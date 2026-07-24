@@ -1,5 +1,12 @@
 "use client";
 
+/**
+ * @deprecated Session 12 (2026-07-24): the wall is retired in favor of the
+ * three-level column layout (DESIGN §2). This pan machinery (`useWallPan`,
+ * `panToElement`) is unused and kept only for reference; remove once the new
+ * layout is accepted. See DESIGN `## Provisional`. Do NOT wire it into new UI.
+ */
+
 /* Vertical-only wall pan — design spec §2.
  *
  * ABSOLUTE RULE: pointermove never triggers a React re-render. All drag

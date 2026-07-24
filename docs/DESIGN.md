@@ -36,51 +36,76 @@ implemented speculatively — leave explicit extension points instead.
 
 - Single-purpose monitor for the KRW IRS market. IRS data only — no bonds, no
   other asset classes. [OWNER]
-- Usage mode: an all-day, always-on monitor, not an on-demand tool. Design for
-  the idle state first: most of the time nobody is touching it. [OWNER]
+- Usage mode: **an on-demand tool a trader opens several times a day**, not an
+  always-on wall. [OWNER 2026-07-24, Session 12] Design for someone who has
+  just arrived and is actively looking — the first thing they need is "what
+  changed since I last looked." There is no idle state to optimize for.
 - Priority order: (1) curve viewing/pricing, (2) position/risk monitoring,
   (3) scenario/what-if, (4) trade log. Priorities 3–4 get entry points, not
   permanent panels. [OWNER]
-- Interaction philosophy: minimal clicks, drag-centric, but LOW user freedom.
-  Layout is fixed; users pan a wall, they do not rearrange it. [OWNER]
-- Reference: Toss Securities WTS informs interaction grammar (friction removal,
-  URL-as-state, command-first navigation) — NOT its visual identity, NOT its
-  low density.
+- Interaction philosophy: **progressive disclosure** — show a calm overview,
+  reveal density on demand. Legibility and calm over maximum density. Minimal
+  clicks; low user freedom (layout is fixed, users navigate levels, they do
+  not rearrange). [OWNER, revised Session 12]
+- Reference: Toss Securities WTS informs both the interaction grammar (friction
+  removal, URL-as-state, command-first navigation) AND the visual model — its
+  stock-detail screen is the reference for the achromatic surface + semantic
+  direction color in §9.
 
-## 2. Core layout — the Wall
+## 2. Core layout — three levels in one column
 
-A single scrollable "wall" of chart tiles, larger than the viewport, navigated
-by dragging (panning). No dockable panels, no user rearrangement, no tile
-add/remove. [OWNER]
+[OWNER, Session 12] The wall is retired. Everything is a **single centered
+column, max-width 960px**, that scrolls vertically like a normal page. No
+horizontal wall, no panning, no viewport-sized grid. Navigation is three
+levels of progressive disclosure, not spatial panning.
 
-- Wall grid: columns = time bases (fixed 6: Now, D-1, WTD, MTD, QTD, YTD),
-  rows = object categories. Tenor lives INSIDE tiles, not on the wall axes.
-  [OWNER]
-- Wall width fits 1920 viewport (6 columns × ~300px + gaps ≈ 1840px), so
-  panning is VERTICAL ONLY. Do not implement horizontal panning.
-- Column headers pinned to top; row/band labels pinned to left.
-- Tile positions are permanent (muscle memory). NO sorting, NO reordering of
-  tiles, ever.
-- All ~260 tiles stay mounted (no virtualization): downsampled data is small
-  (~150 pts/series) and unmount flicker during panning is worse than the
-  memory cost.
-- Panning: pointermove must NOT trigger React re-renders. Drag session state
-  lives in refs; transform is applied imperatively to the wall container;
-  commit on pointerup. This rule is absolute for every drag in the app.
-- Tile click → detail overlay (enlarged chart in place). Esc / click-out
-  closes. No separate detail panel.
+### Level 1 — Home
 
-### Band structure (top to bottom)
+A vertical stack, in order:
 
-1. **Band 1 — tenor-axis overlays**: IRS curve overlay tile + volatility tile
-   (placeholder, see §6) side by side.
-2. **Band 2 — forwards**: 8 column-slice forward tiles (4×2), then the forward
-   matrix table + key-forward block below them.
-3. **Band 3+ — time-series matrix**: rows = 6 outrights + 35 spreads
-   (see §7), columns = 6 time bases. [TBD — tile spec not yet designed; build
-   bands 1–2 first, leave band 3 as a stub region.]
+1. **Status line** — one sentence plus a timestamp (§15 voice). Not labels.
+2. **Briefing card** — "마지막으로 보신 뒤로 …" plus up to 5 change-log lines
+   from the events endpoint (§12, unchanged: event/state split, D-1 fixed).
+   Because the user is away most of the time, this is the most important thing
+   on screen — the most visual weight after the band cards' hero numbers. It
+   has its own empty-state sentence.
+3. **Five band cards**, stacked, one per band: 커브, 변동성, 스왑 포워드,
+   아웃라이트, 스프레드. Each card carries: a one-sentence summary; one hero
+   number at 28px (curve → 10Y level; forwards → 1Yx1Y; outrights → 10Y;
+   spreads → the largest absolute mover; volatility → placeholder); the delta
+   vs the active basis, small, beside the hero; a wide navy sparkline of that
+   hero series; whole card is the tap target.
 
-Estimated wall height ≈ 8,000px. This is fine — it's a pannable wall.
+### Level 2 — Band view
+
+Reached by tapping a band card; animated expansion (§14), same column width.
+
+- Header: band name + back affordance.
+- Tiles stacked one per row, ~960 × 220.
+- **Each tile shows only two lines by default: Now + the selected comparison
+  basis** (Now full navy, basis at 45% — §9). The other four bases live only
+  in Level 3. This is the single biggest legibility fix of the redesign.
+- Tenor markers, tile hero value 28px top-left, label + delta small.
+- The band's matrix table is behind a "표로 보기" toggle, collapsed by default.
+  Tables are the dense view, not the default.
+- **Spreads band** defaults to the 8 largest absolute movers with a "전체 보기"
+  control expanding to all 35. Never render 35 tiles on entry.
+
+### Level 3 — Detail
+
+A sheet that slides up from the bottom over the current view (§14).
+
+- Full 10-year history via the stage-2 endpoint and `lightweight-charts`
+  (only here, §11), with `assertDomainRendered` in force.
+- A segmented control exposes all six time bases here — the full ramp lives
+  only in this sheet now.
+- Dismiss on Esc, backdrop tap, or downward drag of the sheet.
+- URL state (`?tile=series:<id>`, plus `?band=<band>` for Level 2) keeps
+  working and is deep-linkable.
+
+The old five physical "bands" of the wall are now the five band cards /
+band-views above; the object taxonomy (curve, volatility, forwards, outrights,
+spreads) is unchanged.
 
 ## 3. Global chrome
 
@@ -114,12 +139,11 @@ Estimated wall height ≈ 8,000px. This is fine — it's a pannable wall.
   combinations from the 6 display tenors: 15 two-point spreads + 20
   butterflies = 35 series. [OWNER]
 
-## 5. Monochrome policy (critical)
+## 5. Channel budget (critical)
 
-Ship with NO hue anywhere. [OWNER] Every encoding must work in grayscale
-first; color may be layered on later, so nothing may DEPEND on hue.
-
-Channel budget — each channel has exactly one meaning, app-wide:
+[Revised Session 12.] The surface is achromatic first (§9): everything reads
+in grayscale, and hue is a thin semantic layer added on top in a few reserved
+places. Each channel still has exactly one meaning, app-wide:
 
 | Channel        | Meaning                                   |
 |----------------|-------------------------------------------|
@@ -129,9 +153,16 @@ Channel budget — each channel has exactly one meaning, app-wide:
 | Cell border    | Structural: live-quoted (non-interpolated) point |
 | Marker dot     | Live-quoted node on charts                |
 | Mini-bar       | Delta sign+magnitude in tables (center-zero, right=+, left=−) |
+| **Direction hue** | **Sign of a number: red = up, blue = down (Korean market convention, §9)** |
+| **Motion**     | **State change (§14) — a value updated, a level opened/closed** |
 
-Do not reuse a channel for a second meaning. Sign is expressed by minus signs,
-triangles, and bar direction — never by color, never by lightness.
+Direction hue is a **deliberate, owner-mandated exception** to the old "sign
+never by color" rule: a KRW rates trader reads red/blue before the digits.
+Sign is now carried by BOTH hue and the mini-bar direction — the mini-bar
+keeps it legible in grayscale, so nothing DEPENDS on hue alone. Do not reuse a
+channel for a second meaning. Navy is chrome/chart-accent only and never
+encodes sign; the per-band chart hues of the previous draft are dropped
+(chart lines are navy — §9).
 
 ## 6. Tile spec — curve overlay (Band 1)
 
@@ -207,113 +238,132 @@ The table is for exact value reading; the tiles are for shape. Both exist.
 
 [OWNER: floor 0.28 chosen over 0.20 — readability over contrast.]
 
-### Surfaces
+### Surfaces, radius, borders [revised Session 12]
 
 | Role          | Light    | Dark     |
 |---------------|----------|----------|
 | Page          | #FAFAFA  | #1A1A1A  |
-| Tile          | #FFFFFF  | #202020  |
-| Popover       | #FFFFFF  | #262626  |
+| Card / tile   | #FFFFFF  | #202020  |
+| Card (raised) | #FFFFFF  | #262626  | dark uses a lighter step in place of a shadow |
+| Sheet         | #FFFFFF  | #262626  |
 | Ink           | #1A1A1A  | #EDEDED  |
-| Border        | ink 12%  | ink 18%  |
+| Border        | ink 12%  | ink 18%  | tables + live-quote marker ONLY |
 | Live border   | ink 40%  | ink 55%  |
+
+- **Cards and tiles have no borders.** Separation comes from the surface step
+  plus spacing. Hairlines survive only inside tables and as the live-quote
+  cell marker.
+- **Radius:** card 16, sheet 20 (top corners only). Nothing above 20.
+- **Elevation:** light mode gets one soft card shadow token (the casual look
+  depends on it). Dark mode substitutes the lighter surface step (`#262626`) —
+  shadows still die in dark mode.
 
 [OWNER: default theme = LIGHT; dark = neutral dark-gray #1A1A1A family, not
 pure black, not blue-gray. Theme is user-switchable.]
 
 Implementation: every color goes through semantic CSS custom properties with
 light/dark pairs; zero raw hex in component code (enforce with a lint guard).
-No shadows for depth (they die in dark mode) — depth = surface steps + borders.
-Chart canvases cannot resolve CSS variables: build a theme bridge that injects
-RESOLVED hex into canvas-bound options and triggers redraw on theme switch.
-This was a recurring defect class in the old system — gate it with a test that
-rejects `var(` strings in canvas-bound option objects.
+Chart canvases cannot resolve CSS variables: the theme bridge injects RESOLVED
+hex into canvas-bound options and triggers redraw on theme switch — gated by a
+test that rejects `var(` strings in canvas-bound option objects.
 
-### Hue layer [OWNER 2026-07-24]
+### Color — achromatic + semantic direction [OWNER, Session 12]
 
-Hue is added ON TOP of the grayscale encodings, never replacing them. Page,
-tile, and popover surfaces are unchanged. Everything must still read with hue
-removed — the opacity ramp, weight-600, borders, and mini-bars stay
-load-bearing. Navy is the main color; the sub-palette is for charts; orange
-is for interactive elements.
+Reference: the Toss Securities WTS stock-detail screen. It is **almost
+entirely achromatic** — light-grey page, white cards, no borders, near-black
+numbers, grey labels. Hue appears in exactly three places: the direction of a
+number, the primary action control, and the selected state of a control.
+Nothing else is colored. When in doubt, leave it grey.
 
-#### Roles
+#### Direction (the dominant color on screen)
 
-| Role | Light | Dark |
+Semantic, not brand. Korean market convention: **red = up, blue = down.** A
+rates trader reads these before the digits, so this overrides the old "sign
+never by hue" rule (§5). Sign is carried by hue AND the mini-bar direction —
+the mini-bar keeps grayscale working.
+
+| Role | Value | Notes |
 |---|---|---|
-| Main / brand | `#043B72` | `#8DC8E8` |
-| Interactive fill (buttons, focus ring, selection) | `#F58220` | `#F58220` |
-| Text on interactive fill | `#1A1A1A` | `#1A1A1A` |
+| Up (양) | `#E5484D` | red; ≥4.5:1 on white and on dark tile |
+| Down (음) | `#1D6FD8` | blue; ≥4.5:1 on white and on dark tile |
 
-`#043B72` is unreadable on the dark page, so dark mode substitutes `#8DC8E8`
-everywhere the main color appears. White on `#F58220` fails contrast
-(~2.4:1) — button labels are near-black on orange, in both themes.
+Starting values; `## Provisional` records them for the owner to swap for house
+values. Gated in `band-hue-contrast.test.ts` against both surfaces.
 
-#### Chart hue by band
+#### Brand roles
 
-Each band gets one hue. Within a band the six time bases remain an opacity
-ramp of that hue — hue varies BETWEEN bands, opacity WITHIN a tile. This does
-not disturb the §5 channel budget: hue now means "where on the wall you are,"
-which also reinforces spatial memory while panning.
+| Role | Value | Use |
+|---|---|---|
+| Interactive fill | `#F58220` orange | primary action control; near-black label (`#1A1A1A`) — white fails ~2.4:1 |
+| Chrome accent | `#043B72` navy (dark: `#8DC8E8`) | selected segment, active tab, links, AND all chart lines |
 
-| Band | Object | Light | Dark |
-|---|---|---|---|
-| 1 | Curve | `#043B72` | `#8DC8E8` |
-| 2 | Volatility | `#0086B8` | `#00A9CE` |
-| 3 | Forwards | `#AD624E` | `#C2AC97` |
-| 4 | Outrights | `#84888B` | `#A0A6A8` |
-| 5 | Spreads | `#CB6015` | `#F0B26B` |
+#### Chart lines are navy, full stop
 
-Constraints:
+The per-band-hue-by-object scheme is dropped: with one band on screen at a
+time it bought nothing, and the reference screen keeps chart chrome muted
+while the *numbers* carry color. All chart strokes — curve, forward tiles,
+home sparklines — are the navy accent. Series separation inside a tile is the
+opacity ramp, unchanged.
 
-- The light-mode hues above are the only sub-palette entries that clear 3:1
-  against a white tile at 2px stroke. `#00A9CE`, `#7E9FC3`, `#8DC8E8`, and
-  `#F0B26B` fail in light mode and may only be used as dark-mode substitutes
-  or as fills, never as light-mode data lines. (Gated by
-  `guards/band-hue-contrast.test.ts`.)
-- Band 5's `#CB6015` is in the orange family, close to the interactive orange.
-  They are kept apart by FORM, not hue: interactive orange only ever appears
-  as a filled shape or ring, band hues only ever as strokes. Never render an
-  orange filled element inside a chart plot area.
-- Delta sign is still never encoded by hue — mini-bar direction carries sign.
-- Outlier remains weight-600. It is not also colored — orange is spoken for.
+- **Levels 1–2 use two ramp steps**: Now at full navy, comparison basis at
+  45%. The six-step ramp lives only in the Level 3 detail sheet.
+- `band-hue-contrast.test.ts` checks navy at every step actually used (full +
+  45% for L1/L2; the six ramp steps for L3) and both direction colors against
+  both surfaces.
+- The sub-palette (`#CB6015`, `#84888B`, `#AD624E`, `#0086B8`, and the rest)
+  stays **defined in the token module but unreferenced** — kept for a possible
+  future multi-object view.
 
-Implementation: hues live in the semantic token layer with light/dark pairs
-(zero raw hex in components). Band hue reaches SVG data lines via one
-`currentColor` on a wrapping `<g>` (never per-element `var()`, which stalled
-the compositor in Band 2); canvas lines resolve the hue to hex through the
-theme bridge and pass `assertNoCssVars()`. Axis, gridlines, text, borders, and
-mini-bars stay ink/grayscale.
+Implementation unchanged in mechanism: hex lives only in the token layer (raw-
+hex lint); navy reaches SVG lines via one `currentColor` on a wrapping `<g>`
+(never per-element `var()`); canvas lines resolve navy to hex through the theme
+bridge and pass `assertNoCssVars()`. Direction color applies to number text
+and mini-bar fills only, never to a chart stroke. Axis, gridlines, and labels
+stay ink/grey.
 
-### Typography
+### Typography [revised Session 12]
 
 - Font: Pretendard Variable. `font-variant-numeric: tabular-nums` enforced
   globally — every numeral in the app.
-- Sizes/weights: cell·axis·readout 13/400 [OWNER]; outlier value 13/600;
-  tile title 14/600; band title 15/600. Weight 600 appears ONLY on outliers
-  and titles. Two weights total.
+- Base body rises from 13 to 15. Hero numbers are the point; the old screen
+  read flat because every number was the same size. Weights are 400/600/700.
 
-### Spacing
+| Use | Size | Weight |
+|---|---|---|
+| Hero number | 28 | 700 |
+| Card / section title | 17 | 600 |
+| Body sentence | 15 | 400 |
+| Label, axis, table cell | 13 | 400 |
+| Caption, secondary delta | 12 | 400 |
 
-4px base grid. Tile padding 12, tile gap 8, band gap 16, table row height 26,
-table header height 32.
+Outlier value keeps weight 600 (§5). Weight 700 is reserved for hero numbers.
 
-## 10. Interaction rules
+### Spacing [revised Session 12]
 
-- Confirmation dialogs: none inside the analysis surface. Every action is
-  optimistic + undoable (single undo stack). Nothing on this monitor is an
-  order/execution action in v2.
-- Drag threshold 5px (below = click). Wall pan is the ONLY free drag; it is
-  vertical-only by construction.
-- Hover is the primary inspection gesture and must never move layout. Readout
-  strips occupy reserved space at all times. Floating tooltips are banned: in
-  the predecessor system a component-kit tooltip wrapped cell contents in a
-  shrink-to-fit inline span and silently broke column alignment while the DOM
-  looked correct. Do not reintroduce that class of defect.
-- URL reflects state: focused tile / detail overlay target lives in the query
-  string (deep-linkable, back-button works, shareable).
-- Keyboard: `/` or Cmd+K command bar, Esc closes overlay, Home returns to
-  origin.
+4px base grid. Card padding 20, card gap 12, section gap 32, column gutter 24,
+column max-width 960. Table row height 26, table header height 32. Whitespace
+is a feature now, not waste.
+
+## 10. Interaction rules [revised Session 12]
+
+- Navigation is three levels of progressive disclosure (§2), not spatial
+  panning. The page scrolls normally; there is no wall to pan.
+- **Level transitions:** tap a band card → Level 2 band view (animated
+  expansion, §14). Tap a tile → Level 3 detail sheet (slides up). Back
+  affordance and Esc step back one level; backdrop tap and downward sheet drag
+  dismiss the detail sheet.
+- Drag threshold 5px (below = tap). The only free drag is the detail sheet's
+  downward drag-to-dismiss; a tap on a card/tile must never be swallowed by
+  that drag handler.
+- Hover is a secondary inspection gesture and must never move layout. Readout
+  space is reserved at all times. Floating tooltips remain banned (the
+  predecessor's shrink-to-fit tooltip silently broke column alignment).
+- Press feedback: every tappable card/tile scales to 0.98 (§14).
+- URL reflects state: `?band=<band>` (Level 2) and `?tile=series:<id>`
+  (Level 3) are deep-linkable and back-button-friendly.
+- Keyboard: `/` or Cmd+K command bar (scrolls to a series via the tile
+  registry), Esc steps back / closes the sheet.
+- Confirmation dialogs: none. Nothing here is an order/execution action in v2.
 
 ## 11. Stack
 
@@ -345,7 +395,12 @@ table header height 32.
 7. Change log + event detection (see "Change-log firing rule" below).
 8. Command bar + tile jump.
 9. Detail overlay with full-resolution history.
-10. Band 3 time-series matrix [TBD — spec with owner first].
+10. ~~Band 3 time-series matrix~~ — superseded by the Session-12 redesign.
+11. **Session 12 — three-level column redesign (§2):** retire the wall (pan
+    machinery `@deprecated`, not deleted); Home (status + briefing + 5 band
+    cards); Level-2 band views (2-line tiles + table toggle; outrights and
+    spreads bands built); Level-3 detail sheet; new tokens (§9); motion (§14);
+    voice (§15). Backend, endpoints, and all guards unchanged.
 
 ### Change-log firing rule [OWNER-confirmed 2026-07-24]
 
@@ -386,6 +441,69 @@ empty on 153/500 days — a log that can be empty, unlike the prior rule
 ## 13. Explicitly out of scope for v2
 
 - Vol tile internals (placeholder only until formula arrives).
-- Any color/hue. Any user layout customization. Panel add/remove.
+- Any user layout customization. Panel add/remove.
 - Scenario engine UI, trade capture UI (entry points only via change log).
-- Band 3 tile spec (do not improvise it).
+
+(Removed Session 12: color/hue is now in — §9; outrights and spreads
+band-views are now built — §2.)
+
+## 14. Motion [Session 12]
+
+Motion is a channel meaning "state change" (§5), and it is chrome only — never
+animate chart path geometry.
+
+- Library: `motion` (framer-motion's successor). Springs may overshoot
+  slightly now: ~stiffness 400, damping 30; durations 200–280ms. Tune by feel.
+- Band card → band view: a shared-layout animation, not a page swap.
+- Detail sheet: springs up from the bottom; drag-to-dismiss follows the
+  pointer and settles with the same spring.
+- Briefing and change-log rows: stagger in at ~40ms intervals.
+- Press feedback: scale 0.98 on every tappable card/tile.
+- A number that changes re-renders with a short cross-fade. No digit-rolling
+  library (a perf trap at this element count).
+- `prefers-reduced-motion` collapses every animation to an instant state
+  change (asserted by a test).
+
+## 15. Voice & copy [Session 12]
+
+Chrome copy is sentences in **해요체**, not noun labels — especially empty,
+loading, and error states. The register is calm, plain, and human.
+
+- Prefer a sentence to a label wherever one fits:
+  - status: "오늘 커브는 조용해요"
+  - briefing: "마지막으로 보신 뒤로 새로운 게 3건 있어요"
+  - a move: "장기 구간이 연초 대비 22bp 내려왔어요"
+  - placeholder: "변동성은 아직 준비 중이에요"
+  - error: "불러오지 못했어요. 잠시 뒤 다시 시도해 주세요"
+- **Never translate instrument nomenclature.** Tenor and series names stay
+  technical and English/numeric: `1.5Y`, `3s10s`, `2s5s10s`, `1YF`, `SPOT`,
+  `1Yx1Y`. A sentence may wrap them ("`10Y`가 조용해요") but never renames them.
+- Numbers keep their units (bp, %) and signs; the sentence supplies the tone,
+  the number supplies the fact.
+- Direction words follow the market: 올랐어요/내려왔어요 map to red/blue (§9).
+
+## Provisional [Session 12 — review these]
+
+Choices made to keep the build green where the prompt did not fully specify.
+Each should be confirmed or overridden by the owner.
+
+- **Direction colors** `#E5484D` (up) / `#1D6FD8` (down) are starting values,
+  verified ≥4.5:1 on white and on the dark tile. Swap for house values freely.
+- **Forwards home sparkline**: the 1Yx1Y forward has no stored history (the
+  backend serves history only for outrights and spreads/flies, and that is
+  frozen). The forwards band card therefore draws the current SPOT forward
+  strip (a cross-sectional shape line), not a time sparkline. Everything else
+  on the card (hero 1Yx1Y, delta) is real.
+- **Briefing "since you last looked"**: last-visit time is kept in
+  localStorage; the count shown is the current event-cluster count from the
+  (D-1-fixed, snapshot) events endpoint, since the log does not accumulate
+  across the day. Good enough for the briefing framing.
+- **Deprecated, pending removal**: the wall pan machinery (`useWallPan`,
+  `panToElement`) is unused and marked `@deprecated` (Session 12). Remove once
+  the three-level layout is accepted. The tile registry is retained and
+  repurposed for scroll-to-element.
+- **Level-3 six-base control**: renders the six basis reference levels as a
+  segmented readout beside the history chart (not six overlaid curves) — the
+  history chart is a single series, so the ramp appears as selectable reference
+  points, which is the closest faithful realization of "the full ramp lives
+  here."
