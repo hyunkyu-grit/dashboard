@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "braveworld — KRW IRS",
-  description: "All-day KRW IRS market monitor",
+  title: "Sauron — KRW IRS",
+  description: "KRW IRS market monitor",
 };
 
 // Apply the persisted theme before first paint to avoid a light flash.

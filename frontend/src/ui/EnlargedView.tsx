@@ -1,28 +1,25 @@
 "use client";
 
-/* Level 3 — detail sheet sliding up from the bottom (DESIGN §2). Three kinds:
- *   series:<id>  → full 10y history (lightweight-charts, assertDomainRendered)
- *                  + a six-basis segmented readout (the full ramp lives here).
- *   curve        → enlarged curve overlay, all six bases.
- *   fwd:<tenor>  → enlarged forward tile, all six bases.
- * Dismiss on Esc / backdrop; downward-drag is added in Pass 4. Content is
- * wrapped in an error boundary so a thrown guard shows a message, not a blank
- * region (the detail-open fix). */
+/* Enlarged view (DESIGN §2). Full-screen sheet over the list: for a series,
+ * the large lightweight-charts history (orange, assertDomainRendered) + a
+ * six-basis segmented readout (the full ramp lives here) + the larger calendar
+ * heatmap + a reserved-but-empty strategy region. For a forward, the forward
+ * matrix instead. Esc / backdrop dismiss (drag added in Pass 4); wrapped in an
+ * error boundary so a thrown guard shows a message, not a blank region. */
 
-import { motion, type PanInfo } from "motion/react";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
-import type { ForwardsPayload, WallSummary } from "@/lib/api";
+import { fetchSeries, type WallSummary, type ForwardsPayload } from "@/lib/api";
 import { dirClass, fmtBp, fmtRate } from "@/lib/format";
 import { BASIS_LABELS, TIME_BASES, type TimeBasis } from "@/theme/ramp";
-
-import { CurveOverlayTile } from "@/wall/CurveOverlayTile";
 import { DetailChart } from "@/wall/DetailChart";
-import { ForwardTile } from "@/wall/ForwardTile";
+import { ForwardMatrix, KeyForwardBlock } from "@/wall/ForwardMatrix";
 
+import { CalendarHeatmap } from "./CalendarHeatmap";
 import { ERROR_SENTENCE } from "./copy";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { SHEET_SPRING } from "./motion";
+import type { Row } from "./rows";
 
 function SixBasisReadout({
   summary,
@@ -50,7 +47,7 @@ function SixBasisReadout({
             onClick={() => setBasis(b)}
             className={
               b === basis
-                ? "flex-1 bg-brand px-2 py-1 text-center text-page"
+                ? "flex-1 bg-ink px-2 py-1 text-center text-page"
                 : "flex-1 px-2 py-1 text-center opacity-50 hover:opacity-90"
             }
           >
@@ -75,54 +72,69 @@ function SixBasisReadout({
   );
 }
 
-function SheetBody({
-  target,
+function StrategyRegion() {
+  return (
+    <div className="mt-6 flex h-40 items-center justify-center rounded-[16px] border border-dashed border-edge text-[13px] opacity-40">
+      전략 도구가 이 자리에 들어올 예정이에요
+    </div>
+  );
+}
+
+function Body({
+  row,
   summary,
   forwards,
 }: {
-  target: string;
+  row: Row;
   summary: WallSummary;
   forwards?: ForwardsPayload;
 }) {
-  if (target === "curve") {
-    return (
-      <>
-        <h2 className="mb-2 text-[17px] font-semibold">커브 · 6개 기준선</h2>
-        <CurveOverlayTile summary={summary} width={880} height={460} />
-      </>
-    );
-  }
-  if (target.startsWith("fwd:")) {
-    const tenor = target.slice(4);
+  const { data } = useQuery({
+    queryKey: ["series", row.seriesId],
+    queryFn: () => fetchSeries(row.seriesId!),
+    enabled: !!row.seriesId,
+    staleTime: 30_000,
+  });
+
+  if (!row.seriesId) {
+    // forward: show the forward matrix
     if (!forwards) return <p className="p-6">{ERROR_SENTENCE}</p>;
     return (
       <>
-        <h2 className="mb-2 text-[17px] font-semibold">{tenor} · 6개 기준선</h2>
-        <ForwardTile tenor={tenor} payload={forwards} width={880} height={420} />
+        <h2 className="mb-3 text-[17px] font-semibold">{row.label} · 포워드 매트릭스</h2>
+        <div className="flex items-start gap-6 overflow-x-auto">
+          <ForwardMatrix payload={forwards} />
+          <KeyForwardBlock payload={forwards} />
+        </div>
       </>
     );
   }
-  // series:<id>
-  const id = target.slice("series:".length);
+
   return (
     <>
       <div className="mb-1 flex items-baseline justify-between">
-        <h2 className="text-[17px] font-semibold">{id.replace(/-/g, "/")}</h2>
+        <h2 className="text-[17px] font-semibold">{row.label}</h2>
         <span className="text-[12px] opacity-45">지난 10년 흐름이에요</span>
       </div>
-      <DetailChart id={id} width={880} height={440} />
-      <SixBasisReadout summary={summary} seriesId={id} />
+      <DetailChart id={row.seriesId} width={900} height={420} />
+      <SixBasisReadout summary={summary} seriesId={row.seriesId} />
+      {data && (
+        <div className="mt-4 overflow-x-auto">
+          <CalendarHeatmap points={data.points} hoveredDate={null} cell={16} gap={4} />
+        </div>
+      )}
+      <StrategyRegion />
     </>
   );
 }
 
-export function DetailSheet({
-  target,
+export function EnlargedView({
+  row,
   summary,
   forwards,
   onClose,
 }: {
-  target: string;
+  row: Row;
   summary: WallSummary;
   forwards?: ForwardsPayload;
   onClose: () => void;
@@ -135,38 +147,20 @@ export function DetailSheet({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const onDragEnd = (_: unknown, info: PanInfo) => {
-    // Dismiss on a decisive downward drag; otherwise it springs back.
-    if (info.offset.y > 120 || info.velocity.y > 500) onClose();
-  };
-
   return (
-    <motion.div
+    <div
       className="fixed inset-0 z-30 flex items-end justify-center bg-page/70"
       onClick={onClose}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
     >
-      <motion.div
-        className="max-h-[90vh] w-full max-w-[960px] overflow-y-auto rounded-t-[20px] bg-popover p-6 shadow-card"
+      <div
+        className="max-h-[92vh] w-full max-w-[1000px] overflow-y-auto rounded-t-[20px] bg-popover p-6 shadow-card"
         onClick={(e) => e.stopPropagation()}
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        transition={SHEET_SPRING}
-        drag="y"
-        dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0, bottom: 0.5 }}
-        onDragEnd={onDragEnd}
       >
-        {/* grab handle — downward drag dismisses (§14) */}
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-edge" />
         <ErrorBoundary fallback={ERROR_SENTENCE}>
-          <SheetBody target={target} summary={summary} forwards={forwards} />
+          <Body row={row} summary={summary} forwards={forwards} />
         </ErrorBoundary>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 }

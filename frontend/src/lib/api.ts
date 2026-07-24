@@ -87,3 +87,15 @@ export async function fetchForwards(): Promise<ForwardsPayload> {
   if (!res.ok) throw new Error(`forwards: HTTP ${res.status}`);
   return res.json();
 }
+
+export interface SeriesDetail {
+  id: string;
+  asof: string;
+  points: SparkPoint[];
+}
+
+export async function fetchSeries(id: string): Promise<SeriesDetail> {
+  const res = await fetch(`${API_BASE}/api/series/${encodeURIComponent(id)}`);
+  if (!res.ok) throw new Error(`series ${id}: HTTP ${res.status}`);
+  return res.json();
+}
