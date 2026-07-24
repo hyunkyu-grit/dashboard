@@ -13,6 +13,7 @@ import { useMemo, useState } from "react";
 
 import type { SeriesSummary, WallSummary } from "@/lib/api";
 import { fmtBp, fmtRate } from "@/lib/format";
+import { useUiStore } from "@/state/ui";
 import { BASIS_LABELS, TIME_BASES, type TimeBasis } from "@/theme/ramp";
 
 // Spec node axis, in order. Nodes missing from the feed are skipped.
@@ -37,6 +38,7 @@ interface Props {
 
 export function CurveOverlayTile({ summary, width, height }: Props) {
   const [hover, setHover] = useState<number | null>(null);
+  const globalBasis = useUiStore((s) => s.basis);
 
   const byId = useMemo(
     () => new Map(summary.outrights.map((o) => [o.id, o])),
@@ -227,8 +229,12 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
         <div className="truncate">
           <span className="inline-block w-12">{focusTenor}</span>
           <span className="inline-block w-16">{fmtRate(focus?.now)}</span>
+          {/* all 5 deltas stay visible (§6); the global basis is emphasized */}
           {(["d1", "wtd", "mtd", "qtd", "ytd"] as const).map((k) => (
-            <span key={k} className="ml-3">
+            <span
+              key={k}
+              className={k === globalBasis ? "ml-3" : "ml-3 opacity-50"}
+            >
               <span className="opacity-60">{BASIS_LABELS[k]}</span>{" "}
               {fmtBp(focus?.deltas[k])}
             </span>

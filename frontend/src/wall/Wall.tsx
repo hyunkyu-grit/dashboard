@@ -10,7 +10,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect } from "react";
 
 import { fetchWallSummary, type WallSummary } from "@/lib/api";
-import { syncThemeFromDom, useUiStore } from "@/state/ui";
+import { syncUiFromDom, useUiStore } from "@/state/ui";
 import { BASIS_LABELS, TIME_BASES } from "@/theme/ramp";
 
 import {
@@ -91,6 +91,35 @@ function StubBand({ label, note, height }: { label: string; note: string; height
   );
 }
 
+function BasisSelector({ summary }: { summary?: WallSummary }) {
+  const basis = useUiStore((s) => s.basis);
+  const setBasis = useUiStore((s) => s.setBasis);
+  const basisDate =
+    summary && basis !== "now" ? summary.basisDates[basis] : summary?.asof;
+  return (
+    <span className="flex items-center gap-2">
+      <span className="opacity-60">Δ vs</span>
+      <span className="flex overflow-hidden rounded-sm border border-edge">
+        {TIME_BASES.map((b) => (
+          <button
+            key={b}
+            type="button"
+            onClick={() => setBasis(b)}
+            className={
+              b === basis
+                ? "bg-tile px-2 py-0.5"
+                : "px-2 py-0.5 opacity-50 hover:opacity-80"
+            }
+          >
+            {BASIS_LABELS[b]}
+          </button>
+        ))}
+      </span>
+      {basisDate && <span className="opacity-70">{basisDate}</span>}
+    </span>
+  );
+}
+
 function StatusStrip({
   summary,
   isError,
@@ -105,19 +134,15 @@ function StatusStrip({
       <span className="text-[15px] font-semibold">braveworld</span>
       <span className="opacity-70">KRW IRS</span>
       {summary && (
-        <>
-          <span>
-            <span className="opacity-60">asof</span> {summary.asof}
-          </span>
-          <span className="opacity-70">
-            D-1 {summary.basisDates.d1} · YTD {summary.basisDates.ytd}
-          </span>
-          {summary.missingNodes.length > 0 && (
-            <span className="border border-edge px-1.5 py-0.5">
-              feed gap: {summary.missingNodes.join(", ")} absent
-            </span>
-          )}
-        </>
+        <span>
+          <span className="opacity-60">asof</span> {summary.asof}
+        </span>
+      )}
+      <BasisSelector summary={summary} />
+      {summary && summary.missingNodes.length > 0 && (
+        <span className="border border-edge px-1.5 py-0.5">
+          feed gap: {summary.missingNodes.join(", ")} absent
+        </span>
       )}
       <span className={isError ? "font-semibold" : "opacity-70"}>
         {isError ? "DISCONNECTED" : summary ? "live" : "loading…"}
@@ -150,7 +175,7 @@ export function Wall() {
   const { viewportRef, contentRef, handlers } = useWallPan();
 
   useEffect(() => {
-    syncThemeFromDom();
+    syncUiFromDom();
   }, []);
 
   const openTile = useCallback(
