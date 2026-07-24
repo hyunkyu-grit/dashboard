@@ -1,0 +1,49 @@
+/* braveworld design tokens — design spec §9.
+ *
+ * THE ONLY FILE IN src/ ALLOWED TO CONTAIN RAW HEX. Everything else goes
+ * through these custom properties (enforced by guards/no-raw-hex.test.ts).
+ * The time-basis ramp numbers are mirrored in src/theme/ramp.ts for
+ * canvas-bound consumers; guards/ramp-sync.test.ts keeps the two in sync.
+ */
+
+:root {
+  /* Surfaces (light) */
+  --bw-page: #fafafa;
+  --bw-tile: #ffffff;
+  --bw-popover: #ffffff;
+  --bw-ink: #1a1a1a;
+  --bw-border: color-mix(in srgb, var(--bw-ink) 12%, transparent);
+  --bw-border-live: color-mix(in srgb, var(--bw-ink) 40%, transparent);
+
+  /* Time-basis ramp: ink opacity (light) */
+  --bw-ramp-now: 1;
+  --bw-ramp-d1: 0.78;
+  --bw-ramp-wtd: 0.6;
+  --bw-ramp-mtd: 0.47;
+  --bw-ramp-qtd: 0.36;
+  --bw-ramp-ytd: 0.28;
+
+  /* Time-basis ramp: line width (theme-invariant) */
+  --bw-rampw-now: 2;
+  --bw-rampw-d1: 1.5;
+  --bw-rampw-wtd: 1.3;
+  --bw-rampw-mtd: 1.1;
+  --bw-rampw-qtd: 1;
+  --bw-rampw-ytd: 1;
+}
+
+[data-theme="dark"] {
+  --bw-page: #1a1a1a;
+  --bw-tile: #202020;
+  --bw-popover: #262626;
+  --bw-ink: #ededed;
+  --bw-border: color-mix(in srgb, var(--bw-ink) 18%, transparent);
+  --bw-border-live: color-mix(in srgb, var(--bw-ink) 55%, transparent);
+
+  --bw-ramp-now: 1;
+  --bw-ramp-d1: 0.74;
+  --bw-ramp-wtd: 0.56;
+  --bw-ramp-mtd: 0.43;
+  --bw-ramp-qtd: 0.32;
+  --bw-ramp-ytd: 0.24;
+}

@@ -1,0 +1,30 @@
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
+@import "tailwindcss";
+@import "../theme/tokens.css";
+
+/* Expose semantic tokens as Tailwind utilities (bg-page, text-ink, ...). */
+@theme inline {
+  --color-page: var(--bw-page);
+  --color-tile: var(--bw-tile);
+  --color-popover: var(--bw-popover);
+  --color-ink: var(--bw-ink);
+  --color-edge: var(--bw-border);
+  --color-edge-live: var(--bw-border-live);
+  --font-sans: "Pretendard Variable", Pretendard, sans-serif;
+}
+
+html {
+  /* Every numeral in the app is tabular — design spec §9. */
+  font-variant-numeric: tabular-nums;
+}
+
+body {
+  background: var(--bw-page);
+  color: var(--bw-ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  overflow: hidden; /* the wall pans; the page itself never scrolls */
+}
+
+/* Depth = surface steps + borders. No shadows (design spec §9). */
