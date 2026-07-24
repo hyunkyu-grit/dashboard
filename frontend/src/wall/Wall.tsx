@@ -168,7 +168,7 @@ function BasisSelector({ summary }: { summary?: WallSummary }) {
             onClick={() => setBasis(b)}
             className={
               b === basis
-                ? "bg-tile px-2 py-0.5"
+                ? "bg-interactive px-2 py-0.5 text-on-interactive"
                 : "px-2 py-0.5 opacity-50 hover:opacity-80"
             }
           >
@@ -192,7 +192,7 @@ function StatusStrip({
   const setTheme = useUiStore((s) => s.setTheme);
   return (
     <header className="flex h-10 shrink-0 items-center gap-4 border-b border-edge bg-page px-3">
-      <span className="text-[15px] font-semibold">braveworld</span>
+      <span className="text-[15px] font-semibold text-brand">braveworld</span>
       <span className="opacity-70">KRW IRS</span>
       {summary && (
         <span>

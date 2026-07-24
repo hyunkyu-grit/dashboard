@@ -72,7 +72,7 @@ export function CommandBar({ onJump }: { onJump: (el: HTMLElement) => void }) {
               key={entry.anchor}
               value={entry.anchor}
               onSelect={() => jump(entry)}
-              className="flex cursor-pointer items-baseline justify-between rounded-sm px-2 py-1.5 text-[13px] data-[selected=true]:bg-tile"
+              className="flex cursor-pointer items-baseline justify-between rounded-sm px-2 py-1.5 text-[13px] data-[selected=true]:bg-interactive data-[selected=true]:text-on-interactive"
             >
               <span>{entry.label}</span>
               <span className="opacity-40">{entry.anchor}</span>

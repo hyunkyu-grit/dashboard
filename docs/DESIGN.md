@@ -229,6 +229,62 @@ RESOLVED hex into canvas-bound options and triggers redraw on theme switch.
 This was a recurring defect class in the old system — gate it with a test that
 rejects `var(` strings in canvas-bound option objects.
 
+### Hue layer [OWNER 2026-07-24]
+
+Hue is added ON TOP of the grayscale encodings, never replacing them. Page,
+tile, and popover surfaces are unchanged. Everything must still read with hue
+removed — the opacity ramp, weight-600, borders, and mini-bars stay
+load-bearing. Navy is the main color; the sub-palette is for charts; orange
+is for interactive elements.
+
+#### Roles
+
+| Role | Light | Dark |
+|---|---|---|
+| Main / brand | `#043B72` | `#8DC8E8` |
+| Interactive fill (buttons, focus ring, selection) | `#F58220` | `#F58220` |
+| Text on interactive fill | `#1A1A1A` | `#1A1A1A` |
+
+`#043B72` is unreadable on the dark page, so dark mode substitutes `#8DC8E8`
+everywhere the main color appears. White on `#F58220` fails contrast
+(~2.4:1) — button labels are near-black on orange, in both themes.
+
+#### Chart hue by band
+
+Each band gets one hue. Within a band the six time bases remain an opacity
+ramp of that hue — hue varies BETWEEN bands, opacity WITHIN a tile. This does
+not disturb the §5 channel budget: hue now means "where on the wall you are,"
+which also reinforces spatial memory while panning.
+
+| Band | Object | Light | Dark |
+|---|---|---|---|
+| 1 | Curve | `#043B72` | `#8DC8E8` |
+| 2 | Volatility | `#0086B8` | `#00A9CE` |
+| 3 | Forwards | `#AD624E` | `#C2AC97` |
+| 4 | Outrights | `#84888B` | `#A0A6A8` |
+| 5 | Spreads | `#CB6015` | `#F0B26B` |
+
+Constraints:
+
+- The light-mode hues above are the only sub-palette entries that clear 3:1
+  against a white tile at 2px stroke. `#00A9CE`, `#7E9FC3`, `#8DC8E8`, and
+  `#F0B26B` fail in light mode and may only be used as dark-mode substitutes
+  or as fills, never as light-mode data lines. (Gated by
+  `guards/band-hue-contrast.test.ts`.)
+- Band 5's `#CB6015` is in the orange family, close to the interactive orange.
+  They are kept apart by FORM, not hue: interactive orange only ever appears
+  as a filled shape or ring, band hues only ever as strokes. Never render an
+  orange filled element inside a chart plot area.
+- Delta sign is still never encoded by hue — mini-bar direction carries sign.
+- Outlier remains weight-600. It is not also colored — orange is spoken for.
+
+Implementation: hues live in the semantic token layer with light/dark pairs
+(zero raw hex in components). Band hue reaches SVG data lines via one
+`currentColor` on a wrapping `<g>` (never per-element `var()`, which stalled
+the compositor in Band 2); canvas lines resolve the hue to hex through the
+theme bridge and pass `assertNoCssVars()`. Axis, gridlines, text, borders, and
+mini-bars stay ink/grayscale.
+
 ### Typography
 
 - Font: Pretendard Variable. `font-variant-numeric: tabular-nums` enforced

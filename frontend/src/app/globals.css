@@ -10,7 +10,27 @@
   --color-ink: var(--bw-ink);
   --color-edge: var(--bw-border);
   --color-edge-live: var(--bw-border-live);
+  /* hue layer (§9) */
+  --color-brand: var(--bw-brand);
+  --color-interactive: var(--bw-interactive);
+  --color-on-interactive: var(--bw-on-interactive);
+  --color-hue-curve: var(--bw-hue-curve);
+  --color-hue-vol: var(--bw-hue-vol);
+  --color-hue-fwd: var(--bw-hue-fwd);
+  --color-hue-outright: var(--bw-hue-outright);
+  --color-hue-spread: var(--bw-hue-spread);
   --font-sans: "Pretendard Variable", Pretendard, sans-serif;
+}
+
+/* Interactive orange as focus ring + text selection (§9). One var each; not
+ * per-element. Labels on the orange fill are near-black (contrast). */
+:focus-visible {
+  outline: 2px solid var(--bw-interactive);
+  outline-offset: 1px;
+}
+::selection {
+  background: var(--bw-interactive);
+  color: var(--bw-on-interactive);
 }
 
 html {

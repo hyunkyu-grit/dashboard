@@ -29,24 +29,46 @@ const TOKEN_VARS: Record<SemanticToken, string> = {
 
 export type ResolvedTheme = Record<SemanticToken, string>;
 
-/** Resolve every semantic token to a concrete color string (rgb/rgba). */
-export function resolveTheme(): ResolvedTheme {
+/** Resolve a single CSS custom property to a concrete color string via a DOM
+ * probe (also flattens color-mix()). Client-only. */
+function resolveVar(cssVar: string): string {
   if (typeof document === "undefined") {
-    throw new Error("resolveTheme() is client-only");
+    throw new Error("theme resolution is client-only");
   }
   const probe = document.createElement("span");
   probe.style.display = "none";
+  probe.style.color = `var(${cssVar})`;
   document.body.appendChild(probe);
-  const out = {} as ResolvedTheme;
   try {
-    for (const [token, cssVar] of Object.entries(TOKEN_VARS)) {
-      probe.style.color = `var(${cssVar})`;
-      out[token as SemanticToken] = getComputedStyle(probe).color;
-    }
+    return getComputedStyle(probe).color;
   } finally {
     probe.remove();
   }
+}
+
+/** Resolve every semantic token to a concrete color string (rgb/rgba). */
+export function resolveTheme(): ResolvedTheme {
+  const out = {} as ResolvedTheme;
+  for (const [token, cssVar] of Object.entries(TOKEN_VARS)) {
+    out[token as SemanticToken] = resolveVar(cssVar);
+  }
   return out;
+}
+
+export type BandHue = "curve" | "vol" | "fwd" | "outright" | "spread";
+
+const BAND_VARS: Record<BandHue, string> = {
+  curve: "--bw-hue-curve",
+  vol: "--bw-hue-vol",
+  fwd: "--bw-hue-fwd",
+  outright: "--bw-hue-outright",
+  spread: "--bw-hue-spread",
+};
+
+/** Resolve a band hue to concrete hex/rgb for canvas-bound options (§9).
+ * Same path as surfaces so canvas never sees a `var(...)`. */
+export function resolveBandHue(band: BandHue): string {
+  return resolveVar(BAND_VARS[band]);
 }
 
 /** Notify `cb` whenever the root data-theme attribute changes. */

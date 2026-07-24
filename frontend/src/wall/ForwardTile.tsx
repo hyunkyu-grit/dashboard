@@ -130,6 +130,8 @@ export function ForwardTile({ tenor, payload, width, height, refCb }: Props) {
             {v.toFixed(2)}
           </text>
         ))}
+        {/* Band hue (§9): forwards hue on data only, one currentColor here. */}
+        <g className="text-hue-fwd">
         {[...TIME_BASES].reverse().map((b) => (
           <g key={b}>
             <polyline
@@ -154,6 +156,7 @@ export function ForwardTile({ tenor, payload, width, height, refCb }: Props) {
             )}
           </g>
         ))}
+        </g>
         {rows.map((r, i) =>
           LABELED_STARTS.has(r.start) ? (
             <text

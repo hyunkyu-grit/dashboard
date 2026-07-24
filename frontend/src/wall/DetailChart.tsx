@@ -23,6 +23,7 @@ import { API_BASE } from "@/lib/api";
 import {
   assertNoCssVars,
   onThemeChange,
+  resolveBandHue,
   resolveTheme,
 } from "@/theme/bridge";
 import { assertDomainRendered } from "@/theme/domainGuard";
@@ -94,14 +95,18 @@ export function DetailChart({
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const { options, ink } = buildOptions(width, height);
+    const { options } = buildOptions(width, height);
     const chart = createChart(el, options);
-    const series = chart.addSeries(LineSeries, {
-      color: ink,
-      lineWidth: 2,
+    // Band hue by object (§9): a spread/fly id carries a "-"; anything else
+    // is an outright. Resolved to hex via the bridge (no var on canvas).
+    const seriesOptions = {
+      color: resolveBandHue(id.includes("-") ? "spread" : "outright"),
+      lineWidth: 2 as const,
       priceLineVisible: false,
       lastValueVisible: true,
-    });
+    };
+    assertNoCssVars(seriesOptions);
+    const series = chart.addSeries(LineSeries, seriesOptions);
     chartRef.current = chart;
     seriesRef.current = series;
     return () => {
@@ -109,8 +114,9 @@ export function DetailChart({
       chartRef.current = null;
       seriesRef.current = null;
     };
-    // themeTick rebuilds the chart with freshly resolved hex on theme flip
-  }, [width, height, themeTick]);
+    // themeTick rebuilds with freshly resolved hex on theme flip; id rebuilds
+    // to re-resolve the series' band hue (outright vs spread).
+  }, [width, height, themeTick, id]);
 
   useEffect(() => {
     if (!data || !seriesRef.current) return;

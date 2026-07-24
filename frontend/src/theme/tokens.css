@@ -30,6 +30,24 @@
   --bw-rampw-mtd: 1.1;
   --bw-rampw-qtd: 1;
   --bw-rampw-ytd: 1;
+
+  /* Hue layer (§9) — added ON TOP of the grayscale encodings, never
+   * replacing them. Everything must still read with hue removed. */
+
+  /* Main / brand + interactive (interactive is theme-invariant orange;
+   * label on it is near-black — white fails contrast ~2.4:1). */
+  --bw-brand: #043b72;
+  --bw-interactive: #f58220;
+  --bw-on-interactive: #1a1a1a;
+
+  /* Chart hue by band — one hue per band, opacity ramp WITHIN a tile.
+   * These light values are the only sub-palette entries that clear 3:1 on a
+   * white tile at 2px; the dark substitutes are for dark mode / fills. */
+  --bw-hue-curve: #043b72;
+  --bw-hue-vol: #0086b8;
+  --bw-hue-fwd: #ad624e;
+  --bw-hue-outright: #84888b;
+  --bw-hue-spread: #cb6015;
 }
 
 [data-theme="dark"] {
@@ -46,4 +64,15 @@
   --bw-ramp-mtd: 0.43;
   --bw-ramp-qtd: 0.32;
   --bw-ramp-ytd: 0.24;
+
+  /* #043b72 is unreadable on the dark page — dark mode substitutes the light
+   * blue everywhere the main color appears. Interactive orange is unchanged. */
+  --bw-brand: #8dc8e8;
+
+  /* Dark-mode band substitutes (light values fail 3:1 on the dark tile). */
+  --bw-hue-curve: #8dc8e8;
+  --bw-hue-vol: #00a9ce;
+  --bw-hue-fwd: #c2ac97;
+  --bw-hue-outright: #a0a6a8;
+  --bw-hue-spread: #f0b26b;
 }

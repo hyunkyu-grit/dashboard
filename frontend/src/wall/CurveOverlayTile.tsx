@@ -176,6 +176,10 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
             {v.toFixed(2)}
           </text>
         ))}
+        {/* Band hue (§9) applies to DATA only — one currentColor on this <g>,
+            inherited by every line/marker; axis/gridlines/text stay ink.
+            Opacity ramp within the tile is unchanged (still greyscale-safe). */}
+        <g className="text-hue-curve">
         {/* 6 curves, YTD first so Now paints on top */}
         {[...TIME_BASES].reverse().map((b) => {
           const pts = nodes
@@ -212,6 +216,7 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
             </g>
           );
         })}
+        </g>
         {/* tenor labels */}
         {nodes.map((t, i) => (
           <text
