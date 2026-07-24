@@ -31,6 +31,7 @@ import { ChangeLog } from "./ChangeLog";
 import { CommandBar } from "./CommandBar";
 import { CurveOverlayTile } from "./CurveOverlayTile";
 import { DetailOverlay } from "./DetailOverlay";
+import { DetailPanel } from "./DetailPanel";
 import { ForwardMatrix, KeyForwardBlock } from "./ForwardMatrix";
 import { ForwardTile } from "./ForwardTile";
 import { useRegisterTile } from "./useRegisterTile";
@@ -366,9 +367,9 @@ export function Wall() {
 
       <CommandBar onJump={panToElement} />
 
-      {focusedTile === "curve" && data && (
+      {focusedTile && data && (
         <DetailOverlay onClose={closeTile}>
-          <CurveOverlayTile summary={data} width={1200} height={620} />
+          <DetailPanel target={focusedTile} summary={data} />
         </DetailOverlay>
       )}
     </div>
