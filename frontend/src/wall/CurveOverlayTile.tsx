@@ -57,6 +57,18 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
   const nodes = NODE_AXIS.filter((t) => byId.has(t));
   const call = byId.get("1D");
 
+  // Level-extreme STATE (DESIGN §12): tenors whose outright sits in the
+  // extreme percentile band get weight-600 on the tile — the persistent
+  // condition lives here, not in the change log.
+  const extremeTenors = useMemo(() => {
+    const s = new Set<string>();
+    for (const o of summary.outrights) {
+      const p = o.range10y.pct;
+      if (p != null && (p >= 95 || p <= 5)) s.add(o.id);
+    }
+    return s;
+  }, [summary]);
+
   const chartH = height - 40; // readout strip reserves two 20px lines
   const plotW = width - PAD.left - PAD.right;
   const plotH = chartH - PAD.top - PAD.bottom;
@@ -208,8 +220,12 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
             y={chartH - 6}
             textAnchor="middle"
             fill="currentColor"
-            fillOpacity={hover === i ? 1 : 0.7}
-            style={{ fontSize: 12, fontWeight: hover === i ? 600 : 400 }}
+            fillOpacity={hover === i || extremeTenors.has(t) ? 1 : 0.7}
+            style={{
+              fontSize: 12,
+              // weight-600 = outlier: hover, or persistent level-extreme state
+              fontWeight: hover === i || extremeTenors.has(t) ? 600 : 400,
+            }}
           >
             {t}
           </text>

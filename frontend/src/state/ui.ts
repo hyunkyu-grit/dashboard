@@ -59,7 +59,9 @@ export function syncUiFromDom(): void {
   if (useUiStore.getState().theme !== t) useUiStore.setState({ theme: t });
   try {
     const b = localStorage.getItem("bw-basis") as TimeBasis | null;
-    if (b && TIME_BASES.includes(b) && useUiStore.getState().basis !== b) {
+    // "now" is no longer a selector option (DESIGN §12) — clamp it to d1.
+    if (b && TIME_BASES.includes(b) && b !== "now" &&
+        useUiStore.getState().basis !== b) {
       useUiStore.setState({ basis: b });
     }
   } catch {

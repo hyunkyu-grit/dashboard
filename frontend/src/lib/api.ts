@@ -23,6 +23,24 @@ export interface SeriesSummary {
   spark: SparkPoint[];
 }
 
+export interface ChangeEvent {
+  id: string;
+  label: string;
+  kind: "outright" | "spread" | "fly";
+  unit: "%" | "bp";
+  now: number | null;
+  pct: number | null;
+  deltaBp: number | null; // always D-1 (event basis is fixed, DESIGN §12)
+  reasons: ("transition" | "move")[];
+  anchor: string;
+}
+
+export interface EventCluster {
+  leading: ChangeEvent;
+  related: ChangeEvent[];
+  count: number;
+}
+
 export interface WallSummary {
   asof: string;
   basisDates: Record<BasisKey, string | null>;
@@ -31,6 +49,7 @@ export interface WallSummary {
   missingNodes: string[];
   outrights: SeriesSummary[];
   derived: SeriesSummary[];
+  events: EventCluster[];
 }
 
 export async function fetchWallSummary(): Promise<WallSummary> {

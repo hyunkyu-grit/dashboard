@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .curves import build_basis_curves
 from .dataset import DISPLAY_TENORS, SPEC_NODE_ORDER, load_dataset
 from .derive import basis_dates, derived_ids, series_values, summarize
+from .events import detect_event_clusters
 from .forwards import forwards_payload
 
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "irsdata.xlsx"
@@ -37,6 +38,7 @@ _dataset = load_dataset(DATA_PATH)
 _bases = basis_dates(_dataset)
 _curves = build_basis_curves(_dataset)
 _forwards = forwards_payload(_dataset, _curves)
+_events = detect_event_clusters(_dataset)
 
 
 def _outright_label(tenor: str) -> str:
@@ -73,6 +75,8 @@ def wall_summary() -> dict:
         "missingNodes": _dataset.missing_nodes,
         "outrights": outrights,
         "derived": derived,
+        # Change-log EVENTS (D-1 fixed, collapsed) — DESIGN §12 rule (c).
+        "events": _events,
     }
 
 

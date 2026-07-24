@@ -147,6 +147,11 @@ function StubBand({ label, note, height }: { label: string; note: string; height
   );
 }
 
+// Selector offers only the five non-trivial comparison bases (DESIGN §12);
+// "Now" is dropped — Δ vs Now is identically zero. The six-curve ramp still
+// uses all of TIME_BASES; this is only the delta-display selector.
+const SELECTOR_BASES = TIME_BASES.filter((b) => b !== "now");
+
 function BasisSelector({ summary }: { summary?: WallSummary }) {
   const basis = useUiStore((s) => s.basis);
   const setBasis = useUiStore((s) => s.setBasis);
@@ -156,7 +161,7 @@ function BasisSelector({ summary }: { summary?: WallSummary }) {
     <span className="flex items-center gap-2">
       <span className="opacity-60">Δ vs</span>
       <span className="flex overflow-hidden rounded-sm border border-edge">
-        {TIME_BASES.map((b) => (
+        {SELECTOR_BASES.map((b) => (
           <button
             key={b}
             type="button"
