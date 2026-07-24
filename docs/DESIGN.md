@@ -502,7 +502,17 @@ chart path geometry.
   outline while the date stays hovered.
 - **Enlarged sheet** springs up from the bottom; drag-to-dismiss follows the
   pointer.
-- Press feedback: scale 0.98 on rows and controls.
+- **Tabs** use a single sliding underline (`motion` shared-layout `layoutId`),
+  not a fading pill — one element moving reads as a pointer; two fading
+  elements read as a blob. Same spring (~200–260ms). The active tab's label
+  goes weight 600 (no colour change beyond ink strength). Under reduced motion
+  the underline jumps.
+- **Press-feedback rule [Session 13]:** transform-based press-scale (0.98) is
+  applied ONLY to isolated targets — table rows and standalone buttons — never
+  to an element that shares an alignment with its neighbours. Tabs, table
+  headers, and table cells get colour/background transitions only; a scale on
+  them wobbles and breaks the shared baseline. (In practice table rows use a
+  background change too, since CSS transforms do not apply to `table-row`.)
 - A changed number cross-fades. No digit-rolling library.
 - `prefers-reduced-motion` collapses every animation to instant (asserted by a
   test).

@@ -13,7 +13,7 @@ import { dirClass, fmtBp } from "@/lib/format";
 import { MiniBar } from "@/wall/MiniBar";
 import { useRegisterTile } from "@/wall/useRegisterTile";
 
-import { PRESS_SCALE } from "./motion";
+import { SPRING } from "./motion";
 
 import {
   BASIS_ORDER,
@@ -156,22 +156,32 @@ export function InstrumentTable({
 
   return (
     <div>
-      <div className="mb-3 flex gap-1.5">
-        {FILTERS.map((f) => (
-          <motion.button
-            key={f.id}
-            type="button"
-            onClick={() => setFilter(f.id)}
-            whileTap={{ scale: PRESS_SCALE }}
-            className={
-              filter === f.id
-                ? "rounded-full bg-ink px-3 py-1 text-[13px] text-page"
-                : "rounded-full px-3 py-1 text-[13px] opacity-55 hover:opacity-90"
-            }
-          >
-            {f.label}
-          </motion.button>
-        ))}
+      {/* Tabs: a sliding underline indicator (§14). No press-scale here — a
+          tab shares an alignment with its neighbours; transform press feedback
+          is reserved for isolated targets (rows, standalone buttons). */}
+      <div className="mb-3 flex gap-1 border-b border-edge">
+        {FILTERS.map((f) => {
+          const on = filter === f.id;
+          return (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setFilter(f.id)}
+              className={`relative px-3 py-2 text-[13px] transition-opacity ${
+                on ? "font-semibold" : "opacity-55 hover:opacity-90"
+              }`}
+            >
+              {f.label}
+              {on && (
+                <motion.div
+                  layoutId="tab-underline"
+                  transition={SPRING}
+                  className="absolute inset-x-2 -bottom-px h-[2.5px] rounded-full bg-ink"
+                />
+              )}
+            </button>
+          );
+        })}
       </div>
 
       <table
