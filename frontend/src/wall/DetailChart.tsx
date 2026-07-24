@@ -25,6 +25,7 @@ import {
   onThemeChange,
   resolveTheme,
 } from "@/theme/bridge";
+import { assertDomainRendered } from "@/theme/domainGuard";
 
 interface SeriesDetail {
   id: string;
@@ -116,7 +117,22 @@ export function DetailChart({
     seriesRef.current.setData(
       data.points.map((p) => ({ time: p.t, value: p.v })),
     );
-    chartRef.current?.timeScale().fitContent();
+    const ts = chartRef.current?.timeScale();
+    ts?.fitContent();
+    // Guard on the next frame, once fitContent's layout has settled: the
+    // rendered domain must match what we asked for, or throw loudly (Pass C).
+    const raf = requestAnimationFrame(() => {
+      if (!chartRef.current || data.points.length === 0) return;
+      assertDomainRendered(
+        chartRef.current.timeScale().getVisibleLogicalRange(),
+        data.points.length,
+        {
+          first: data.points[0].t,
+          last: data.points[data.points.length - 1].t,
+        },
+      );
+    });
+    return () => cancelAnimationFrame(raf);
   }, [data, themeTick]);
 
   return (
