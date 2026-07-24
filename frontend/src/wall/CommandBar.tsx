@@ -48,7 +48,7 @@ export function CommandBar({ onJump }: { onJump: (el: HTMLElement) => void }) {
       onClick={() => setOpen(false)}
     >
       <Command
-        label="Command bar"
+        label="명령 바"
         className="w-[420px] overflow-hidden rounded-sm border border-edge-live bg-popover"
         onClick={(e) => e.stopPropagation()}
         shouldFilter={false}
