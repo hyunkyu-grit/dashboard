@@ -71,6 +71,12 @@ export function resolveBandHue(band: BandHue): string {
   return resolveVar(BAND_VARS[band]);
 }
 
+/** Resolve the navy brand/chart-line color to hex for canvas (§9, Session 12).
+ * All chart lines are navy now. */
+export function resolveBrand(): string {
+  return resolveVar("--bw-brand");
+}
+
 /** Notify `cb` whenever the root data-theme attribute changes. */
 export function onThemeChange(cb: () => void): () => void {
   const observer = new MutationObserver(cb);

@@ -23,7 +23,7 @@ import { API_BASE } from "@/lib/api";
 import {
   assertNoCssVars,
   onThemeChange,
-  resolveBandHue,
+  resolveBrand,
   resolveTheme,
 } from "@/theme/bridge";
 import { assertDomainRendered } from "@/theme/domainGuard";
@@ -97,10 +97,10 @@ export function DetailChart({
     if (!el) return;
     const { options } = buildOptions(width, height);
     const chart = createChart(el, options);
-    // Band hue by object (§9): a spread/fly id carries a "-"; anything else
-    // is an outright. Resolved to hex via the bridge (no var on canvas).
+    // Chart lines are navy (§9, Session 12), resolved to hex via the bridge
+    // (no var on canvas). The id-based band-hue selection is retired.
     const seriesOptions = {
-      color: resolveBandHue(id.includes("-") ? "spread" : "outright"),
+      color: resolveBrand(),
       lineWidth: 2 as const,
       priceLineVisible: false,
       lastValueVisible: true,

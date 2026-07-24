@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 
-import { Wall } from "@/wall/Wall";
+import { App } from "@/ui/App";
 
 import { Providers } from "./providers";
 
@@ -9,7 +9,7 @@ export default function Home() {
     <Providers>
       {/* Suspense boundary required by useSearchParams (URL-as-state, §10) */}
       <Suspense>
-        <Wall />
+        <App />
       </Suspense>
     </Providers>
   );

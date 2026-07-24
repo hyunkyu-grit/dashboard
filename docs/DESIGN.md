@@ -510,8 +510,17 @@ Each should be confirmed or overridden by the owner.
   `panToElement`) is unused and marked `@deprecated` (Session 12). Remove once
   the three-level layout is accepted. The tile registry is retained and
   repurposed for scroll-to-element.
-- **Level-3 six-base control**: renders the six basis reference levels as a
-  segmented readout beside the history chart (not six overlaid curves) — the
-  history chart is a single series, so the ramp appears as selectable reference
-  points, which is the closest faithful realization of "the full ramp lives
-  here."
+- **Level-3 six-base control**: for a series history the six bases render as a
+  segmented readout beside the chart (the history is one series, so the ramp
+  appears as selectable reference points). For a curve/forward tile the sheet
+  instead shows the full six-curve overlay — that is where the six-step navy
+  ramp genuinely lives.
+- **Detail-open root cause (fixed)**: the old failure was the wall pan's
+  click-suppression (`onClickCapture` swallowed a tap it mistook for a
+  micro-drag). The three-level column has no pan, so tile taps are plain
+  buttons and open reliably; the sheet content is additionally wrapped in an
+  error boundary so a thrown guard shows a message, not a blank region.
+- **Command bar**: now scrolls to a mounted, registered tile
+  (`scrollIntoView`) instead of panning. Series tiles self-register only while
+  their band view is mounted, so the command bar resolves series within the
+  current view; from Home it opens their detail. Acceptable for now.

@@ -6,16 +6,17 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 
-import { TIME_BASES, type TimeBasis } from "@/theme/ramp";
+import type { BasisKey } from "@/lib/api";
+import { TIME_BASES } from "@/theme/ramp";
 
 export type Theme = "light" | "dark";
 
 interface UiState {
   theme: Theme;
   setTheme: (t: Theme) => void;
-  /** Global comparison basis — re-bases every delta representation (§3). */
-  basis: TimeBasis;
-  setBasis: (b: TimeBasis) => void;
+  /** Global comparison basis — one of the five non-"now" bases (§12). */
+  basis: BasisKey;
+  setBasis: (b: BasisKey) => void;
   /** Matrix-cell hover → linked highlight in the matching forward tile (§8). */
   fwdHover: { tenor: string; startIdx: number } | null;
   setFwdHover: (h: { tenor: string; startIdx: number } | null) => void;
@@ -58,11 +59,11 @@ export function syncUiFromDom(): void {
     document.documentElement.dataset.theme === "dark" ? "dark" : "light";
   if (useUiStore.getState().theme !== t) useUiStore.setState({ theme: t });
   try {
-    const b = localStorage.getItem("bw-basis") as TimeBasis | null;
-    // "now" is no longer a selector option (DESIGN §12) — clamp it to d1.
-    if (b && TIME_BASES.includes(b) && b !== "now" &&
+    const b = localStorage.getItem("bw-basis");
+    // "now" is not a selector option (§12) — accept only the five bases.
+    if (b && b !== "now" && TIME_BASES.includes(b as (typeof TIME_BASES)[number]) &&
         useUiStore.getState().basis !== b) {
-      useUiStore.setState({ basis: b });
+      useUiStore.setState({ basis: b as BasisKey });
     }
   } catch {
     /* storage unavailable */

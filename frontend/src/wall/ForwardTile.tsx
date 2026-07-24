@@ -16,10 +16,12 @@ import { fmtBp, fmtRate } from "@/lib/format";
 import { useUiStore } from "@/state/ui";
 import {
   BASIS_LABELS,
+  BASIS_SECONDARY_OPACITY,
   EDGE_OPACITY,
   RAMP_OPACITY,
   RAMP_WIDTH,
   TIME_BASES,
+  type TimeBasis,
 } from "@/theme/ramp";
 
 const PAD = { left: 42, right: 10, top: 12, bottom: 18 };
@@ -32,13 +34,28 @@ interface Props {
   width: number;
   height: number;
   refCb?: (el: HTMLElement | null) => void;
+  /** Time-basis lines to draw; Level 1–2 pass [now, basis] (DESIGN §2). */
+  bases?: TimeBasis[];
 }
 
-export function ForwardTile({ tenor, payload, width, height, refCb }: Props) {
+export function ForwardTile({
+  tenor,
+  payload,
+  width,
+  height,
+  refCb,
+  bases = [...TIME_BASES],
+}: Props) {
   const [hover, setHover] = useState<number | null>(null);
   const theme = useUiStore((s) => s.theme);
   const rampOpacity = RAMP_OPACITY[theme];
   const edge = EDGE_OPACITY[theme];
+  const op = (b: TimeBasis) =>
+    b === "now"
+      ? rampOpacity.now
+      : bases.length <= 2
+        ? BASIS_SECONDARY_OPACITY
+        : rampOpacity[b];
   // Linked highlight from the matrix (§8) — only this tile's hover matters.
   const linkedIdx = useUiStore((s) =>
     s.fwdHover?.tenor === tenor ? s.fwdHover.startIdx : null,
@@ -54,7 +71,7 @@ export function ForwardTile({ tenor, payload, width, height, refCb }: Props) {
     let lo = Infinity;
     let hi = -Infinity;
     for (const r of rows) {
-      for (const b of TIME_BASES) {
+      for (const b of bases) {
         const v = r.values[b];
         lo = Math.min(lo, v);
         hi = Math.max(hi, v);
@@ -66,7 +83,7 @@ export function ForwardTile({ tenor, payload, width, height, refCb }: Props) {
       yMax: hi + pad,
       spanBp: Math.round((hi - lo) * 100),
     };
-  }, [rows]);
+  }, [rows, bases]);
 
   const x = (i: number) => PAD.left + (i * plotW) / (rows.length - 1);
   const y = (v: number) => PAD.top + (1 - (v - yMin) / (yMax - yMin)) * plotH;
@@ -84,7 +101,7 @@ export function ForwardTile({ tenor, payload, width, height, refCb }: Props) {
   const activeIdx = hover ?? linkedIdx;
 
   return (
-    <section ref={refCb} className="flex flex-col rounded-sm border border-edge bg-tile p-3" style={{ width, height }}>
+    <section ref={refCb} className="flex flex-col rounded-[16px] bg-tile p-4" style={{ width, height }}>
       <h2 className="mb-1 flex items-baseline justify-between text-[14px] font-semibold">
         <span>{tenor}</span>
         <span className="text-[12px] font-normal opacity-60">span {spanBp}bp</span>
@@ -130,15 +147,15 @@ export function ForwardTile({ tenor, payload, width, height, refCb }: Props) {
             {v.toFixed(2)}
           </text>
         ))}
-        {/* Band hue (§9): forwards hue on data only, one currentColor here. */}
-        <g className="text-hue-fwd">
-        {[...TIME_BASES].reverse().map((b) => (
+        {/* Navy data lines (§9, Session 12) — one currentColor here. */}
+        <g className="text-brand">
+        {[...bases].reverse().map((b) => (
           <g key={b}>
             <polyline
               points={rows.map((r, i) => `${x(i)},${y(r.values[b])}`).join(" ")}
               fill="none"
               stroke="currentColor"
-              strokeOpacity={rampOpacity[b]}
+              strokeOpacity={op(b)}
               strokeWidth={RAMP_WIDTH[b]}
             />
             {/* markers = live-quoted points only (§7) */}
@@ -150,7 +167,7 @@ export function ForwardTile({ tenor, payload, width, height, refCb }: Props) {
                   cy={y(r.values[b])}
                   r={b === "now" ? 2.4 : 1.9}
                   fill="currentColor"
-                  fillOpacity={rampOpacity[b]}
+                  fillOpacity={op(b)}
                 />
               ) : null,
             )}

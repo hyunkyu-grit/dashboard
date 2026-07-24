@@ -16,6 +16,7 @@ import { fmtBp, fmtRate } from "@/lib/format";
 import { useUiStore } from "@/state/ui";
 import {
   BASIS_LABELS,
+  BASIS_SECONDARY_OPACITY,
   EDGE_OPACITY,
   RAMP_OPACITY,
   RAMP_WIDTH,
@@ -41,9 +42,17 @@ interface Props {
   summary: WallSummary;
   width: number;
   height: number;
+  /** Which time-basis curves to draw. Level 1–2 pass [now, basis]; the full
+   * six-curve ramp is Level-3 only (DESIGN §2/§9). Defaults to all six. */
+  bases?: TimeBasis[];
 }
 
-export function CurveOverlayTile({ summary, width, height }: Props) {
+export function CurveOverlayTile({
+  summary,
+  width,
+  height,
+  bases = [...TIME_BASES],
+}: Props) {
   const [hover, setHover] = useState<number | null>(null);
   const globalBasis = useUiStore((s) => s.basis);
   const theme = useUiStore((s) => s.theme);
@@ -80,7 +89,7 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
     let hi = -Infinity;
     for (const t of nodes) {
       const s = byId.get(t)!;
-      for (const b of TIME_BASES) {
+      for (const b of bases) {
         const v = basisValue(s, b);
         if (v != null) {
           lo = Math.min(lo, v);
@@ -90,7 +99,7 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
     }
     const pad = (hi - lo) * 0.05 || 0.1;
     return { yMin: lo - pad, yMax: hi + pad };
-  }, [nodes, byId]);
+  }, [nodes, byId, bases]);
 
   const x = (i: number) =>
     PAD.left + (nodes.length > 1 ? (i * plotW) / (nodes.length - 1) : plotW / 2);
@@ -176,12 +185,20 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
             {v.toFixed(2)}
           </text>
         ))}
-        {/* Band hue (§9) applies to DATA only — one currentColor on this <g>,
-            inherited by every line/marker; axis/gridlines/text stay ink.
-            Opacity ramp within the tile is unchanged (still greyscale-safe). */}
-        <g className="text-hue-curve">
-        {/* 6 curves, YTD first so Now paints on top */}
-        {[...TIME_BASES].reverse().map((b) => {
+        {/* Navy (§9, Session 12) applies to DATA only — one currentColor on
+            this <g>, inherited by every line/marker; axis/gridlines/text stay
+            ink. The opacity ramp within the tile separates the bases. */}
+        <g className="text-brand">
+        {/* draw requested bases, back-to-front so Now paints on top. In the
+            two-line Level-1/2 mode the basis line is at 45% (§9); the full
+            six-step ramp is used only when all bases are passed (Level 3). */}
+        {[...bases].reverse().map((b) => {
+          const op =
+            b === "now"
+              ? rampOpacity.now
+              : bases.length <= 2
+                ? BASIS_SECONDARY_OPACITY
+                : rampOpacity[b];
           const pts = nodes
             .map((t, i) => {
               const v = basisValue(byId.get(t)!, b);
@@ -195,7 +212,7 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
                 points={pts}
                 fill="none"
                 stroke="currentColor"
-                strokeOpacity={rampOpacity[b]}
+                strokeOpacity={op}
                 strokeWidth={RAMP_WIDTH[b]}
               />
               {nodes.map((t, i) => {
@@ -208,7 +225,7 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
                     r={b === "now" ? 2.8 : 2.2}
                     fill="var(--bw-tile)"
                     stroke="currentColor"
-                    strokeOpacity={rampOpacity[b]}
+                    strokeOpacity={op}
                     strokeWidth={b === "now" ? 1.6 : 1.1}
                   />
                 );
