@@ -52,8 +52,8 @@ export function ForwardMatrix({ payload }: { payload: ForwardsPayload }) {
     >
       <thead>
         <tr className="h-8">
-          <th className="w-12 text-left font-normal opacity-60">start</th>
-          <th className="w-24 text-left font-normal opacity-60">date</th>
+          <th className="w-12 text-left font-normal opacity-60">시작</th>
+          <th className="w-24 text-left font-normal opacity-60">날짜</th>
           {payload.tenors.map((t) => (
             <th key={t} className="w-[74px] text-right font-semibold">
               {t}
@@ -115,7 +115,7 @@ export function KeyForwardBlock({ payload }: { payload: ForwardsPayload }) {
     >
       <thead>
         <tr className="h-8">
-          <th className="w-16 text-left font-semibold">key fwd</th>
+          <th className="w-16 text-left font-semibold">주요 포워드</th>
           {TIME_BASES.map((b) => (
             <th key={b} className="w-[74px] text-right font-normal opacity-60">
               {BASIS_LABELS[b]}

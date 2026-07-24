@@ -207,9 +207,9 @@ export function ForwardTile({
           ))}
         </div>
         <div className="truncate opacity-80">
-          {focus.live ? "on quotes" : "interpolated"}
+          {focus.live ? "호가 위" : "보간값"}
           <span className="ml-3">
-            <span className="opacity-60">start</span> {focusStart.date}
+            <span className="opacity-60">시작</span> {focusStart.date}
           </span>
         </div>
       </div>

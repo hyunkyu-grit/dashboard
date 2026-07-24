@@ -70,12 +70,10 @@ function buildOptions(width: number, height: number) {
 
 export function DetailChart({
   id,
-  label,
   width,
   height,
 }: {
   id: string;
-  label: string;
   width: number;
   height: number;
 }) {
@@ -143,18 +141,13 @@ export function DetailChart({
 
   return (
     <div>
-      <div className="mb-2 flex items-baseline justify-between">
-        <h2 className="text-[14px] font-semibold">{label}</h2>
-        <span className="text-[12px] opacity-60">
-          {data ? `${data.points.length} daily closes · to ${data.asof}` : "…"}
-        </span>
-      </div>
+      {/* header (title + caption) is provided by the enclosing detail sheet */}
       {isError ? (
         <div
           className="flex items-center justify-center opacity-60"
           style={{ width, height }}
         >
-          series unavailable
+          불러오지 못했어요. 잠시 뒤 다시 시도해 주세요
         </div>
       ) : (
         <div ref={containerRef} style={{ width, height }} />

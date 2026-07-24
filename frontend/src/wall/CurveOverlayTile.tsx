@@ -285,7 +285,7 @@ export function CurveOverlayTile({
         <div className="truncate opacity-80">
           {slope
             ? `${slope.from}→${focusTenor} ${fmtBp(slope.bpPerYear)} bp/yr`
-            : "segment –"}
+            : "구간 –"}
           <span className="ml-4">
             <span className="opacity-60">Call 1D</span> {fmtRate(call?.now)}
           </span>

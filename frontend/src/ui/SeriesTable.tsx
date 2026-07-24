@@ -36,9 +36,9 @@ export function SeriesTable({
     >
       <thead>
         <tr className="h-8 border-b border-edge text-left opacity-50">
-          <th className="font-normal">series</th>
-          <th className="w-24 text-right font-normal">now</th>
-          <th className="w-40 text-right font-normal">Δ</th>
+          <th className="font-normal">종목</th>
+          <th className="w-24 text-right font-normal">현재</th>
+          <th className="w-40 text-right font-normal">변화</th>
         </tr>
       </thead>
       <tbody>

@@ -110,7 +110,7 @@ function SheetBody({
         <h2 className="text-[17px] font-semibold">{id.replace(/-/g, "/")}</h2>
         <span className="text-[12px] opacity-45">지난 10년 흐름이에요</span>
       </div>
-      <DetailChart id={id} label={id.replace(/-/g, "/")} width={880} height={440} />
+      <DetailChart id={id} width={880} height={440} />
       <SixBasisReadout summary={summary} seriesId={id} />
     </>
   );
