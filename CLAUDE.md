@@ -4,6 +4,10 @@
 first; it outranks anything inferred from code.** This file is a pointer plus
 the load-bearing guardrails that must never be violated.
 
+**Continuing work?** Read [`docs/HANDOFF.md`](docs/HANDOFF.md) — current state,
+run/gate commands, architecture map, invariants, conventions, and the gotchas
+from prior sessions. Update its "Current state" / "Open" sections when you finish.
+
 ## Guardrails
 
 - `braveworld` is a NEW, STANDALONE project. It does not replace krw-fi-pms.
