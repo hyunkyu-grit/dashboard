@@ -27,10 +27,10 @@ def test_loads_ascending_daily(ds):
 
 
 def test_tenor_columns(ds):
-    for t in ["1D", "6M", "9M", "1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y"]:
+    for t in ["1D", "3M", "6M", "9M", "1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y"]:
         assert t in ds.series, t
-    # 3M (CD91) is not in the current export — must be reported, not faked.
-    assert "3M" in ds.missing_nodes
+    # full spec node set present since the 2026-07-24 re-export added CD 3M
+    assert ds.missing_nodes == []
 
 
 def test_derived_count():

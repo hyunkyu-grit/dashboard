@@ -34,6 +34,8 @@ def _tenor_id(label: str) -> str:
     """Map a Korean series label to a tenor id like '6M', '1.5Y', '1D'."""
     if "콜금리" in label:
         return "1D"
+    if "CD" in label:
+        return "3M"  # CD 91d average — the spec's 3M node (IRS 3M = CD91)
     m = re.search(r"(\d+)개월", label)
     if m:
         months = int(m.group(1))
