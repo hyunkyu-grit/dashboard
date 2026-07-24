@@ -9,7 +9,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect } from "react";
 
-import { fetchWallSummary, type WallSummary } from "@/lib/api";
+import {
+  fetchForwards,
+  fetchWallSummary,
+  type WallSummary,
+} from "@/lib/api";
 import { syncUiFromDom, useUiStore } from "@/state/ui";
 import { BASIS_LABELS, TIME_BASES } from "@/theme/ramp";
 
@@ -24,6 +28,8 @@ import {
 } from "./constants";
 import { CurveOverlayTile } from "./CurveOverlayTile";
 import { DetailOverlay } from "./DetailOverlay";
+import { ForwardMatrix, KeyForwardBlock } from "./ForwardMatrix";
+import { ForwardTile } from "./ForwardTile";
 import { useWallPan } from "./usePan";
 
 const GRID_STYLE: React.CSSProperties = {
@@ -171,6 +177,12 @@ export function Wall() {
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
+  const { data: fwd } = useQuery({
+    queryKey: ["forwards"],
+    queryFn: fetchForwards,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
 
   const { viewportRef, contentRef, handlers } = useWallPan();
 
@@ -188,6 +200,7 @@ export function Wall() {
   );
 
   const bandTileW = 3 * COL_W + 2 * COL_GAP - 24; // half-wall tile, minus padding
+  const fwdTileW = (WALL_W - 3 * COL_GAP) / 4; // ~1.5 wall-columns each (§7)
 
   return (
     <div className="flex h-screen flex-col">
@@ -216,7 +229,9 @@ export function Wall() {
           style={{ paddingTop: HEADER_H }}
           {...handlers}
         >
-          <div ref={contentRef} className="will-change-transform pt-2">
+          {/* no will-change: promoting the full ~3000px wall into one GPU
+              layer stalls compositing; translate3d promotes on demand */}
+          <div ref={contentRef} className="pt-2">
             {/* Band 1 — tenor-axis overlays */}
             <Band label="Curve">
               <Tile
@@ -240,12 +255,38 @@ export function Wall() {
               </Tile>
             </Band>
 
-            {/* Band 2 — forwards: gated on the curve-engine port [TBD §0] */}
-            <StubBand
-              label="Fwd"
-              note="forwards — gated on curve bootstrap port (owner TBD)"
-              height={420}
-            />
+            {/* Band 2 — forwards (§7/§8) */}
+            <Band label="Fwd">
+              <div
+                className="flex flex-col gap-2"
+                style={{ gridColumn: `span ${N_COLS}` }}
+              >
+                {fwd && (
+                  <>
+                    {[
+                      ["SPOT", "3MF", "6MF", "9MF"],
+                      ["1YF", "2YF", "3YF", "5YF"],
+                    ].map((row) => (
+                      <div key={row[0]} className="flex gap-2">
+                        {row.map((tenor) => (
+                          <ForwardTile
+                            key={tenor}
+                            tenor={tenor}
+                            payload={fwd}
+                            width={fwdTileW}
+                            height={300}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                    <div className="flex items-start gap-4 rounded-sm border border-edge bg-tile p-3">
+                      <ForwardMatrix payload={fwd} />
+                      <KeyForwardBlock payload={fwd} />
+                    </div>
+                  </>
+                )}
+              </div>
+            </Band>
 
             {/* Band 3+ — time-series matrix [TBD — do not improvise (§13)] */}
             <StubBand

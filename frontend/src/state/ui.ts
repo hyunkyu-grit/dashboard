@@ -16,6 +16,9 @@ interface UiState {
   /** Global comparison basis — re-bases every delta representation (§3). */
   basis: TimeBasis;
   setBasis: (b: TimeBasis) => void;
+  /** Matrix-cell hover → linked highlight in the matching forward tile (§8). */
+  fwdHover: { tenor: string; startIdx: number } | null;
+  setFwdHover: (h: { tenor: string; startIdx: number } | null) => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -43,6 +46,8 @@ export const useUiStore = create<UiState>()(
       }
       set({ basis: b });
     },
+    fwdHover: null,
+    setFwdHover: (h) => set({ fwdHover: h }),
   })),
 );
 

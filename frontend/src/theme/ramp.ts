@@ -22,6 +22,14 @@ export const RAMP_OPACITY: Record<"light" | "dark", Record<TimeBasis, number>> =
   dark: { now: 1, d1: 0.74, wtd: 0.56, mtd: 0.43, qtd: 0.32, ytd: 0.24 },
 };
 
+/** Border ink-opacities, mirroring the --bw-border/--bw-border-live
+ * color-mix percentages in tokens.css. Used where a var() lookup would be
+ * paid per element (SVG paints hundreds of gridlines/markers). */
+export const EDGE_OPACITY: Record<"light" | "dark", { base: number; live: number }> = {
+  light: { base: 0.12, live: 0.4 },
+  dark: { base: 0.18, live: 0.55 },
+};
+
 export const RAMP_WIDTH: Record<TimeBasis, number> = {
   now: 2,
   d1: 1.5,

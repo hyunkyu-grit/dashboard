@@ -14,7 +14,14 @@ import { useMemo, useState } from "react";
 import type { SeriesSummary, WallSummary } from "@/lib/api";
 import { fmtBp, fmtRate } from "@/lib/format";
 import { useUiStore } from "@/state/ui";
-import { BASIS_LABELS, TIME_BASES, type TimeBasis } from "@/theme/ramp";
+import {
+  BASIS_LABELS,
+  EDGE_OPACITY,
+  RAMP_OPACITY,
+  RAMP_WIDTH,
+  TIME_BASES,
+  type TimeBasis,
+} from "@/theme/ramp";
 
 // Spec node axis, in order. Nodes missing from the feed are skipped.
 const NODE_AXIS = ["3M", "6M", "9M", "1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y"];
@@ -39,6 +46,9 @@ interface Props {
 export function CurveOverlayTile({ summary, width, height }: Props) {
   const [hover, setHover] = useState<number | null>(null);
   const globalBasis = useUiStore((s) => s.basis);
+  const theme = useUiStore((s) => s.theme);
+  const rampOpacity = RAMP_OPACITY[theme];
+  const edge = EDGE_OPACITY[theme];
 
   const byId = useMemo(
     () => new Map(summary.outrights.map((o) => [o.id, o])),
@@ -117,6 +127,7 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
 
   return (
     <div className="flex h-full flex-col">
+      {/* currentColor from text-ink; no per-element var() (see ForwardTile) */}
       <svg
         width={width}
         height={chartH}
@@ -124,6 +135,7 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
         onMouseLeave={() => setHover(null)}
         role="img"
         aria-label="IRS curve overlay"
+        className="text-ink"
       >
         {/* vertical tenor gridlines (double as tenor guides) */}
         {nodes.map((t, i) => (
@@ -133,11 +145,9 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
             x2={x(i)}
             y1={PAD.top}
             y2={PAD.top + plotH}
-            style={{
-              stroke:
-                hover === i ? "var(--bw-border-live)" : "var(--bw-border)",
-              strokeWidth: 1,
-            }}
+            stroke="currentColor"
+            strokeWidth={1}
+            strokeOpacity={hover === i ? edge.live : edge.base}
           />
         ))}
         {/* y tick labels, no horizontal gridlines */}
@@ -147,8 +157,9 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
             x={PAD.left - 6}
             y={y(v) + 4}
             textAnchor="end"
-            className="fill-ink"
-            style={{ fontSize: 11, opacity: 0.6 }}
+            fill="currentColor"
+            fillOpacity={0.6}
+            style={{ fontSize: 11 }}
           >
             {v.toFixed(2)}
           </text>
@@ -167,11 +178,9 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
               <polyline
                 points={pts}
                 fill="none"
-                style={{
-                  stroke: "var(--bw-ink)",
-                  strokeOpacity: `var(--bw-ramp-${b})` as string,
-                  strokeWidth: `var(--bw-rampw-${b})` as string,
-                }}
+                stroke="currentColor"
+                strokeOpacity={rampOpacity[b]}
+                strokeWidth={RAMP_WIDTH[b]}
               />
               {nodes.map((t, i) => {
                 const v = basisValue(byId.get(t)!, b);
@@ -181,12 +190,10 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
                     cx={x(i)}
                     cy={y(v)}
                     r={b === "now" ? 2.8 : 2.2}
-                    style={{
-                      fill: "var(--bw-tile)",
-                      stroke: "var(--bw-ink)",
-                      strokeOpacity: `var(--bw-ramp-${b})` as string,
-                      strokeWidth: b === "now" ? 1.6 : 1.1,
-                    }}
+                    fill="var(--bw-tile)"
+                    stroke="currentColor"
+                    strokeOpacity={rampOpacity[b]}
+                    strokeWidth={b === "now" ? 1.6 : 1.1}
                   />
                 );
               })}
@@ -200,12 +207,9 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
             x={x(i)}
             y={chartH - 6}
             textAnchor="middle"
-            className="fill-ink"
-            style={{
-              fontSize: 12,
-              fontWeight: hover === i ? 600 : 400,
-              opacity: hover === i ? 1 : 0.7,
-            }}
+            fill="currentColor"
+            fillOpacity={hover === i ? 1 : 0.7}
+            style={{ fontSize: 12, fontWeight: hover === i ? 600 : 400 }}
           >
             {t}
           </text>
@@ -216,7 +220,7 @@ export function CurveOverlayTile({ summary, width, height }: Props) {
             x={width - PAD.right}
             y={PAD.top + 4}
             textAnchor="end"
-            className="fill-ink"
+            fill="currentColor"
             style={{ fontSize: 12 }}
           >
             {nodes[nodes.length - 1]} {fmtRate(last.now)}

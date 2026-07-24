@@ -7,7 +7,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { RAMP_OPACITY, RAMP_WIDTH, TIME_BASES } from "../src/theme/ramp";
+import {
+  EDGE_OPACITY,
+  RAMP_OPACITY,
+  RAMP_WIDTH,
+  TIME_BASES,
+} from "../src/theme/ramp";
 
 const css = readFileSync(
   join(__dirname, "..", "src", "theme", "tokens.css"),
@@ -23,6 +28,17 @@ function cssNumber(block: string, name: string): number {
   return Number(m[1]);
 }
 
+/** color-mix(in srgb, var(--bw-ink) N%, transparent) → N/100 */
+function edgeMixOpacity(block: string, cssVar: string): number {
+  const line = block
+    .split("\n")
+    .find((l) => l.trimStart().startsWith(`${cssVar}:`));
+  if (!line) throw new Error(`missing ${cssVar} in tokens.css block`);
+  const m = line.match(/ink\)\s+([0-9.]+)%/);
+  if (!m) throw new Error(`no ink % in ${cssVar}`);
+  return Number(m[1]) / 100;
+}
+
 describe("ramp constants stay in sync with tokens.css", () => {
   it.each(TIME_BASES)("opacity + width for %s", (basis) => {
     expect(cssNumber(lightBlock, `--bw-ramp-${basis}`)).toBe(
@@ -33,6 +49,23 @@ describe("ramp constants stay in sync with tokens.css", () => {
     );
     expect(cssNumber(lightBlock, `--bw-rampw-${basis}`)).toBe(
       RAMP_WIDTH[basis],
+    );
+  });
+
+  // SVG paints hundreds of gridlines/markers, so edge opacities are read
+  // from EDGE_OPACITY rather than resolved per element from the CSS var.
+  it("edge opacities match the border color-mix percentages", () => {
+    expect(edgeMixOpacity(lightBlock, "--bw-border")).toBe(
+      EDGE_OPACITY.light.base,
+    );
+    expect(edgeMixOpacity(lightBlock, "--bw-border-live")).toBe(
+      EDGE_OPACITY.light.live,
+    );
+    expect(edgeMixOpacity(darkBlock, "--bw-border")).toBe(
+      EDGE_OPACITY.dark.base,
+    );
+    expect(edgeMixOpacity(darkBlock, "--bw-border-live")).toBe(
+      EDGE_OPACITY.dark.live,
     );
   });
 });
