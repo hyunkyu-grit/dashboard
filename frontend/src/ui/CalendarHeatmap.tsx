@@ -5,6 +5,7 @@
  * for the chart-hovered date pulses with an INK outline (never orange = line,
  * never blue = direction). Recent ~26 weeks only (see ## Provisional). */
 
+import { motion } from "motion/react";
 import { useMemo } from "react";
 
 import type { SparkPoint } from "@/lib/api";
@@ -63,6 +64,7 @@ export function CalendarHeatmap({
 
   if (cells.length === 0) return null;
   const cols = Math.max(...cells.map((c) => c.col)) + 1;
+  const pulsed = hoveredDate ? cells.find((c) => c.date === hoveredDate) : undefined;
   const labelW = 18;
   const width = labelW + cols * (cell + gap);
   const height = 5 * (cell + gap);
@@ -88,7 +90,6 @@ export function CalendarHeatmap({
       {cells.map((c) => {
         const up = c.change >= 0;
         const mag = Math.min(1, Math.abs(c.change) / maxMag);
-        const pulsed = hoveredDate === c.date;
         return (
           <rect
             key={c.date}
@@ -100,11 +101,27 @@ export function CalendarHeatmap({
             className={up ? "text-up" : "text-down"}
             fill="currentColor"
             fillOpacity={0.15 + 0.85 * mag}
-            stroke={pulsed ? "var(--bw-ink)" : "none"}
-            strokeWidth={pulsed ? 1.5 : 0}
           />
         );
       })}
+      {/* pulse: an INK outline on the chart-hovered date — two cycles, then it
+          settles static (§9/§14). Keyed by date so it restarts on move. */}
+      {pulsed && (
+        <motion.rect
+          key={pulsed.date}
+          x={labelW + pulsed.col * (cell + gap) - 1}
+          y={pulsed.row * (cell + gap) - 1}
+          width={cell + 2}
+          height={cell + 2}
+          rx={3}
+          fill="none"
+          stroke="var(--bw-ink)"
+          strokeWidth={1.5}
+          initial={{ opacity: 0.9 }}
+          animate={{ opacity: [0.9, 0.25, 0.9, 0.25, 0.9] }}
+          transition={{ duration: 1.2, times: [0, 0.25, 0.5, 0.75, 1] }}
+        />
+      )}
     </svg>
   );
 }

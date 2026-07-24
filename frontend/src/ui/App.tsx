@@ -5,8 +5,9 @@
  * `?tile=…` opens the enlarged view. No navigation, no basis selector. */
 
 import { useQuery } from "@tanstack/react-query";
+import { AnimatePresence, MotionConfig } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { fetchForwards, fetchWallSummary } from "@/lib/api";
 import { syncUiFromDom, useUiStore } from "@/state/ui";
@@ -61,6 +62,14 @@ export function App() {
   const [pinned, setPinned] = useState<Row | null>(null);
   const active = hovered ?? pinned;
 
+  // ~120ms hover delay so crossing the table does not strobe the preview (§2).
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const handleHover = useCallback((row: Row | null) => {
+    clearTimeout(hoverTimer.current);
+    if (row) hoverTimer.current = setTimeout(() => setHovered(row), 120);
+    else setHovered(null);
+  }, []);
+
   const rows = useMemo(
     () => (summary ? buildRows(summary, forwards) : []),
     [summary, forwards],
@@ -105,6 +114,7 @@ export function App() {
   }, []);
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="min-h-screen">
       <Header />
 
@@ -126,7 +136,7 @@ export function App() {
                 rows={rows}
                 activeId={active?.id ?? null}
                 pinnedId={pinned?.id ?? null}
-                onHover={setHovered}
+                onHover={handleHover}
                 onPin={setPinned}
               />
             </div>
@@ -139,16 +149,19 @@ export function App() {
         )}
       </main>
 
-      {enlargedRow && summary && (
-        <EnlargedView
-          row={enlargedRow}
-          summary={summary}
-          forwards={forwards}
-          onClose={closeEnlarged}
-        />
-      )}
+      <AnimatePresence>
+        {enlargedRow && summary && (
+          <EnlargedView
+            row={enlargedRow}
+            summary={summary}
+            forwards={forwards}
+            onClose={closeEnlarged}
+          />
+        )}
+      </AnimatePresence>
 
       <CommandBar onJump={scrollTo} />
     </div>
+    </MotionConfig>
   );
 }

@@ -6,13 +6,16 @@
  * volatility (no stage-2 history). Clicking the chart opens the enlarged view. */
 
 import { useQuery } from "@tanstack/react-query";
+import { motion } from "motion/react";
 import { useState } from "react";
 
 import { fetchSeries } from "@/lib/api";
 import { dirClass, fmtBp } from "@/lib/format";
 
+import { AnimatedNumber } from "./AnimatedNumber";
 import { CalendarHeatmap } from "./CalendarHeatmap";
 import { ERROR_SENTENCE, LOADING_SENTENCE } from "./copy";
+import { PRESS_SCALE, SPRING } from "./motion";
 import { PreviewChart } from "./PreviewChart";
 import type { Row } from "./rows";
 
@@ -37,9 +40,10 @@ function Header({ row }: { row: Row }) {
         <span className="text-[13px] opacity-45">{row.oneLiner}</span>
       </div>
       <div className="mt-0.5 flex items-baseline gap-2">
-        <span className="text-[28px] font-bold leading-none tabular-nums">
-          {level}
-        </span>
+        <AnimatedNumber
+          value={level}
+          className="text-[28px] font-bold leading-none tabular-nums"
+        />
         <span className="text-[12px] opacity-45">{row.unit === "%" ? "%" : "bp"}</span>
         <span className={`text-[13px] tabular-nums ${dirClass(row.changes.d1)}`}>
           {fmtBp(row.changes.d1)}
@@ -100,11 +104,16 @@ export function PreviewPane({
       {isError && <Sentence>{ERROR_SENTENCE}</Sentence>}
       {isLoading && <Sentence>{LOADING_SENTENCE}</Sentence>}
       {data && (
-        <div
+        <motion.div
+          key={row.seriesId}
           role="button"
           tabIndex={0}
           onClick={() => onOpen(row)}
           onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onOpen(row)}
+          whileTap={{ scale: PRESS_SCALE }}
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ ...SPRING, duration: 0.18 }}
           className="cursor-pointer"
         >
           <PreviewChart
@@ -118,7 +127,7 @@ export function PreviewPane({
             <CalendarHeatmap points={data.points} hoveredDate={hoveredDate} />
           </div>
           <p className="mt-2 text-[12px] opacity-40">눌러서 크게 볼 수 있어요</p>
-        </div>
+        </motion.div>
       )}
     </>
   );

@@ -5,12 +5,15 @@
  * any change column, hover → preview, click → pin, Esc unpins (in App). Rows
  * self-register in the tile registry so the command bar can scroll to them. */
 
+import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 
 import type { BasisKey } from "@/lib/api";
 import { dirClass, fmtBp } from "@/lib/format";
 import { MiniBar } from "@/wall/MiniBar";
 import { useRegisterTile } from "@/wall/useRegisterTile";
+
+import { PRESS_SCALE } from "./motion";
 
 import {
   BASIS_ORDER,
@@ -155,10 +158,11 @@ export function InstrumentTable({
     <div>
       <div className="mb-3 flex gap-1.5">
         {FILTERS.map((f) => (
-          <button
+          <motion.button
             key={f.id}
             type="button"
             onClick={() => setFilter(f.id)}
+            whileTap={{ scale: PRESS_SCALE }}
             className={
               filter === f.id
                 ? "rounded-full bg-ink px-3 py-1 text-[13px] text-page"
@@ -166,7 +170,7 @@ export function InstrumentTable({
             }
           >
             {f.label}
-          </button>
+          </motion.button>
         ))}
       </div>
 

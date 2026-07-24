@@ -566,3 +566,6 @@ Confirm or override.
   click-suppression swallowing taps. The list has no pan; the chart-open click
   is a plain handler and the enlarged view is wrapped in an error boundary so a
   thrown guard renders a message, not a blank region.
+- **Row press feedback**: CSS transforms do not apply to `display: table-row`,
+  so table rows use a surface (bg) change on hover/press instead of the 0.98
+  scale; scale press is on the controls (filter chips, preview, sheet).
