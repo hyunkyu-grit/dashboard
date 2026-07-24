@@ -46,35 +46,31 @@ export function traderName(id: string): string {
   return id.split("-").map((t) => t.replace("Y", "")).join("s") + "s";
 }
 
-const SHORT_BASIS: Record<BasisKey, string> = {
-  d1: "어제",
-  wtd: "주간",
-  mtd: "월간",
-  qtd: "분기",
-  ytd: "연초",
-};
-
-/** 한 줄 — ≤~12 chars, from percentile then the largest change (§2/§15). */
+/** 한 줄 — must never restate a value already visible in the row (§6). The
+ * level and the five change columns are on screen; a sentence that says
+ * "연초 26bp 상승" only re-prints the YTD cell. So the sentence carries ONLY:
+ *   1. an extreme-band percentile — a number shown in no column, so it is new;
+ *   2. the SHAPE of the move (a reversal → 되돌림), never a bp magnitude;
+ *   3. nothing. An empty 한 줄 beats a restatement. */
 export function oneLiner(
   pct: number | null,
   changes: Record<BasisKey, number | null>,
   hasData: boolean,
 ): string {
-  if (!hasData) return "아직 준비 중이에요";
-  if (pct != null && pct >= 95) return "10년 고점권";
-  if (pct != null && pct <= 5) return "10년 저점권";
-  let best: BasisKey | null = null;
-  let mag = 0;
-  for (const b of BASIS_ORDER) {
-    const v = changes[b];
-    if (v != null && Math.abs(v) > mag) {
-      mag = Math.abs(v);
-      best = b;
-    }
+  if (!hasData) return "";
+  if (pct != null && (pct >= 90 || pct <= 10)) {
+    return `백분위 ${Math.round(pct)}`;
   }
-  if (!best || mag < 0.5) return "오늘은 조용해요";
-  const dir = (changes[best] ?? 0) > 0 ? "상승" : "하락";
-  return `${SHORT_BASIS[best]} ${mag.toFixed(0)}bp ${dir}`;
+  // Shape only. A sign flip between adjacent bases reads as a retracement —
+  // today against the week, or the week against the month. No bp figure: those
+  // ARE the columns.
+  const { d1, wtd, mtd } = changes;
+  const flipped = (a: number | null, b: number | null) =>
+    a != null && b != null && Math.abs(a) >= 0.5 && Math.abs(b) >= 0.5 &&
+    Math.sign(a) !== Math.sign(b);
+  if (flipped(d1, wtd)) return "주간 되돌림";
+  if (flipped(wtd, mtd)) return "월중 되돌림";
+  return "";
 }
 
 /** Tenor → years, for explicit numeric sort keys (§6). Unknown → Infinity so a

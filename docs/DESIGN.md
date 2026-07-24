@@ -68,18 +68,32 @@ Columns, left to right:
 
 | Instrument | 현재 | Yesterday | WTD | MTD | QTD | YTD | 한 줄 |
 
-- **Instrument** — `10Y`, `3s10s`, `2s5s10s`, `1Yx1Y`, `SPOT`. Never
-  translated (§15).
+- **Instrument** — `10Y`, `3s10s`, `2s5s10s`, `2Yx1Y`, `SPOT`. Never
+  translated (§15). Notation is defined once in **§ Instrument notation**
+  below and is identical across labels, the command bar, and ids.
+  - **Quoted vs interpolated [Session 13]:** outright nodes carry a small
+    leading **dot** — filled = a live-quoted tenor, hollow = interpolated
+    (`4Y/6Y/7Y/8Y/9Y`). A dot, not a badge (§5 channel discipline); it marks
+    provenance without adding a column. Spreads/flies/forwards get no dot (the
+    distinction does not apply).
 - **현재** — the current level, in ink, no hue (a level has no direction).
   Existing precision (4 decimals for forwards).
 - **Five change columns** — change in bp vs each basis. Red for up, blue for
-  down (§9), plus the existing center-zero mini-bar so it still reads in
-  grayscale. **There is no "Now" column** — Now minus Now is zero, which is
-  why the old six-basis selector was wrong; all five bases are columns now.
-- **한 줄** — a short generated 해요체-adjacent phrase (the analogue of the
-  reference's AI-summary column) from data already present: percentile standing
-  and the largest of the five changes. e.g. "10년 고점권", "연초 대비 22bp 하락".
-  Aim for ≤ ~12 characters.
+  down (§9). The mini-bar is gone (Session 13, §9): hue now carries the sign,
+  so the bar triple-encoded. **There is no "Now" column** — Now minus Now is
+  zero, which is why the old six-basis selector was wrong; all five bases are
+  columns now.
+- **한 줄 [rewritten Session 13]** — must **never restate a value already
+  visible in the same row.** The level and all five change columns are on
+  screen; a phrase like "연초 26bp 상승" only re-prints the YTD cell. So the
+  column carries exactly one of:
+  1. an **extreme-band percentile as a number** — "백분위 99" / "백분위 3"
+     (`pct ≥ 90` or `≤ 10`). The percentile is in no column, so it is new
+     information;
+  2. the **shape** of the move, never a magnitude — a sign flip between
+     adjacent bases reads as "주간 되돌림" (today against the week) or
+     "월중 되돌림" (the week against the month);
+  3. **nothing.** An empty 한 줄 is correct and preferred over a restatement.
 
 Behaviour:
 
@@ -90,12 +104,54 @@ Behaviour:
 - **Sortable by any change column, both directions.** Default order is
   instrument order (not a ranking). Sorting by |change| is one click = "what
   moved today".
+- **Every series carries an explicit numeric sort key [Session 13, §6].**
+  Default order is that key ascending: tenor-in-years for outrights, the leg
+  tuple (compared lexicographically) for spreads/flies/forwards. *Diagnosis of
+  the "3M lands last" bug:* 3M/CD91 was added to the roster after the original
+  node set and had no sort key, so it fell to the bottom under a
+  key-or-`undefined` sort. `tenorYears` now maps every tenor, and unknown →
+  `Infinity` so a genuinely unmapped tenor sorts loudly to the end rather than
+  silently mid-list. `guards/sort-key.test.ts` fails if any row's key is empty
+  or non-finite.
 - Row hover paints a subtle surface change and drives the right pane.
 - **Clicking a row pins it** (hover-only would empty the pane the moment the
   pointer leaves). Pinned rows keep a marker; hovering another row previews
   without unpinning; Esc unpins.
 - The spread group is 35 rows — fine in a scrollable list, do not truncate. The
   list is the dense view now.
+
+### Instrument notation [Session 13 — read from code, do not change]
+
+One naming scheme, used identically for the display **label**, the **command
+bar** aliases, and the internal **id** (the id keeps the raw tenor form; the
+label is the trader shorthand — both resolve to the same row).
+
+| Kind | id (raw) | label (shorthand) |
+|------|----------|-------------------|
+| Outright | `10Y` | `10Y` |
+| Spread (2 legs) | `1Y-10Y` | `1s10s` |
+| Butterfly (3 legs) | `2Y-5Y-10Y` | `2s5s10s` |
+| Forward | `2Yx1Y` | `2Yx1Y` |
+
+- **Shorthand rule** (`traderName`): split legs on `-`, drop the trailing `Y`
+  from each, join with `s`, append a final `s`. Only the `Y` is removed — a
+  **fractional tenor keeps its point**, so a `1.5Y` leg is written **`1.5s`**
+  (e.g. spread `1Y-1.5Y` → `1s1.5s`, fly `1Y-1.5Y-2Y` → `1s1.5s2s`). The
+  display tenor set that legs are drawn from is `1Y, 1.5Y, 2Y, 3Y, 5Y, 10Y`.
+- **Forward id** is `{start}x{tenor}` with the backend's `F`/`SPOT` suffixes
+  cleaned off the tenor (`1YF`→`1Y`): `2Yx1Y`, `5Yx5Y`, `ONxSPOT`.
+- **Butterfly weighting is 1 : −2 : 1 (cash/rate-neutral), NOT DV01-neutral.**
+  The backend computes the fly in bp as `2 × belly − short − long`
+  (`derive.py::fly_series`): +2 on the belly, −1 on each wing. A positive
+  number = the belly is cheap (high) relative to the wings. This convention is
+  load-bearing for the sign of every fly on the wall — **document only, do not
+  change it.**
+
+**MTD == QTD in the first month of a quarter is correct, not a bug.** In
+Jan/Apr/Jul/Oct the month-start and quarter-start bases resolve to the same
+prior close (`derive.py::basis_dates`), so the two columns are identically
+equal by construction. Do not "fix" it, and do not collapse the columns — they
+diverge the moment the quarter advances a month.
 
 ### Right pane — curve (idle) + preview (on hover)
 
@@ -607,9 +663,10 @@ Confirm or override.
 - **Heatmap pulse = ink outline.** The chain: owner asked blue → blue means
   "down" → an earlier note said orange → orange is now the chart line → so ink.
   An ink outline reads as focus, never as a direction.
-- **한 줄 column** is generated from `range10y.pct` (≥95 → "10년 고점권", ≤5 →
-  "10년 저점권") else the largest of the five basis changes ("연초 대비 22bp
-  하락"). No new backend data; all fields already exist.
+- **한 줄 column** [superseded Session 13 — see the Left-pane spec]. It no
+  longer prints "10년 고점권" or a basis magnitude (that restated the columns);
+  it now emits an extreme-band percentile number, a retracement shape, or
+  nothing. No new backend data; all fields already exist.
 - **Forwards & volatility have no stage-2 history.** Forward rows use the key
   forwards (`1Yx1Y`, …); their preview is a sentence and the enlarged view
   shows the forward matrix instead of a chart. Volatility rows are a

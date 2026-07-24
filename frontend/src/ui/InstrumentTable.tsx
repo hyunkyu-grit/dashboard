@@ -86,6 +86,21 @@ function TableRow({
         {pinned && (
           <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-ink" />
         )}
+        {/* quoted vs interpolated (§6): a filled dot = live-quoted node, a
+            hollow dot = interpolated tenor (4Y/6Y/7Y/8Y/9Y). A dot, not a
+            badge; outrights only, where the distinction exists. */}
+        {row.quoted === true && (
+          <span
+            title="고시 만기"
+            className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-ink/45 align-middle"
+          />
+        )}
+        {row.quoted === false && (
+          <span
+            title="보간 만기"
+            className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full border border-ink/45 align-middle"
+          />
+        )}
         {row.label}
       </td>
       <td className="pr-3 text-right tabular-nums">{levelText(row)}</td>
