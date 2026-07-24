@@ -71,10 +71,15 @@ export function resolveBandHue(band: BandHue): string {
   return resolveVar(BAND_VARS[band]);
 }
 
-/** Resolve the navy brand/chart-line color to hex for canvas (§9, Session 12).
- * All chart lines are navy now. */
+/** Resolve the navy product-lockup color to hex (§9). Not used on data. */
 export function resolveBrand(): string {
   return resolveVar("--bw-brand");
+}
+
+/** Resolve the line-safe orange chart-stroke color to hex for canvas (§9).
+ * All plain line charts are orange. */
+export function resolveLine(): string {
+  return resolveVar("--bw-line");
 }
 
 /** Notify `cb` whenever the root data-theme attribute changes. */

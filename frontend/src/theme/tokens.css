@@ -40,10 +40,17 @@
   --bw-interactive: #f58220;
   --bw-on-interactive: #1a1a1a;
 
-  /* Semantic direction (§9, Session 12) — red up / blue down, Korean market
-   * convention. Verified ≥4.5:1 on white. Provisional starting values. */
-  --bw-up: #d32f2f;
-  --bw-down: #1d6fd8;
+  /* Semantic direction (§9) — red up / blue down (Toss, owner-supplied).
+   * Down clears 4.5:1 on white; up #f04452 is 3.71:1 (brand red, above the
+   * 3:1 graphical floor — see ## Provisional). Only directional numbers/marks
+   * use these; levels stay ink. */
+  --bw-up: #f04452;
+  --bw-down: #0064ff;
+
+  /* Chart line — line-safe orange (§9). #f58220 is only 2.6:1 on white and
+   * washes out, so light deepens to #d97316 (≥3:1); the action-button fill
+   * keeps #f58220 (below is --bw-interactive). */
+  --bw-line: #d97316;
 
   /* Card elevation — light gets a soft shadow; the raised surface equals the
    * base card in light (shadow does the work). */
@@ -78,9 +85,11 @@
    * blue everywhere the main color appears. Interactive orange is unchanged. */
   --bw-brand: #8dc8e8;
 
-  /* Direction — lighter reds/blues clear 4.5:1 on the dark tile. */
-  --bw-up: #ff6b6b;
-  --bw-down: #5c9dff;
+  /* Direction — lighter red/blue clear 4.5:1 on the dark tile (#0064ff is
+   * only ~3.9:1 there). Chart line uses #f58220 directly in dark. */
+  --bw-up: #f16e77;
+  --bw-down: #4c93ff;
+  --bw-line: #f58220;
 
   /* Dark has no shadow (they die here) — a lighter surface step stands in. */
   --bw-card-raised: #262626;

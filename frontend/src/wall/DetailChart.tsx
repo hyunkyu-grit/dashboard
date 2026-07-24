@@ -23,7 +23,7 @@ import { API_BASE } from "@/lib/api";
 import {
   assertNoCssVars,
   onThemeChange,
-  resolveBrand,
+  resolveLine,
   resolveTheme,
 } from "@/theme/bridge";
 import { assertDomainRendered } from "@/theme/domainGuard";
@@ -95,10 +95,10 @@ export function DetailChart({
     if (!el) return;
     const { options } = buildOptions(width, height);
     const chart = createChart(el, options);
-    // Chart lines are navy (§9, Session 12), resolved to hex via the bridge
-    // (no var on canvas). The id-based band-hue selection is retired.
+    // Chart lines are line-safe orange (§9), resolved to hex via the bridge
+    // (no var on canvas).
     const seriesOptions = {
-      color: resolveBrand(),
+      color: resolveLine(),
       lineWidth: 2 as const,
       priceLineVisible: false,
       lastValueVisible: true,

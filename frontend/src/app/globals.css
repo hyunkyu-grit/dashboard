@@ -19,9 +19,10 @@
   --color-hue-fwd: var(--bw-hue-fwd);
   --color-hue-outright: var(--bw-hue-outright);
   --color-hue-spread: var(--bw-hue-spread);
-  /* semantic direction (§9) + card elevation (Session 12) */
+  /* semantic direction + chart line + card elevation (§9) */
   --color-up: var(--bw-up);
   --color-down: var(--bw-down);
+  --color-line: var(--bw-line);
   --color-card-raised: var(--bw-card-raised);
   --shadow-card: var(--bw-shadow-card);
   --radius-card: 16px;
@@ -29,15 +30,15 @@
   --font-sans: "Pretendard Variable", Pretendard, sans-serif;
 }
 
-/* Interactive orange as focus ring + text selection (§9). One var each; not
- * per-element. Labels on the orange fill are near-black (contrast). */
+/* Focus + selection are INK now (§9, list-first): the chart line is orange,
+ * so focus/selection move off orange to avoid two oranges on one pane. */
 :focus-visible {
-  outline: 2px solid var(--bw-interactive);
+  outline: 2px solid var(--bw-ink);
   outline-offset: 1px;
 }
 ::selection {
-  background: var(--bw-interactive);
-  color: var(--bw-on-interactive);
+  background: var(--bw-ink);
+  color: var(--bw-page);
 }
 
 html {
