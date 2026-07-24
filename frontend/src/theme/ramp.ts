@@ -30,6 +30,11 @@ export const EDGE_OPACITY: Record<"light" | "dark", { base: number; live: number
   dark: { base: 0.18, live: 0.55 },
 };
 
+/** Levels 1–2 draw only two navy lines: Now at full opacity and the selected
+ * comparison basis at this reduced opacity (§9, Session 12). The full
+ * six-step RAMP_OPACITY above lives only in the Level-3 detail sheet. */
+export const BASIS_SECONDARY_OPACITY = 0.45;
+
 export const RAMP_WIDTH: Record<TimeBasis, number> = {
   now: 2,
   d1: 1.5,

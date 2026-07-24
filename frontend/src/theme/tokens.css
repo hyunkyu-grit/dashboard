@@ -40,9 +40,18 @@
   --bw-interactive: #f58220;
   --bw-on-interactive: #1a1a1a;
 
-  /* Chart hue by band — one hue per band, opacity ramp WITHIN a tile.
-   * These light values are the only sub-palette entries that clear 3:1 on a
-   * white tile at 2px; the dark substitutes are for dark mode / fills. */
+  /* Semantic direction (§9, Session 12) — red up / blue down, Korean market
+   * convention. Verified ≥4.5:1 on white. Provisional starting values. */
+  --bw-up: #d32f2f;
+  --bw-down: #1d6fd8;
+
+  /* Card elevation — light gets a soft shadow; the raised surface equals the
+   * base card in light (shadow does the work). */
+  --bw-card-raised: #ffffff;
+  --bw-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 6px 16px rgba(0, 0, 0, 0.05);
+
+  /* Sub-palette — DEFINED BUT UNREFERENCED (Session 12). Chart lines are navy
+   * (--bw-brand). Kept for a possible future multi-object view. */
   --bw-hue-curve: #043b72;
   --bw-hue-vol: #0086b8;
   --bw-hue-fwd: #ad624e;
@@ -69,7 +78,15 @@
    * blue everywhere the main color appears. Interactive orange is unchanged. */
   --bw-brand: #8dc8e8;
 
-  /* Dark-mode band substitutes (light values fail 3:1 on the dark tile). */
+  /* Direction — lighter reds/blues clear 4.5:1 on the dark tile. */
+  --bw-up: #ff6b6b;
+  --bw-down: #5c9dff;
+
+  /* Dark has no shadow (they die here) — a lighter surface step stands in. */
+  --bw-card-raised: #262626;
+  --bw-shadow-card: none;
+
+  /* Dark-mode band substitutes (sub-palette, unreferenced). */
   --bw-hue-curve: #8dc8e8;
   --bw-hue-vol: #00a9ce;
   --bw-hue-fwd: #c2ac97;

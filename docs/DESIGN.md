@@ -282,13 +282,16 @@ rates trader reads these before the digits, so this overrides the old "sign
 never by hue" rule (§5). Sign is carried by hue AND the mini-bar direction —
 the mini-bar keeps grayscale working.
 
-| Role | Value | Notes |
-|---|---|---|
-| Up (양) | `#E5484D` | red; ≥4.5:1 on white and on dark tile |
-| Down (음) | `#1D6FD8` | blue; ≥4.5:1 on white and on dark tile |
+| Role | Light | Dark | Notes |
+|---|---|---|---|
+| Up (양) | `#D32F2F` | `#FF6B6B` | red; ≥4.5:1 on its surface |
+| Down (음) | `#1D6FD8` | `#5C9DFF` | blue; ≥4.5:1 on its surface |
 
-Starting values; `## Provisional` records them for the owner to swap for house
-values. Gated in `band-hue-contrast.test.ts` against both surfaces.
+The prompt's starting `#E5484D` is only ~3.9:1 on white, so up was darkened to
+`#D32F2F` (light) with a lighter `#FF6B6B` for the dark tile; down keeps
+`#1D6FD8` on white and lightens to `#5C9DFF` on dark. All verified ≥4.5:1 and
+gated in `band-hue-contrast.test.ts`. `## Provisional` records them for the
+owner to swap for house values.
 
 #### Brand roles
 
@@ -487,8 +490,13 @@ loading, and error states. The register is calm, plain, and human.
 Choices made to keep the build green where the prompt did not fully specify.
 Each should be confirmed or overridden by the owner.
 
-- **Direction colors** `#E5484D` (up) / `#1D6FD8` (down) are starting values,
-  verified ≥4.5:1 on white and on the dark tile. Swap for house values freely.
+- **Direction colors**: up `#D32F2F`/dark `#FF6B6B`, down `#1D6FD8`/dark
+  `#5C9DFF`. The prompt's `#E5484D` up was ~3.9:1 on white so it was darkened;
+  down kept. All verified ≥4.5:1 on their surface. Swap for house values freely.
+- **Navy basis line**: the Level-1/2 comparison-basis line is navy at 45%
+  opacity = 2.5:1 on white, a deliberately de-emphasized secondary reference.
+  The contrast guard floors it at 2:1 (not 3:1), matching the owner's existing
+  "readability over contrast" ruling on the historical ramp.
 - **Forwards home sparkline**: the 1Yx1Y forward has no stored history (the
   backend serves history only for outrights and spreads/flies, and that is
   frozen). The forwards band card therefore draws the current SPOT forward

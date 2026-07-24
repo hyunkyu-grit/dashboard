@@ -19,6 +19,13 @@
   --color-hue-fwd: var(--bw-hue-fwd);
   --color-hue-outright: var(--bw-hue-outright);
   --color-hue-spread: var(--bw-hue-spread);
+  /* semantic direction (§9) + card elevation (Session 12) */
+  --color-up: var(--bw-up);
+  --color-down: var(--bw-down);
+  --color-card-raised: var(--bw-card-raised);
+  --shadow-card: var(--bw-shadow-card);
+  --radius-card: 16px;
+  --radius-sheet: 20px;
   --font-sans: "Pretendard Variable", Pretendard, sans-serif;
 }
 
@@ -42,9 +49,9 @@ body {
   background: var(--bw-page);
   color: var(--bw-ink);
   font-family: var(--font-sans);
-  font-size: 13px;
+  /* base body 15 (§9, Session 12); the column scrolls like a normal page */
+  font-size: 15px;
   font-weight: 400;
-  overflow: hidden; /* the wall pans; the page itself never scrolls */
 }
 
 /* Depth = surface steps + borders. No shadows (design spec §9). */
