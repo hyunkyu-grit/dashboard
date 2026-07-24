@@ -105,6 +105,8 @@ function TableRow({
 export function InstrumentTable({
   rows,
   forwards,
+  filter,
+  onFilter,
   activeId,
   pinnedId,
   onHover,
@@ -112,12 +114,13 @@ export function InstrumentTable({
 }: {
   rows: Row[];
   forwards?: ForwardsPayload;
+  filter: Group | "all";
+  onFilter: (f: Group | "all") => void;
   activeId: string | null;
   pinnedId: string | null;
   onHover: (row: Row | null) => void;
   onPin: (row: Row) => void;
 }) {
-  const [filter, setFilter] = useState<Group | "all">("all");
   const [sortCol, setSortCol] = useState<BasisKey | null>(null);
   const [sortAsc, setSortAsc] = useState(false);
   const [startFilter, setStartFilter] = useState<string>("all");
@@ -202,7 +205,7 @@ export function InstrumentTable({
             <button
               key={f.id}
               type="button"
-              onClick={() => setFilter(f.id)}
+              onClick={() => onFilter(f.id)}
               className={`relative px-3 py-2 text-[13px] transition-opacity ${
                 on ? "font-semibold" : "opacity-55 hover:opacity-90"
               }`}

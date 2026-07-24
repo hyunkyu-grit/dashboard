@@ -97,9 +97,16 @@ Behaviour:
 - The spread group is 35 rows — fine in a scrollable list, do not truncate. The
   list is the dense view now.
 
-### Right pane — preview
+### Right pane — curve (idle) + preview (on hover)
 
-- Empty state before any hover: one sentence, not a blank box (§15).
+- **Idle state is the curve for the active tab [Session 13, restored]** —
+  curve viewing is priority 1 (§1). No row hovered → outrights show the IRS
+  par curve (9 equal-spaced nodes 3M…10Y); forwards show the 1YF forward
+  ladder (x = start point); spreads show the two-point-spread curve; volatility
+  its placeholder. Orange line, two lines only (Now + D-1) — the six-basis ramp
+  is enlarged-view only. Hand-rolled SVG (§11).
+- Hovering a row replaces the curve with that series' history + heatmap;
+  leaving the table returns to the curve; pinning keeps the history until Esc.
 - On row hover, after a ~120ms delay (so crossing the table does not strobe),
   the chart springs in (§14).
 - Chart: that series' 10-year history, **orange line** (§9), from the stage-2
@@ -583,6 +590,10 @@ Confirm or override.
   forwards (`1Yx1Y`, …); their preview is a sentence and the enlarged view
   shows the forward matrix instead of a chart. Volatility rows are a
   placeholder sentence (no formula yet).
+- **Forward idle curve = the 1YF ladder** (the 1-year forward rate at each
+  start point, one orange line, x = start point). Chosen over "one line per
+  tenor" (8 same-colour lines are unreadable) and "x = tenor for a selected
+  start" (needs an extra selector). It is the standard 1y-forward curve.
 - **Calendar heatmap window**: the visible chart window is the full 10y, which
   is too many weeks for a legible calendar; the heatmap therefore shows the
   most recent ~26 weeks of daily changes. Adjust when the enlarged view lands a

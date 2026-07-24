@@ -14,10 +14,11 @@ import { syncUiFromDom, useUiStore } from "@/state/ui";
 import { CommandBar } from "@/wall/CommandBar";
 
 import { ERROR_SENTENCE, LOADING_SENTENCE } from "./copy";
+import { CurveView } from "./CurveView";
 import { EnlargedView } from "./EnlargedView";
 import { InstrumentTable } from "./InstrumentTable";
 import { PreviewPane } from "./PreviewPane";
-import { buildRows, type Row } from "./rows";
+import { buildRows, type Group, type Row } from "./rows";
 
 function Header() {
   const theme = useUiStore((s) => s.theme);
@@ -60,6 +61,7 @@ export function App() {
 
   const [hovered, setHovered] = useState<Row | null>(null);
   const [pinned, setPinned] = useState<Row | null>(null);
+  const [tab, setTab] = useState<Group | "all">("all");
   const active = hovered ?? pinned;
 
   // ~120ms hover delay so crossing the table does not strobe the preview (§2).
@@ -135,6 +137,8 @@ export function App() {
               <InstrumentTable
                 rows={rows}
                 forwards={forwards}
+                filter={tab}
+                onFilter={setTab}
                 activeId={active?.id ?? null}
                 pinnedId={pinned?.id ?? null}
                 onHover={handleHover}
@@ -143,7 +147,17 @@ export function App() {
             </div>
             <div className="basis-[45%]">
               <div className="sticky top-20 rounded-[16px] bg-tile p-5 shadow-card">
-                <PreviewPane row={active} onOpen={openEnlarged} />
+                {active ? (
+                  <PreviewPane row={active} onOpen={openEnlarged} />
+                ) : (
+                  <CurveView
+                    tab={tab}
+                    summary={summary}
+                    forwards={forwards}
+                    width={440}
+                    height={300}
+                  />
+                )}
               </div>
             </div>
           </div>
