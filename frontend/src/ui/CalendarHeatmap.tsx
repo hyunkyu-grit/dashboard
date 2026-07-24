@@ -10,6 +10,8 @@ import { useMemo } from "react";
 
 import type { SparkPoint } from "@/lib/api";
 
+import { tintSvg } from "./tint";
+
 const WEEKS = 26;
 const WEEKDAYS = ["월", "화", "수", "목", "금"]; // Mon–Fri
 
@@ -88,8 +90,10 @@ export function CalendarHeatmap({
         </text>
       ))}
       {cells.map((c) => {
-        const up = c.change >= 0;
-        const mag = Math.min(1, Math.abs(c.change) / maxMag);
+        // shared grid tint scale (§2, Session 13). Near-zero cells stay
+        // untinted — rendered faint-neutral so the calendar shape survives
+        // without implying a direction.
+        const t = tintSvg(c.change, maxMag);
         return (
           <rect
             key={c.date}
@@ -98,9 +102,9 @@ export function CalendarHeatmap({
             width={cell}
             height={cell}
             rx={2}
-            className={up ? "text-up" : "text-down"}
+            className={t ? t.cls : "fill-ink"}
             fill="currentColor"
-            fillOpacity={0.15 + 0.85 * mag}
+            fillOpacity={t ? t.op : 0.05}
           />
         );
       })}

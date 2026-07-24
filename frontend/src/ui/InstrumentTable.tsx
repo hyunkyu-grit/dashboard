@@ -10,7 +10,6 @@ import { useMemo, useState } from "react";
 
 import type { BasisKey } from "@/lib/api";
 import { dirClass, fmtBp } from "@/lib/format";
-import { MiniBar } from "@/wall/MiniBar";
 import { useRegisterTile } from "@/wall/useRegisterTile";
 
 import { SPRING } from "./motion";
@@ -43,27 +42,14 @@ function levelText(row: Row): string {
   return row.unit === "%" ? row.now.toFixed(4) : row.now.toFixed(1);
 }
 
-function ChangeCell({ v, scale }: { v: number | null; scale: number }) {
-  return (
-    <div className="pr-3 text-right">
-      <div className={`tabular-nums ${dirClass(v)}`}>{fmtBp(v)}</div>
-      <div className="mt-0.5">
-        <MiniBar delta={v} scale={scale} />
-      </div>
-    </div>
-  );
-}
-
 function TableRow({
   row,
-  scales,
   active,
   pinned,
   onHover,
   onPin,
 }: {
   row: Row;
-  scales: Record<BasisKey, number>;
   active: boolean;
   pinned: boolean;
   onHover: (row: Row | null) => void;
@@ -92,8 +78,11 @@ function TableRow({
       </td>
       <td className="pr-3 text-right tabular-nums">{levelText(row)}</td>
       {BASIS_ORDER.map((b) => (
-        <td key={b}>
-          <ChangeCell v={row.changes[b]} scale={scales[b]} />
+        <td
+          key={b}
+          className={`pr-3 text-right tabular-nums ${dirClass(row.changes[b])}`}
+        >
+          {fmtBp(row.changes[b])}
         </td>
       ))}
       <td className="pr-3 text-[13px] opacity-55">{row.oneLiner}</td>
@@ -129,19 +118,6 @@ export function InstrumentTable({
     });
     return [...withVal, ...without];
   }, [rows, filter, sortCol, sortAsc]);
-
-  const scales = useMemo(() => {
-    const s = {} as Record<BasisKey, number>;
-    for (const b of BASIS_ORDER) {
-      let m = 0;
-      for (const r of shown) {
-        const v = r.changes[b];
-        if (v != null) m = Math.max(m, Math.abs(v));
-      }
-      s[b] = m;
-    }
-    return s;
-  }, [shown]);
 
   const clickSort = (b: BasisKey) => {
     if (sortCol !== b) {
@@ -213,7 +189,6 @@ export function InstrumentTable({
             <TableRow
               key={row.id}
               row={row}
-              scales={scales}
               active={row.id === activeId}
               pinned={row.id === pinnedId}
               onHover={onHover}

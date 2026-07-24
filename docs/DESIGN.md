@@ -306,7 +306,20 @@ selected/focus state. When in doubt, leave it grey.
 Semantic, not brand — these sit beside the Mirae brand colors, they do not
 replace them. Korean market convention overrides the old "sign never by hue"
 rule (§5). **Only numbers with a direction get hue**: changes, percentages,
-mini-bar fills, heatmap cells. Levels stay ink.
+grid tints. Levels stay ink.
+
+**Encoding by surface [Session 13]:** the mini-bar under a change figure is
+gone — it was the sign channel when the build was monochrome; now that hue
+carries direction the bar triple-encodes and adds noise. Instead:
+
+- **A number in a list column** (the five change columns): coloured text only,
+  nothing under it.
+- **A cell in a grid** (forward matrix, calendar heatmap, any tenor×date
+  grid): a **background tint** — red up / blue down, alpha scaled by magnitude
+  within that grid (~8–45%, near-zero untinted, darkest tint keeps ink at
+  ≥4.5:1, gated by `tint-contrast.test.ts`). The number stays ink so it reads
+  on the tint. One shared scale (`src/ui/tint.ts`) so a cell means the same
+  everywhere.
 
 | Role | Light | Dark | Notes |
 |---|---|---|---|
