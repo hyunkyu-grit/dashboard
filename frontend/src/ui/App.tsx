@@ -134,6 +134,7 @@ export function App() {
             <div className="min-w-0 basis-[55%]">
               <InstrumentTable
                 rows={rows}
+                forwards={forwards}
                 activeId={active?.id ?? null}
                 pinnedId={pinned?.id ?? null}
                 onHover={handleHover}
@@ -154,7 +155,6 @@ export function App() {
           <EnlargedView
             row={enlargedRow}
             summary={summary}
-            forwards={forwards}
             onClose={closeEnlarged}
           />
         )}

@@ -11,14 +11,13 @@ import { useQuery } from "@tanstack/react-query";
 import { motion, type PanInfo } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 
-import { fetchSeries, type WallSummary, type ForwardsPayload } from "@/lib/api";
+import { fetchSeries, type WallSummary } from "@/lib/api";
 import { dirClass, fmtBp, fmtRate } from "@/lib/format";
 import { BASIS_LABELS, TIME_BASES, type TimeBasis } from "@/theme/ramp";
 import { DetailChart } from "@/wall/DetailChart";
-import { ForwardMatrix, KeyForwardBlock } from "@/wall/ForwardMatrix";
 
 import { CalendarHeatmap } from "./CalendarHeatmap";
-import { ERROR_SENTENCE } from "./copy";
+import { ERROR_SENTENCE, VOL_PLACEHOLDER } from "./copy";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { SHEET_SPRING } from "./motion";
 import type { Row } from "./rows";
@@ -82,15 +81,7 @@ function StrategyRegion() {
   );
 }
 
-function Body({
-  row,
-  summary,
-  forwards,
-}: {
-  row: Row;
-  summary: WallSummary;
-  forwards?: ForwardsPayload;
-}) {
+function Body({ row, summary }: { row: Row; summary: WallSummary }) {
   const { data } = useQuery({
     queryKey: ["series", row.seriesId],
     queryFn: () => fetchSeries(row.seriesId!),
@@ -99,16 +90,11 @@ function Body({
   });
 
   if (!row.seriesId) {
-    // forward: show the forward matrix
-    if (!forwards) return <p className="p-6">{ERROR_SENTENCE}</p>;
+    // only volatility has no stage-2 history now (forwards derive theirs)
     return (
-      <>
-        <h2 className="mb-3 text-[17px] font-semibold">{row.label} · 포워드 매트릭스</h2>
-        <div className="flex items-start gap-6 overflow-x-auto">
-          <ForwardMatrix payload={forwards} />
-          <KeyForwardBlock payload={forwards} />
-        </div>
-      </>
+      <p className="p-10 text-center text-[15px] opacity-55">
+        {VOL_PLACEHOLDER}
+      </p>
     );
   }
 
@@ -133,12 +119,10 @@ function Body({
 export function EnlargedView({
   row,
   summary,
-  forwards,
   onClose,
 }: {
   row: Row;
   summary: WallSummary;
-  forwards?: ForwardsPayload;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -176,7 +160,7 @@ export function EnlargedView({
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-edge" />
         <ErrorBoundary fallback={ERROR_SENTENCE}>
-          <Body row={row} summary={summary} forwards={forwards} />
+          <Body row={row} summary={summary} />
         </ErrorBoundary>
       </motion.div>
     </motion.div>

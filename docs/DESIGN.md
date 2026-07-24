@@ -113,8 +113,14 @@ Behaviour:
   pulses with an **ink outline** (not orange — orange is the chart line now;
   not blue — blue is a direction; see §9 and `## Provisional`).
 - Clicking the chart opens the enlarged view.
-- Forwards and volatility have no stage-2 history; their preview is a sentence,
-  and forwards open the forward matrix in the enlarged view instead.
+- **Forwards now have history [Session 13]** — a forward rate on any past date
+  is derived from that date's curve (stage-2, rebuilt lazily per series and
+  cached). Only volatility has no history (no formula); its preview is a
+  sentence.
+- **Forward tab [Session 13]:** every forward in the matrix (21 starts × 8
+  tenors, named `2Yx1Y` / `2YxSPOT`) is a row; the six quoted key forwards pin
+  to the top under a "주요 포워드" heading; a start-point secondary filter
+  narrows the list; a "표로 보기" toggle flips to the 21×8 matrix (Pass-2 tint).
 
 ### Enlarged view
 

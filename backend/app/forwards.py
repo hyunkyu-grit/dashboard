@@ -21,9 +21,10 @@ import datetime as dt
 
 import numpy as np
 
+from .curves import par_rates_at_index
 from .dataset import Dataset
 from .derive import BASIS_KEYS, basis_dates
-from .engine_port import _modfol_bd, df
+from .engine_port import _modfol_bd, bootstrap_zero_curve, df
 
 # 21 forward start points: ON, then 3M steps out to 5Y (§7).
 ON_T = 1.0 / 365.0
@@ -94,6 +95,42 @@ def start_date_for(asof: dt.date, label: str, t: float) -> dt.date:
     if label == "ON":
         return asof
     return _modfol_bd(_add_months(asof, round(t * 12)))
+
+
+# ── Stage-2 forward history (§2, Session 13) ────────────────────────────────
+# A forward rate on any past date is derivable from that date's curve; ten
+# years of curve history is already loaded. Compute lazily, one series at a
+# time (2,608 points ≈ one cheap bootstrap per date), and cache per series.
+
+START_YEARS = {label: t for label, t in START_POINTS}
+TENOR_YEARS = {label.replace("F", ""): t for label, t in FWD_TENORS}  # SPOT→None
+
+_forward_history_cache: dict[str, list[dict]] = {}
+
+
+def parse_forward_id(fid: str) -> tuple[float, float | None]:
+    """'2Yx1Y' → (start_years, tenor_years); '2YxSPOT' → (start_years, None)."""
+    start, _, tenor = fid.partition("x")
+    if start not in START_YEARS or tenor not in TENOR_YEARS:
+        raise KeyError(fid)
+    return START_YEARS[start], TENOR_YEARS[tenor]
+
+
+def forward_history(dataset: Dataset, fid: str) -> list[dict]:
+    """10y daily history of a forward, rebuilt from each date's curve. Cached."""
+    if fid in _forward_history_cache:
+        return _forward_history_cache[fid]
+    start_y, tenor_y = parse_forward_id(fid)
+    out: list[dict] = []
+    for i, date in enumerate(dataset.dates):
+        pars = par_rates_at_index(dataset, i)
+        if len(pars) < 2:
+            continue
+        zc = bootstrap_zero_curve(pars)
+        r = forward_par_rate(zc, start_y, tenor_y)
+        out.append({"t": date.isoformat(), "v": round(r * 100, 4)})
+    _forward_history_cache[fid] = out
+    return out
 
 
 def forwards_payload(dataset: Dataset, curves: dict[str, np.ndarray]) -> dict:

@@ -49,6 +49,18 @@ def par_rates_at(dataset: Dataset, date: dt.date | None) -> list[tuple[float, fl
     return sorted(out)
 
 
+def par_rates_at_index(dataset: Dataset, i: int) -> list[tuple[float, float]]:
+    """[(T_years, rate_decimal), ...] from the row at index `i` directly (no
+    date fallback) — for point-in-time history reconstruction (§2 stage-2)."""
+    out: list[tuple[float, float]] = []
+    for tenor, values in dataset.series.items():
+        t = TENOR_T.get(tenor)
+        v = values[i]
+        if t is not None and v is not None:
+            out.append((t, v / 100.0))
+    return sorted(out)
+
+
 def build_basis_curves(dataset: Dataset) -> dict[str, np.ndarray]:
     """Zero curve per basis key ('now' + BASIS_KEYS). Cheap (6 bootstraps);
     callers cache per dataset load."""

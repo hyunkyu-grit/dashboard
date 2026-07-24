@@ -83,17 +83,10 @@ export function PreviewPane({
   }
 
   if (!row.seriesId) {
-    // forwards: no stage-2 history
     return (
       <>
         <Header row={row} />
-        <button
-          type="button"
-          onClick={() => onOpen(row)}
-          className="flex h-[280px] w-full items-center justify-center rounded-[16px] px-8 text-center text-[15px] opacity-55 hover:bg-page"
-        >
-          포워드는 과거 흐름이 없어요. 눌러서 매트릭스를 볼 수 있어요
-        </button>
+        <Sentence>과거 흐름을 볼 수 없어요</Sentence>
       </>
     );
   }

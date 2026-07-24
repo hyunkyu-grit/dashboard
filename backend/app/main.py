@@ -19,7 +19,7 @@ from .curves import build_basis_curves
 from .dataset import DISPLAY_TENORS, SPEC_NODE_ORDER, load_dataset
 from .derive import basis_dates, derived_ids, series_values, summarize
 from .events import detect_event_clusters
-from .forwards import forwards_payload
+from .forwards import forward_history, forwards_payload
 
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "irsdata.xlsx"
 
@@ -82,6 +82,14 @@ def wall_summary() -> dict:
 
 @app.get("/api/series/{series_id}")
 def series_detail(series_id: str) -> dict:
+    # Forward ids carry an 'x' (e.g. 2Yx1Y); their history is derived from each
+    # date's curve, lazily and cached (§2 stage-2).
+    if "x" in series_id:
+        try:
+            points = forward_history(_dataset, series_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"unknown forward {series_id}")
+        return {"id": series_id, "asof": _dataset.asof.isoformat(), "points": points}
     try:
         values = series_values(_dataset, series_id)
     except KeyError:

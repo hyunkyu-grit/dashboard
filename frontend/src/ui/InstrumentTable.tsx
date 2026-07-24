@@ -8,11 +8,23 @@
 import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 
-import type { BasisKey } from "@/lib/api";
+import type { BasisKey, ForwardsPayload } from "@/lib/api";
 import { dirClass, fmtBp } from "@/lib/format";
+import { ForwardMatrix, KeyForwardBlock } from "@/wall/ForwardMatrix";
 import { useRegisterTile } from "@/wall/useRegisterTile";
 
 import { SPRING } from "./motion";
+
+/** lexicographic compare of numeric sort keys (§6). */
+function cmpKey(a: number[], b: number[]): number {
+  const n = Math.max(a.length, b.length);
+  for (let i = 0; i < n; i++) {
+    const av = a[i] ?? -1;
+    const bv = b[i] ?? -1;
+    if (av !== bv) return av - bv;
+  }
+  return 0;
+}
 
 import {
   BASIS_ORDER,
@@ -92,12 +104,14 @@ function TableRow({
 
 export function InstrumentTable({
   rows,
+  forwards,
   activeId,
   pinnedId,
   onHover,
   onPin,
 }: {
   rows: Row[];
+  forwards?: ForwardsPayload;
   activeId: string | null;
   pinnedId: string | null;
   onHover: (row: Row | null) => void;
@@ -106,18 +120,64 @@ export function InstrumentTable({
   const [filter, setFilter] = useState<Group | "all">("all");
   const [sortCol, setSortCol] = useState<BasisKey | null>(null);
   const [sortAsc, setSortAsc] = useState(false);
+  const [startFilter, setStartFilter] = useState<string>("all");
+  const [showMatrix, setShowMatrix] = useState(false);
+
+  const isForward = filter === "forward";
+
+  const startOptions = useMemo(() => {
+    const s: string[] = [];
+    for (const r of rows) {
+      if (r.group === "forward" && r.startLabel && !s.includes(r.startLabel)) {
+        s.push(r.startLabel);
+      }
+    }
+    return s;
+  }, [rows]);
 
   const shown = useMemo(() => {
-    const base = filter === "all" ? rows : rows.filter((r) => r.group === filter);
-    if (!sortCol) return base;
-    const withVal = base.filter((r) => r.changes[sortCol] != null);
-    const without = base.filter((r) => r.changes[sortCol] == null);
-    withVal.sort((a, b) => {
-      const d = Math.abs(b.changes[sortCol]!) - Math.abs(a.changes[sortCol]!);
-      return sortAsc ? -d : d;
+    let base = filter === "all" ? rows : rows.filter((r) => r.group === filter);
+    if (isForward && startFilter !== "all") {
+      base = base.filter((r) => r.startLabel === startFilter);
+    }
+    if (sortCol) {
+      const withVal = base.filter((r) => r.changes[sortCol] != null);
+      const without = base.filter((r) => r.changes[sortCol] == null);
+      withVal.sort((a, b) => {
+        const d = Math.abs(b.changes[sortCol]!) - Math.abs(a.changes[sortCol]!);
+        return sortAsc ? -d : d;
+      });
+      return [...withVal, ...without];
+    }
+    // default: explicit numeric sort key ascending (§6); forwards pin the six
+    // quoted key forwards to the top.
+    return [...base].sort((a, b) => {
+      if (isForward) {
+        const ak = a.keyForward ? 0 : 1;
+        const bk = b.keyForward ? 0 : 1;
+        if (ak !== bk) return ak - bk;
+      }
+      return cmpKey(a.sortKey, b.sortKey);
     });
-    return [...withVal, ...without];
-  }, [rows, filter, sortCol, sortAsc]);
+  }, [rows, filter, startFilter, sortCol, sortAsc, isForward]);
+
+  // interleave group headings for the forward tab in default order (§3)
+  const items = useMemo(() => {
+    if (!(isForward && !sortCol)) {
+      return shown.map((row) => ({ head: null, row }) as const);
+    }
+    const out: { head: string | null; row: Row | null }[] = [];
+    let phase: "key" | "rest" | null = null;
+    for (const row of shown) {
+      const p = row.keyForward ? "key" : "rest";
+      if (p !== phase) {
+        out.push({ head: p === "key" ? "주요 포워드" : "전체 포워드", row: null });
+        phase = p;
+      }
+      out.push({ head: null, row });
+    }
+    return out;
+  }, [shown, isForward, sortCol]);
 
   const clickSort = (b: BasisKey) => {
     if (sortCol !== b) {
@@ -160,43 +220,87 @@ export function InstrumentTable({
         })}
       </div>
 
-      <table
-        className="w-full text-[13px]"
-        style={{ borderCollapse: "separate", borderSpacing: 0 }}
-        onMouseLeave={() => onHover(null)}
-      >
-        <thead>
-          <tr className="h-10 border-b border-edge text-left align-bottom opacity-50">
-            <th className="pl-3 font-normal">종목</th>
-            <th className="pr-3 text-right font-normal">현재</th>
-            {BASIS_ORDER.map((b) => (
-              <th key={b} className="pr-3 text-right font-normal">
-                <button
-                  type="button"
-                  onClick={() => clickSort(b)}
-                  className="hover:opacity-100"
-                >
-                  {BASIS_HEAD[b]}
-                  {sortCol === b ? (sortAsc ? " ↑" : " ↓") : ""}
-                </button>
-              </th>
+      {/* forward-tab secondary controls (§3): narrow by start point, or flip
+          to the 21×8 matrix */}
+      {isForward && (
+        <div className="mb-2 flex items-center gap-3 text-[13px]">
+          <select
+            value={startFilter}
+            onChange={(e) => setStartFilter(e.target.value)}
+            className="rounded-[8px] bg-page px-2 py-1 opacity-70"
+          >
+            <option value="all">전체 시작</option>
+            {startOptions.map((s) => (
+              <option key={s} value={s}>
+                {s} 시작
+              </option>
             ))}
-            <th className="pr-3 font-normal">한 줄</th>
-          </tr>
-        </thead>
-        <tbody>
-          {shown.map((row) => (
-            <TableRow
-              key={row.id}
-              row={row}
-              active={row.id === activeId}
-              pinned={row.id === pinnedId}
-              onHover={onHover}
-              onPin={onPin}
-            />
-          ))}
-        </tbody>
-      </table>
+          </select>
+          <button
+            type="button"
+            onClick={() => setShowMatrix((v) => !v)}
+            className="opacity-60 hover:opacity-100"
+          >
+            {showMatrix ? "▾ 목록으로" : "▸ 표로 보기"}
+          </button>
+        </div>
+      )}
+
+      {isForward && showMatrix && forwards ? (
+        <div className="flex items-start gap-6 overflow-x-auto">
+          <ForwardMatrix payload={forwards} />
+          <KeyForwardBlock payload={forwards} />
+        </div>
+      ) : (
+        <table
+          className="w-full text-[13px]"
+          style={{ borderCollapse: "separate", borderSpacing: 0 }}
+          onMouseLeave={() => onHover(null)}
+        >
+          <thead>
+            <tr className="h-10 border-b border-edge text-left align-bottom opacity-50">
+              <th className="pl-3 font-normal">종목</th>
+              <th className="pr-3 text-right font-normal">현재</th>
+              {BASIS_ORDER.map((b) => (
+                <th key={b} className="pr-3 text-right font-normal">
+                  <button
+                    type="button"
+                    onClick={() => clickSort(b)}
+                    className="hover:opacity-100"
+                  >
+                    {BASIS_HEAD[b]}
+                    {sortCol === b ? (sortAsc ? " ↑" : " ↓") : ""}
+                  </button>
+                </th>
+              ))}
+              <th className="pr-3 font-normal">한 줄</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it, i) =>
+              it.row ? (
+                <TableRow
+                  key={it.row.id}
+                  row={it.row}
+                  active={it.row.id === activeId}
+                  pinned={it.row.id === pinnedId}
+                  onHover={onHover}
+                  onPin={onPin}
+                />
+              ) : (
+                <tr key={`head-${i}`}>
+                  <td
+                    colSpan={8}
+                    className="border-t-2 border-t-edge pl-3 pb-1 pt-3 text-[12px] font-semibold opacity-45"
+                  >
+                    {it.head}
+                  </td>
+                </tr>
+              ),
+            )}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

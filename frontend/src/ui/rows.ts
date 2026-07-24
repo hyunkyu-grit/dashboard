@@ -30,6 +30,15 @@ export interface Row {
   pct: number | null; // 10y percentile, null if none
   seriesId: string | null; // stage-2 history id, null = no history
   oneLiner: string;
+  /** explicit ascending sort key so no series lacks one (§6): tenor in years
+   * for outrights, leg tuple for spreads/forwards. */
+  sortKey: number[];
+  /** true only for the six quoted key forwards (pinned to the top, §3). */
+  keyForward?: boolean;
+  /** forward start point label, for the secondary start filter (§3). */
+  startLabel?: string;
+  /** true for live-quoted (non-interpolated) outright nodes (§6). */
+  quoted?: boolean;
 }
 
 /** "1Y-10Y" → "1s10s", "2Y-5Y-10Y" → "2s5s10s" (trader shorthand). */
@@ -68,7 +77,23 @@ export function oneLiner(
   return `${SHORT_BASIS[best]} ${mag.toFixed(0)}bp ${dir}`;
 }
 
+/** Tenor → years, for explicit numeric sort keys (§6). Unknown → Infinity so a
+ * missing key sorts to the end loudly rather than silently mid-list. */
+const YEARS: Record<string, number> = {
+  "1D": 1 / 365, "3M": 0.25, "6M": 0.5, "9M": 0.75, "1Y": 1, "1.5Y": 1.5,
+  "2Y": 2, "3Y": 3, "4Y": 4, "5Y": 5, "6Y": 6, "7Y": 7, "8Y": 8, "9Y": 9,
+  "10Y": 10,
+};
+export function tenorYears(t: string): number {
+  return YEARS[t] ?? Number.POSITIVE_INFINITY;
+}
+
+/** Live-quoted outright nodes (the curve node set); the rest are interpolated
+ * (§6). */
+const QUOTED = new Set(["1D", "3M", "6M", "9M", "1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y"]);
+
 function fromSummary(s: SeriesSummary, group: Group, label: string): Row {
+  const legs = s.id.split("-");
   return {
     id: s.id,
     label,
@@ -85,6 +110,8 @@ function fromSummary(s: SeriesSummary, group: Group, label: string): Row {
     pct: s.range10y.pct,
     seriesId: s.id,
     oneLiner: oneLiner(s.range10y.pct, s.deltas, s.now != null),
+    sortKey: legs.map(tenorYears),
+    quoted: group === "outright" ? QUOTED.has(s.id) : undefined,
   };
 }
 
@@ -103,19 +130,31 @@ export function buildRows(
     rows.push(fromSummary(d, "spread", traderName(d.id)));
   }
   if (forwards) {
-    for (const kf of forwards.keyForwards) {
-      const changes = { ...kf.deltas };
-      rows.push({
-        id: `fwd:${kf.label}`,
-        label: kf.label,
-        group: "forward",
-        unit: "%",
-        now: kf.values.now,
-        changes,
-        pct: null,
-        seriesId: null, // forwards have no stage-2 history
-        oneLiner: oneLiner(null, changes, kf.values.now != null),
-      });
+    const startYears: Record<string, number> = {};
+    for (const sp of forwards.startPoints) startYears[sp.label] = sp.t;
+    const keyLabels = new Set(forwards.keyForwards.map((k) => k.label));
+    // every forward in the matrix (21 starts × 8 tenors), start-major (§3)
+    for (const sp of forwards.startPoints) {
+      for (const tenor of forwards.tenors) {
+        const clean = tenor.replace("F", ""); // "1YF"→"1Y", "SPOT" stays
+        const name = `${sp.label}x${clean}`;
+        const cell = forwards.grid[tenor].find((c) => c.start === sp.label);
+        if (!cell) continue;
+        rows.push({
+          id: name,
+          label: name,
+          group: "forward",
+          unit: "%",
+          now: cell.values.now,
+          changes: { ...cell.deltas },
+          pct: null,
+          seriesId: name, // stage-2 forward history (Session 13)
+          oneLiner: oneLiner(null, cell.deltas, cell.values.now != null),
+          sortKey: [startYears[sp.label] ?? Infinity, YEARS[clean] ?? 0],
+          keyForward: keyLabels.has(name),
+          startLabel: sp.label,
+        });
+      }
     }
   }
   // Volatility rows are placeholders until a formula arrives (§13).
@@ -130,6 +169,7 @@ export function buildRows(
       pct: null,
       seriesId: null,
       oneLiner: "아직 준비 중이에요",
+      sortKey: [tenorYears(t)],
     });
   }
   return rows;
