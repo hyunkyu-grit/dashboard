@@ -15,8 +15,10 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from .curves import build_basis_curves
 from .dataset import DISPLAY_TENORS, SPEC_NODE_ORDER, load_dataset
 from .derive import basis_dates, derived_ids, series_values, summarize
+from .forwards import forwards_payload
 
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "irsdata.xlsx"
 
@@ -33,6 +35,8 @@ app.add_middleware(
 
 _dataset = load_dataset(DATA_PATH)
 _bases = basis_dates(_dataset)
+_curves = build_basis_curves(_dataset)
+_forwards = forwards_payload(_dataset, _curves)
 
 
 def _outright_label(tenor: str) -> str:
@@ -90,11 +94,5 @@ def series_detail(series_id: str) -> dict:
 
 
 @app.get("/api/forwards")
-def forwards_stub() -> dict:
-    raise HTTPException(
-        status_code=501,
-        detail=(
-            "Forward derivation requires the curve bootstrap port from the "
-            "frozen engine; module list is [TBD — owner]. Not implemented."
-        ),
-    )
+def forwards() -> dict:
+    return _forwards
