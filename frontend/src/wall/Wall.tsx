@@ -12,6 +12,7 @@ import { useCallback, useEffect } from "react";
 import {
   fetchForwards,
   fetchWallSummary,
+  type ForwardsPayload,
   type WallSummary,
 } from "@/lib/api";
 import { syncUiFromDom, useUiStore } from "@/state/ui";
@@ -26,11 +27,43 @@ import {
   N_COLS,
   WALL_W,
 } from "./constants";
+import { ChangeLog } from "./ChangeLog";
+import { CommandBar } from "./CommandBar";
 import { CurveOverlayTile } from "./CurveOverlayTile";
 import { DetailOverlay } from "./DetailOverlay";
 import { ForwardMatrix, KeyForwardBlock } from "./ForwardMatrix";
 import { ForwardTile } from "./ForwardTile";
+import { useRegisterTile } from "./useRegisterTile";
 import { useWallPan } from "./usePan";
+
+const NO_TOKENS: string[] = [];
+
+/** Forward tile that registers itself in the tile registry (§3). */
+function RegisteredForwardTile({
+  tenor,
+  payload,
+  width,
+  height,
+}: {
+  tenor: string;
+  payload: ForwardsPayload;
+  width: number;
+  height: number;
+}) {
+  const refCb = useRegisterTile(`fwd:${tenor}`, tenor, [
+    tenor,
+    tenor.replace("F", "").toLowerCase() + "f",
+  ]);
+  return (
+    <ForwardTile
+      tenor={tenor}
+      payload={payload}
+      width={width}
+      height={height}
+      refCb={refCb}
+    />
+  );
+}
 
 const GRID_STYLE: React.CSSProperties = {
   width: WALL_W,
@@ -64,16 +97,19 @@ function Tile({
   span,
   height,
   onOpen,
+  refCb,
   children,
 }: {
   title: string;
   span: number;
   height: number;
   onOpen?: () => void;
+  refCb?: (el: HTMLElement | null) => void;
   children?: React.ReactNode;
 }) {
   return (
     <section
+      ref={refCb}
       className="rounded-sm border border-edge bg-tile p-3"
       style={{ gridColumn: `span ${span}`, height }}
       onClick={onOpen}
@@ -82,6 +118,19 @@ function Tile({
       <div style={{ height: height - 24 - 24 }}>{children}</div>
     </section>
   );
+}
+
+/** Search tokens for the curve tile: outright tenors + every derived id in
+ * plain, dash-free, and trader ("3s10s") forms so the command bar resolves
+ * them (all point at the curve tile until Band 3 owns per-series tiles). */
+function curveTokens(summary: WallSummary): string[] {
+  const tokens = ["curve", "irs", ...summary.outrights.map((o) => o.id)];
+  for (const d of summary.derived) {
+    const legs = d.id.split("-");
+    tokens.push(d.id, legs.join(""));
+    tokens.push(legs.map((l) => l.replace("Y", "s").replace(".", "")).join(""));
+  }
+  return tokens;
 }
 
 function StubBand({ label, note, height }: { label: string; note: string; height: number }) {
@@ -184,7 +233,18 @@ export function Wall() {
     staleTime: 30_000,
   });
 
-  const { viewportRef, contentRef, handlers } = useWallPan();
+  const { viewportRef, contentRef, handlers, panToElement } = useWallPan();
+
+  const curveRef = useRegisterTile(
+    "curve",
+    "IRS curve",
+    data ? curveTokens(data) : NO_TOKENS,
+  );
+  const matrixRef = useRegisterTile("matrix", "Forward matrix", [
+    "matrix",
+    "forward matrix",
+    "fwd",
+  ]);
 
   useEffect(() => {
     syncUiFromDom();
@@ -239,6 +299,7 @@ export function Wall() {
                 span={3}
                 height={400}
                 onOpen={() => openTile("curve")}
+                refCb={curveRef}
               >
                 {data && (
                   <CurveOverlayTile
@@ -269,7 +330,7 @@ export function Wall() {
                     ].map((row) => (
                       <div key={row[0]} className="flex gap-2">
                         {row.map((tenor) => (
-                          <ForwardTile
+                          <RegisteredForwardTile
                             key={tenor}
                             tenor={tenor}
                             payload={fwd}
@@ -279,7 +340,10 @@ export function Wall() {
                         ))}
                       </div>
                     ))}
-                    <div className="flex items-start gap-4 rounded-sm border border-edge bg-tile p-3">
+                    <div
+                      ref={matrixRef}
+                      className="flex items-start gap-4 rounded-sm border border-edge bg-tile p-3"
+                    >
                       <ForwardMatrix payload={fwd} />
                       <KeyForwardBlock payload={fwd} />
                     </div>
@@ -297,6 +361,10 @@ export function Wall() {
           </div>
         </div>
       </div>
+
+      <ChangeLog summary={data} onJump={panToElement} />
+
+      <CommandBar onJump={panToElement} />
 
       {focusedTile === "curve" && data && (
         <DetailOverlay onClose={closeTile}>

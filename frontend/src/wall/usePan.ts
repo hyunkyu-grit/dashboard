@@ -25,6 +25,8 @@ export interface WallPan {
   };
   /** Pan to an absolute offset (clamped). */
   panTo: (y: number) => void;
+  /** Pan so `el` sits just below the pinned header (change log / cmd bar). */
+  panToElement: (el: HTMLElement) => void;
   /** Home: back to wall origin. */
   home: () => void;
 }
@@ -65,6 +67,20 @@ export function useWallPan(): WallPan {
   );
 
   const home = useCallback(() => panTo(0), [panTo]);
+
+  const panToElement = useCallback(
+    (el: HTMLElement) => {
+      const c = contentRef.current;
+      if (!c) return;
+      // el and content translate together, so their rect delta is invariant
+      // of the current transform — the element's fixed offset within content.
+      // Target translate places that offset 16px below the content origin.
+      const withinContent =
+        el.getBoundingClientRect().top - c.getBoundingClientRect().top;
+      panTo(16 - withinContent);
+    },
+    [panTo],
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -134,6 +150,7 @@ export function useWallPan(): WallPan {
       onClickCapture,
     },
     panTo,
+    panToElement,
     home,
   };
 }

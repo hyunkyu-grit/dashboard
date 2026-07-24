@@ -31,9 +31,10 @@ interface Props {
   payload: ForwardsPayload;
   width: number;
   height: number;
+  refCb?: (el: HTMLElement | null) => void;
 }
 
-export function ForwardTile({ tenor, payload, width, height }: Props) {
+export function ForwardTile({ tenor, payload, width, height, refCb }: Props) {
   const [hover, setHover] = useState<number | null>(null);
   const theme = useUiStore((s) => s.theme);
   const rampOpacity = RAMP_OPACITY[theme];
@@ -83,7 +84,7 @@ export function ForwardTile({ tenor, payload, width, height }: Props) {
   const activeIdx = hover ?? linkedIdx;
 
   return (
-    <section className="flex flex-col rounded-sm border border-edge bg-tile p-3" style={{ width, height }}>
+    <section ref={refCb} className="flex flex-col rounded-sm border border-edge bg-tile p-3" style={{ width, height }}>
       <h2 className="mb-1 flex items-baseline justify-between text-[14px] font-semibold">
         <span>{tenor}</span>
         <span className="text-[12px] font-normal opacity-60">span {spanBp}bp</span>
