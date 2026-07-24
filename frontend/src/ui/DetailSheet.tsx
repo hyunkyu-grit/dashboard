@@ -9,6 +9,7 @@
  * wrapped in an error boundary so a thrown guard shows a message, not a blank
  * region (the detail-open fix). */
 
+import { motion, type PanInfo } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 
 import type { ForwardsPayload, WallSummary } from "@/lib/api";
@@ -21,6 +22,7 @@ import { ForwardTile } from "@/wall/ForwardTile";
 
 import { ERROR_SENTENCE } from "./copy";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { SHEET_SPRING } from "./motion";
 
 function SixBasisReadout({
   summary,
@@ -133,21 +135,38 @@ export function DetailSheet({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const onDragEnd = (_: unknown, info: PanInfo) => {
+    // Dismiss on a decisive downward drag; otherwise it springs back.
+    if (info.offset.y > 120 || info.velocity.y > 500) onClose();
+  };
+
   return (
-    <div
+    <motion.div
       className="fixed inset-0 z-30 flex items-end justify-center bg-page/70"
       onClick={onClose}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
     >
-      <div
+      <motion.div
         className="max-h-[90vh] w-full max-w-[960px] overflow-y-auto rounded-t-[20px] bg-popover p-6 shadow-card"
         onClick={(e) => e.stopPropagation()}
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={SHEET_SPRING}
+        drag="y"
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0, bottom: 0.5 }}
+        onDragEnd={onDragEnd}
       >
-        {/* grab handle (drag-to-dismiss wired in Pass 4) */}
+        {/* grab handle — downward drag dismisses (§14) */}
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-edge" />
         <ErrorBoundary fallback={ERROR_SENTENCE}>
           <SheetBody target={target} summary={summary} forwards={forwards} />
         </ErrorBoundary>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

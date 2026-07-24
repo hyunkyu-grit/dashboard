@@ -4,6 +4,7 @@
  * URL owns navigation: ?band=<band> is Level 2, ?tile=<target> is Level 3. */
 
 import { useQuery } from "@tanstack/react-query";
+import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect } from "react";
 
@@ -17,6 +18,7 @@ import { BandView } from "./BandView";
 import { ERROR_SENTENCE, LOADING_SENTENCE } from "./copy";
 import { DetailSheet } from "./DetailSheet";
 import { Home } from "./Home";
+import { SPRING } from "./motion";
 
 const SELECTOR_BASES = TIME_BASES.filter((b) => b !== "now") as BasisKey[];
 
@@ -117,51 +119,67 @@ export function App() {
   }, []);
 
   return (
-    <div className="min-h-screen">
-      <Header />
+    <MotionConfig reducedMotion="user">
+      <div className="min-h-screen">
+        <Header />
 
-      <main className="mx-auto max-w-[960px] px-6 pb-24 pt-6">
-        {isError && (
-          <p className="p-10 text-center text-[15px] opacity-60">
-            {ERROR_SENTENCE}
-          </p>
-        )}
-        {!summary && !isError && (
-          <p className="p-10 text-center text-[15px] opacity-50">
-            {LOADING_SENTENCE}
-          </p>
-        )}
-        {summary &&
-          (band ? (
-            <BandView
-              band={band}
+        <main className="mx-auto max-w-[960px] px-6 pb-24 pt-6">
+          {isError && (
+            <p className="p-10 text-center text-[15px] opacity-60">
+              {ERROR_SENTENCE}
+            </p>
+          )}
+          {!summary && !isError && (
+            <p className="p-10 text-center text-[15px] opacity-50">
+              {LOADING_SENTENCE}
+            </p>
+          )}
+          {summary && (
+            // Level 1 ⇄ 2 is an animated content transition, not a hard swap.
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={band ?? "home"}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={SPRING}
+              >
+                {band ? (
+                  <BandView
+                    band={band}
+                    summary={summary}
+                    forwards={forwards}
+                    basis={basis}
+                    onBack={back}
+                    onOpenTile={openTile}
+                  />
+                ) : (
+                  <Home
+                    summary={summary}
+                    forwards={forwards}
+                    basis={basis}
+                    onOpenBand={openBand}
+                    onOpenSeries={openSeries}
+                  />
+                )}
+              </motion.div>
+            </AnimatePresence>
+          )}
+        </main>
+
+        <AnimatePresence>
+          {tileParam && summary && (
+            <DetailSheet
+              target={tileParam}
               summary={summary}
               forwards={forwards}
-              basis={basis}
-              onBack={back}
-              onOpenTile={openTile}
+              onClose={closeTile}
             />
-          ) : (
-            <Home
-              summary={summary}
-              forwards={forwards}
-              basis={basis}
-              onOpenBand={openBand}
-              onOpenSeries={openSeries}
-            />
-          ))}
-      </main>
+          )}
+        </AnimatePresence>
 
-      {tileParam && summary && (
-        <DetailSheet
-          target={tileParam}
-          summary={summary}
-          forwards={forwards}
-          onClose={closeTile}
-        />
-      )}
-
-      <CommandBar onJump={scrollTo} />
-    </div>
+        <CommandBar onJump={scrollTo} />
+      </div>
+    </MotionConfig>
   );
 }

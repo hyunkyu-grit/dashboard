@@ -4,6 +4,7 @@
  * a "표로 보기" table toggle (collapsed by default), and for spreads the 8
  * largest movers with a "전체 보기" expansion to all 35. */
 
+import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 
 import type { BasisKey, ForwardsPayload, WallSummary } from "@/lib/api";
@@ -14,6 +15,7 @@ import { ForwardTile } from "@/wall/ForwardTile";
 
 import { BAND_NAME, type BandId } from "./bands";
 import { VOL_PLACEHOLDER } from "./copy";
+import { PRESS_SCALE } from "./motion";
 import { SeriesTable } from "./SeriesTable";
 import { SeriesTile } from "./SeriesTile";
 
@@ -44,15 +46,16 @@ function Tappable({
   children: React.ReactNode;
 }) {
   return (
-    <div
+    <motion.div
       role="button"
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onClick()}
-      className="cursor-pointer rounded-[16px] transition-transform active:scale-[0.99]"
+      whileTap={{ scale: PRESS_SCALE }}
+      className="cursor-pointer rounded-[16px]"
     >
       {children}
-    </div>
+    </motion.div>
   );
 }
 

@@ -4,11 +4,14 @@
  * 2). Hero value 28px, label + delta (direction color) small, a wide navy
  * sparkline of the series' own history. Whole tile → Level 3 detail. */
 
+import { motion } from "motion/react";
+
 import type { BasisKey, SeriesSummary } from "@/lib/api";
 import { dirClass, fmtBp } from "@/lib/format";
 import { useRegisterTile } from "@/wall/useRegisterTile";
 
 import { BASIS_PHRASE } from "./copy";
+import { PRESS_SCALE } from "./motion";
 import { Sparkline } from "./Sparkline";
 
 export function SeriesTile({
@@ -31,11 +34,12 @@ export function SeriesTile({
     s.now == null ? "–" : s.unit === "%" ? s.now.toFixed(2) : s.now.toFixed(1);
 
   return (
-    <button
+    <motion.button
       type="button"
       ref={registerRef as ((el: HTMLButtonElement | null) => void) | undefined}
       onClick={onOpen}
-      className="flex w-full items-center gap-5 rounded-[16px] bg-tile p-5 text-left shadow-card transition-transform active:scale-[0.98]"
+      whileTap={{ scale: PRESS_SCALE }}
+      className="flex w-full items-center gap-5 rounded-[16px] bg-tile p-5 text-left shadow-card"
     >
       <div className="w-40 shrink-0">
         <div className="text-[13px] opacity-50">{s.label}</div>
@@ -55,6 +59,6 @@ export function SeriesTile({
       <div className="min-w-0 flex-1">
         <Sparkline values={s.spark.map((p) => p.v)} width={640} height={72} />
       </div>
-    </button>
+    </motion.button>
   );
 }

@@ -5,10 +5,13 @@
  * fixed, event/state split). Most visual weight after the hero numbers.
  * Tapping a line opens that series' detail (Level 3). */
 
+import { motion } from "motion/react";
+
 import type { EventCluster } from "@/lib/api";
 import { dirClass, fmtBp } from "@/lib/format";
 
 import { briefingHeadline, BRIEFING_EMPTY } from "./copy";
+import { PRESS_SCALE, SPRING, STAGGER_STEP } from "./motion";
 
 const MAX_ROWS = 5;
 
@@ -33,15 +36,27 @@ export function Briefing({
       {events.length === 0 ? (
         <p className="mt-1.5 text-[15px] opacity-60">{BRIEFING_EMPTY}</p>
       ) : (
-        <ul className="mt-3 flex flex-col gap-0.5">
+        <motion.ul
+          className="mt-3 flex flex-col gap-0.5"
+          initial="hidden"
+          animate="show"
+          variants={{ show: { transition: { staggerChildren: STAGGER_STEP } } }}
+        >
           {rows.map((c) => {
             const e = c.leading;
             return (
-              <li key={e.id}>
-                <button
+              <motion.li
+                key={e.id}
+                variants={{
+                  hidden: { opacity: 0, y: 6 },
+                  show: { opacity: 1, y: 0, transition: SPRING },
+                }}
+              >
+                <motion.button
                   type="button"
                   onClick={() => onOpenSeries(e.id)}
-                  className="flex w-full items-baseline gap-3 rounded-[8px] py-1.5 text-left transition-transform active:scale-[0.99] hover:bg-page"
+                  whileTap={{ scale: PRESS_SCALE }}
+                  className="flex w-full items-baseline gap-3 rounded-[8px] py-1.5 text-left hover:bg-page"
                 >
                   <span className="w-24 shrink-0 text-[15px]">{e.label}</span>
                   <span
@@ -53,11 +68,11 @@ export function Briefing({
                     {e.reasons.map((r) => REASON[r] ?? r).join(" + ")}
                     {c.count > 0 ? ` · 연관 ${c.count}건` : ""}
                   </span>
-                </button>
-              </li>
+                </motion.button>
+              </motion.li>
             );
           })}
-        </ul>
+        </motion.ul>
       )}
     </section>
   );
