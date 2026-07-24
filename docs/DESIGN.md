@@ -284,7 +284,6 @@ The table is for exact value reading; the tiles are for shape. Both exist.
 |---------------|----------|----------|
 | Page          | #FAFAFA  | #1A1A1A  |
 | Card / tile   | #FFFFFF  | #202020  |
-| Card (raised) | #FFFFFF  | #262626  | dark uses a lighter step in place of a shadow |
 | Sheet         | #FFFFFF  | #262626  |
 | Ink           | #1A1A1A  | #EDEDED  |
 | Border        | ink 12%  | ink 18%  | tables + live-quote marker ONLY |
@@ -294,9 +293,34 @@ The table is for exact value reading; the tiles are for shape. Both exist.
   plus spacing. Hairlines survive only inside tables and as the live-quote
   cell marker.
 - **Radius:** card 16, sheet 20 (top corners only). Nothing above 20.
-- **Elevation:** light mode gets one soft card shadow token (the casual look
-  depends on it). Dark mode substitutes the lighter surface step (`#262626`) —
-  shadows still die in dark mode.
+- **No elevation.** [Session 13, revised from Session 12.] The floating,
+  shadowed card is gone, and with it the `--bw-card-raised` /
+  `--bw-shadow-card` tokens — depth is surface steps + hairlines only, in both
+  themes. The single sanctioned drop-shadow left in the app is the chart
+  tooltip overlay (Tailwind `shadow-lg`), a transient popover, not a surface.
+
+#### The shell is one continuous surface [OWNER, Session 13]
+
+Reference again: the Toss table sits on one uninterrupted white sheet, not a
+mosaic of floating cards. Sauron matches it.
+
+- The whole app is **one surface** (radius 16, no shadow, no border) filling
+  the viewport minus a thin `p-3` grey margin. Header, tabs, table, and the
+  right preview all live *inside* it. Grey (`page`) shows only as that margin
+  and as the row-hover / active tint.
+- **The page never scrolls.** The surface is pinned to viewport height
+  (`h-screen` → inner `h-full`, `overflow: hidden` on `body`). Scrolling
+  happens *inside* the surface: the table body is the scroll container; the
+  header, the tabs, and the forward controls stay fixed above it; the right
+  pane scrolls independently. The rounded corners clip the overflow.
+- **Row rhythm:** row height 48 (`h-12`), vertical padding 12 (`py-3`), a
+  single hairline (`border-edge`) between rows and nowhere else on the screen —
+  it is the *only* border. Group headings (forward "주요/전체") take a heavier
+  rule *above* (`border-t-2`) and no rule below.
+- Charts inside the panes must fit their measured pane width — a callback-ref
+  `useMeasure` feeds live width into the hand-rolled SVGs so they reflow with
+  the viewport (they are not `lightweight-charts`; §11 still owns the enlarged
+  view alone).
 
 [OWNER: default theme = LIGHT; dark = neutral dark-gray #1A1A1A family, not
 pure black, not blue-gray. Theme is user-switchable.]

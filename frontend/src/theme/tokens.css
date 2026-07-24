@@ -52,11 +52,6 @@
    * keeps #f58220 (below is --bw-interactive). */
   --bw-line: #d97316;
 
-  /* Card elevation — light gets a soft shadow; the raised surface equals the
-   * base card in light (shadow does the work). */
-  --bw-card-raised: #ffffff;
-  --bw-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 6px 16px rgba(0, 0, 0, 0.05);
-
   /* Sub-palette — DEFINED BUT UNREFERENCED (Session 12). Chart lines are navy
    * (--bw-brand). Kept for a possible future multi-object view. */
   --bw-hue-curve: #043b72;
@@ -90,10 +85,6 @@
   --bw-up: #f16e77;
   --bw-down: #4c93ff;
   --bw-line: #f58220;
-
-  /* Dark has no shadow (they die here) — a lighter surface step stands in. */
-  --bw-card-raised: #262626;
-  --bw-shadow-card: none;
 
   /* Dark-mode band substitutes (sub-palette, unreferenced). */
   --bw-hue-curve: #8dc8e8;

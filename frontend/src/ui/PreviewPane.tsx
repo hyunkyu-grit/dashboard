@@ -19,7 +19,6 @@ import { PRESS_SCALE, SPRING } from "./motion";
 import { PreviewChart } from "./PreviewChart";
 import type { Row } from "./rows";
 
-const CHART_W = 460;
 const CHART_H = 220;
 
 function Sentence({ children }: { children: React.ReactNode }) {
@@ -56,9 +55,11 @@ function Header({ row }: { row: Row }) {
 export function PreviewPane({
   row,
   onOpen,
+  width,
 }: {
   row: Row | null;
   onOpen: (row: Row) => void;
+  width: number;
 }) {
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
 
@@ -112,7 +113,7 @@ export function PreviewPane({
           <PreviewChart
             points={data.points}
             unit={row.unit}
-            width={CHART_W}
+            width={width}
             height={CHART_H}
             onHoverDate={setHoveredDate}
           />

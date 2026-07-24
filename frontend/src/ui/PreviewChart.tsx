@@ -102,7 +102,7 @@ export function PreviewChart({
       </svg>
       {hi != null && hp && (
         <div
-          className="pointer-events-none absolute top-2 rounded-[8px] bg-popover p-2 text-[12px] shadow-card"
+          className="pointer-events-none absolute top-2 rounded-[8px] bg-popover p-2 text-[12px] shadow-lg"
           style={{ left: tipLeft, width: 140 }}
         >
           <div className="mb-1 font-semibold">{hp.t}</div>

@@ -147,7 +147,7 @@ export function EnlargedView({
       transition={{ duration: 0.2 }}
     >
       <motion.div
-        className="max-h-[92vh] w-full max-w-[1000px] overflow-y-auto rounded-t-[20px] bg-popover p-6 shadow-card"
+        className="max-h-[92vh] w-full max-w-[1000px] overflow-y-auto rounded-t-[20px] bg-popover p-6 shadow-lg"
         onClick={(e) => e.stopPropagation()}
         initial={{ y: "100%" }}
         animate={{ y: 0 }}

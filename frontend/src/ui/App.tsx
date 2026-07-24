@@ -19,24 +19,25 @@ import { EnlargedView } from "./EnlargedView";
 import { InstrumentTable } from "./InstrumentTable";
 import { PreviewPane } from "./PreviewPane";
 import { buildRows, type Group, type Row } from "./rows";
+import { useMeasure } from "./useMeasure";
 
 function Header() {
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
+  // The title bar is the top of the one continuous surface (§ shell) — a
+  // hairline separates it from the panes; no page-level sticky, no shadow.
   return (
-    <header className="sticky top-0 z-20 bg-page/90 backdrop-blur">
-      <div className="mx-auto flex max-w-[1280px] items-center gap-3 px-6 py-3">
-        <span className="text-[17px] font-bold text-brand">Sauron</span>
-        <span className="text-[13px] opacity-45">KRW IRS</span>
-        <span className="flex-1" />
-        <button
-          type="button"
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          className="rounded-[8px] px-2 py-0.5 text-[13px] opacity-60 hover:opacity-100"
-        >
-          {theme === "dark" ? "밝게" : "어둡게"}
-        </button>
-      </div>
+    <header className="flex shrink-0 items-center gap-3 border-b border-edge px-5 py-3">
+      <span className="text-[17px] font-bold text-brand">Sauron</span>
+      <span className="text-[13px] opacity-45">KRW IRS</span>
+      <span className="flex-1" />
+      <button
+        type="button"
+        onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+        className="rounded-[8px] px-2 py-0.5 text-[13px] opacity-60 hover:opacity-100"
+      >
+        {theme === "dark" ? "밝게" : "어둡게"}
+      </button>
     </header>
   );
 }
@@ -115,12 +116,16 @@ export function App() {
     el.scrollIntoView({ behavior: "smooth", block: "center" });
   }, []);
 
+  const [paneRef, paneW] = useMeasure<HTMLDivElement>();
+
   return (
     <MotionConfig reducedMotion="user">
-    <div className="min-h-screen">
-      <Header />
+    {/* The page never scrolls; grey shows only as a thin margin around the one
+        continuous surface (§ shell, Session 13). */}
+    <div className="h-screen bg-page p-3">
+      <div className="mx-auto flex h-full max-w-[1400px] flex-col overflow-hidden rounded-[16px] bg-tile">
+        <Header />
 
-      <main className="mx-auto max-w-[1280px] px-6 pb-24 pt-4">
         {isError && (
           <p className="p-10 text-center text-[15px] opacity-60">
             {ERROR_SENTENCE}
@@ -132,8 +137,9 @@ export function App() {
           </p>
         )}
         {summary && (
-          <div className="flex gap-6">
-            <div className="min-w-0 basis-[55%]">
+          <div className="flex min-h-0 flex-1">
+            {/* left pane: tabs fixed, rows scroll inside (InstrumentTable) */}
+            <div className="flex min-w-0 basis-[55%] flex-col border-r border-edge">
               <InstrumentTable
                 rows={rows}
                 forwards={forwards}
@@ -145,24 +151,30 @@ export function App() {
                 onPin={setPinned}
               />
             </div>
-            <div className="basis-[45%]">
-              <div className="sticky top-20 rounded-[16px] bg-tile p-5 shadow-card">
-                {active ? (
-                  <PreviewPane row={active} onOpen={openEnlarged} />
-                ) : (
-                  <CurveView
-                    tab={tab}
-                    summary={summary}
-                    forwards={forwards}
-                    width={440}
-                    height={300}
-                  />
-                )}
+            {/* right pane: within the surface, does not scroll with the rows */}
+            <div className="basis-[45%] overflow-y-auto overflow-x-hidden p-5">
+              <div ref={paneRef}>
+                {paneW > 0 &&
+                  (active ? (
+                    <PreviewPane
+                      row={active}
+                      onOpen={openEnlarged}
+                      width={paneW}
+                    />
+                  ) : (
+                    <CurveView
+                      tab={tab}
+                      summary={summary}
+                      forwards={forwards}
+                      width={paneW}
+                      height={300}
+                    />
+                  ))}
               </div>
             </div>
           </div>
         )}
-      </main>
+      </div>
 
       <AnimatePresence>
         {enlargedRow && summary && (

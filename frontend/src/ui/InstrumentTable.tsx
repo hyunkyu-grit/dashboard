@@ -78,11 +78,11 @@ function TableRow({
       onMouseEnter={() => onHover(row)}
       onMouseLeave={() => onHover(null)}
       onClick={() => onPin(row)}
-      className={`h-10 cursor-pointer border-b border-edge ${
-        active ? "bg-page" : ""
+      className={`h-12 cursor-pointer border-b border-edge ${
+        active ? "bg-page" : "hover:bg-page/50"
       }`}
     >
-      <td className="relative pl-3">
+      <td className="relative py-3 pl-3">
         {pinned && (
           <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-ink" />
         )}
@@ -97,7 +97,9 @@ function TableRow({
           {fmtBp(row.changes[b])}
         </td>
       ))}
-      <td className="pr-3 text-[13px] opacity-55">{row.oneLiner}</td>
+      <td className="whitespace-nowrap pr-3 text-[13px] opacity-55">
+        {row.oneLiner}
+      </td>
     </tr>
   );
 }
@@ -194,11 +196,13 @@ export function InstrumentTable({
   };
 
   return (
-    <div>
+    <div className="flex h-full min-h-0 flex-col">
+      {/* fixed: tabs + forward controls stay at the top of the surface (§shell) */}
+      <div className="shrink-0 px-5 pt-4">
       {/* Tabs: a sliding underline indicator (§14). No press-scale here — a
           tab shares an alignment with its neighbours; transform press feedback
           is reserved for isolated targets (rows, standalone buttons). */}
-      <div className="mb-3 flex gap-1 border-b border-edge">
+      <div className="flex gap-1 border-b border-edge">
         {FILTERS.map((f) => {
           const on = filter === f.id;
           return (
@@ -226,7 +230,7 @@ export function InstrumentTable({
       {/* forward-tab secondary controls (§3): narrow by start point, or flip
           to the 21×8 matrix */}
       {isForward && (
-        <div className="mb-2 flex items-center gap-3 text-[13px]">
+        <div className="mt-2 flex items-center gap-3 text-[13px]">
           <select
             value={startFilter}
             onChange={(e) => setStartFilter(e.target.value)}
@@ -248,62 +252,75 @@ export function InstrumentTable({
           </button>
         </div>
       )}
+      </div>
 
-      {isForward && showMatrix && forwards ? (
-        <div className="flex items-start gap-6 overflow-x-auto">
-          <ForwardMatrix payload={forwards} />
-          <KeyForwardBlock payload={forwards} />
-        </div>
-      ) : (
-        <table
-          className="w-full text-[13px]"
-          style={{ borderCollapse: "separate", borderSpacing: 0 }}
-          onMouseLeave={() => onHover(null)}
-        >
-          <thead>
-            <tr className="h-10 border-b border-edge text-left align-bottom opacity-50">
-              <th className="pl-3 font-normal">종목</th>
-              <th className="pr-3 text-right font-normal">현재</th>
-              {BASIS_ORDER.map((b) => (
-                <th key={b} className="pr-3 text-right font-normal">
-                  <button
-                    type="button"
-                    onClick={() => clickSort(b)}
-                    className="hover:opacity-100"
-                  >
-                    {BASIS_HEAD[b]}
-                    {sortCol === b ? (sortAsc ? " ↑" : " ↓") : ""}
-                  </button>
+      {/* scroll: the table body scrolls under the fixed header (§shell) */}
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-4 pt-3">
+        {isForward && showMatrix && forwards ? (
+          <div className="flex items-start gap-6 overflow-x-auto">
+            <ForwardMatrix payload={forwards} />
+            <KeyForwardBlock payload={forwards} />
+          </div>
+        ) : (
+          <table
+            className="w-full text-[13px]"
+            style={{ borderCollapse: "separate", borderSpacing: 0 }}
+            onMouseLeave={() => onHover(null)}
+          >
+            <thead>
+              <tr className="text-left align-bottom opacity-50">
+                <th className="sticky top-0 z-10 bg-tile pb-2 pl-3 font-normal">
+                  종목
                 </th>
-              ))}
-              <th className="pr-3 font-normal">한 줄</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((it, i) =>
-              it.row ? (
-                <TableRow
-                  key={it.row.id}
-                  row={it.row}
-                  active={it.row.id === activeId}
-                  pinned={it.row.id === pinnedId}
-                  onHover={onHover}
-                  onPin={onPin}
-                />
-              ) : (
-                <tr key={`head-${i}`}>
-                  <td
-                    colSpan={8}
-                    className="border-t-2 border-t-edge pl-3 pb-1 pt-3 text-[12px] font-semibold opacity-45"
+                <th className="sticky top-0 z-10 bg-tile pb-2 pr-3 text-right font-normal">
+                  현재
+                </th>
+                {BASIS_ORDER.map((b) => (
+                  <th
+                    key={b}
+                    className="sticky top-0 z-10 bg-tile pb-2 pr-3 text-right font-normal"
                   >
-                    {it.head}
-                  </td>
-                </tr>
-              ),
-            )}
-          </tbody>
-        </table>
-      )}
+                    <button
+                      type="button"
+                      onClick={() => clickSort(b)}
+                      className="hover:opacity-100"
+                    >
+                      {BASIS_HEAD[b]}
+                      {sortCol === b ? (sortAsc ? " ↑" : " ↓") : ""}
+                    </button>
+                  </th>
+                ))}
+                <th className="sticky top-0 z-10 bg-tile pb-2 pr-3 font-normal">
+                  한 줄
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it, i) =>
+                it.row ? (
+                  <TableRow
+                    key={it.row.id}
+                    row={it.row}
+                    active={it.row.id === activeId}
+                    pinned={it.row.id === pinnedId}
+                    onHover={onHover}
+                    onPin={onPin}
+                  />
+                ) : (
+                  <tr key={`head-${i}`}>
+                    <td
+                      colSpan={8}
+                      className="border-t-2 border-t-edge pb-1 pl-3 pt-4 text-[12px] font-semibold opacity-45"
+                    >
+                      {it.head}
+                    </td>
+                  </tr>
+                ),
+              )}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
