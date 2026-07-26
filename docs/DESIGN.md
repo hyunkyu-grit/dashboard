@@ -683,6 +683,20 @@ all arrive precomputed — the browser never differences a series.
 Choices made to keep the build green where the prompt did not fully specify.
 Confirm or override.
 
+- **Volatility = relative ATR [Session 14].** `mean(ATR over 5 obs) /
+  mean(ATR over 60 obs)`, a dimensionless short-vs-long realised-vol ratio
+  (~1.0 normal, >1 = the recent window is hotter). **Close-only form:** the
+  export carries daily `MID종가` closes with **no intraday high/low column**, so
+  true range collapses to `TR_t = |r_t − r_{t−1}|` in bp — the measure is the
+  ratio of the 5-obs to the 60-obs mean absolute change. Someone reading a
+  number needs to know it is *this* form, not the high−low ATR. Implemented as a
+  generic transform over any series id (`backend/app/volatility.py`); only the
+  tenor set is exposed for now. Chosen constants: **warm-up 65 observations**
+  (earlier dates → `null`), **denominator floor 0.05 bp** on the 60-obs mean
+  (below it the ratio is `null`, never a divide-by-zero), windows counted in
+  **observations, not calendar days** (holidays cannot shorten a window). The
+  warm-up count and the floor value are the implementer's call.
+
 - **Name split**: the product is Sauron (header, `<title>`, all user-facing
   copy). The repo directory, npm package, mirror script, and internal
   identifiers stay `braveworld` — a path rename is churn with no payoff today.
