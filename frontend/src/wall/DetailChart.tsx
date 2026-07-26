@@ -35,7 +35,9 @@ interface SeriesDetail {
 }
 
 async function fetchSeries(id: string): Promise<SeriesDetail> {
-  const res = await fetch(`${API_BASE}/api/series/${encodeURIComponent(id)}`);
+  // full resolution for the enlarged chart (§16); the preview pane fetches the
+  // downsampled variant under a different key.
+  const res = await fetch(`${API_BASE}/api/series/${encodeURIComponent(id)}?res=full`);
   if (!res.ok) throw new Error(`series ${id}: HTTP ${res.status}`);
   return res.json();
 }
@@ -83,7 +85,7 @@ export function DetailChart({
   const [themeTick, setThemeTick] = useState(0);
 
   const { data, isError } = useQuery({
-    queryKey: ["series", id],
+    queryKey: ["series", id, "full"],
     queryFn: () => fetchSeries(id),
     staleTime: 30_000,
   });

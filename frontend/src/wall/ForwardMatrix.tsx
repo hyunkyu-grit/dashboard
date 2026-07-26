@@ -9,7 +9,7 @@
 
 import { useMemo } from "react";
 
-import type { ForwardsPayload } from "@/lib/api";
+import type { BasisKey, ForwardsPayload } from "@/lib/api";
 import { BASIS_LABELS, TIME_BASES } from "@/theme/ramp";
 
 import { tintStyle } from "@/ui/tint";
@@ -76,12 +76,12 @@ export function ForwardMatrix({ payload }: { payload: ForwardsPayload }) {
 
 export function KeyForwardBlock({ payload }: { payload: ForwardsPayload }) {
   // level cells tinted by their change from Now (the "now" column is untinted).
+  // Deltas arrive precomputed on each key forward (§16) — no recompute here.
   const gridMax = useMemo(() => {
     let m = 0;
     for (const kf of payload.keyForwards) {
       for (const b of TIME_BASES) {
-        if (b !== "now")
-          m = Math.max(m, Math.abs((kf.values.now - kf.values[b]) * 100));
+        if (b !== "now") m = Math.max(m, Math.abs(kf.deltas[b as BasisKey]));
       }
     }
     return m;
@@ -107,8 +107,7 @@ export function KeyForwardBlock({ payload }: { payload: ForwardsPayload }) {
           <tr key={kf.label} className="h-[26px]">
             <td>{kf.label}</td>
             {TIME_BASES.map((b) => {
-              const change =
-                b === "now" ? null : (kf.values.now - kf.values[b]) * 100;
+              const change = b === "now" ? null : kf.deltas[b as BasisKey];
               return (
                 <td
                   key={b}

@@ -64,8 +64,10 @@ export function PreviewPane({
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
 
   const { data, isError, isLoading } = useQuery({
-    queryKey: ["series", row?.seriesId],
-    queryFn: () => fetchSeries(row!.seriesId!),
+    // preview resolution: ~150 downsampled line points (§16); the enlarged view
+    // fetches full resolution under a distinct key.
+    queryKey: ["series", row?.seriesId, "preview"],
+    queryFn: () => fetchSeries(row!.seriesId!, "preview"),
     enabled: !!row?.seriesId,
     staleTime: 30_000,
   });
@@ -112,13 +114,14 @@ export function PreviewPane({
         >
           <PreviewChart
             points={data.points}
+            stats={data.stats}
             unit={row.unit}
             width={width}
             height={CHART_H}
             onHoverDate={setHoveredDate}
           />
           <div className="mt-3 overflow-x-auto">
-            <CalendarHeatmap points={data.points} hoveredDate={hoveredDate} />
+            <CalendarHeatmap changes={data.calendar} hoveredDate={hoveredDate} />
           </div>
           <p className="mt-2 text-[12px] opacity-40">눌러서 크게 볼 수 있어요</p>
         </motion.div>

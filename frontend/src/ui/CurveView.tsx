@@ -11,8 +11,7 @@ import { useMemo } from "react";
 import type { ForwardsPayload, WallSummary } from "@/lib/api";
 import { BASIS_SECONDARY_OPACITY } from "@/theme/ramp";
 
-import type { Group } from "./rows";
-import { tenorYears } from "./rows";
+import { cmpKey, type Group } from "./rows";
 
 interface Node {
   label: string;
@@ -124,11 +123,8 @@ export function CurveView({
     unit = "bp";
     nodes = [...summary.derived]
       .filter((d) => d.id.split("-").length === 2) // 2-point spreads only
-      .sort(
-        (a, b) =>
-          tenorYears(a.id.split("-")[0]) - tenorYears(b.id.split("-")[0]) ||
-          tenorYears(a.id.split("-")[1]) - tenorYears(b.id.split("-")[1]),
-      )
+      // order by the backend-supplied sort key (§16), not a client tenor map
+      .sort((a, b) => cmpKey(a.sortKey, b.sortKey))
       .map((d) => ({
         label: d.id.split("-").map((t) => t.replace("Y", "")).join("s"),
         now: d.now,

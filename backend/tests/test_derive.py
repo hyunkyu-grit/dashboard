@@ -3,11 +3,13 @@ from pathlib import Path
 
 import pytest
 
-from app.dataset import DISPLAY_TENORS, load_dataset
+from app.dataset import DISPLAY_TENORS, QUOTED_NODES, load_dataset, tenor_years
 from app.derive import (
     basis_dates,
+    classify_one_liner,
     derived_ids,
     downsample,
+    series_history,
     series_values,
     summarize,
 )
@@ -76,3 +78,80 @@ def test_downsample_keeps_last():
     out = downsample(dates, vals, target=150)
     assert len(out) == 150
     assert out[-1] == (dates[-1], vals[-1])
+
+
+# ── §16 computation boundary: the numbers the browser used to compute ──────────
+
+def test_summarize_carries_sort_key_quoted_and_classification(ds):
+    b = basis_dates(ds)
+    o = summarize(ds, "10Y", "IRS 10Y", "outright", b)
+    assert o["sortKey"] == [10.0]
+    assert o["quoted"] is True
+    assert o["oneLiner"]["kind"] in {
+        "extreme", "retrace_week", "retrace_month", "none"
+    }
+    sp = summarize(ds, "1Y-10Y", "1Y/10Y", "spread", b)
+    assert sp["sortKey"] == [1.0, 10.0]
+    assert sp["quoted"] is None  # quoted/interpolated only applies to outrights
+
+
+def test_sort_key_orders_3m_second_not_last():
+    # the 3M-at-the-end bug (§6): CD91/3M must sort just after the overnight.
+    order = sorted(["1D", "10Y", "3M", "5Y", "1Y"], key=tenor_years)
+    assert order == ["1D", "3M", "1Y", "5Y", "10Y"]
+    assert tenor_years("does-not-exist") == float("inf")
+    assert "10Y" in QUOTED_NODES and "4Y" not in QUOTED_NODES
+
+
+def test_classify_one_liner_matches_the_old_client_rule():
+    flat = {"d1": None, "wtd": None, "mtd": None, "qtd": None, "ytd": None}
+    assert classify_one_liner(50, flat, has_data=False) == {"kind": "none", "value": None}
+    assert classify_one_liner(95, flat, True) == {"kind": "extreme", "value": 95}
+    assert classify_one_liner(5, flat, True) == {"kind": "extreme", "value": 5}
+    # a sign flip d1 vs wtd (both ≥0.5bp) is a weekly retracement
+    assert classify_one_liner(
+        50, {"d1": 1.0, "wtd": -1.0, "mtd": None, "qtd": None, "ytd": None}, True
+    )["kind"] == "retrace_week"
+    # d1/wtd same sign, wtd vs mtd flip → monthly
+    assert classify_one_liner(
+        50, {"d1": 1.0, "wtd": 1.0, "mtd": -1.0, "qtd": None, "ytd": None}, True
+    )["kind"] == "retrace_month"
+    # sub-0.5bp wiggles never count as a flip
+    assert classify_one_liner(
+        50, {"d1": 0.2, "wtd": -1.0, "mtd": None, "qtd": None, "ytd": None}, True
+    )["kind"] == "none"
+
+
+def test_series_history_precomputes_deltas_stats_calendar():
+    pairs = [
+        ("2020-01-01", 1.0), ("2020-01-02", 1.5),
+        ("2020-01-03", 1.5), ("2020-01-06", 2.0),
+    ]
+    h = series_history(pairs, "%", "full")
+    assert [p["d"] for p in h["points"]] == [None, 50.0, 0.0, 50.0]  # bp
+    assert h["stats"] == {"min": 1.0, "max": 2.0, "avg": 1.5}
+    # calendar drops the first (no prior day) and stays at daily resolution
+    assert [c["d"] for c in h["calendar"]] == [50.0, 0.0, 50.0]
+
+
+def test_series_history_bp_unit_does_not_rescale():
+    pairs = [("2020-01-01", 10.0), ("2020-01-02", 10.5)]
+    h = series_history(pairs, "bp", "full")
+    assert h["points"][1]["d"] == 0.5  # bp levels: change is a plain difference
+
+
+def test_series_history_preview_downsamples_but_keeps_daily_calendar():
+    pairs = [(f"2020-{1 + i // 28:02d}-{1 + i % 28:02d}", float(i)) for i in range(600)]
+    full = series_history(pairs, "%", "full")
+    prev = series_history(pairs, "%", "preview")
+    assert len(full["points"]) == 600
+    assert len(prev["points"]) == 150
+    assert prev["points"][-1]["t"] == pairs[-1][0]  # last point always kept
+    # calendar is daily regardless of line resolution: recent 130 changes
+    assert len(prev["calendar"]) == 130 == len(full["calendar"])
+
+
+def test_series_history_empty_is_null_safe():
+    h = series_history([], "%", "preview")
+    assert h["stats"] is None
+    assert h["points"] == [] and h["calendar"] == []

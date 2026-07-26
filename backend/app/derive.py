@@ -10,11 +10,12 @@ import datetime as dt
 from bisect import bisect_left
 from itertools import combinations
 
-from .dataset import DISPLAY_TENORS, Dataset
+from .dataset import DISPLAY_TENORS, QUOTED_NODES, Dataset, tenor_years
 
 BASIS_KEYS = ["d1", "wtd", "mtd", "qtd", "ytd"]
 
-SPARK_POINTS = 150  # ~150-pt downsampled sparkline (design spec §4)
+SPARK_POINTS = 150  # ~150-pt downsampled sparkline / preview series (§4/§16)
+CALENDAR_DAYS = 130  # ~26 trading weeks of daily changes for the heatmap (§2)
 
 
 def basis_dates(dataset: Dataset) -> dict[str, dt.date | None]:
@@ -122,6 +123,83 @@ def downsample(dates: list[dt.date], values: list[float | None],
     return picked
 
 
+def classify_one_liner(pct: float | None,
+                       deltas: dict[str, float | None],
+                       has_data: bool) -> dict:
+    """The `한 줄` classification (§16 exception). The backend decides WHAT is
+    true; the browser renders the Korean sentence.
+
+    Mirrors the old client rule exactly: an extreme-band percentile (a number
+    shown in no column, so genuinely new), else the SHAPE of the move (a sign
+    flip between adjacent bases → a retracement), else nothing. Never a bp
+    magnitude — those already ARE the change columns.
+    """
+    if not has_data:
+        return {"kind": "none", "value": None}
+    if pct is not None and (pct >= 90 or pct <= 10):
+        return {"kind": "extreme", "value": round(pct)}
+
+    def flipped(a: float | None, b: float | None) -> bool:
+        return (
+            a is not None and b is not None
+            and abs(a) >= 0.5 and abs(b) >= 0.5 and (a > 0) != (b > 0)
+        )
+
+    if flipped(deltas.get("d1"), deltas.get("wtd")):
+        return {"kind": "retrace_week", "value": None}
+    if flipped(deltas.get("wtd"), deltas.get("mtd")):
+        return {"kind": "retrace_month", "value": None}
+    return {"kind": "none", "value": None}
+
+
+def downsample_triples(points: list[dict], target: int = SPARK_POINTS) -> list[dict]:
+    """Stride decimation of {t,v,d} points to ≤ target, always keeping the last.
+    Each surviving point keeps its own true daily change `d` (computed on the
+    full series before thinning), so a preview point's tooltip stays honest."""
+    if len(points) <= target:
+        return points
+    stride = len(points) / target
+    picked = [points[int(i * stride)] for i in range(target)]
+    if picked[-1] is not points[-1]:
+        picked[-1] = points[-1]
+    return picked
+
+
+def series_history(pairs: list[tuple[str, float]], unit: str,
+                   resolution: str = "full") -> dict:
+    """Precompute everything the preview/enlarged panes display for a series
+    (§16): the line points (downsampled for preview, full otherwise), the
+    range stats, and the recent daily-change calendar. `pairs` is the full,
+    chronological list of (iso-date, value) with no gaps. The browser never
+    differences or averages a series — it all leaves here."""
+    scale = 100 if unit == "%" else 1  # deltas quoted in bp even for % levels
+    triples: list[dict] = []
+    prev: float | None = None
+    for t, v in pairs:
+        d = round((v - prev) * scale, 2) if prev is not None else None
+        triples.append({"t": t, "v": v, "d": d})
+        prev = v
+
+    values = [x["v"] for x in triples]
+    stats = None
+    if values:
+        stats = {
+            "min": min(values),
+            "max": max(values),
+            "avg": round(sum(values) / len(values), 4),
+        }
+
+    points = (
+        downsample_triples(triples) if resolution == "preview" else triples
+    )
+    # Calendar wants DAILY resolution regardless of the line's resolution.
+    calendar = [
+        {"t": x["t"], "d": x["d"]} for x in triples if x["d"] is not None
+    ][-CALENDAR_DAYS:]
+
+    return {"unit": unit, "points": points, "stats": stats, "calendar": calendar}
+
+
 def summarize(dataset: Dataset, series_id: str, label: str, kind: str,
               bases: dict[str, dt.date | None]) -> dict:
     values = [None if v is None else round(v, 4)
@@ -149,6 +227,11 @@ def summarize(dataset: Dataset, series_id: str, label: str, kind: str,
     if clean and now is not None:
         pct = round(bisect_left(clean, now) / len(clean) * 100, 1)
 
+    # Sort key + quoted flag + 한 줄 classification are computed HERE, not in the
+    # browser (§16). Legs map to years; an outright is a single-leg key.
+    sort_key = [tenor_years(leg) for leg in series_id.split("-")]
+    quoted = (series_id in QUOTED_NODES) if kind == "outright" else None
+
     return {
         "id": series_id,
         "label": label,
@@ -162,6 +245,9 @@ def summarize(dataset: Dataset, series_id: str, label: str, kind: str,
             "max": clean[-1] if clean else None,
             "pct": pct,
         },
+        "sortKey": sort_key,
+        "quoted": quoted,
+        "oneLiner": classify_one_liner(pct, deltas, now is not None),
         "spark": [
             {"t": d.isoformat(), "v": v}
             for d, v in downsample(dataset.dates, values)

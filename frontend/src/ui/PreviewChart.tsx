@@ -5,21 +5,23 @@
  * Orange line (§9). Hovering shows a floating card near the cursor:
  * 날짜 · 레벨 · 구간 최고 · 구간 최저 · 구간 평균 · 당일 변화. */
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
-import type { SparkPoint } from "@/lib/api";
+import type { HistoryPoint, SeriesStats } from "@/lib/api";
 import { dirClass, fmtBp } from "@/lib/format";
 
 const PAD = { top: 10, right: 10, bottom: 16, left: 6 };
 
 export function PreviewChart({
   points,
+  stats,
   unit,
   width,
   height,
   onHoverDate,
 }: {
-  points: SparkPoint[];
+  points: HistoryPoint[];
+  stats: SeriesStats | null; // range min/max/avg, precomputed server-side (§16)
   unit: "%" | "bp";
   width: number;
   height: number;
@@ -27,26 +29,17 @@ export function PreviewChart({
 }) {
   const [hi, setHi] = useState<number | null>(null);
 
-  const stats = useMemo(() => {
-    const vs = points.map((p) => p.v);
-    const lo = Math.min(...vs);
-    const high = Math.max(...vs);
-    const avg = vs.reduce((a, b) => a + b, 0) / vs.length;
-    return { lo, high, avg };
-  }, [points]);
-
-  if (points.length < 2) return null;
+  if (points.length < 2 || !stats) return null;
 
   const plotW = width - PAD.left - PAD.right;
   const plotH = height - PAD.top - PAD.bottom;
-  const pad = (stats.high - stats.lo) * 0.06 || 0.01;
-  const yMin = stats.lo - pad;
-  const yMax = stats.high + pad;
+  const pad = (stats.max - stats.min) * 0.06 || 0.01;
+  const yMin = stats.min - pad;
+  const yMax = stats.max + pad;
   const x = (i: number) => PAD.left + (i / (points.length - 1)) * plotW;
   const y = (v: number) => PAD.top + (1 - (v - yMin) / (yMax - yMin)) * plotH;
   const path = points.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
 
-  const scale = unit === "%" ? 100 : 1;
   const lvl = (v: number) => (unit === "%" ? v.toFixed(4) : v.toFixed(1));
 
   const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -63,8 +56,8 @@ export function PreviewChart({
   };
 
   const hp = hi != null ? points[hi] : null;
-  const dailyChange =
-    hi != null && hi > 0 ? (points[hi].v - points[hi - 1].v) * scale : null;
+  // daily change arrives precomputed per point (§16) — no client differencing.
+  const dailyChange = hp ? hp.d : null;
   const tipLeft = hi != null ? Math.min(width - 150, Math.max(0, x(hi) + 10)) : 0;
 
   return (
@@ -107,8 +100,8 @@ export function PreviewChart({
         >
           <div className="mb-1 font-semibold">{hp.t}</div>
           <Line k="레벨" v={lvl(hp.v)} />
-          <Line k="구간 최고" v={lvl(stats.high)} />
-          <Line k="구간 최저" v={lvl(stats.lo)} />
+          <Line k="구간 최고" v={lvl(stats.max)} />
+          <Line k="구간 최저" v={lvl(stats.min)} />
           <Line k="구간 평균" v={lvl(stats.avg)} />
           <div className="mt-1 flex justify-between">
             <span className="opacity-50">당일 변화</span>

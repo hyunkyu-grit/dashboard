@@ -14,20 +14,9 @@ import { ForwardMatrix, KeyForwardBlock } from "@/wall/ForwardMatrix";
 import { useRegisterTile } from "@/wall/useRegisterTile";
 
 import { SPRING } from "./motion";
-
-/** lexicographic compare of numeric sort keys (§6). */
-function cmpKey(a: number[], b: number[]): number {
-  const n = Math.max(a.length, b.length);
-  for (let i = 0; i < n; i++) {
-    const av = a[i] ?? -1;
-    const bv = b[i] ?? -1;
-    if (av !== bv) return av - bv;
-  }
-  return 0;
-}
-
 import {
   BASIS_ORDER,
+  cmpKey,
   GROUP_LABEL,
   type Group,
   type Row,

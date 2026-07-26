@@ -17,7 +17,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .curves import build_basis_curves
 from .dataset import DISPLAY_TENORS, SPEC_NODE_ORDER, load_dataset
-from .derive import basis_dates, derived_ids, series_values, summarize
+from .derive import (
+    basis_dates,
+    derived_ids,
+    series_history,
+    series_values,
+    summarize,
+)
 from .events import detect_event_clusters
 from .forwards import forward_history, forwards_payload
 
@@ -81,27 +87,35 @@ def wall_summary() -> dict:
 
 
 @app.get("/api/series/{series_id}")
-def series_detail(series_id: str) -> dict:
-    # Forward ids carry an 'x' (e.g. 2Yx1Y); their history is derived from each
-    # date's curve, lazily and cached (§2 stage-2).
+def series_detail(series_id: str, res: str = "full") -> dict:
+    # `res=preview` → ~150 downsampled line points; `res=full` → every day (the
+    # enlarged view). Stats + per-point daily change + the calendar are always
+    # precomputed here — the browser never differences a series (§16).
     if "x" in series_id:
+        # Forward ids carry an 'x' (e.g. 2Yx1Y); their history is derived from
+        # each date's curve, lazily and cached (§2 stage-2). Levels are %.
         try:
-            points = forward_history(_dataset, series_id)
+            hist = forward_history(_dataset, series_id)
         except KeyError:
             raise HTTPException(status_code=404, detail=f"unknown forward {series_id}")
-        return {"id": series_id, "asof": _dataset.asof.isoformat(), "points": points}
-    try:
-        values = series_values(_dataset, series_id)
-    except KeyError:
-        raise HTTPException(status_code=404, detail=f"unknown series {series_id}")
+        pairs = [(p["t"], p["v"]) for p in hist]
+        unit = "%"
+    else:
+        try:
+            values = series_values(_dataset, series_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"unknown series {series_id}")
+        # outright levels are %, derived spreads/flies are already bp.
+        unit = "%" if series_id in _dataset.series else "bp"
+        pairs = [
+            (d.isoformat(), round(v, 4))
+            for d, v in zip(_dataset.dates, values)
+            if v is not None
+        ]
     return {
         "id": series_id,
         "asof": _dataset.asof.isoformat(),
-        "points": [
-            {"t": d.isoformat(), "v": v}
-            for d, v in zip(_dataset.dates, values)
-            if v is not None
-        ],
+        **series_history(pairs, unit, res),
     }
 
 

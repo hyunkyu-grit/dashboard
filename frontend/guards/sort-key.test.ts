@@ -6,10 +6,24 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { ForwardsPayload, SeriesSummary, WallSummary } from "../src/lib/api";
+import type {
+  ForwardsPayload,
+  OneLiner,
+  SeriesSummary,
+  WallSummary,
+} from "../src/lib/api";
 import { buildRows } from "../src/ui/rows";
 
 const nullDeltas = { d1: 1, wtd: 1, mtd: 1, qtd: 1, ytd: 1 };
+const NONE: OneLiner = { kind: "none", value: null };
+
+// The sort key + quoted flag + classification now arrive from the backend (§16);
+// these fixtures stand in for that DTO. `yr` mirrors the server tenor→years map.
+const yr: Record<string, number> = {
+  "1D": 1 / 365, "3M": 0.25, "6M": 0.5, "9M": 0.75, "1Y": 1, "1.5Y": 1.5,
+  "2Y": 2, "3Y": 3, "4Y": 4, "5Y": 5, "6Y": 6, "7Y": 7, "8Y": 8, "9Y": 9,
+  "10Y": 10,
+};
 
 function outright(id: string): SeriesSummary {
   return {
@@ -21,12 +35,27 @@ function outright(id: string): SeriesSummary {
     deltas: { ...nullDeltas },
     basisValues: { d1: 3, wtd: 3, mtd: 3, qtd: 3, ytd: 3 },
     range10y: { min: 1, max: 5, pct: 50 },
+    sortKey: id.split("-").map((t) => yr[t]),
+    quoted: true,
+    oneLiner: NONE,
     spark: [],
   };
 }
 
 function derived(id: string, kind: "spread" | "fly"): SeriesSummary {
-  return { ...outright(id), kind, unit: "bp" };
+  return { ...outright(id), kind, unit: "bp", quoted: null };
+}
+
+function fwdCell(start: string, sortKey: number[]) {
+  return {
+    start,
+    live: true,
+    values: { now: 3 },
+    deltas: { ...nullDeltas },
+    sortKey,
+    oneLiner: NONE,
+    keyForward: false,
+  };
 }
 
 // Cover every quoted node (incl. 3M/CD91, 1D, and the 1.5Y fractional tenor)
@@ -55,12 +84,12 @@ const forwards: ForwardsPayload = {
   tenors: ["1YF", "5YF"],
   grid: {
     "1YF": [
-      { start: "ON", live: true, values: { now: 3 }, deltas: { ...nullDeltas } },
-      { start: "2Y", live: true, values: { now: 3 }, deltas: { ...nullDeltas } },
+      fwdCell("ON", [0, 1]),
+      fwdCell("2Y", [2, 1]),
     ],
     "5YF": [
-      { start: "ON", live: true, values: { now: 3 }, deltas: { ...nullDeltas } },
-      { start: "2Y", live: true, values: { now: 3 }, deltas: { ...nullDeltas } },
+      fwdCell("ON", [0, 5]),
+      fwdCell("2Y", [2, 5]),
     ],
   } as ForwardsPayload["grid"],
   keyForwards: [],

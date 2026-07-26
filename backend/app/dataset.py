@@ -29,6 +29,25 @@ SPEC_NODE_ORDER = [
 # Display tenor set for spreads/flies. [OWNER]
 DISPLAY_TENORS = ["1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y"]
 
+# Tenor id → years, for explicit numeric sort keys (§6/§16). Unknown → +inf so
+# a genuinely unmapped tenor sorts to the end loudly, never silently mid-list.
+TENOR_YEARS: dict[str, float] = {
+    "1D": 1.0 / 365.0, "3M": 0.25, "6M": 0.5, "9M": 0.75, "1Y": 1.0,
+    "1.5Y": 1.5, "2Y": 2.0, "3Y": 3.0, "4Y": 4.0, "5Y": 5.0, "6Y": 6.0,
+    "7Y": 7.0, "8Y": 8.0, "9Y": 9.0, "10Y": 10.0,
+}
+
+
+def tenor_years(tenor: str) -> float:
+    return TENOR_YEARS.get(tenor, float("inf"))
+
+
+# Live-quoted curve nodes (the actual node set); every other tenor is
+# interpolated (§6). The quoted/interpolated dot marker reads this.
+QUOTED_NODES = frozenset(
+    {"1D", "3M", "6M", "9M", "1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y"}
+)
+
 
 def _tenor_id(label: str) -> str:
     """Map a Korean series label to a tenor id like '6M', '1.5Y', '1D'."""

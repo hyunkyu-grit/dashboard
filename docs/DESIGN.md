@@ -644,6 +644,40 @@ loading, and error states. The register is calm, plain, and human.
   the number supplies the fact.
 - Direction words follow the market: 올랐어요/내려왔어요 map to red/blue (§9).
 
+## 16. The computation boundary [OWNER, Session 14]
+
+Anything that has to be **calculated** is calculated in the **backend**. The
+frontend turns numbers into pixels; it does not turn market data into numbers.
+The line, stated so it can be applied without a judgement call:
+
+- **Backend — market data → numbers.** Levels, every delta, percentiles,
+  ratios, forwards, spreads, flies, volatility, downsampled series, sort keys,
+  and the *classification* behind any summary text. If a displayed number is the
+  result of arithmetic on market data, it is produced here and travels the wire.
+- **Frontend — numbers → pixels.** Colour mapping, tint alpha, layout, rounding
+  for display, thousands separators, `null`→"—", and ordering rows by a key the
+  backend already supplied. No arithmetic on market data: no averaging, no bp
+  conversion, no delta, no percentile.
+
+**The one deliberate exception — classify in the backend, phrase in the
+frontend.** The `한 줄` column ships as a *classification*, e.g.
+`{ kind: "extreme", value: 99 }`, never the finished Korean string. Copy is
+presentation: if changing wording required a backend deploy, the wording would
+never improve. So the backend decides *what is true* (an extreme percentile, a
+retracement, or nothing); the frontend decides *how to say it*.
+
+**Enforced by** `guards/row-vm-source.test.ts`: every field the row view-model
+builder (`buildRows`) emits must be declared in `ROW_FIELD_SOURCE` as either
+`dto` (read straight from the API) or `format` (pure presentation). A new field
+with no declaration fails the gate; a field that needs a calculation has no
+honest declaration and must move to the backend. `dto` fields are additionally
+checked to equal their API source, so arithmetic cannot hide in the passthrough.
+
+Preview series are **downsampled in the backend** (~150 points); full
+resolution is a separate request for the enlarged view. Range statistics
+(min/max/avg), per-point daily change, and the calendar's daily-change series
+all arrive precomputed — the browser never differences a series.
+
 ## Provisional [Session 12 list-first — review these]
 
 Choices made to keep the build green where the prompt did not fully specify.

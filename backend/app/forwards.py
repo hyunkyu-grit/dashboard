@@ -23,7 +23,7 @@ import numpy as np
 
 from .curves import par_rates_at_index
 from .dataset import Dataset
-from .derive import BASIS_KEYS, basis_dates
+from .derive import BASIS_KEYS, basis_dates, classify_one_liner
 from .engine_port import _modfol_bd, bootstrap_zero_curve, df
 
 # 21 forward start points: ON, then 3M steps out to 5Y (§7).
@@ -136,8 +136,9 @@ def forward_history(dataset: Dataset, fid: str) -> list[dict]:
 def forwards_payload(dataset: Dataset, curves: dict[str, np.ndarray]) -> dict:
     bases = basis_dates(dataset)
     all_keys = ["now", *BASIS_KEYS]
+    key_labels = {label for label, _s, _t in KEY_FORWARDS}
 
-    def cell(start: float, tenor: float | None) -> dict:
+    def cell(start: float, tenor: float | None, name: str | None = None) -> dict:
         values = {
             k: round(forward_par_rate(curves[k], start, tenor) * 100, 4)
             for k in all_keys
@@ -145,14 +146,25 @@ def forwards_payload(dataset: Dataset, curves: dict[str, np.ndarray]) -> dict:
         deltas = {
             k: round((values["now"] - values[k]) * 100, 2) for k in BASIS_KEYS
         }
-        return {"values": values, "deltas": deltas}
+        # Sort key, keyForward flag, and 한 줄 classification are computed HERE,
+        # not in the browser (§16). Forwards have no 10y percentile → the
+        # classification is shape-only (a retracement or nothing).
+        out = {
+            "values": values,
+            "deltas": deltas,
+            "sortKey": [start, tenor if tenor is not None else 0.0],
+            "oneLiner": classify_one_liner(None, deltas, values["now"] is not None),
+        }
+        if name is not None:
+            out["keyForward"] = name in key_labels
+        return out
 
     grid = {
         tenor_label: [
             {
                 "start": s_label,
                 "live": is_live_point(s_t, tenor_t),
-                **cell(s_t, tenor_t),
+                **cell(s_t, tenor_t, f"{s_label}x{tenor_label.replace('F', '')}"),
             }
             for s_label, s_t in START_POINTS
         ]

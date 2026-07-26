@@ -8,7 +8,7 @@
 import { motion } from "motion/react";
 import { useMemo } from "react";
 
-import type { SparkPoint } from "@/lib/api";
+import type { CalendarChange } from "@/lib/api";
 
 import { tintSvg } from "./tint";
 
@@ -23,27 +23,25 @@ interface Cell {
 }
 
 export function CalendarHeatmap({
-  points,
+  changes,
   hoveredDate,
   cell = 13,
   gap = 3,
 }: {
-  points: SparkPoint[];
+  changes: CalendarChange[]; // daily changes, precomputed server-side (§16)
   hoveredDate: string | null;
   cell?: number;
   gap?: number;
 }) {
   const { cells, maxMag } = useMemo(() => {
-    // daily changes over the recent window
-    const changes: { date: string; change: number }[] = [];
-    for (let i = 1; i < points.length; i++) {
-      changes.push({ date: points[i].t, change: points[i].v - points[i - 1].v });
-    }
+    // §16: the daily-change series arrives precomputed; here we only place each
+    // change into a calendar cell (layout) and normalise magnitude for the tint
+    // alpha (colour mapping) — no differencing of a series.
     const recent = changes.slice(-WEEKS * 5);
     if (recent.length === 0) return { cells: [] as Cell[], maxMag: 1 };
 
     // column 0 = the Monday-week of the first recent point
-    const start = new Date(recent[0].date + "T00:00:00");
+    const start = new Date(recent[0].t + "T00:00:00");
     const startMon = new Date(start);
     const dow = (start.getDay() + 6) % 7; // Mon=0
     startMon.setDate(start.getDate() - dow);
@@ -51,18 +49,18 @@ export function CalendarHeatmap({
     const out: Cell[] = [];
     let maxMag = 1e-9;
     for (const c of recent) {
-      const d = new Date(c.date + "T00:00:00");
+      const d = new Date(c.t + "T00:00:00");
       const row = (d.getDay() + 6) % 7;
       if (row > 4) continue; // weekends absent, but guard anyway
       const days = Math.round(
         (d.getTime() - startMon.getTime()) / 86_400_000,
       );
       const col = Math.floor(days / 7);
-      out.push({ date: c.date, change: c.change, col, row });
-      maxMag = Math.max(maxMag, Math.abs(c.change));
+      out.push({ date: c.t, change: c.d, col, row });
+      maxMag = Math.max(maxMag, Math.abs(c.d));
     }
     return { cells: out, maxMag };
-  }, [points]);
+  }, [changes]);
 
   if (cells.length === 0) return null;
   const cols = Math.max(...cells.map((c) => c.col)) + 1;

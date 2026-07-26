@@ -1,10 +1,20 @@
 /* Unified instrument rows for the list-first table (DESIGN §2). One row per
- * instrument across all groups; every field comes from data already served
- * (summary + forwards). Instrument labels are technical, never translated. */
+ * instrument across all groups.
+ *
+ * §16 computation boundary: this builder turns the API's numbers into a row
+ * shape — it does NOT compute any of them. Levels, deltas, percentiles, sort
+ * keys, the quoted flag, and the 한 줄 classification all arrive precomputed
+ * from the backend. The only work here is presentation: choosing a display
+ * label, routing a series into its group, and rendering the classification into
+ * a Korean sentence. `ROW_FIELD_SOURCE` records every field's provenance and
+ * `guards/row-vm-source.test.ts` fails the build if a new field appears that
+ * isn't declared — a field that needs arithmetic has no honest declaration and
+ * belongs in the backend. */
 
 import type {
   BasisKey,
   ForwardsPayload,
+  OneLiner,
   SeriesSummary,
   WallSummary,
 } from "@/lib/api";
@@ -29,9 +39,8 @@ export interface Row {
   changes: Record<BasisKey, number | null>; // bp vs each basis
   pct: number | null; // 10y percentile, null if none
   seriesId: string | null; // stage-2 history id, null = no history
-  oneLiner: string;
-  /** explicit ascending sort key so no series lacks one (§6): tenor in years
-   * for outrights, leg tuple for spreads/forwards. */
+  oneLiner: string; // rendered from the backend classification (§16)
+  /** explicit ascending sort key, supplied by the backend (§6/§16). */
   sortKey: number[];
   /** true only for the six quoted key forwards (pinned to the top, §3). */
   keyForward?: boolean;
@@ -41,73 +50,72 @@ export interface Row {
   quoted?: boolean;
 }
 
+/** Provenance of every Row field (§16). `dto` = read straight from the API;
+ * `format` = pure presentation (label, routing, rendered copy). There is no
+ * `compute` value on purpose: a field that would need arithmetic on market
+ * data has no home here and must be produced by the backend. The guard fails
+ * when a built row carries a key absent from this map. */
+export const ROW_FIELD_SOURCE: Record<keyof Row, "dto" | "format"> = {
+  id: "format",
+  label: "format",
+  group: "format",
+  unit: "dto",
+  now: "dto",
+  changes: "dto",
+  pct: "dto",
+  seriesId: "format",
+  oneLiner: "format", // rendered string built from the dto classification
+  sortKey: "dto",
+  keyForward: "dto",
+  startLabel: "format",
+  quoted: "dto",
+};
+
+/** lexicographic compare of numeric sort keys (§6). */
+export function cmpKey(a: number[], b: number[]): number {
+  const n = Math.max(a.length, b.length);
+  for (let i = 0; i < n; i++) {
+    const av = a[i] ?? -1;
+    const bv = b[i] ?? -1;
+    if (av !== bv) return av - bv;
+  }
+  return 0;
+}
+
 /** "1Y-10Y" → "1s10s", "2Y-5Y-10Y" → "2s5s10s" (trader shorthand). */
 export function traderName(id: string): string {
   return id.split("-").map((t) => t.replace("Y", "")).join("s") + "s";
 }
 
-/** 한 줄 — must never restate a value already visible in the row (§6). The
- * level and the five change columns are on screen; a sentence that says
- * "연초 26bp 상승" only re-prints the YTD cell. So the sentence carries ONLY:
- *   1. an extreme-band percentile — a number shown in no column, so it is new;
- *   2. the SHAPE of the move (a reversal → 되돌림), never a bp magnitude;
- *   3. nothing. An empty 한 줄 beats a restatement. */
-export function oneLiner(
-  pct: number | null,
-  changes: Record<BasisKey, number | null>,
-  hasData: boolean,
-): string {
-  if (!hasData) return "";
-  if (pct != null && (pct >= 90 || pct <= 10)) {
-    return `백분위 ${Math.round(pct)}`;
+/** Render the backend's 한 줄 classification into a Korean fragment (§16). The
+ * backend decided WHAT is true; this only decides HOW to say it, so wording can
+ * change without a backend deploy. Never restates a visible column (§6). */
+export function renderOneLiner(o: OneLiner): string {
+  switch (o.kind) {
+    case "extreme":
+      return `백분위 ${o.value}`;
+    case "retrace_week":
+      return "주간 되돌림";
+    case "retrace_month":
+      return "월중 되돌림";
+    default:
+      return "";
   }
-  // Shape only. A sign flip between adjacent bases reads as a retracement —
-  // today against the week, or the week against the month. No bp figure: those
-  // ARE the columns.
-  const { d1, wtd, mtd } = changes;
-  const flipped = (a: number | null, b: number | null) =>
-    a != null && b != null && Math.abs(a) >= 0.5 && Math.abs(b) >= 0.5 &&
-    Math.sign(a) !== Math.sign(b);
-  if (flipped(d1, wtd)) return "주간 되돌림";
-  if (flipped(wtd, mtd)) return "월중 되돌림";
-  return "";
 }
-
-/** Tenor → years, for explicit numeric sort keys (§6). Unknown → Infinity so a
- * missing key sorts to the end loudly rather than silently mid-list. */
-const YEARS: Record<string, number> = {
-  "1D": 1 / 365, "3M": 0.25, "6M": 0.5, "9M": 0.75, "1Y": 1, "1.5Y": 1.5,
-  "2Y": 2, "3Y": 3, "4Y": 4, "5Y": 5, "6Y": 6, "7Y": 7, "8Y": 8, "9Y": 9,
-  "10Y": 10,
-};
-export function tenorYears(t: string): number {
-  return YEARS[t] ?? Number.POSITIVE_INFINITY;
-}
-
-/** Live-quoted outright nodes (the curve node set); the rest are interpolated
- * (§6). */
-const QUOTED = new Set(["1D", "3M", "6M", "9M", "1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y"]);
 
 function fromSummary(s: SeriesSummary, group: Group, label: string): Row {
-  const legs = s.id.split("-");
   return {
     id: s.id,
     label,
     group,
     unit: s.unit,
     now: s.now,
-    changes: {
-      d1: s.deltas.d1,
-      wtd: s.deltas.wtd,
-      mtd: s.deltas.mtd,
-      qtd: s.deltas.qtd,
-      ytd: s.deltas.ytd,
-    },
+    changes: { ...s.deltas },
     pct: s.range10y.pct,
     seriesId: s.id,
-    oneLiner: oneLiner(s.range10y.pct, s.deltas, s.now != null),
-    sortKey: legs.map(tenorYears),
-    quoted: group === "outright" ? QUOTED.has(s.id) : undefined,
+    oneLiner: renderOneLiner(s.oneLiner),
+    sortKey: s.sortKey,
+    quoted: s.quoted ?? undefined,
   };
 }
 
@@ -126,9 +134,6 @@ export function buildRows(
     rows.push(fromSummary(d, "spread", traderName(d.id)));
   }
   if (forwards) {
-    const startYears: Record<string, number> = {};
-    for (const sp of forwards.startPoints) startYears[sp.label] = sp.t;
-    const keyLabels = new Set(forwards.keyForwards.map((k) => k.label));
     // every forward in the matrix (21 starts × 8 tenors), start-major (§3)
     for (const sp of forwards.startPoints) {
       for (const tenor of forwards.tenors) {
@@ -145,16 +150,17 @@ export function buildRows(
           changes: { ...cell.deltas },
           pct: null,
           seriesId: name, // stage-2 forward history (Session 13)
-          oneLiner: oneLiner(null, cell.deltas, cell.values.now != null),
-          sortKey: [startYears[sp.label] ?? Infinity, YEARS[clean] ?? 0],
-          keyForward: keyLabels.has(name),
+          oneLiner: renderOneLiner(cell.oneLiner),
+          sortKey: cell.sortKey,
+          keyForward: cell.keyForward,
           startLabel: sp.label,
         });
       }
     }
   }
-  // Volatility rows are placeholders until a formula arrives (§13).
-  for (const t of VOL_TENORS) {
+  // Volatility rows are placeholders until the engine lands (§13, Session 14
+  // Pass 2–4 replaces these with DTO-backed rows). Sort key is positional.
+  VOL_TENORS.forEach((t, i) => {
     rows.push({
       id: `vol:${t}`,
       label: `${t} σ`,
@@ -165,8 +171,8 @@ export function buildRows(
       pct: null,
       seriesId: null,
       oneLiner: "아직 준비 중이에요",
-      sortKey: [tenorYears(t)],
+      sortKey: [i],
     });
-  }
+  });
   return rows;
 }

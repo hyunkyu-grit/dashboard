@@ -83,8 +83,9 @@ function StrategyRegion() {
 
 function Body({ row, summary }: { row: Row; summary: WallSummary }) {
   const { data } = useQuery({
-    queryKey: ["series", row.seriesId],
-    queryFn: () => fetchSeries(row.seriesId!),
+    // full resolution — same key the DetailChart uses, so they share one fetch.
+    queryKey: ["series", row.seriesId, "full"],
+    queryFn: () => fetchSeries(row.seriesId!, "full"),
     enabled: !!row.seriesId,
     staleTime: 30_000,
   });
@@ -108,7 +109,7 @@ function Body({ row, summary }: { row: Row; summary: WallSummary }) {
       <SixBasisReadout summary={summary} seriesId={row.seriesId} />
       {data && (
         <div className="mt-4 overflow-x-auto">
-          <CalendarHeatmap points={data.points} hoveredDate={null} cell={16} gap={4} />
+          <CalendarHeatmap changes={data.calendar} hoveredDate={null} cell={16} gap={4} />
         </div>
       )}
       <StrategyRegion />
