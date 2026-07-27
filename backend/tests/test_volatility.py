@@ -32,14 +32,14 @@ def _pairs(values, scale_free_dates=True):
     return out
 
 
-def test_warmup_returns_null_until_65_observations():
-    # a steadily moving series so the ratio would otherwise be well-defined
-    vals = [i * 0.1 for i in range(WARMUP_OBS)]  # exactly 65 observations
+def test_warmup_returns_null_until_the_first_full_long_window():
+    # 61 observations = the first index with a full 60-obs long window (§E)
+    vals = [i * 0.1 for i in range(WARMUP_OBS)]
     out = relative_atr(_pairs(vals), scale=1.0)
-    assert len(out) == WARMUP_OBS
-    # first 64 observations: null (not 0, not a partial window)
+    assert len(out) == WARMUP_OBS == 61
+    # every observation before the last is null (not 0, not a partial window)
     assert all(r is None for _t, r in out[:WARMUP_OBS - 1])
-    # the 65th observation is the first that can carry a value
+    # the WARMUP_OBS-th observation is the first that can carry a value
     assert out[WARMUP_OBS - 1][1] is not None
 
 
@@ -81,8 +81,8 @@ def test_tiny_moves_below_floor_are_null_not_exploding():
 
 
 def test_holiday_gap_does_not_shorten_the_window():
-    # 65 observations with a two-week calendar hole embedded; a value must still
-    # appear at observation 65 because windows count observations.
+    # WARMUP_OBS observations with a two-week calendar hole embedded; a value
+    # must still appear at the last one because windows count observations.
     vals = [i * 0.1 for i in range(WARMUP_OBS)]
     out = relative_atr(_pairs(vals), scale=1.0)
     dates = [t for t, _r in out]

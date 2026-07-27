@@ -821,10 +821,13 @@ resolution is a separate request for the enlarged view. Range statistics
 (min/max/avg), per-point daily change, and the calendar's daily-change series
 all arrive precomputed — the browser never differences a series.
 
-## Provisional [Session 12 list-first — review these]
+## Settled decisions & open items [closed out, final session Pass E]
 
-Choices made to keep the build green where the prompt did not fully specify.
-Confirm or override.
+These accumulated as "Provisional" across sessions. As of the final session
+every entry has a status: **each is a CONFIRMED decision of record unless tagged
+`[OPEN]`.** Confirmed entries are the standing rationale for a choice already in
+the code and spec; open entries name work genuinely not done. Do not re-litigate
+a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
 
 - **RESOLVED [final §C] — the curve heatmap is synced to the chart.** DetailChart
   emits its visible date window and crosshair date; the heatmap binds its
@@ -883,11 +886,18 @@ Confirm or override.
   ratio of the 5-obs to the 60-obs mean absolute change. Someone reading a
   number needs to know it is *this* form, not the high−low ATR. Implemented as a
   generic transform over any series id (`backend/app/volatility.py`); only the
-  tenor set is exposed for now. Chosen constants: **warm-up 65 observations**
-  (earlier dates → `null`), **denominator floor 0.05 bp** on the 60-obs mean
-  (below it the ratio is `null`, never a divide-by-zero), windows counted in
-  **observations, not calendar days** (holidays cannot shorten a window). The
-  warm-up count and the floor value are the implementer's call.
+  tenor set is exposed for now. Constants **settled final Pass E**: **warm-up
+  61 observations** — the mathematical minimum (60 daily changes need 61
+  points), no buffer, corrected from 65; **denominator floor 0.1 bp** on the
+  60-obs mean, raised from 0.05 to trim the clearest divide-by-near-zero tail;
+  windows counted in **observations, not calendar days**.
+  **Max-ratio finding (Pass E):** over 10y the max relative-ATR is **3M = 12.0**
+  and **1D = 6.0** (all swap tenors ≤ 4.5). This is NOT a floor artefact — it
+  barely moves at a 0.5 bp floor — it is genuine: policy/fixing rates (1D call,
+  3M CD91) are step-like (pinned for weeks, then jump), so their short-vs-long
+  ratio legitimately spikes. It does not dominate a sort because the vol tab's
+  default order is by tenor, not by the ratio level. A display cap could be
+  added later if the large 3M value ever reads as spurious; not done.
 
 - **Name split**: the product is Sauron (header, `<title>`, all user-facing
   copy). The repo directory, npm package, mirror script, and internal
@@ -899,13 +909,14 @@ Confirm or override.
   (4.78:1 tile / 4.58:1 page), hue and saturation kept. `#0064FF` is ~3.9:1 on
   the dark tile, so dark lightens to `#4C93FF`. All four now clear the **4.5:1
   text floor**; `band-hue-contrast.test.ts` gates by usage (text 4.5, stroke 3).
-- **Line-safe orange**: chart stroke light `#C2560F` (measured ≥3:1 on white),
-  dark `#F58220`. The action-button fill stays `#F58220` in both themes (a
-  large filled shape with a near-black label tolerates the lower ratio). Swap
-  for house values freely.
-- **Heatmap pulse = ink outline.** The chain: owner asked blue → blue means
-  "down" → an earlier note said orange → orange is now the chart line → so ink.
-  An ink outline reads as focus, never as a direction.
+- **Chart stroke = blue; orange = action/selection [corrected Session 16 §E,
+  superseding the old "line-safe orange" note].** The line moved off orange to
+  blue (`#0064FF` / dark `#4C93FF`, ≥3:1 stroke floor), which freed orange
+  (`#F58220`) to return to its proper job — primary action, selection, focus,
+  hover pulse. Candle bodies use 상승 빨강 / 하락 파랑, not the line blue (§9).
+- **OBSOLETE — heatmap pulse.** The calendar heatmap it described was removed
+  in Session 15 §I, so there is no pulse. (Kept only so the reference isn't
+  mistaken for a live feature.)
 - **한 줄 column** [superseded Session 13 — see the Left-pane spec]. It no
   longer prints "10년 고점권" or a basis magnitude (that restated the columns);
   it now emits an extreme-band percentile number, a retracement shape, or
@@ -916,7 +927,7 @@ Confirm or override.
   instead of a line chart. (Superseded the Session-13 note that forwards and
   volatility had no history and showed placeholder sentences.)
 - **Forward idle curve = the 1YF ladder** (the 1-year forward rate at each
-  start point, one orange line, x = start point). Chosen over "one line per
+  start point, one line, x = start point). Chosen over "one line per
   tenor" (8 same-colour lines are unreadable) and "x = tenor for a selected
   start" (needs an extra selector). It is the standard 1y-forward curve.
 - **Calendar heatmap removed [Session 15 §I].** It plotted daily change — the
@@ -927,10 +938,9 @@ Confirm or override.
   stays, now used only by the matrix. A tenor × date heatmap may return later in
   a curve context (parallel vs led moves) — not now. The heatmap pulse / focus
   notes elsewhere in this doc refer to the removed component.
-- **Deprecated, pending removal**: the wall pan machinery (`useWallPan`,
-  `panToElement`) and the whole three-level column build of the previous
-  Session-12 draft are unused; `useWallPan` stays `@deprecated`. The tile
-  registry is retained and repointed at table rows for the command bar.
+- **RESOLVED [final §E] — dead wall-pan code removed.** The list-first UI never
+  pans, so `wall/usePan.ts` was dead (no importers); deleted this session. The
+  tile registry is retained and repointed at table rows for the command bar.
 - **Detail-open root cause (fixed)**: the earlier failure was the wall pan's
   click-suppression swallowing taps. The list has no pan; the chart-open click
   is a plain handler and the enlarged view is wrapped in an error boundary so a

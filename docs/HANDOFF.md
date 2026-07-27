@@ -160,15 +160,29 @@ rule:
 
 ---
 
-## 6. Current state (as of Session 16, 2026-07-27)
+## 6. Current state (as of the final session, 2026-07-27)
 
-- **FINAL HEAD `3fc5a52`** on `master`, mirrored to D:.
-- Gates: FE **58 vitest tests / 14 files**, `pnpm build` clean, `pnpm lint`
-  exit 0. Backend **50 tests**.
-- **Backend startup is now ~15–20s**: the forward-matrix own-history percentiles
-  (§J) and the curve heatmap (§D) bootstrap each historical date's curve once at
-  startup. One-time; live server unaffected, only dev restarts.
-- Session 16 landed 10 passes (A–J), one commit each:
+- **FINAL HEAD** = the final-session Pass E commit on `master`, mirrored to D:.
+- Gates: FE **57 vitest tests**, `pnpm build` clean, `pnpm lint` exit 0.
+  Backend **53 tests**.
+- **Backend startup: ~17s cold, ~2s warm.** The own-history distributions are
+  persisted to `backend/.cache/` keyed by a SHA-256 of `data/irsdata.xlsx`
+  (final §D); recomputed (loudly logged) only when the data changes. `.cache/`
+  is gitignored.
+- The final session landed 5 passes (A–E), one commit each:
+  1. `4a773a4` **A — Pay/Receive curve diagram** (`ui/PayReceive.tsx`): the
+     missing feature (spec'd S15 Pass J, dropped). Beside the DV01 ratio; one
+     rule (Pay profits when the value rises); arrows + desk-term per kind.
+  2. `8340b4d` **B — outlier cue is a leading-edge rule**, not the invisible
+     0.04 fill (a fill behind coloured text can't clear contrast). `columnCue`.
+  3. `9153559` **C — curve heatmap synced to the chart**: x-domain bound to the
+     visible range, crosshair through both.
+  4. `d292507` **D — own-history cache** (`app/cache.py`), 17s→2s warm boot.
+  5. **E — closeout** (this): resolved the Provisional list, settled vol
+     warm-up 65→**61** and floor 0.05→**0.1** (max ratio 3M 12.0 / 1D 6.0 is
+     genuine step-behaviour, not an artefact), removed dead `usePan.ts`,
+     reconciled docs, confirmed the mirror.
+- **Earlier: Session 16 landed 10 passes (A–J):**
   1. `2d998d9` **E — chart line → blue**, orange back to selection/focus.
   2. `8f062e7` **H — full-bleed**: dropped the outer card, header is a
      full-width band.

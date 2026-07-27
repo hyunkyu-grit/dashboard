@@ -41,14 +41,19 @@ from .derive import (
 
 SHORT_OBS = 5
 LONG_OBS = 60
-# The ratio is null until this many closes exist (owner spec). 60 observations
-# give the long ATR its window; the warm-up is held to 65 so the short window
-# also sits fully inside real history before a number is shown.
-WARMUP_OBS = 65
-# The 60-obs mean absolute change can approach zero for a rate that sits
-# unchanged for weeks (the 1D call rate, 3M CD91 — 3M shows +0.0 for yesterday).
-# Below this floor the ratio explodes or divides by zero, so it is undefined.
-LONG_MEAN_FLOOR_BP = 0.05
+# The ratio is null until a full 60-observation long window exists. That needs
+# 60 daily changes = 61 observations — the mathematical minimum, no buffer (the
+# 5-obs short window sits inside it). [Was 65; corrected to 61, final Pass E.]
+WARMUP_OBS = 61
+# The 60-obs mean absolute change can approach zero for a rate pinned for weeks
+# (1D call, 3M CD91), which explodes the ratio. Below this floor it is null.
+# 0.1bp (raised from 0.05) trims the clearest divide-by-near-zero tail. NOTE it
+# does NOT cap the headline: 1D/3M still legitimately reach ~6–10× because
+# policy/fixing rates are step-like (flat, then jump) — a real short-vs-long
+# ratio, not an artefact (verified: the max barely moves even at a 0.5bp floor).
+# The vol tab's default order is by tenor, not the ratio level, so a high 3M
+# ratio does not dominate a sort. Reported in DESIGN §4 / Provisional.
+LONG_MEAN_FLOOR_BP = 0.1
 
 
 def relative_atr(pairs: list[tuple[str, float]],
