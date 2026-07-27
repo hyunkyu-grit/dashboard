@@ -6,7 +6,7 @@
  * volatility (no stage-2 history). Clicking the chart opens the enlarged view. */
 
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 
 import { fetchSeries } from "@/lib/api";
 import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
@@ -75,6 +75,49 @@ export function PreviewPane({
     return <Sentence>행에 올려두면 그 종목 흐름이 나옵니다</Sentence>;
   }
 
+  /* Cross-fade on a series switch (motion session, Pass D): moving between
+   * rows is the most frequent action in the product and it hard-swapped.
+   * popLayout pops the outgoing pane out of the flow so the incoming one
+   * takes its place immediately — old fades out over new fading in. */
+  return (
+    <div className="relative">
+      <AnimatePresence initial={false} mode="popLayout">
+        <motion.div
+          key={row.id}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+        >
+          <PreviewBody
+            row={row}
+            onOpen={onOpen}
+            width={width}
+            data={data}
+            isError={isError}
+            isLoading={isLoading}
+          />
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function PreviewBody({
+  row,
+  onOpen,
+  width,
+  data,
+  isError,
+  isLoading,
+}: {
+  row: Row;
+  onOpen: (row: Row) => void;
+  width: number;
+  data: Awaited<ReturnType<typeof fetchSeries>> | undefined;
+  isError: boolean;
+  isLoading: boolean;
+}) {
   if (!row.seriesId) {
     return (
       <>

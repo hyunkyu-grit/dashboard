@@ -843,6 +843,21 @@ Rules, pinned by `guards/reorder.test.ts`:
   per-row DOM-read bookkeeping, not the paint cost.
 - `prefers-reduced-motion` reorders instantly (MotionConfig).
 
+### Pay/Receive morph + preview cross-fade [motion session, Pass D]
+
+- The 페이/리시브 toggle **morphs** the diagram instead of cutting: the
+  deformation is linear in the sign, so one factor q ∈ [−1, +1] (animated
+  with the standard SPRING) carries the ghost curve through the base curve to
+  its mirrored position, the fill recomputing and flipping colour as q
+  crosses 0 — one transformation, not two drawings. The solid current curve
+  never moves. An instrument change (different mode/band) snaps — morphing
+  between two different trades would be a lie. (The old spec's "arrows rotate
+  through" predates the mode picture: the current diagram has no arrows; the
+  ghost + fill carry the whole morph.) Reduced motion snaps.
+- The **preview pane cross-fades** on a series switch (~150ms, popLayout so
+  the outgoing pane leaves the flow immediately) — moving between rows is the
+  most frequent action in the product and it hard-swapped before.
+
 ### Rules (carried forward)
 
 - Library: `motion` (framer-motion's successor). Springs may overshoot: ~stiff

@@ -16,9 +16,16 @@
  * bounds are in payReceiveModel.ts (unit-tested). Colours follow the palette
  * (ink structure, red/blue direction) — the palette session owns those. */
 
-import { useState } from "react";
+import {
+  animate,
+  useMotionValue,
+  useMotionValueEvent,
+  useReducedMotion,
+} from "motion/react";
+import { useEffect, useRef, useState } from "react";
 
 import { classify } from "./gloss";
+import { SPRING } from "./motion";
 import {
   baseValue,
   diagramSpec,
@@ -128,10 +135,38 @@ function Toggle({ side, onSide }: { side: Side; onSide: (s: Side) => void }) {
 }
 
 function Diagram({ spec }: { spec: DiagramSpec }) {
+  /* Pay/Receive morph (motion session, Pass D). The deformation is LINEAR in
+   * the sign, so one factor q ∈ [−1, +1] interpolates the wanted (ghost)
+   * curve through the base curve to its mirrored position — the reader sees
+   * one transformation, not two drawings. The solid current curve never
+   * moves; the fill recomputes per frame and flips colour as q crosses 0.
+   * An instrument change (different mode/band) snaps instead of morphing —
+   * a morph between two different trades would be a lie. */
+  const reduced = useReducedMotion();
+  const mv = useMotionValue<number>(spec.sign);
+  const [q, setQ] = useState<number>(spec.sign);
+  useMotionValueEvent(mv, "change", setQ);
+  const shapeKey = `${spec.mode}|${spec.band[0]}|${spec.band[1]}`;
+  const prevShapeKey = useRef(shapeKey);
+  useEffect(() => {
+    const shapeChanged = prevShapeKey.current !== shapeKey;
+    prevShapeKey.current = shapeKey;
+    if (reduced || shapeChanged) {
+      mv.jump(spec.sign);
+      setQ(spec.sign);
+      return;
+    }
+    const controls = animate(mv, spec.sign, SPRING);
+    return () => controls.stop();
+  }, [spec.sign, shapeKey, reduced, mv]);
+
+  const paySpec: DiagramSpec = { ...spec, sign: 1 };
   const ts = Array.from({ length: N }, (_, i) => i / (N - 1));
   const cur: Pt[] = ts.map((t) => [xAt(t), yAt(baseValue(t))]);
-  const want: Pt[] = ts.map((t) => [xAt(t), yAt(wantedValue(spec, t))]);
-  const dv = ts.map((t) => wantedValue(spec, t) - baseValue(t)); // +ve = above
+  const wantAt = (t: number) =>
+    baseValue(t) + q * (wantedValue(paySpec, t) - baseValue(t));
+  const want: Pt[] = ts.map((t) => [xAt(t), yAt(wantAt(t))]);
+  const dv = ts.map((t) => wantAt(t) - baseValue(t)); // +ve = above
   const regions = fillRegions(cur, want, dv);
 
   return (
