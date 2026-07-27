@@ -10,7 +10,7 @@ import { motion } from "motion/react";
 import { useState } from "react";
 
 import { fetchSeries } from "@/lib/api";
-import { dirClass, fmtBp } from "@/lib/format";
+import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 
 import { AnimatedNumber } from "./AnimatedNumber";
 import { CalendarHeatmap } from "./CalendarHeatmap";
@@ -29,9 +29,10 @@ function Sentence({ children }: { children: React.ReactNode }) {
   );
 }
 
+// dimensionless ratio carries no unit suffix (§ vol); % and bp keep theirs.
+const UNIT_SUFFIX: Record<Row["unit"], string> = { "%": "%", bp: "bp", ratio: "" };
+
 function Header({ row }: { row: Row }) {
-  const level =
-    row.now == null ? "–" : row.unit === "%" ? row.now.toFixed(4) : row.now.toFixed(1);
   return (
     <div className="mb-3">
       <div className="flex items-baseline justify-between">
@@ -40,12 +41,14 @@ function Header({ row }: { row: Row }) {
       </div>
       <div className="mt-0.5 flex items-baseline gap-2">
         <AnimatedNumber
-          value={level}
+          value={fmtLevel(row.now, row.unit)}
           className="text-[28px] font-bold leading-none tabular-nums"
         />
-        <span className="text-[12px] opacity-45">{row.unit === "%" ? "%" : "bp"}</span>
+        {UNIT_SUFFIX[row.unit] && (
+          <span className="text-[12px] opacity-45">{UNIT_SUFFIX[row.unit]}</span>
+        )}
         <span className={`text-[13px] tabular-nums ${dirClass(row.changes.d1)}`}>
-          {fmtBp(row.changes.d1)}
+          {fmtDelta(row.changes.d1, row.unit)}
         </span>
       </div>
     </div>
@@ -74,15 +77,6 @@ export function PreviewPane({
 
   if (!row) {
     return <Sentence>행을 올려두면 그래프가 나와요</Sentence>;
-  }
-
-  if (row.group === "vol") {
-    return (
-      <>
-        <Header row={row} />
-        <Sentence>변동성은 아직 준비 중이에요</Sentence>
-      </>
-    );
   }
 
   if (!row.seriesId) {

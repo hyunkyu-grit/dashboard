@@ -16,6 +16,8 @@ import type {
   ForwardsPayload,
   OneLiner,
   SeriesSummary,
+  Unit,
+  VolatilityPayload,
   WallSummary,
 } from "@/lib/api";
 
@@ -34,7 +36,7 @@ export interface Row {
   id: string;
   label: string; // display instrument name
   group: Group;
-  unit: "%" | "bp";
+  unit: Unit;
   now: number | null;
   changes: Record<BasisKey, number | null>; // bp vs each basis
   pct: number | null; // 10y percentile, null if none
@@ -119,11 +121,10 @@ function fromSummary(s: SeriesSummary, group: Group, label: string): Row {
   };
 }
 
-const VOL_TENORS = ["1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y"];
-
 export function buildRows(
   summary: WallSummary,
   forwards: ForwardsPayload | undefined,
+  volatility?: VolatilityPayload,
 ): Row[] {
   const rows: Row[] = [];
 
@@ -158,21 +159,12 @@ export function buildRows(
       }
     }
   }
-  // Volatility rows are placeholders until the engine lands (§13, Session 14
-  // Pass 2–4 replaces these with DTO-backed rows). Sort key is positional.
-  VOL_TENORS.forEach((t, i) => {
-    rows.push({
-      id: `vol:${t}`,
-      label: `${t} σ`,
-      group: "vol",
-      unit: "bp",
-      now: null,
-      changes: { d1: null, wtd: null, mtd: null, qtd: null, ytd: null },
-      pct: null,
-      seriesId: null,
-      oneLiner: "아직 준비 중이에요",
-      sortKey: [i],
-    });
-  });
+  // Volatility rows — the relative-ATR ratio per tenor, precomputed server-side
+  // (§16) and shaped like every other summary, so this reuses fromSummary.
+  if (volatility) {
+    for (const v of volatility.rows) {
+      rows.push(fromSummary(v, "vol", v.label));
+    }
+  }
   return rows;
 }

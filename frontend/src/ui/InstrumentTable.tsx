@@ -9,7 +9,7 @@ import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 
 import type { BasisKey, ForwardsPayload } from "@/lib/api";
-import { dirClass, fmtBp } from "@/lib/format";
+import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 import { ForwardMatrix, KeyForwardBlock } from "@/wall/ForwardMatrix";
 import { useRegisterTile } from "@/wall/useRegisterTile";
 
@@ -39,8 +39,7 @@ const FILTERS: { id: Group | "all"; label: string }[] = [
 ];
 
 function levelText(row: Row): string {
-  if (row.now == null) return "–";
-  return row.unit === "%" ? row.now.toFixed(4) : row.now.toFixed(1);
+  return fmtLevel(row.now, row.unit);
 }
 
 function TableRow({
@@ -98,7 +97,7 @@ function TableRow({
           key={b}
           className={`pr-3 text-right tabular-nums ${dirClass(row.changes[b])}`}
         >
-          {fmtBp(row.changes[b])}
+          {fmtDelta(row.changes[b], row.unit)}
         </td>
       ))}
       <td className="whitespace-nowrap pr-3 text-[13px] opacity-55">

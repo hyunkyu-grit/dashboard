@@ -6,6 +6,10 @@ export const API_BASE =
 
 export type BasisKey = "d1" | "wtd" | "mtd" | "qtd" | "ytd";
 
+/** Level/change unit. `ratio` is the dimensionless volatility ratio (§ vol):
+ * shown to two decimals, its change is a ratio difference, never bp. */
+export type Unit = "%" | "bp" | "ratio";
+
 export interface SparkPoint {
   t: string;
   v: number;
@@ -23,8 +27,8 @@ export interface OneLiner {
 export interface SeriesSummary {
   id: string;
   label: string;
-  kind: "outright" | "spread" | "fly";
-  unit: "%" | "bp";
+  kind: "outright" | "spread" | "fly" | "vol";
+  unit: Unit;
   now: number | null;
   deltas: Record<BasisKey, number | null>;
   basisValues: Record<BasisKey, number | null>;
@@ -105,6 +109,26 @@ export async function fetchForwards(): Promise<ForwardsPayload> {
   return res.json();
 }
 
+/** Relative-ATR across tenors for the volatility tab's idle right pane. */
+export interface VolCurveNode {
+  label: string;
+  now: number | null;
+  prev: number | null; // D-1 comparison
+}
+
+export interface VolatilityPayload {
+  asof: string;
+  basisDates: Record<BasisKey, string | null>;
+  rows: SeriesSummary[]; // SeriesSummary-shaped so the table never branches
+  curve: VolCurveNode[];
+}
+
+export async function fetchVolatility(): Promise<VolatilityPayload> {
+  const res = await fetch(`${API_BASE}/api/volatility`);
+  if (!res.ok) throw new Error(`volatility: HTTP ${res.status}`);
+  return res.json();
+}
+
 /** One point of a history line. `d` = true daily change in bp (from the
  * previous trading day), precomputed server-side (§16) so the browser never
  * differences a series; null on the first point. */
@@ -130,7 +154,7 @@ export type SeriesResolution = "preview" | "full";
 export interface SeriesDetail {
   id: string;
   asof: string;
-  unit: "%" | "bp";
+  unit: Unit;
   points: HistoryPoint[];
   stats: SeriesStats | null;
   calendar: CalendarChange[];

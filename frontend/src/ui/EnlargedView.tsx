@@ -17,7 +17,7 @@ import { BASIS_LABELS, TIME_BASES, type TimeBasis } from "@/theme/ramp";
 import { DetailChart } from "@/wall/DetailChart";
 
 import { CalendarHeatmap } from "./CalendarHeatmap";
-import { ERROR_SENTENCE, VOL_PLACEHOLDER } from "./copy";
+import { ERROR_SENTENCE } from "./copy";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { SHEET_SPRING } from "./motion";
 import type { Row } from "./rows";
@@ -91,10 +91,11 @@ function Body({ row, summary }: { row: Row; summary: WallSummary }) {
   });
 
   if (!row.seriesId) {
-    // only volatility has no stage-2 history now (forwards derive theirs)
+    // every group now derives a history (outrights, spreads, forwards, vol);
+    // this stays only as a defensive fallback.
     return (
       <p className="p-10 text-center text-[15px] opacity-55">
-        {VOL_PLACEHOLDER}
+        과거 흐름을 볼 수 없어요
       </p>
     );
   }

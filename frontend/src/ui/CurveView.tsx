@@ -8,7 +8,7 @@
 
 import { useMemo } from "react";
 
-import type { ForwardsPayload, WallSummary } from "@/lib/api";
+import type { ForwardsPayload, Unit, VolatilityPayload, WallSummary } from "@/lib/api";
 import { BASIS_SECONDARY_OPACITY } from "@/theme/ramp";
 
 import { cmpKey, type Group } from "./rows";
@@ -28,7 +28,7 @@ function NodeLine({
   height,
 }: {
   nodes: Node[];
-  unit: "%" | "bp";
+  unit: Unit;
   width: number;
   height: number;
 }) {
@@ -58,7 +58,7 @@ function NodeLine({
       .map((n, i) => (n[key] == null ? null : `${x(i)},${y(n[key]!)}`))
       .filter(Boolean)
       .join(" ");
-  const fmt = (v: number) => (unit === "%" ? v.toFixed(2) : v.toFixed(1));
+  const fmt = (v: number) => (unit === "bp" ? v.toFixed(1) : v.toFixed(2));
   const labelEvery = Math.ceil(nodes.length / 8);
 
   return (
@@ -96,29 +96,31 @@ export function CurveView({
   tab,
   summary,
   forwards,
+  volatility,
   width,
   height,
 }: {
   tab: Group | "all";
   summary: WallSummary;
   forwards?: ForwardsPayload;
+  volatility?: VolatilityPayload;
   width: number;
   height: number;
 }) {
-  if (tab === "vol") {
-    return (
-      <div className="flex items-center justify-center px-8 text-center text-[15px] opacity-55"
-        style={{ height }}>
-        변동성은 아직 준비 중이에요
-      </div>
-    );
-  }
-
   let title = "IRS 커브";
-  let unit: "%" | "bp" = "%";
+  let unit: Unit = "%";
   let nodes: Node[] = [];
 
-  if (tab === "spread") {
+  if (tab === "vol") {
+    // relative-ATR across tenors (now + D-1), matching the other tabs' idle pane
+    title = "변동성 커브";
+    unit = "ratio";
+    nodes = (volatility?.curve ?? []).map((c) => ({
+      label: c.label,
+      now: c.now,
+      prev: c.prev,
+    }));
+  } else if (tab === "spread") {
     title = "스프레드 커브";
     unit = "bp";
     nodes = [...summary.derived]

@@ -9,7 +9,7 @@ import { AnimatePresence, MotionConfig } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchForwards, fetchWallSummary } from "@/lib/api";
+import { fetchForwards, fetchVolatility, fetchWallSummary } from "@/lib/api";
 import { syncUiFromDom, useUiStore } from "@/state/ui";
 import { CommandBar } from "@/wall/CommandBar";
 
@@ -59,6 +59,12 @@ export function App() {
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
+  const { data: volatility } = useQuery({
+    queryKey: ["volatility"],
+    queryFn: fetchVolatility,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
 
   const [hovered, setHovered] = useState<Row | null>(null);
   const [pinned, setPinned] = useState<Row | null>(null);
@@ -74,8 +80,8 @@ export function App() {
   }, []);
 
   const rows = useMemo(
-    () => (summary ? buildRows(summary, forwards) : []),
-    [summary, forwards],
+    () => (summary ? buildRows(summary, forwards, volatility) : []),
+    [summary, forwards, volatility],
   );
 
   useEffect(() => {
@@ -166,6 +172,7 @@ export function App() {
                       tab={tab}
                       summary={summary}
                       forwards={forwards}
+                      volatility={volatility}
                       width={paneW}
                       height={300}
                     />

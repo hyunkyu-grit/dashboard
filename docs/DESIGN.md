@@ -159,8 +159,9 @@ diverge the moment the quarter advances a month.
   curve viewing is priority 1 (§1). No row hovered → outrights show the IRS
   par curve (9 equal-spaced nodes 3M…10Y); forwards show the 1YF forward
   ladder (x = start point); spreads show the two-point-spread curve; volatility
-  its placeholder. Orange line, two lines only (Now + D-1) — the six-basis ramp
-  is enlarged-view only. Hand-rolled SVG (§11).
+  shows the relative-ATR curve across tenors [Session 14]. Orange line, two
+  lines only (Now + D-1) — the six-basis ramp is enlarged-view only. Hand-rolled
+  SVG (§11).
 - Hovering a row replaces the curve with that series' history + heatmap;
   leaving the table returns to the curve; pinning keeps the history until Esc.
 - On row hover, after a ~120ms delay (so crossing the table does not strobe),
@@ -178,8 +179,9 @@ diverge the moment the quarter advances a month.
 - Clicking the chart opens the enlarged view.
 - **Forwards now have history [Session 13]** — a forward rate on any past date
   is derived from that date's curve (stage-2, rebuilt lazily per series and
-  cached). Only volatility has no history (no formula); its preview is a
-  sentence.
+  cached). **Volatility now has history too [Session 14]** — the relative-ATR
+  ratio series per tenor (`vol:<tenor>`), served through the same stage-2 path.
+  Every group now has a preview chart + heatmap.
 - **Forward tab [Session 13]:** every forward in the matrix (21 starts × 8
   tenors, named `2Yx1Y` / `2YxSPOT`) is a row; the six quoted key forwards pin
   to the top under a "주요 포워드" heading; a start-point secondary filter
@@ -226,9 +228,10 @@ it is now the filter-chip set, not physical bands.
   wall; stage 2 = full-resolution series on demand (detail overlay). All
   derived series (spreads, flies, forwards, rolling vol) are computed on the
   BACKEND, never in the browser.
-- Volatility: rolling realized vol of daily par-rate changes per tenor.
-  Formula [TBD — owner will provide]. Until then the vol tile is an empty
-  placeholder that reserves its slot. [OWNER]
+- Volatility: **relative ATR = mean(ATR over 5 obs) / mean(ATR over 60 obs)**
+  [OWNER, Session 14]. Close-only form (`TR_t = |r_t − r_{t−1}|` in bp) since the
+  export carries no intraday high/low; see `## Provisional` for the constants
+  and `backend/app/volatility.py` for the implementation.
 - Spreads: IRS-vs-IRS curve spreads only (no bond/swap-spread). ALL
   combinations from the 6 display tenors: 15 two-point spreads + 20
   butterflies = 35 series. [OWNER]
@@ -587,12 +590,13 @@ empty on 153/500 days — a log that can be empty, unlike the prior rule
 
 ## 13. Explicitly out of scope for v2
 
-- Vol tile internals (placeholder only until formula arrives).
+- Strategy tooling in the enlarged view (the reserved empty region stays empty).
 - Any user layout customization. Panel add/remove.
 - Scenario engine UI, trade capture UI (entry points only via change log).
 
 (Removed Session 12: color/hue is now in — §9; outrights and spreads
-band-views are now built — §2.)
+band-views are now built — §2. Removed Session 14: the volatility engine is now
+built — relative ATR, §4/§16 and `## Provisional`.)
 
 ## 14. Motion [Session 12, list-first]
 
@@ -715,10 +719,11 @@ Confirm or override.
   longer prints "10년 고점권" or a basis magnitude (that restated the columns);
   it now emits an extreme-band percentile number, a retracement shape, or
   nothing. No new backend data; all fields already exist.
-- **Forwards & volatility have no stage-2 history.** Forward rows use the key
-  forwards (`1Yx1Y`, …); their preview is a sentence and the enlarged view
-  shows the forward matrix instead of a chart. Volatility rows are a
-  placeholder sentence (no formula yet).
+- **Every group now has stage-2 history [Session 14].** Forwards derive theirs
+  from each date's curve; volatility serves its relative-ATR ratio series
+  (`vol:<tenor>`). The forward enlarged view still shows the forward matrix
+  instead of a line chart. (Superseded the Session-13 note that forwards and
+  volatility had no history and showed placeholder sentences.)
 - **Forward idle curve = the 1YF ladder** (the 1-year forward rate at each
   start point, one orange line, x = start point). Chosen over "one line per
   tenor" (8 same-colour lines are unreadable) and "x = tenor for a selected

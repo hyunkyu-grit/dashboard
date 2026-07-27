@@ -7,8 +7,8 @@
 
 import { useState } from "react";
 
-import type { HistoryPoint, SeriesStats } from "@/lib/api";
-import { dirClass, fmtBp } from "@/lib/format";
+import type { HistoryPoint, SeriesStats, Unit } from "@/lib/api";
+import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 
 const PAD = { top: 10, right: 10, bottom: 16, left: 6 };
 
@@ -22,7 +22,7 @@ export function PreviewChart({
 }: {
   points: HistoryPoint[];
   stats: SeriesStats | null; // range min/max/avg, precomputed server-side (§16)
-  unit: "%" | "bp";
+  unit: Unit;
   width: number;
   height: number;
   onHoverDate: (date: string | null) => void;
@@ -40,7 +40,7 @@ export function PreviewChart({
   const y = (v: number) => PAD.top + (1 - (v - yMin) / (yMax - yMin)) * plotH;
   const path = points.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
 
-  const lvl = (v: number) => (unit === "%" ? v.toFixed(4) : v.toFixed(1));
+  const lvl = (v: number) => fmtLevel(v, unit);
 
   const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -106,7 +106,7 @@ export function PreviewChart({
           <div className="mt-1 flex justify-between">
             <span className="opacity-50">당일 변화</span>
             <span className={`tabular-nums ${dirClass(dailyChange)}`}>
-              {fmtBp(dailyChange)}
+              {fmtDelta(dailyChange, unit)}
             </span>
           </div>
         </div>
