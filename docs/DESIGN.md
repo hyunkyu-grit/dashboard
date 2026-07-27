@@ -310,10 +310,13 @@ drag dismiss; `?tile=series:<id>` keeps working).
   `ui/payReceiveModel.ts`; SVG in `ui/PayReceive.tsx`; pinned by
   `guards/pay-receive-mode.test.ts`. **The test is readability: can you tell what
   the trade wants without reading the label?** Verified live in both themes
-  (diagram session 3, Pass C): level reads as an even parallel band, slope as a
-  blue-near/red-far bowtie, curvature as a central arch, forward as a confined
-  tilt in a soft band — each mode legible before the label. The ~25%
-  exaggeration and 16% fill were sufficient; no tuning needed.
+  (band session, Pass C): pairs that previously rendered identically are now
+  distinguishable at a glance — `1s2s` tilts in a front-end band while `5s10s`
+  tilts in the long half; `1s2s3s` arches in a narrow front band while
+  `2s5s10s` arches belly-to-long; an outright reads as a flat-topped lift in a
+  narrow band, distinct from a butterfly's arch. The 5%-ink band wash is
+  visible on both surfaces; the ~25% exaggeration and 16% fill carried over
+  unchanged; no tuning needed.
 - (The calendar heatmap that used to sit here was removed in §I — see the
   preview note above.)
 - A **clearly-marked empty region reserved for future strategy tooling** — a
