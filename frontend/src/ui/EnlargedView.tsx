@@ -75,7 +75,7 @@ function SixBasisReadout({
 function StrategyRegion() {
   return (
     <div className="mt-6 flex h-40 items-center justify-center rounded-[16px] border border-dashed border-edge text-[13px] opacity-40">
-      전략 도구가 이 자리에 들어올 예정이에요
+      전략 도구가 이 자리에 들어올 예정입니다
     </div>
   );
 }
@@ -86,7 +86,7 @@ function Body({ row, summary }: { row: Row; summary: WallSummary }) {
     // this stays only as a defensive fallback.
     return (
       <p className="p-10 text-center text-[15px] opacity-55">
-        과거 흐름을 볼 수 없어요
+        과거 흐름을 볼 수 없습니다
       </p>
     );
   }
@@ -99,7 +99,7 @@ function Body({ row, summary }: { row: Row; summary: WallSummary }) {
           {/* subtitle naming the construct (§ Pass C1) */}
           <p className="mt-0.5 text-[13px] opacity-55">{instrumentSubtitle(row)}</p>
         </div>
-        <span className="text-[12px] opacity-45">지난 10년 흐름이에요</span>
+        <span className="text-[12px] opacity-45">지난 10년 흐름입니다</span>
       </div>
       <DetailChart id={row.seriesId} width={900} height={420} />
       {/* what this instrument IS — static, keyed to kind (§ Pass C1) */}

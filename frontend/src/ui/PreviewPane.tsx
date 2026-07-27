@@ -72,14 +72,14 @@ export function PreviewPane({
   });
 
   if (!row) {
-    return <Sentence>행을 올려두면 그래프가 나와요</Sentence>;
+    return <Sentence>행에 올려두면 그 종목 흐름이 나옵니다</Sentence>;
   }
 
   if (!row.seriesId) {
     return (
       <>
         <Header row={row} />
-        <Sentence>과거 흐름을 볼 수 없어요</Sentence>
+        <Sentence>과거 흐름을 볼 수 없습니다</Sentence>
       </>
     );
   }
@@ -113,7 +113,7 @@ export function PreviewPane({
             width={width}
             height={CHART_H}
           />
-          <p className="mt-2 text-[12px] opacity-40">눌러서 크게 볼 수 있어요</p>
+          <p className="mt-2 text-[12px] opacity-40">눌러서 크게 볼 수 있습니다</p>
         </motion.div>
       )}
     </>

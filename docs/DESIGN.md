@@ -681,26 +681,54 @@ chart path geometry.
 - `prefers-reduced-motion` collapses every animation to instant (asserted by a
   test).
 
-## 15. Voice & copy [Session 12]
+## 15. Voice & copy [rewritten Session 15]
 
-Chrome copy is sentences in **해요체**, not noun labels — especially empty,
-loading, and error states. The register is calm, plain, and human.
+This is a desk tool, not a consumer app. 해요체 came from the casual-app pivot
+and made definitional text sound like it was addressing a beginner. Two rules,
+enforced as rules so a later session matches them instead of re-deriving them.
 
-- Prefer a sentence to a label wherever one fits:
-  - preview empty: "행을 올려두면 그래프가 나와요"
-  - status: "오늘 커브는 조용해요"
-  - a move: "장기 구간이 연초 대비 22bp 내려왔어요"
-  - placeholder: "변동성은 아직 준비 중이에요"
-  - error: "불러오지 못했어요. 잠시 뒤 다시 시도해 주세요"
-- The `한 줄` table column is the one place a compact fragment beats a full
-  sentence (≤ ~12 chars): "10년 고점권", "연초 대비 22bp 하락". Still Korean,
-  still calm; just clipped to fit a cell.
-- **Never translate instrument nomenclature.** Tenor and series names stay
-  technical and English/numeric: `1.5Y`, `3s10s`, `2s5s10s`, `1YF`, `SPOT`,
-  `1Yx1Y`. A sentence may wrap them ("`10Y`가 조용해요") but never renames them.
-- Numbers keep their units (bp, %) and signs; the sentence supplies the tone,
-  the number supplies the fact.
-- Direction words follow the market: 올랐어요/내려왔어요 map to red/blue (§9).
+### Register — 합니다체
+
+Everything **declarative** is 합니다체; labels stay noun-final; nothing is
+playful. The only survivor of the softer register is the **error state**.
+Interaction hints stay short and human but are now 합니다체 too. Sweep the whole
+product, not just new copy — empty states, loading text, tooltips, the change
+log.
+
+Before → after:
+
+| context | before (해요체) | after (합니다체) |
+|---|---|---|
+| preview empty (hint) | 행을 올려두면 그래프가 나와요 | 행에 올려두면 그 종목 흐름이 나옵니다 |
+| loading | 불러오는 중이에요 | 불러오는 중입니다 |
+| no history | 과거 흐름을 볼 수 없어요 | 과거 흐름을 볼 수 없습니다 |
+| open hint | 눌러서 크게 볼 수 있어요 | 눌러서 크게 볼 수 있습니다 |
+| reserved region | 전략 도구가 …들어올 예정이에요 | 전략 도구가 …들어올 예정입니다 |
+| command empty | 찾는 종목이 없어요 | 찾는 종목이 없습니다 |
+| **error (survivor)** | 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요 | *(kept)* |
+
+- The `한 줄` column is a compact fragment, not a sentence: `일간 변동 상위 3%`,
+  `백분위 99`, `단독 상승` (§2 ladder).
+- **Never translate instrument nomenclature.** `1.5Y`, `3s10s`, `2s5s10s`,
+  `1YF`, `SPOT`, `1Yx1Y` stay technical; a sentence may wrap them, never rename
+  them.
+- Numbers keep their units (bp, %) and signs.
+
+### Terminology — the standard desk words, never paraphrased
+
+A reader of this product knows what a butterfly is, or is about to learn the
+real word; teaching them "나비" teaches nothing usable. Use the standard terms
+directly:
+
+- 버터플라이 스프레드, 벨리, 윙, 확대·축소
+- 커브 스프레드, 스티프닝, 플래트닝
+- 내재 선도금리, 파 금리, 스왑 스프레드
+- 약세·강세 for rate direction, bp for units
+
+**Forbidden** (examples of the failure mode): `나비`, `양옆`, `싼지 비싼지`,
+`얼마나 거친지`, `묶어 보는`. If a phrase would not appear in a desk note, it
+does not go in the product. The instrument glosses (§C1, `ui/gloss.ts`) are the
+reference for the register + vocabulary; `gloss.test.ts` pins their wording.
 
 ## 16. The computation boundary [OWNER, Session 14]
 
