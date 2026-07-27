@@ -7,13 +7,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { useState } from "react";
 
 import { fetchSeries } from "@/lib/api";
 import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 
 import { AnimatedNumber } from "./AnimatedNumber";
-import { CalendarHeatmap } from "./CalendarHeatmap";
 import { ERROR_SENTENCE, LOADING_SENTENCE } from "./copy";
 import { PRESS_SCALE, SPRING } from "./motion";
 import { PreviewChart } from "./PreviewChart";
@@ -64,8 +62,6 @@ export function PreviewPane({
   onOpen: (row: Row) => void;
   width: number;
 }) {
-  const [hoveredDate, setHoveredDate] = useState<string | null>(null);
-
   const { data, isError, isLoading } = useQuery({
     // preview resolution: ~150 downsampled line points (§16); the enlarged view
     // fetches full resolution under a distinct key.
@@ -106,17 +102,17 @@ export function PreviewPane({
           transition={{ ...SPRING, duration: 0.18 }}
           className="cursor-pointer"
         >
+          {/* the chart hover tooltip is the sole readout for a hovered date
+              (§I) — the daily-change heatmap was removed: it plotted the slope
+              of the line above it, and volatility clustering is now answered
+              numerically by the relative-ATR series. */}
           <PreviewChart
             points={data.points}
             stats={data.stats}
             unit={row.unit}
             width={width}
             height={CHART_H}
-            onHoverDate={setHoveredDate}
           />
-          <div className="mt-3 overflow-x-auto">
-            <CalendarHeatmap changes={data.calendar} hoveredDate={hoveredDate} />
-          </div>
           <p className="mt-2 text-[12px] opacity-40">눌러서 크게 볼 수 있어요</p>
         </motion.div>
       )}

@@ -18,14 +18,12 @@ export function PreviewChart({
   unit,
   width,
   height,
-  onHoverDate,
 }: {
   points: HistoryPoint[];
   stats: SeriesStats | null; // range min/max/avg, precomputed server-side (§16)
   unit: Unit;
   width: number;
   height: number;
-  onHoverDate: (date: string | null) => void;
 }) {
   const [hi, setHi] = useState<number | null>(null);
 
@@ -48,11 +46,9 @@ export function PreviewChart({
     const i = Math.round(((px - PAD.left) / plotW) * (points.length - 1));
     const idx = Math.max(0, Math.min(points.length - 1, i));
     setHi(idx);
-    onHoverDate(points[idx].t);
   };
   const onLeave = () => {
     setHi(null);
-    onHoverDate(null);
   };
 
   const hp = hi != null ? points[hi] : null;

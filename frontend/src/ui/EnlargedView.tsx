@@ -7,16 +7,14 @@
  * matrix instead. Esc / backdrop dismiss (drag added in Pass 4); wrapped in an
  * error boundary so a thrown guard shows a message, not a blank region. */
 
-import { useQuery } from "@tanstack/react-query";
 import { motion, type PanInfo } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 
-import { fetchSeries, type WallSummary } from "@/lib/api";
+import type { WallSummary } from "@/lib/api";
 import { dirClass, fmtBp, fmtRate } from "@/lib/format";
 import { BASIS_LABELS, TIME_BASES, type TimeBasis } from "@/theme/ramp";
 import { DetailChart } from "@/wall/DetailChart";
 
-import { CalendarHeatmap } from "./CalendarHeatmap";
 import { ERROR_SENTENCE } from "./copy";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { instrumentGloss, instrumentSubtitle } from "./gloss";
@@ -83,14 +81,6 @@ function StrategyRegion() {
 }
 
 function Body({ row, summary }: { row: Row; summary: WallSummary }) {
-  const { data } = useQuery({
-    // full resolution — same key the DetailChart uses, so they share one fetch.
-    queryKey: ["series", row.seriesId, "full"],
-    queryFn: () => fetchSeries(row.seriesId!, "full"),
-    enabled: !!row.seriesId,
-    staleTime: 30_000,
-  });
-
   if (!row.seriesId) {
     // every group now derives a history (outrights, spreads, forwards, vol);
     // this stays only as a defensive fallback.
@@ -117,11 +107,6 @@ function Body({ row, summary }: { row: Row; summary: WallSummary }) {
         {instrumentGloss(row)}
       </p>
       <SixBasisReadout summary={summary} seriesId={row.seriesId} />
-      {data && (
-        <div className="mt-4 overflow-x-auto">
-          <CalendarHeatmap changes={data.calendar} hoveredDate={null} cell={16} gap={4} />
-        </div>
-      )}
       <StrategyRegion />
     </>
   );

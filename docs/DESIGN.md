@@ -190,26 +190,23 @@ diverge the moment the quarter advances a month.
   shows the relative-ATR curve across tenors [Session 14]. Orange line, two
   lines only (Now + D-1) — the six-basis ramp is enlarged-view only. Hand-rolled
   SVG (§11).
-- Hovering a row replaces the curve with that series' history + heatmap;
-  leaving the table returns to the curve; pinning keeps the history until Esc.
+- Hovering a row replaces the curve with that series' history line; leaving the
+  table returns to the curve; pinning keeps the history until Esc.
 - On row hover, after a ~120ms delay (so crossing the table does not strobe),
   the chart springs in (§14).
 - Chart: that series' 10-year history, **orange line** (§9), from the stage-2
   endpoint. `assertDomainRendered` still applies.
 - Hovering the chart shows a floating card near the cursor: **날짜 · 레벨 ·
-  구간 최고 · 구간 최저 · 구간 평균 · 당일 변화** (a rate series, so the
-  reference candle's open/close become level + daily change).
-- **Below the chart, a calendar heatmap** of daily changes across the visible
-  window — weeks × weekdays, cell shade by magnitude, hue by direction (red up
-  / blue down). As the pointer moves along the chart, the hovered date's cell
-  pulses with an **ink outline** (not orange — orange is the chart line now;
-  not blue — blue is a direction; see §9 and `## Provisional`).
+  구간 최고 · 구간 최저 · 구간 평균 · 당일 변화**. This tooltip is the **sole
+  readout for a hovered date** (§I) — the preview calendar heatmap was removed
+  (it plotted the slope of the line drawn right above it; volatility clustering
+  is now answered numerically by the relative-ATR series).
 - Clicking the chart opens the enlarged view.
 - **Forwards now have history [Session 13]** — a forward rate on any past date
   is derived from that date's curve (stage-2, rebuilt lazily per series and
   cached). **Volatility now has history too [Session 14]** — the relative-ATR
   ratio series per tenor (`vol:<tenor>`), served through the same stage-2 path.
-  Every group now has a preview chart + heatmap.
+  Every group now has a preview chart.
 - **Forward tab [Session 13]:** every forward in the matrix (21 starts × 8
   tenors, named `2Yx1Y` / `2YxSPOT`) is a row; the six quoted key forwards pin
   to the top under a "주요 포워드" heading; a start-point secondary filter
@@ -222,7 +219,10 @@ drag dismiss; `?tile=series:<id>` keeps working).
 
 - Large chart, full history, plus a **segmented control exposing all six time
   bases** — the full opacity ramp lives here now.
-- The calendar heatmap comes along, larger.
+- A block beneath the chart naming and explaining the instrument (§C1): a
+  subtitle plus two or three 합니다체 sentences keyed to its kind.
+- (The calendar heatmap that used to sit here was removed in §I — see the
+  preview note above.)
 - A **clearly-marked empty region reserved for future strategy tooling** — a
   labelled placeholder is the entire deliverable; build nothing in it.
 - For forward instruments the enlarged view shows the **forward matrix**
@@ -775,10 +775,14 @@ Confirm or override.
   start point, one orange line, x = start point). Chosen over "one line per
   tenor" (8 same-colour lines are unreadable) and "x = tenor for a selected
   start" (needs an extra selector). It is the standard 1y-forward curve.
-- **Calendar heatmap window**: the visible chart window is the full 10y, which
-  is too many weeks for a legible calendar; the heatmap therefore shows the
-  most recent ~26 weeks of daily changes. Adjust when the enlarged view lands a
-  window control.
+- **Calendar heatmap removed [Session 15 §I].** It plotted daily change — the
+  slope of the line drawn directly above it — and the one thing it added
+  (volatility clustering) is now answered numerically by the relative-ATR
+  series. The hovered-date readout is the chart tooltip. The forward-matrix tint
+  stays (a genuine start × tenor grid a line cannot replace), and `ui/tint.ts`
+  stays, now used only by the matrix. A tenor × date heatmap may return later in
+  a curve context (parallel vs led moves) — not now. The heatmap pulse / focus
+  notes elsewhere in this doc refer to the removed component.
 - **Deprecated, pending removal**: the wall pan machinery (`useWallPan`,
   `panToElement`) and the whole three-level column build of the previous
   Session-12 draft are unused; `useWallPan` stays `@deprecated`. The tile
