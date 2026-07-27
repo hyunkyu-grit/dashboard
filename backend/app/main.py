@@ -27,6 +27,7 @@ from .derive import (
     series_values,
     summarize,
 )
+from .dv01 import build_dv01_table
 from .events import detect_event_clusters
 from .forwards import forward_history, forwards_payload
 from .volatility import relative_atr_for, volatility_payload
@@ -50,6 +51,7 @@ _curves = build_basis_curves(_dataset)
 _forwards = forwards_payload(_dataset, _curves)
 _events = detect_event_clusters(_dataset)
 _volatility = volatility_payload(_dataset, _bases)
+_dv01_table = build_dv01_table(_curves["now"], derived_ids)
 
 
 def _outright_label(tenor: str) -> str:
@@ -147,6 +149,16 @@ def series_detail(series_id: str, res: str = "full") -> dict:
 @app.get("/api/forwards")
 def forwards() -> dict:
     return _forwards
+
+
+@app.get("/api/dv01/{series_id}")
+def dv01(series_id: str) -> dict:
+    # Per-leg DV01 + DV01-neutral notional ratio at the current curve (§B).
+    # Forwards/vol/unknown ids get an empty block (kind null).
+    return _dv01_table.get(
+        series_id,
+        {"id": series_id, "kind": None, "legs": [], "residual": None},
+    )
 
 
 @app.get("/api/volatility")

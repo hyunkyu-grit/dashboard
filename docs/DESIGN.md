@@ -229,6 +229,17 @@ drag dismiss; `?tile=series:<id>` keeps working).
   bases** — the full opacity ramp lives here now.
 - A block beneath the chart naming and explaining the instrument (§C1): a
   subtitle plus two or three 합니다체 sentences keyed to its kind.
+- **DV01-neutral leg weights [Session 16 §B].** Curve trades are executed
+  DV01-neutral, and once weighted so (`N_short·d_short = N_long·d_long`;
+  `N_wing·d_wing = ½·N_belly·d_belly`) the quoted value *is* the P&L driver — a
+  rise in the displayed spread/fly is profit for a Pay position, no
+  qualification. (There is **no** residual-duration caveat; the 1:−2:1 quoting
+  convention is not a notional convention.) The popup shows the notional ratio
+  a trader has to execute (`1Y 442 : 2Y 100 : 10Y 22`, belly/long = 100),
+  numbers only, plus a line noting it is indicative at the current curve; an
+  outright shows its DV01 alone. DV01 = the par-swap annuity off the
+  bootstrapped curve (`backend/app/dv01.py`); the browser never computes it
+  (§16). No notional entry / P&L / sizing — those stay in the reserved region.
 - (The calendar heatmap that used to sit here was removed in §I — see the
   preview note above.)
 - A **clearly-marked empty region reserved for future strategy tooling** — a

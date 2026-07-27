@@ -7,10 +7,11 @@
  * matrix instead. Esc / backdrop dismiss (drag added in Pass 4); wrapped in an
  * error boundary so a thrown guard shows a message, not a blank region. */
 
+import { useQuery } from "@tanstack/react-query";
 import { motion, type PanInfo } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 
-import type { WallSummary } from "@/lib/api";
+import { fetchDv01, type WallSummary } from "@/lib/api";
 import { dirClass, fmtBp, fmtRate } from "@/lib/format";
 import { BASIS_LABELS, TIME_BASES, type TimeBasis } from "@/theme/ramp";
 import { DetailChart } from "@/wall/DetailChart";
@@ -72,6 +73,44 @@ function SixBasisReadout({
   );
 }
 
+/** DV01-neutral leg weights (§B) — what you actually have to execute. Numbers
+ * only, no chart. Spread/fly show the ratio; an outright shows its DV01 alone.
+ * Indicative at the current curve; drifts as it moves. */
+function LegWeights({ seriesId }: { seriesId: string }) {
+  const { data } = useQuery({
+    queryKey: ["dv01", seriesId],
+    queryFn: () => fetchDv01(seriesId),
+    staleTime: 60_000,
+  });
+  if (!data || !data.kind) return null;
+
+  if (data.kind === "outright") {
+    const leg = data.legs[0];
+    // annuity → KRW/bp per 100억 notional = annuity × 1e6; shown in 만원.
+    const manwon = Math.round(leg.dv01 * 100);
+    return (
+      <div className="mt-4">
+        <div className="text-[12px] opacity-45">DV01</div>
+        <div className="mt-0.5 text-[15px] tabular-nums">
+          {manwon.toLocaleString()}만원 / bp
+          <span className="ml-1 text-[12px] opacity-45">100억 명목 기준</span>
+        </div>
+      </div>
+    );
+  }
+
+  const ratio = data.legs.map((l) => `${l.tenor} ${l.notional}`).join(" : ");
+  return (
+    <div className="mt-4">
+      <div className="text-[12px] opacity-45">DV01 중립 비중</div>
+      <div className="mt-0.5 text-[15px] tabular-nums">{ratio}</div>
+      <p className="mt-1 text-[12px] opacity-45">
+        현재 커브 기준 지표이며, 커브가 움직이면 함께 변합니다.
+      </p>
+    </div>
+  );
+}
+
 function StrategyRegion() {
   return (
     <div className="mt-6 flex h-40 items-center justify-center rounded-[16px] border border-dashed border-edge text-[13px] opacity-40">
@@ -106,6 +145,7 @@ function Body({ row, summary }: { row: Row; summary: WallSummary }) {
       <p className="mt-3 max-w-[720px] text-[13px] leading-relaxed opacity-70">
         {instrumentGloss(row)}
       </p>
+      <LegWeights seriesId={row.seriesId} />
       <SixBasisReadout summary={summary} seriesId={row.seriesId} />
       <StrategyRegion />
     </>

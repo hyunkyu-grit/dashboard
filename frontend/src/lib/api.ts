@@ -141,6 +141,25 @@ export async function fetchVolatility(): Promise<VolatilityPayload> {
   return res.json();
 }
 
+/** Per-leg DV01 + the DV01-neutral notional ratio (§B). */
+export interface Dv01Leg {
+  tenor: string;
+  dv01: number; // par-swap annuity / PV01 per unit notional
+  notional: number | null; // ratio, normalised to 100; null for an outright
+}
+export interface Dv01Payload {
+  id: string;
+  kind: "outright" | "spread" | "fly" | null;
+  legs: Dv01Leg[];
+  residual: number | null;
+}
+
+export async function fetchDv01(id: string): Promise<Dv01Payload> {
+  const res = await fetch(`${API_BASE}/api/dv01/${encodeURIComponent(id)}`);
+  if (!res.ok) throw new Error(`dv01 ${id}: HTTP ${res.status}`);
+  return res.json();
+}
+
 /** One point of a history line. `d` = true daily change in bp (from the
  * previous trading day), precomputed server-side (§16) so the browser never
  * differences a series; null on the first point. */
