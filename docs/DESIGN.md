@@ -1053,6 +1053,16 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
   (4.78:1 tile / 4.58:1 page), hue and saturation kept. `#0064FF` is ~3.9:1 on
   the dark tile, so dark lightens to `#4C93FF`. All four now clear the **4.5:1
   text floor**; `band-hue-contrast.test.ts` gates by usage (text 4.5, stroke 3).
+- **Blue does double duty (down-direction + chart stroke) — evaluated, ACCEPTED
+  [palette cut, Pass D].** With the palette cut to red/blue/grey, blue is both
+  the down-delta colour and the (signless) line-chart stroke. Checked live in
+  both themes: a blue preview/chart line does **not** read as "down" because the
+  line and the change-column numbers live in **separate panes** with unambiguous
+  context — a large titled price chart on the right, small signed figures in the
+  table on the left. So strokes stay blue. **Revisit only if** a future layout
+  ever places a blue stroke *inside the same visual group* as a column of blue
+  down-numbers; the fix then is to move strokes to ink (the chart is signless,
+  so ink loses nothing) — do not reach for a third hue.
 - **REVERSED [palette cut] — "orange = action/selection" is withdrawn.** The
   Session 16 §E decision (line → blue, freeing orange for primary action /
   selection / focus / hover pulse) was CONFIRMED and is now **reversed**: the
