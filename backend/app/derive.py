@@ -7,10 +7,16 @@ series (design spec §4).
 from __future__ import annotations
 
 import datetime as dt
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 from itertools import combinations
 
-from .dataset import DISPLAY_TENORS, QUOTED_NODES, Dataset, tenor_years
+from .dataset import (
+    DISPLAY_TENORS,
+    QUOTED_NODES,
+    SPEC_NODE_ORDER,
+    Dataset,
+    tenor_years,
+)
 
 BASIS_KEYS = ["d1", "wtd", "mtd", "qtd", "ytd"]
 
@@ -324,6 +330,50 @@ def ohlc_buckets(pairs: list[tuple[str, float]], interval: str) -> list[dict]:
     if group:
         bars.append(bar(group))
     return bars
+
+
+def curve_heatmap(dataset: Dataset, n_cols: int = 110) -> dict:
+    """Tenor × date grid of curve changes (§D). Rows are the 10 curve nodes
+    (short→long); columns are ~110 contiguous date buckets over the full 10y.
+    A cell is that node's change over the bucket, with its OWN-HISTORY percentile
+    (same scale as the forward matrix, §J) so the browser only maps pct→alpha.
+    Shows the CURVE, not any one instrument — the context for a fly/spread move.
+    Aggregation is calculation, so it happens here (§16)."""
+    dates = dataset.dates
+    n = len(dates)
+    ends = [round((i + 1) * n / n_cols) - 1 for i in range(n_cols)]
+    col_dates = [dates[e].isoformat() for e in ends]
+
+    rows: list[list[dict | None]] = []
+    for tenor in SPEC_NODE_ORDER:
+        vals = dataset.series.get(tenor)
+        if vals is None:
+            rows.append([None] * n_cols)
+            continue
+
+        def close_at(e: int) -> float | None:
+            j = e
+            while j >= 0 and vals[j] is None:
+                j -= 1
+            return vals[j] if j >= 0 else None
+
+        closes = [close_at(e) for e in ends]
+        changes: list[float | None] = [None] * n_cols
+        for i in range(1, n_cols):
+            a, b = closes[i], closes[i - 1]
+            changes[i] = (a - b) * 100 if a is not None and b is not None else None
+
+        hist = sorted(abs(c) for c in changes if c is not None)
+        row: list[dict | None] = []
+        for c in changes:
+            if c is None:
+                row.append(None)
+                continue
+            pct = round(100.0 * bisect_right(hist, abs(c)) / len(hist), 1) if hist else None
+            row.append({"d": round(c, 2), "pct": pct})
+        rows.append(row)
+
+    return {"nodes": list(SPEC_NODE_ORDER), "dates": col_dates, "cells": rows}
 
 
 def summarize(dataset: Dataset, series_id: str, label: str, kind: str,

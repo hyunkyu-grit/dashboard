@@ -142,6 +142,24 @@ export async function fetchVolatility(): Promise<VolatilityPayload> {
   return res.json();
 }
 
+/** Tenor × date curve heatmap (§D). Rows = nodes (short→long), cols = date
+ * buckets; each cell is the node's change + its own-history percentile. */
+export interface HeatCell {
+  d: number;
+  pct: number | null;
+}
+export interface CurveHeatmapPayload {
+  nodes: string[];
+  dates: string[];
+  cells: (HeatCell | null)[][];
+}
+
+export async function fetchCurveHeatmap(): Promise<CurveHeatmapPayload> {
+  const res = await fetch(`${API_BASE}/api/curve-heatmap`);
+  if (!res.ok) throw new Error(`curve-heatmap: HTTP ${res.status}`);
+  return res.json();
+}
+
 /** Per-leg DV01 + the DV01-neutral notional ratio (§B). */
 export interface Dv01Leg {
   tenor: string;

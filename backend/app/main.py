@@ -22,6 +22,7 @@ from .derive import (
     apply_solo_direction,
     basis_dates,
     curve_banner,
+    curve_heatmap,
     derived_ids,
     ohlc_buckets,
     series_history,
@@ -53,6 +54,7 @@ _forwards = forwards_payload(_dataset, _curves)
 _events = detect_event_clusters(_dataset)
 _volatility = volatility_payload(_dataset, _bases)
 _dv01_table = build_dv01_table(_curves["now"], derived_ids)
+_curve_heatmap = curve_heatmap(_dataset)
 
 
 def _outright_label(tenor: str) -> str:
@@ -159,6 +161,13 @@ def series_detail(series_id: str, res: str = "full", interval: str | None = None
 @app.get("/api/forwards")
 def forwards() -> dict:
     return _forwards
+
+
+@app.get("/api/curve-heatmap")
+def curve_heatmap_endpoint() -> dict:
+    # Tenor × date grid of curve changes, own-history normalised (§D). Static
+    # across instruments — it is the curve, not the popup's instrument.
+    return _curve_heatmap
 
 
 @app.get("/api/dv01/{series_id}")

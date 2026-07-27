@@ -17,6 +17,7 @@ import { BASIS_LABELS, TIME_BASES, type TimeBasis } from "@/theme/ramp";
 import { DetailChart, type ChartType } from "@/wall/DetailChart";
 
 import { ERROR_SENTENCE } from "./copy";
+import { CurveHeatmap } from "./CurveHeatmap";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { instrumentGloss, instrumentSubtitle } from "./gloss";
 import { SHEET_SPRING } from "./motion";
@@ -192,6 +193,9 @@ function Body({
         width={900}
         height={420}
       />
+      {/* the CURVE over time (§D) — context for a fly/spread move, not this
+          instrument. Aligned under the chart. */}
+      <CurveHeatmap width={900} />
       {/* what this instrument IS — static, keyed to kind (§ Pass C1) */}
       <p className="mt-3 max-w-[720px] text-[13px] leading-relaxed opacity-70">
         {instrumentGloss(row)}
