@@ -34,8 +34,10 @@
   /* Hue layer (§9) — added ON TOP of the grayscale encodings, never
    * replacing them. Everything must still read with hue removed. */
 
-  /* Main / brand + interactive (interactive is theme-invariant orange;
-   * label on it is near-black — white fails contrast ~2.4:1). */
+  /* RETIRED [palette cut] — brand (navy) and interactive (orange) no longer
+   * have a live role. The palette is red/blue/grey: every non-directional state
+   * is ink/grey now. These stay DEFINED so the history is legible, but no
+   * component may reference them (gated by guards/palette.test.ts). */
   --bw-brand: #043b72;
   --bw-interactive: #f58220;
   --bw-on-interactive: #1a1a1a;
@@ -49,15 +51,15 @@
   --bw-up: #d92d3c;
   --bw-down: #0064ff;
 
-  /* Chart line — BLUE (§9, Session 16 Pass E). Moved off orange for product
-   * consistency; this frees orange to return to action/selection/focus. Same
-   * blue as the down-delta (a line has no sign, so there is nothing to
-   * confuse). Navy was rejected — §9 forbids navy on data. #0064ff is 4.92:1
-   * on white (clears the 3:1 stroke floor). */
+  /* Chart line — BLUE (§9, Session 16 Pass E). The same blue as the down-delta
+   * (a line has no sign, so there is nothing to confuse). #0064ff is 4.92:1 on
+   * white (clears the 3:1 stroke floor). This is the ONLY non-direction hue on
+   * screen, and it is only ever a line stroke. */
   --bw-line: #0064ff;
 
-  /* Sub-palette — DEFINED BUT UNREFERENCED (Session 12). Chart lines are navy
-   * (--bw-brand). Kept for a possible future multi-object view. */
+  /* Sub-palette — DEFINED BUT UNREFERENCED (Session 12); RETIRED with the
+   * palette cut. Kept only so the history is legible; no component references
+   * these (gated). */
   --bw-hue-curve: #043b72;
   --bw-hue-vol: #0086b8;
   --bw-hue-fwd: #ad624e;
@@ -80,12 +82,11 @@
   --bw-ramp-qtd: 0.32;
   --bw-ramp-ytd: 0.24;
 
-  /* #043b72 is unreadable on the dark page — dark mode substitutes the light
-   * blue everywhere the main color appears. Interactive orange is unchanged. */
+  /* RETIRED (see the light block) — kept defined, unreferenced. */
   --bw-brand: #8dc8e8;
 
   /* Direction — lighter red/blue clear 4.5:1 on the dark tile (#0064ff is
-   * only ~3.9:1 there). Chart line uses #f58220 directly in dark. */
+   * only ~3.9:1 there). */
   --bw-up: #f16e77;
   --bw-down: #4c93ff;
   /* line = blue on dark too (§9 Pass E); #4c93ff is 5.37:1 on the dark tile. */

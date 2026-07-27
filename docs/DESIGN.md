@@ -239,7 +239,7 @@ drag dismiss; `?tile=series:<id>` keeps working).
   slope of the line). Backend precomputes the grid (§16). **Synced to the chart
   [final §C]:** the x-domain binds to the chart's visible range (rebucket by
   slicing on zoom, cells kept ≥8px) and the crosshair runs through both — the
-  hovered column takes an orange focus rule aligned to the chart crosshair.
+  hovered column takes an ink focus rule aligned to the chart crosshair.
 - **Chart type: 선 · 주봉 · 월봉 [Session 16 §G].** A selector in the popup
   (line only in the preview — candles need width it lacks). Closes-only data
   means a true daily candle is impossible (open would equal close), so no 일봉;
@@ -270,10 +270,12 @@ drag dismiss; `?tile=series:<id>` keeps working).
   across the nine nodes (3M·6M·9M·1Y·1.5Y·2Y·3Y·5Y·10Y, equal-spaced, real data
   from `summary.outrights`), the instrument's own region at full strength and the
   rest dimmed to ~35% context, a dashed ~55% ghost of the wanted state, y fitted
-  to both curves with no axis labels.** The accent is the FOCUS colour
-  (`--bw-interactive`, orange) so the diagram reads as an annotation, not another
-  data chart (charts are blue); direction arrows keep red-up/blue-down; labels
-  stay ink. Pure model in `ui/payReceiveModel.ts`, SVG in `ui/PayReceive.tsx`.
+  to both curves with no axis labels.** No annotation accent: the curve takes
+  the **chart-stroke blue** (`--bw-line`) and the arrows take the direction
+  colours (red up / blue down); the shaded forward interval and all labels are
+  grey/ink. (An earlier draft made the accent orange; the palette cut removed
+  it — an annotation hue was solving a problem that does not exist.) Pure model
+  in `ui/payReceiveModel.ts`, SVG in `ui/PayReceive.tsx`.
   Per kind:
   - **Outright** — whole curve full strength, marker + up arrow at the tenor,
     ghost lifted at that node. 금리 상승/하락.
@@ -376,8 +378,8 @@ legible in grayscale, so nothing DEPENDS on hue alone. **Only numbers with a
 direction get hue**: a change, a percentage, a mini-bar, a heatmap cell. A
 level has no direction, so the `현재` column and any level readout stay ink.
 The plain line chart is blue (a line has no per-point up/down sense — §9 Pass E);
-a directional mark (heatmap cell, candle body) is red/blue. Navy
-is freed to the product lockup only and never touches data (§9).
+a directional mark (heatmap cell, candle body) is red/blue. The product lockup
+and every non-directional mark are ink/grey — the palette is red/blue/grey (§9).
 
 ## 6. Tile spec — curve overlay (Band 1)
 
@@ -523,19 +525,27 @@ Chart canvases cannot resolve CSS variables: the theme bridge injects RESOLVED
 hex into canvas-bound options and triggers redraw on theme switch — gated by a
 test that rejects `var(` strings in canvas-bound option objects.
 
-### Color — achromatic + semantic direction + blue line [OWNER; line recoloured Session 16]
+### Color — two hues and nothing else [OWNER; palette cut to red/blue/grey]
 
-Reference: the Toss ranking table. **Almost entirely achromatic** — light-grey
-page, white panes, no borders, near-black numbers, grey labels. Hue appears
-only on: a directional number, the line chart, the primary action, and
-selected/focus state. When in doubt, leave it grey.
+**The product carries two hues and nothing else. Red means up, blue means
+down. Anything not carrying direction is neutral, differentiated by lightness
+alone.** Reference: the Toss ranking table — almost entirely achromatic
+(light-grey page, white panes, no borders, near-black numbers, grey labels).
+Hue appears only on a directional number/mark and on the line chart (a line has
+no sign, so its blue can't be confused with the down colour). Everything else —
+selection, focus, primary action, the product lockup, dividers, chips, markers
+— is grey at the appropriate lightness. When in doubt, leave it grey.
+
+Orange and navy were each reintroduced twice (chart-line recolouring freed
+orange to selection/focus/action; the Pay/Receive diagram took orange as an
+accent) and are now removed in one sweep. See the reversed entries in
+`## Provisional`.
 
 #### Direction (red up / blue down)
 
-Semantic, not brand — these sit beside the Mirae brand colors, they do not
-replace them. Korean market convention overrides the old "sign never by hue"
-rule (§5). **Only numbers with a direction get hue**: changes, percentages,
-grid tints. Levels stay ink.
+Semantic direction marks, not a brand palette. Korean market convention
+overrides the old "sign never by hue" rule (§5). **Only numbers with a
+direction get hue**: changes, percentages, grid tints. Levels stay ink.
 
 **Encoding by surface [Session 13]:** the mini-bar under a change figure is
 gone — it was the sign channel when the build was monochrome; now that hue
@@ -560,12 +570,12 @@ surface, gated in `band-hue-contrast.test.ts`.
 
 #### Chart line — blue [revised Session 16 Pass E]
 
-A plain line chart has no per-point up/down sense, so it is one colour. As of
-Session 16 that colour is **blue**, not orange — moved for product consistency,
-which frees orange to return to action/selection/focus. It is the **same blue
-as the down-delta**; a line has no sign, so there is nothing to confuse, and
-the line and the down-numbers live in different panes. Navy `#043B72` was
-rejected for strokes because §9 forbids navy on data.
+A plain line chart has no per-point up/down sense, so it is one colour: **blue**
+(kept from the Session 16 recolouring). It is the **same blue as the down-delta**
+— a line has no sign, so there is nothing to confuse, and the line and the
+down-numbers live in different panes. (If a blue line ever reads as "down" beside
+a column of blue numbers, move strokes to ink — see `## Provisional`.) Navy was
+rejected for strokes because §9 keeps everything non-directional grey.
 
 | Role | Light | Dark |
 |---|---|---|
@@ -577,26 +587,35 @@ not reinvent it].** A candle body has a sign (close vs open), so it uses the
 (`--bw-up` / `--bw-down`), NOT the blue line colour. Line charts stay blue;
 only candle bodies take the red/blue direction pair.
 
-#### Selected / focus / pulse — orange again [revised Session 16 Pass E]
+#### Selected / focus / action / pulse — INK [palette cut; re-reverses Session 16 Pass E]
 
-The chart line moved to blue, so orange returns to its proper job: **primary
-action, selection, focus, hover pulse** all use `#F58220`. `:focus-visible` and
-`::selection` are orange; the active-tab underline and the pinned-row marker are
-orange. (This reverses Session 15's "focus/selection are ink" note, which
-existed only because the line was orange then.)
+Every non-directional interactive state is **ink/grey**, not a hue:
 
-| Role | Colour |
+| Role | Treatment |
 |---|---|
-| Primary action (filled button) | `#F58220` (near-black `#1A1A1A` label) |
-| Selection / focus / hover pulse | `#F58220` |
+| Primary action (filled button) | ink fill, light label (`bg-ink` / `text-page`) |
+| Selected state (tab, segmented, list item) | dark ink pill, light label — the reference tab control |
+| Focus ring (`:focus-visible`) | ink outline |
+| Selection (`::selection`) | ink background, light text |
+| Active-tab underline / pinned-row marker | ink |
+| Heatmap / cell pulse | ink |
+| Pay/Receive diagram | no accent — the curve takes the chart-stroke blue, arrows take the direction colours |
 
-#### What stays grey / navy
+Because `bg-ink` inverts with the theme (near-black in light, near-white in
+dark), an ink pill is dark-on-light in light mode and light-on-dark in dark
+mode — legible in both, no dark-on-dark failure. (This RE-reverses the Session
+16 Pass E "orange for selection/focus/action" note; that note itself reversed
+Session 15's "focus/selection are ink". We are back to ink, now permanently: the
+palette is red/blue/grey.)
 
-Navy `#043B72` is freed to the **product lockup only** and never touches data.
-Levels, axes, gridlines, labels stay ink/grey. Series separation inside the
-enlarged view is the opacity ramp, unchanged. The sub-palette (`#CB6015`,
-`#84888B`, `#AD624E`, `#0086B8`, …) stays defined in the token module and
-**unreferenced on data**.
+#### What stays grey
+
+The **product lockup is ink** (navy removed). Levels, axes, gridlines, labels,
+dividers, chips, and every non-directional marker stay ink/grey, differentiated
+by lightness. Series separation inside the enlarged view is the opacity ramp,
+unchanged. Orange (`#F58220`), navy (`#043B72`), and the sub-palette (`#CB6015`,
+`#84888B`, `#AD624E`, `#0086B8`, …) remain **defined but unreferenced** in the
+token module; no component may reference them (gated — §9 colour guard).
 
 `band-hue-contrast.test.ts` gates what ships: the chart-line blue at the 3:1
 stroke floor on both surfaces, and both direction colours at the 4.5:1 text
@@ -685,7 +704,7 @@ makes them scannable), table header height 40. Whitespace is a feature.
 12. **Session 12 (final) — Sauron list-first (§2):** two panes, no navigation;
     left instrument table (현재 + 5 change columns + 한 줄, filter chips,
     sortable, hover→preview, click→pin); right preview (empty state → chart
-    pops in orange + floating tooltip + calendar heatmap); enlarged view
+    pops in blue + floating tooltip + calendar heatmap); enlarged view
     (chart + six-basis ramp + heatmap + reserved strategy region). Basis
     selector deleted. New tokens (§9), motion (§14), voice (§15). Backend,
     endpoints, and all guards unchanged. Renamed braveworld → Sauron
@@ -873,7 +892,7 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
     reverted — no code change shipped.)
   - **Deep-zoom heatmap rebucketing** confirmed: zooming the candle chart into a
     ~1-year window widened the heatmap cells into far fewer buckets and kept the
-    orange crosshair-synced marker aligned.
+    ink crosshair-synced marker aligned.
   - **Candles never comb** at any zoom (LWC scales candle width to bar spacing);
     the interval is user-chosen (선/주봉/월봉) and labelled in the toggle, so the
     absence of an auto step-up is invisible to the reader (see the entry below).
@@ -900,12 +919,13 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
   (`backend/app/forwards.py::_level_range`, a LEVEL distribution — distinct from
   the |Δ| move percentile that drives the tint), a fill + marker at the current
   level's POSITION in that range, and the **percentile** as a number at the
-  right. The marker + percentile switch to the accent (`--bw-interactive`) at
-  the tails (≥90th or ≤10th) so a 99th-percentile row is distinct from a 72nd at
-  a glance; secondary ink otherwise. Track ends are labelled 10년 최저 / 10년
+  right. At the tails (≥90th or ≤10th) the marker goes **full ink** and the
+  percentile **full-strength ink**, so a 99th-percentile row is distinct from a
+  72nd at a glance; away from the tails the marker is a lighter grey and the
+  percentile dimmed. Distinction is by **lightness, not hue** (palette cut — the
+  old accent was `--bw-interactive`). Track ends are labelled 10년 최저 / 10년
   최고 **once** above the block. This is the only place in the product that shows
-  a level's position within its own range. Verified live (2026-07-24: 1Yx1Y..5Yx5Y
-  at 99–100th in accent, 6Mx3M at 90th in ink).
+  a level's position within its own range.
 - **RESOLVED [closing session, part 2, Pass E2] — the matrix tint has a
   legend.** 168 tinted cells (plus the popup heatmap on the same scale) with
   nothing saying what the intensity meant. `ui/TintLegend.tsx` is a compact
@@ -957,7 +977,7 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
   emits its visible date window and crosshair date; the heatmap binds its
   x-domain to that window (shows the buckets in view, stretched to fill width so
   cells stay ≥8px — the 110-bucket full range is already ~8px, so no step-up is
-  needed) and marks the hovered column with an orange focus rule aligned to the
+  needed) and marks the hovered column with an ink focus rule aligned to the
   chart crosshair. Moved to §2 popup. **Rebucketing verified live [Pass B].**
 - **Candle interval step-up not needed at current densities [Session 16 §G].**
   Ten years is ~550 weekly or ~130 monthly bars; both fit the popup's ~900px at
@@ -1033,11 +1053,18 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
   (4.78:1 tile / 4.58:1 page), hue and saturation kept. `#0064FF` is ~3.9:1 on
   the dark tile, so dark lightens to `#4C93FF`. All four now clear the **4.5:1
   text floor**; `band-hue-contrast.test.ts` gates by usage (text 4.5, stroke 3).
-- **Chart stroke = blue; orange = action/selection [corrected Session 16 §E,
-  superseding the old "line-safe orange" note].** The line moved off orange to
-  blue (`#0064FF` / dark `#4C93FF`, ≥3:1 stroke floor), which freed orange
-  (`#F58220`) to return to its proper job — primary action, selection, focus,
-  hover pulse. Candle bodies use 상승 빨강 / 하락 파랑, not the line blue (§9).
+- **REVERSED [palette cut] — "orange = action/selection" is withdrawn.** The
+  Session 16 §E decision (line → blue, freeing orange for primary action /
+  selection / focus / hover pulse) was CONFIRMED and is now **reversed**: the
+  product carries only red/blue/grey. Chart stroke stays blue (`#0064FF` / dark
+  `#4C93FF`, ≥3:1 stroke floor); candle bodies keep 상승 빨강 / 하락 파랑. But
+  every non-directional interactive state — primary action, selection, focus,
+  hover pulse, the active-tab underline, the pinned-row marker, the heatmap
+  crosshair marker, the key-forward gauge marker, the product lockup, and the
+  Pay/Receive diagram accent — is now **ink/grey**, not orange or navy. Orange
+  (`#F58220`) and navy (`#043B72`) remain defined but unreferenced; §9 colour
+  guard fails any component that references them. (This also withdraws the
+  reintroduction of orange as the Pay/Receive diagram accent.)
 - **OBSOLETE — heatmap pulse.** The calendar heatmap it described was removed
   in Session 15 §I, so there is no pulse. (Kept only so the reference isn't
   mistaken for a live feature.)

@@ -84,7 +84,7 @@ cd frontend; pnpm vitest run; pnpm lint; pnpm build
   `QUOTED` set, `sortKey`. Start here for any list/label/sort change.
 - `ui/CurveView.tsx` — idle right-pane curve, dispatched by tab.
 - `ui/PreviewPane.tsx` / `PreviewChart.tsx` / `CalendarHeatmap.tsx` — hover
-  state: series history (orange SVG) + tooltip + calendar heatmap.
+  state: series history (blue SVG) + tooltip + calendar heatmap.
 - `ui/EnlargedView.tsx` — the `?tile=…` sheet; **the only place
   `lightweight-charts` is allowed**.
 - `ui/tint.ts` — shared grid background-tint scale (forward matrix + heatmap).
@@ -133,12 +133,16 @@ rule:
 
 - **Monochrome-first (§5):** every encoding must work in grayscale; hue only
   layers on. **Only directional numbers take hue; levels stay ink.**
-- Colors: up `#d92d3c` / down `#0064FF` (Toss convention, red=up; up deepened
-  from `#f04452` in S15 E1 so change TEXT clears 4.5:1). **Chart line is BLUE**
-  (`#0064ff` light / `#4c93ff` dark, S16 E) — orange returned to
-  action/selection/focus (`#F58220` filled, `--bw-interactive`). Levels stay ink.
-  All values live only in `theme/tokens.css`; the dark theme substitutes lighter
-  variants (see that file).
+- Colors: **two hues only — red up, blue down; everything else grey by
+  lightness** [palette cut]. up `#d92d3c` / down `#0064FF` (Toss convention,
+  red=up; up deepened from `#f04452` in S15 E1 so change TEXT clears 4.5:1).
+  **Chart line is BLUE** (`#0064ff` light / `#4c93ff` dark, S16 E; same as the
+  down colour — a line has no sign). Every non-directional interactive state
+  (primary action, selection, focus, pins, tab underline, heatmap marker, gauge
+  marker, product lockup, Pay/Receive accent) is **ink/grey** — `bg-ink` inverts
+  with the theme so a filled pill is legible both ways. Orange (`#F58220`) and
+  navy (`#043B72`) are defined but **unreferenced** and blocked by the §9 colour
+  guard. Levels stay ink. All values live only in `theme/tokens.css`.
 - **No elevation / no floating cards** (S13). Depth = surface steps + hairlines.
   The single sanctioned drop-shadow is the chart tooltip overlay.
 - **Volatility is built** [Session 14] — relative ATR (mean ATR 5 / mean ATR
