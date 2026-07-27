@@ -160,9 +160,29 @@ rule:
 
 ---
 
-## 6. Current state (as of the final session, 2026-07-27)
+## 6. Current state (as of the closing / validation session, 2026-07-27)
 
-- **FINAL HEAD** = the final-session Pass E commit on `master`, mirrored to D:.
+- **HEAD** = the closing-session Pass A commit (`91f216c`+) on `master`,
+  mirrored to D:. See `docs/STATE.md` for the full works-verified / works-
+  unverified / missing boundary.
+- Gates: FE **57 vitest**, backend **60 pass / 1 skip / 1 xfail** (the skip is
+  the reference-sheet harness awaiting a file; the xfail is the documented
+  round-trip finding), build+lint clean.
+- **NUMBERS VALIDATED for the first time (Pass A).** Internal consistency is
+  proven (forward-annuity identity exact to 1e-17; DFs sound; derived agree; no
+  calendar blowup). **Defined stop hit:** the bootstrap does not reprice its own
+  par inputs to 1e-8 — a ≤0.25bp fit residual on swap tenors, exact at 1D/3M,
+  in **frozen** `engine_port.bootstrap_zero_curve` (not a convention error; the
+  annuity identity proves derived quantities are exact). Per the session's A1
+  rule the closing session STOPPED after reporting; **Passes B–F were not run**
+  (dark-mode/live checks, orphaned change log, stale-data loudness, key-forward
+  gauges). See `docs/CONVENTIONS.md` and `docs/diagnostics/curve-validation.md`.
+  Owner's call: accept ≤0.25bp or commission an iterated bootstrap re-port; and
+  run Pass A2 by dropping a sheet into `data/reference/`.
+
+### Earlier — the preceding session landed 5 passes (A–E):
+
+- **FINAL HEAD** = its Pass E commit on `master`, mirrored to D:.
 - Gates: FE **57 vitest tests**, `pnpm build` clean, `pnpm lint` exit 0.
   Backend **53 tests**.
 - **Backend startup: ~17s cold, ~2s warm.** The own-history distributions are
