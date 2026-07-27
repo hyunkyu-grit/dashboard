@@ -75,10 +75,11 @@ function PreviewSheet({
 function Header() {
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
-  // The title bar is the top of the one continuous surface (§ shell) — a
-  // hairline separates it from the panes; no page-level sticky, no shadow.
+  // Full-bleed chrome band (§H, Session 16): full window width, its own band at
+  // the top, an opaque bg + a hairline along the bottom and nothing else — no
+  // card, no radius. It is chrome, not content.
   return (
-    <header className="flex shrink-0 items-center gap-3 border-b border-edge px-5 py-3">
+    <header className="flex shrink-0 items-center gap-3 border-b border-edge bg-tile px-5 py-3">
       <span className="text-[17px] font-bold text-brand">Sauron</span>
       <span className="text-[13px] opacity-45">KRW IRS</span>
       <span className="flex-1" />
@@ -185,10 +186,12 @@ export function App() {
 
   return (
     <MotionConfig reducedMotion="user">
-    {/* The page never scrolls; grey shows only as a thin margin around the one
-        continuous surface that now spans the viewport (§ layout, Session 15). */}
-    <div className="h-screen bg-page p-2">
-      <div className="flex h-full flex-col overflow-hidden rounded-[16px] bg-tile">
+    {/* Full-bleed (§H, Session 16): the surface fills the window edge to edge —
+        no outer card, no radius, no page-coloured gutter. The window edge is the
+        boundary; structure comes from the header hairline, the pane divider, and
+        the row hairlines. Card radius survives only where something floats (the
+        popup + the chart tooltip). */}
+    <div className="flex h-screen flex-col overflow-hidden bg-tile">
         <Header />
 
         {isError && (
@@ -253,7 +256,6 @@ export function App() {
             )}
           </div>
         )}
-      </div>
 
       {/* single-column preview: a bottom sheet opened by a row click */}
       <AnimatePresence>
