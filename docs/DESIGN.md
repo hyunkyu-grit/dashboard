@@ -257,12 +257,21 @@ places. Each channel still has exactly one meaning, app-wide:
 |----------------|-------------------------------------------|
 | Ink opacity    | Time basis (ramp, see §9)                 |
 | Line width     | Time basis (secondary, disambiguates ramp)|
-| Text weight 600| Outlier only (percentile extreme / large delta) |
+| Text weight 600| **Structure** — the row anchors (instrument name + `현재` level), NOT outliers (§ revised Session 15) |
+| Color intensity (alpha) | **Outlier magnitude** — how far a move is from that series' own history (§ Session 15; owner-selected scale, Pass E2) |
 | Cell border    | Structural: live-quoted (non-interpolated) point |
 | Marker dot     | Live-quoted node on charts                |
 | Mini-bar       | Delta sign+magnitude in tables (center-zero, right=+, left=−) |
 | **Direction hue** | **Sign of a number: red = up, blue = down (Korean market convention, §9)** |
 | **Motion**     | **State change (§14) — a value updated, a level opened/closed** |
+
+**Weight is structural, not an outlier channel [Session 15].** Weight 600 was
+reserved for outliers; it caught nothing across 44 uniformly-faint rows. It now
+anchors every row — the instrument name and the `현재` level render at 600, the
+five change columns at 400 — and outlier emphasis moves entirely to **color
+intensity** (alpha relative to the series' own history; scale chosen from the
+Pass E2 replay). Weight says *this is the row's identity and level*; alpha says
+*this move is worth looking at*.
 
 Direction hue is a **deliberate, owner-mandated exception** to the old "sign
 never by color" rule: a KRW rates trader reads red/blue before the digits.

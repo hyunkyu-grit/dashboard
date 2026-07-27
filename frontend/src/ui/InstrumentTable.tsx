@@ -70,7 +70,7 @@ function TableRow({
         active ? "bg-page" : "hover:bg-page/50"
       }`}
     >
-      <td className="relative py-3 pl-3">
+      <td className="relative py-3 pl-3 font-semibold">
         {pinned && (
           <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-ink" />
         )}
@@ -91,7 +91,10 @@ function TableRow({
         )}
         {row.label}
       </td>
-      <td className="pr-3 text-right tabular-nums">{levelText(row)}</td>
+      {/* 현재 is a structural anchor: weight 600, tabular, ink (§5) */}
+      <td className="pr-3 text-right font-semibold tabular-nums text-ink">
+        {levelText(row)}
+      </td>
       {BASIS_ORDER.map((b) => (
         <td
           key={b}
