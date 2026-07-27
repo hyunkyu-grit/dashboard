@@ -159,12 +159,35 @@ rule:
 
 ---
 
-## 6. Current state (as of Session 13, 2026-07-24)
+## 6. Current state (as of Session 14, 2026-07-27)
 
-- **FINAL HEAD `fadf7ce`** on `master`, mirrored to D:.
-- Gates: FE **31 vitest tests / 8 files**, `pnpm build` clean, `pnpm lint`
-  exit 0. Backend 24 tests (from S13 forward-history work).
-- Session 13 landed 6 passes, one commit each:
+- **FINAL HEAD `04bce8f`** on `master`, mirrored to D:.
+- Gates: FE **36 vitest tests / 9 files**, `pnpm build` clean, `pnpm lint`
+  exit 0. Backend **38 tests**.
+- Session 14 landed 4 passes, one commit each:
+  1. `0dda57c` **Computation boundary (§16).** Backend computes, frontend
+     renders. Moved FE→BE: the 한 줄 classification (ships as `{kind,value}`,
+     rendered on the client — the §16 exception), sort keys, the quoted flag,
+     series range stats (min/max/avg), per-point daily change, the calendar's
+     daily-change series, and preview downsampling (`?res=preview` ~150 pts;
+     `res=full` for the enlarged view). New guard `row-vm-source.test.ts`:
+     every `buildRows` field is declared `dto|format` in `ROW_FIELD_SOURCE`,
+     dto fields checked against the API source.
+  2. `0e33443` **Volatility engine.** `relative_atr` in `volatility.py`:
+     `mean(ATR 5) / mean(ATR 60)`, close-only form `TR=|Δr|` bp (no intraday
+     high/low in the export). Warm-up 65 obs→null, 60-obs mean floor 0.05 bp→
+     null, windows in observations. Generic over any series id, cached.
+  3. `908b030` **Vol endpoints.** `/api/volatility` (SeriesSummary-shaped rows
+     + across-tenor curve) and `/api/series/vol:{tenor}` (history via the
+     shared builder, unit `"ratio"`). Nulls stay null end to end.
+  4. `04bce8f` **Vol tab, display-only.** unit `"ratio"` (2dp, no bp suffix),
+     ratio-difference changes, `null`→"—", direction colour, idle relative-ATR
+     curve. Placeholder + reserved-slot removed. Verified live (tab, hover
+     preview, enlarged chart) — no console errors, domain guard passes.
+
+### Session 13 (superseded head, kept for the pass ledger)
+
+- Session 13 FINAL HEAD was `fadf7ce`; it landed 6 passes, one commit each:
   1. `affae6f` Tabs — sliding underline (`motion` `layoutId`), press-scale
      removed from tabs (§14: no transform press-feedback on alignment-sharing
      elements).
@@ -179,16 +202,35 @@ rule:
   6. `fadf7ce` Correctness — 한 줄 never restates a column; quoted/interpolated
      dot; `sort-key` guard; notation + fly weighting documented.
 
-### Gotchas discovered this session (keep in mind)
+### Gotchas — Session 14 (keep in mind)
+
+- **Preview vs enlarged share `/api/series/{id}` — key by resolution.** Preview
+  fetches `?res=preview` (~150 pts) under `["series", id, "preview"]`; the
+  enlarged chart fetches `?res=full` under `["series", id, "full"]`. Same key
+  for both would clobber the full series with the downsampled one.
+- **`sort-key.test.ts` fixtures now carry the DTO fields** (`sortKey`, `quoted`,
+  `oneLiner`) because those moved to the backend. `tsconfig` typechecks
+  `guards/`, so a fixture missing a DTO field fails `pnpm build`, not just
+  vitest.
+- **Vol needs a third unit.** `unit: "ratio"` (2dp, no bp suffix, ratio-diff
+  changes) lives alongside `%`/`bp`; `fmtLevel`/`fmtDelta` in `lib/format.ts`
+  are the unit-aware formatters — use them, don't re-inline `toFixed`.
+- **`relative_atr` is scale-invariant** (the ratio cancels units); `scale` only
+  sets the denominator floor's unit (bp). Don't rely on `scale` to change the
+  ratio.
+
+### Gotchas — Session 13 (keep in mind)
 
 - **`useMeasure` blank-pane trap:** a `useRef`+`useEffect` width hook left the
   measured width stuck at 0 (right pane rendered nothing). Fix = a **callback
   ref** that reads `clientWidth` synchronously on mount and attaches a
   ResizeObserver. This is the current `ui/useMeasure.ts`; don't regress it.
 - **Sort key / "3M lands last":** a tenor added after the original node set
-  (CD91 / 3M) had no sort key and sorted to the bottom. `tenorYears()` now maps
-  every tenor; unknown → `Infinity` so a genuinely unmapped tenor sorts loudly.
-  `guards/sort-key.test.ts` fails on any empty/non-finite key.
+  (CD91 / 3M) had no sort key and sorted to the bottom. Every tenor now maps
+  through `tenor_years()`; unknown → `inf` so a genuinely unmapped tenor sorts
+  loudly. `guards/sort-key.test.ts` fails on any empty/non-finite key.
+  (Session 14: this map moved to the backend `dataset.py`; the FE reads
+  `sortKey` from the DTO.)
 - Don't chain `pnpm vitest run | grep … && git commit` in one shell line — a
   non-matching grep breaks the `&&` chain and the commit silently doesn't run.
   Run the gate, then commit as a separate step.
@@ -203,7 +245,14 @@ rule:
   "shape" = a sign flip between adjacent bases (→ `주간/월중 되돌림`). The
   principle is owner-set (never restate a visible column); the exact cutoffs
   were the implementer's call.
-- **Volatility** — still placeholder; awaiting an owner-provided formula.
+- **Volatility = relative ATR [Session 14, built].** `mean(ATR 5)/mean(ATR 60)`,
+  close-only form `TR=|Δr|` bp (the export has no intraday high/low). Exposed on
+  the tenor set; the transform is generic over any series id. **Implementer's
+  calls to confirm:** warm-up = 65 observations, denominator floor = 0.05 bp on
+  the 60-obs mean. Recorded in DESIGN §4/§6/`## Provisional`.
+- **Computation boundary (§16) is now enforced** — if you add a row field,
+  declare it `dto|format` in `ROW_FIELD_SOURCE` or the guard fails. Anything
+  that needs a calculation goes in the backend.
 
 ---
 
