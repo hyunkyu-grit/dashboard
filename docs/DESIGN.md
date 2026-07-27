@@ -323,7 +323,7 @@ places. Each channel still has exactly one meaning, app-wide:
 | Ink opacity    | Time basis (ramp, see §9)                 |
 | Line width     | Time basis (secondary, disambiguates ramp)|
 | Text weight 600| **Structure** — the row anchors (instrument name + `현재` level), NOT outliers (§ revised Session 15) |
-| Color intensity (alpha) | **Outlier magnitude vs the series' OWN history** (own-history percentile, §16). Built Session 16 §J with two ceilings on one scale: change columns **0.04** (binary — tint the cell bg on an outlier, never the coloured glyph; 0.04 not 0.12 — see `## Provisional`); forward matrix 0.45 (graded pct70→pct97, ink on tint). The matrix dropped its cross-sectional grid-max, which lit 96–99% of cells. |
+| Color intensity (alpha) | **Outlier magnitude vs the series' OWN history** (own-history percentile, §16). Forward matrix: a graded background wash, pct70→floor..pct97→**0.45**, ink on tint (dropped the cross-sectional grid-max, which lit 96–99% of cells). Change columns: NO background fill — the number is coloured text and a fill can't clear its contrast; the outlier cue is a **leading-edge rule** (`columnCue`, final §B), full hue, off the glyph. |
 | Cell border    | Structural: live-quoted (non-interpolated) point |
 | Marker dot     | Live-quoted node on charts                |
 | Mini-bar       | Delta sign+magnitude in tables (center-zero, right=+, left=−) |
@@ -847,13 +847,13 @@ Confirm or override.
   zoom, so its min/max/avg ARE the full history and are labelled **`10년`**. The
   popup zooms, so its stats follow the **visible range** (recompute on zoom) and
   are labelled **`구간`** — genuinely selectable there.
-- **Change-column tint ceiling = 0.04, not 0.12 [Session 16 §J].** The coloured
-  change number sits ON its own faint wash in the same hue; a 0.12 wash drops
-  the up-red from 4.78:1 to 3.99:1 (below the 4.5 text floor — the exact defect
-  the guard exists to catch). 0.04 is the measured max that keeps the glyph
-  legible (`tint-contrast.test.ts`). The matrix's 0.45 ceiling is unaffected
-  because its text is ink, not the hue. Owner may raise it only by moving the
-  outlier signal off the same-hue wash (e.g. a border, or a neutral wash).
+- **RESOLVED [final §B] — change-column outlier cue is a leading-edge rule, not
+  a fill.** Session 16 §J tried a same-hue background wash and had to cap it at
+  0.04 to keep the coloured number ≥4.5:1 — but 0.04 (≈#fef8f8) is invisible, so
+  it marked nothing. A fill behind coloured text can never work here. The cue
+  is now a 3px leading-edge rule (`columnCue`) in the direction hue, off the
+  glyph, with no fill. The matrix's 0.45 wash stays (its text is ink). Moved to
+  §5.
 - **Pin clears on tab change [Session 16 §I].** A pinned row from another tab
   was showing silently in the preview. Of the two offered cures — clear the pin,
   or keep it and mark which tab it belongs to — the pin is **cleared** on a tab

@@ -22,7 +22,7 @@ import {
   type Row,
 } from "./rows";
 import { SCREENERS } from "./screener";
-import { columnTint } from "./tint";
+import { columnCue } from "./tint";
 
 const BASIS_HEAD: Record<BasisKey, string> = {
   d1: "어제",
@@ -100,11 +100,12 @@ function TableRow({
       {BASIS_ORDER.map((b) => (
         <td
           key={b}
-          // binary own-history tint on the live 어제 column only (§J): an
-          // outlier day gets a faint background; the number keeps full hue.
+          // own-history outlier cue on the live 어제 column only (§B): an
+          // outlier day gets a leading-edge rule (not a fill — a fill behind
+          // the coloured number can't clear contrast). Number keeps full hue.
           style={
             b === "d1"
-              ? columnTint(row.movePct, (row.changes.d1 ?? 0) > 0)
+              ? columnCue(row.movePct, (row.changes.d1 ?? 0) > 0)
               : undefined
           }
           className={`pr-3 text-right tabular-nums ${dirClass(row.changes[b])}`}

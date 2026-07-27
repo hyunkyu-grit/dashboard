@@ -1,18 +1,21 @@
-/* Guard (§J): the own-history tint has two ceilings, and BOTH must stay legible
- * — a ceiling that passes in one context and fails in the other is the defect
- * class E1 just cleaned up. Checked here:
- *   1. Forward matrix — INK on the 0.45 graded tint of a direction hue ≥ 4.5:1.
- *   2. Change columns — the direction hue AS TEXT on a 0.12 tint of its OWN hue
- *      ≥ 4.5:1. (This is why alpha never touches the glyph and the column tint
- *      is capped low: a coloured number on a faint wash of its own colour must
- *      still clear the text floor.)
+/* Guard (§J / final §B): the forward-matrix tint uses INK on a background wash,
+ * so the darkest tint (0.45) must still leave ink ≥ 4.5:1.
+ *
+ * SCOPE NOTE — the CHANGE COLUMNS carry NO background fill, by design (final
+ * §B). Their number is coloured TEXT at full strength; a fill behind it
+ * competes with the very contrast this guard protects, and the largest fill
+ * that keeps the text legible (~0.04) is invisible. The outlier cue there is a
+ * leading-edge rule (`columnCue`), off the glyph, so there is no
+ * text-on-own-hue-tint case to guard. Do NOT re-add a change-column fill and a
+ * matching assertion — that was tried (0.12 → 0.04 → removed).
+ *
  * Hex is read from tokens.css. */
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { COLUMN_TINT, MATRIX_FULL } from "../src/ui/tint";
+import { MATRIX_FULL } from "../src/ui/tint";
 
 const css = readFileSync(
   join(__dirname, "..", "src", "theme", "tokens.css"),
@@ -63,14 +66,3 @@ describe("matrix ceiling: ink stays ≥4.5:1 on the 0.45 graded tint (§J)", () 
   }
 });
 
-describe("column ceiling: direction text stays ≥4.5:1 on a 0.12 tint of its own hue (§J)", () => {
-  for (const [name, block] of themes) {
-    for (const dir of dirs) {
-      it(`${name} ${dir}`, () => {
-        const fg = hex(block, dir);
-        const bg = blend(fg, COLUMN_TINT, hex(block, "--bw-tile"));
-        expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
-      });
-    }
-  }
-});
