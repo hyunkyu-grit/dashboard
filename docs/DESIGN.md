@@ -284,13 +284,18 @@ it is now the filter-chip set, not physical bands.
 
 ## 3. Global chrome
 
-- **Top status strip** (always visible): data timestamps, connection state,
-  the global comparison-basis selector (Now/D-1/WTD/MTD/QTD/YTD — one control
-  that re-bases every delta representation on the wall), compact risk summary
-  numbers (total DV01, day P&L — exact set [TBD], leave a slot), theme toggle.
-- **Bottom change log**: outlier events append as single lines; clicking a
-  line pans the viewport to that tile. This is how off-screen anomalies are
-  surfaced. Also the entry point for scenario/trade-log features later.
+- **Header band** (full-bleed chrome, §H — this replaced the "top status strip"
+  in the list-first redesign): the Sauron / KRW IRS wordmark, the change-log
+  trigger, the **data-freshness indicator** (Pass C — the "data timestamps" this
+  bullet once promised, now with business-day staleness), and the theme toggle.
+  The global comparison-basis selector was **deleted** (§4). Compact risk
+  numbers (total DV01, day P&L) remain **Band 3 / [TBD]** — owner-gated, a slot
+  only.
+- **Change log** [surfaced as a header POPOVER, Pass D — not a bottom strip; the
+  list-first shell gives its vertical space to the table]: outlier-event
+  clusters as single lines; clicking a line focuses that instrument (switch to
+  its tab, pin, pan) via the tile registry. This is how off-screen anomalies are
+  surfaced. Empty by design ~31% of days.
 - **Command bar**: hidden by default; `/` or Cmd+K summons it. Typing a series
   name ("5y", "3s10s", "1yf") pans to that tile. No menu navigation anywhere.
 - **Home key**: one keystroke returns the viewport to the wall origin.
@@ -673,11 +678,10 @@ EVENTS.** States belong on the tile, events belong in the log.
   the extreme percentile band (`pct ≥ 95` or `pct ≤ 5`, constant
   `OUTLIER_PCT = 95`) keeps its weight-600 treatment on the tile. This is a
   persistent condition and never appears in the log.
-- **Event detection is fixed to the D-1 basis**, decoupled from the global
-  comparison-basis selector — the log reads the same regardless of what the
-  selector shows. The selector therefore offers only the five non-trivial
-  comparison bases (D-1, WTD, MTD, QTD, YTD); "Now" is dropped from the
-  selector (it is still one of the six time-basis ramp curves in §9).
+- **Event detection is fixed to the D-1 basis.** It always reads "what changed
+  since the previous business day," independent of any comparison basis shown
+  elsewhere. (The global comparison-basis selector this once coordinated with was
+  removed in the list-first redesign, §4 — the fixed D-1 basis stands on its own.)
 - **An event fires when either** (rule (c)):
   - (a) **Transition** — the series crosses INTO the extreme percentile band,
     or exits it, relative to the previous business day (point-in-time
@@ -689,11 +693,13 @@ EVENTS.** States belong on the tile, events belong in the log.
   independent spread dimensions, correlated firings are collapsed by
   union-find over shared tenor legs into one line per cluster: a leading
   series plus "연관 N건" that expands on click. Expanded rows remain
-  individually clickable and pan to their tiles.
-- **Visible cap = 12** entries; older entries scroll. Chosen from the Pass A
-  500-day replay of rule (c): p90 = 2 collapsed lines/day, max = 12 — the cap
-  holds even the worst replayed day without dropping an event, while typical
-  days use a fraction of it.
+  individually clickable and focus their instrument (switch tab, pin, pan).
+- **No hard visible cap [implemented Pass D].** The popover renders every
+  cluster and scrolls (`max-h-[70vh]`); a numeric cap proved unnecessary because
+  rule (c)'s own distribution keeps the list short — p90 = 2 collapsed lines/day,
+  max = 12 over the 500-day replay, so even the worst day fits without dropping
+  an event. (The earlier spec proposed a cap of 12; the scroll container makes
+  it moot and can never silently drop an event.)
 
 Replay of rule (c) over the last 500 business days: median 1, p90 2, max 12,
 empty on 153/500 days — a log that can be empty, unlike the prior rule

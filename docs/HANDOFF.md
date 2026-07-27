@@ -133,9 +133,12 @@ rule:
 
 - **Monochrome-first (§5):** every encoding must work in grayscale; hue only
   layers on. **Only directional numbers take hue; levels stay ink.**
-- Colors: up `#F04452` / down `#0064FF` (Toss convention, red=up), line-safe
-  orange for chart strokes, `#F58220` filled for the primary action, **ink** for
-  selection/focus/pulse.
+- Colors: up `#d92d3c` / down `#0064FF` (Toss convention, red=up; up deepened
+  from `#f04452` in S15 E1 so change TEXT clears 4.5:1). **Chart line is BLUE**
+  (`#0064ff` light / `#4c93ff` dark, S16 E) — orange returned to
+  action/selection/focus (`#F58220` filled, `--bw-interactive`). Levels stay ink.
+  All values live only in `theme/tokens.css`; the dark theme substitutes lighter
+  variants (see that file).
 - **No elevation / no floating cards** (S13). Depth = surface steps + hairlines.
   The single sanctioned drop-shadow is the chart tooltip overlay.
 - **Volatility is built** [Session 14] — relative ATR (mean ATR 5 / mean ATR
@@ -160,25 +163,40 @@ rule:
 
 ---
 
-## 6. Current state (as of the closing / validation session, 2026-07-27)
+## 6. Current state (as of the closing session, part 2 — Passes A–F, 2026-07-27)
 
-- **HEAD** = the closing-session Pass A commit (`91f216c`+) on `master`,
-  mirrored to D:. See `docs/STATE.md` for the full works-verified / works-
-  unverified / missing boundary.
-- Gates: FE **57 vitest**, backend **60 pass / 1 skip / 1 xfail** (the skip is
-  the reference-sheet harness awaiting a file; the xfail is the documented
-  round-trip finding), build+lint clean.
-- **NUMBERS VALIDATED for the first time (Pass A).** Internal consistency is
-  proven (forward-annuity identity exact to 1e-17; DFs sound; derived agree; no
-  calendar blowup). **Defined stop hit:** the bootstrap does not reprice its own
-  par inputs to 1e-8 — a ≤0.25bp fit residual on swap tenors, exact at 1D/3M,
-  in **frozen** `engine_port.bootstrap_zero_curve` (not a convention error; the
-  annuity identity proves derived quantities are exact). Per the session's A1
-  rule the closing session STOPPED after reporting; **Passes B–F were not run**
-  (dark-mode/live checks, orphaned change log, stale-data loudness, key-forward
-  gauges). See `docs/CONVENTIONS.md` and `docs/diagnostics/curve-validation.md`.
-  Owner's call: accept ≤0.25bp or commission an iterated bootstrap re-port; and
-  run Pass A2 by dropping a sheet into `data/reference/`.
+- **HEAD** = the closing-session-2 Pass F commit on `master`, mirrored to D:.
+  See `docs/STATE.md` for the full works-verified / works-unverified / known-
+  accepted / missing boundary.
+- Gates: FE **54 vitest** (the prior handoff's "57" was a miscount — the suite
+  has been 54 all session), backend **68 pass / 1 skip / 1 xfail** (skip = the
+  reference-sheet harness awaiting a file; xfail = the documented, now
+  owner-accepted round-trip finding), build+lint clean.
+- **This session ran A–F end to end** (the earlier closing session stopped at A1;
+  the owner has now decided). One commit per pass, mirrored:
+  1. **A — accepted residual recorded.** The owner accepted the ≤0.25bp
+     bootstrap round-trip residual (frozen code, not re-ported). The strict
+     `xfail` now documents an accepted limitation; `CONVENTIONS.md` + `STATE.md`
+     record what it does (level reads) and doesn't (change columns cancel)
+     affect, and that byte-identical krw-fi-pms carries it too.
+  2. **B — first live browser look.** Dark mode across every surface,
+     single-column bottom-sheet fallback, deep-zoom heatmap rebucketing, candles
+     never comb (interval user-chosen, no auto step-up), quiet-day tint reads
+     clean (own-history percentile floor). No defect found.
+  3. **C — stale data made loud.** `staleness.py` + `/api/health` freshness;
+     header chip scales with KR-business-day age (quiet / visible / red words).
+     README documents the manual refresh.
+  4. **D — change log surfaced** (`ui/ChangeLog.tsx`): header popover on the
+     events rule with 연관 N건 expansion + click-to-focus. Chosen over deletion
+     (the rule is good; surfacing was the orphaned Pass B of the diagnostic).
+  5. **E — key-forward gauges** (10y min→max track + marker + percentile, accent
+     at the tails; backend `range10y`) and the shared **tint legend**
+     (`ui/TintLegend.tsx`, matrix + heatmap). E1 also removed the per-basis LEVEL
+     columns that shared the table's change-column headers.
+  6. **F — this handover.**
+- **Still the owner's call:** run **Pass A2** (drop a forward-matrix sheet into
+  `data/reference/`) — the only external correctness check, never run. The
+  bootstrap re-port is now closed (accepted).
 
 ### Earlier — the preceding session landed 5 passes (A–E):
 
@@ -337,11 +355,17 @@ rule:
   "shape" = a sign flip between adjacent bases (→ `주간/월중 되돌림`). The
   principle is owner-set (never restate a visible column); the exact cutoffs
   were the implementer's call.
-- **Volatility = relative ATR [Session 14, built].** `mean(ATR 5)/mean(ATR 60)`,
-  close-only form `TR=|Δr|` bp (the export has no intraday high/low). Exposed on
-  the tenor set; the transform is generic over any series id. **Implementer's
-  calls to confirm:** warm-up = 65 observations, denominator floor = 0.05 bp on
-  the 60-obs mean. Recorded in DESIGN §4/§6/`## Provisional`.
+- **Volatility = relative ATR [Session 14, built; constants SETTLED final
+  session].** `mean(ATR 5)/mean(ATR 60)`, close-only form `TR=|Δr|` bp (the
+  export has no intraday high/low). Generic over any series id. Constants are no
+  longer "to confirm": **warm-up = 61 observations** (the mathematical minimum,
+  corrected from 65) and **denominator floor = 0.1 bp** on the 60-obs mean
+  (raised from 0.05 to trim the divide-by-near-zero tail). Recorded in DESIGN
+  `## Provisional`. Open only: whether the tab is *useful* (unreviewed by a user).
+- **This session's features are CONFIRMED (Passes C–E), not provisional:**
+  stale-data freshness, the change-log popover, the key-forward gauges, and the
+  tint legend — all built, gated, and verified live. See DESIGN's "Settled
+  decisions" for each.
 - **Computation boundary (§16) is now enforced** — if you add a row field,
   declare it `dto|format` in `ROW_FIELD_SOURCE` or the guard fails. Anything
   that needs a calculation goes in the backend.
