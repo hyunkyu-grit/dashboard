@@ -9,6 +9,7 @@ import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import type { EventCluster } from "@/lib/api";
 import {
   fetchForwards,
   fetchHealth,
@@ -17,6 +18,9 @@ import {
 } from "@/lib/api";
 import { syncUiFromDom, useUiStore } from "@/state/ui";
 import { CommandBar } from "@/wall/CommandBar";
+import { getTile } from "@/wall/tileRegistry";
+
+import { ChangeLog } from "./ChangeLog";
 
 import { ERROR_SENTENCE, LOADING_SENTENCE } from "./copy";
 import { CurveView } from "./CurveView";
@@ -124,7 +128,13 @@ function DataFreshness() {
   );
 }
 
-function Header() {
+function Header({
+  events,
+  onFocus,
+}: {
+  events: EventCluster[];
+  onFocus: (id: string) => void;
+}) {
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
   // Full-bleed chrome band (§H, Session 16): full window width, its own band at
@@ -135,6 +145,7 @@ function Header() {
       <span className="text-[17px] font-bold text-brand">Sauron</span>
       <span className="text-[13px] opacity-45">KRW IRS</span>
       <span className="flex-1" />
+      <ChangeLog events={events} onFocus={onFocus} />
       <DataFreshness />
       <button
         type="button"
@@ -252,6 +263,26 @@ export function App() {
     el.scrollIntoView({ behavior: "smooth", block: "center" });
   }, []);
 
+  // Change-log line → focus (§3/§12): switch to the instrument's OWN group tab
+  // (전체 lists spreads/flies far down; its own tab puts it up top), pin it (the
+  // preview / bottom sheet follows), and pan the table to it. The pan is a
+  // double-rAF after the state updates so the tab switch has committed and the
+  // target row has laid out + registered its tile element (§3).
+  const focusFromChangeLog = useCallback(
+    (id: string) => {
+      const row = rows.find((r) => r.id === id);
+      if (!row) return;
+      setTab(row.group);
+      setPinned(row);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() =>
+          getTile(id)?.el.scrollIntoView({ behavior: "smooth", block: "center" }),
+        ),
+      );
+    },
+    [rows],
+  );
+
   const wide = useIsWide();
   const [paneRef, paneW, paneH] = useMeasure<HTMLDivElement>();
 
@@ -267,7 +298,7 @@ export function App() {
         the row hairlines. Card radius survives only where something floats (the
         popup + the chart tooltip). */}
     <div className="flex h-screen flex-col overflow-hidden bg-tile">
-        <Header />
+        <Header events={summary?.events ?? []} onFocus={focusFromChangeLog} />
 
         {isError && (
           <p className="p-10 text-center text-[15px] opacity-60">

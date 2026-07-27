@@ -857,6 +857,26 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
     region of the curve heatmap, which reads near-blank as intended. No as-of
     selector exists to replay a calm date on the main matrix (single-snapshot
     design), so the calm behaviour was verified on the shared heatmap scale.
+- **RESOLVED [closing session, part 2, Pass D] — the change log is surfaced,
+  not deleted.** The events rule (`backend/app/events.py`) is candidate (c) from
+  the Session-11 500-day replay (`docs/diagnostics/changelog-firing.md`): band
+  transition ∪ own-Δ percentile, correlation-collapsed, owner-confirmed. It is a
+  good rule — frequently empty (~31% of days silent), p90 = 2 leading lines — so
+  the answer to "surface or delete" is **surface**: the diagnostic explicitly
+  anticipated a surfacing pass ("Pass B", a cap "recorded in DESIGN §12") that
+  the list-first redesign orphaned, not abandoned. The surface is
+  `ui/ChangeLog.tsx`: a compact **popover off the header** (not a permanent
+  strip — the list-first shell gives vertical space to the table), reading
+  `summary.events`. Each cluster shows its leading line with reason chips
+  (구간 전환 / 큰 변동), an expandable **연관 N건** revealing the correlated lines,
+  and **click-to-focus** — a line switches to the instrument's own group tab,
+  pins it (preview / bottom sheet follows), and pans the table to it via the
+  tile registry (§3), the same routing the command bar uses. The empty state is
+  itself information (변화 없음 / "조용한 하루"), so the trigger is always present
+  and shows the cluster count. No cap constant was needed: the rule's own p90 = 2
+  keeps the list short; the popover scrolls if a rare burst day (replay max 12)
+  arrives. Verified live (2 clusters on 2026-07-24: a 1.5Y/3Y band transition
+  + the genuine 1D +12.5bp move).
 - **RESOLVED [closing session, part 2, Pass C] — the product measures its own
   staleness.** `data/irsdata.xlsx` is a static snapshot and there is no feed, so
   without this the app shows yesterday's curve as today's silently — this

@@ -164,4 +164,10 @@ is set in Pass B and recorded in `DESIGN §12`.
 
 ---
 
-*Awaiting owner confirmation of the rule before implementing Pass B.*
+*Rule (c) was confirmed and implemented (`backend/app/events.py`,
+owner-confirmed 2026-07-24). The surfacing pass this doc calls "Pass B" was
+orphaned when the list-first redesign removed the change-log surface, then
+completed in the closing session (part 2, Pass D): `ui/ChangeLog.tsx`, a header
+popover with 연관 N건 expansion and click-to-focus. No numeric cap was added —
+the rule's p90 = 2 keeps the list short and the popover scrolls on a rare burst
+day. See DESIGN §12 / "Settled decisions".*
