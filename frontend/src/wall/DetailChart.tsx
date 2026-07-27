@@ -1,20 +1,24 @@
 "use client";
 
-/* Full-resolution stage-2 history chart (design spec §11/§12; §C/§F Session 16).
+/* Full-resolution stage-2 history chart (design spec §11/§12; §C/§F/§G S16).
  *
- * lightweight-charts is used ONLY here, inside the popup — never per wall tile.
- * Canvas cannot resolve CSS custom properties, so every colour is resolved to
- * hex through the theme bridge and the options object is run past
- * assertNoCssVars() before it touches the chart.
+ * lightweight-charts is used ONLY here, inside the popup. Canvas cannot resolve
+ * CSS custom properties, so every colour is resolved to hex through the theme
+ * bridge and options run past assertNoCssVars().
  *
- * The popup is a SUPERSET of the preview (§C, guarded): a crosshair, a floating
- * tooltip (날짜 · 레벨 · 구간 최고/최저/평균 · 당일 변화), a last-value badge, and
- * — because the popup zooms — range statistics that follow the VISIBLE window
- * and recompute on zoom (§F; the preview, which cannot zoom, shows the full 10y
- * and labels it 10년). The readout set is declared in ui/readouts.ts.
+ * Two chart types (§G): a blue LINE, or weekly/monthly CANDLES aggregated
+ * server-side from closes. The tooltip changes shape with the type — line shows
+ * 날짜·레벨·구간 최고/최저/평균·당일 변화 (a superset of the preview, §C);
+ * candles show 날짜·시가·고가·저가·종가·등락률. Candle bodies use the domestic
+ * 상승 빨강 / 하락 파랑 convention (§9), never the line blue.
+ *
+ * assertDomainRendered guards both, and a candle chart additionally asserts the
+ * rendered domain spans every supplied bar — a silently dropped bar is worse on
+ * a candle chart than a line, because the picture still looks fine.
  */
 
 import {
+  CandlestickSeries,
   createChart,
   LineSeries,
   type IChartApi,
@@ -24,24 +28,32 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
-import { API_BASE, type HistoryPoint, type Unit } from "@/lib/api";
+import {
+  API_BASE,
+  type CandlesPayload,
+  fetchCandles,
+  type HistoryPoint,
+  type Interval,
+  type OhlcBar,
+  type Unit,
+} from "@/lib/api";
 import { fmtDelta, fmtLevel } from "@/lib/format";
 import {
   assertNoCssVars,
   onThemeChange,
+  resolveDirection,
   resolveLine,
   resolveTheme,
 } from "@/theme/bridge";
 import { assertDomainRendered } from "@/theme/domainGuard";
 
-interface SeriesDetail {
-  id: string;
-  asof: string;
-  unit: Unit;
+export type ChartType = "line" | Interval;
+
+interface LineDetail {
   points: HistoryPoint[];
 }
 
-async function fetchSeries(id: string): Promise<SeriesDetail> {
+async function fetchLine(id: string): Promise<LineDetail> {
   const res = await fetch(`${API_BASE}/api/series/${encodeURIComponent(id)}?res=full`);
   if (!res.ok) throw new Error(`series ${id}: HTTP ${res.status}`);
   return res.json();
@@ -69,49 +81,56 @@ interface Stats {
 }
 interface Hover {
   t: string;
-  v: number;
-  d: number | null;
   x: number;
   y: number;
+  v?: number;
+  d?: number | null;
+  bar?: OhlcBar;
 }
 
 export function DetailChart({
   id,
   unit,
+  chartType,
   width,
   height,
 }: {
   id: string;
   unit: Unit;
+  chartType: ChartType;
   width: number;
   height: number;
 }) {
+  const isCandle = chartType !== "line";
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Line" | "Candlestick"> | null>(null);
   const [themeTick, setThemeTick] = useState(0);
   const [hover, setHover] = useState<Hover | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
 
-  const { data, isError } = useQuery({
-    queryKey: ["series", id, "full"],
-    queryFn: () => fetchSeries(id),
+  const { data, isError } = useQuery<CandlesPayload | LineDetail>({
+    queryKey: ["chart", id, chartType],
+    queryFn: (): Promise<CandlesPayload | LineDetail> =>
+      isCandle ? fetchCandles(id, chartType as Interval) : fetchLine(id),
     staleTime: 30_000,
   });
 
   useEffect(() => onThemeChange(() => setThemeTick((n) => n + 1)), []);
 
-  // Refs so the chart subscriptions (created once, before data loads) always
-  // read the LATEST points rather than a stale closure — the stats handler
-  // otherwise clobbers to null when fitContent fires with empty data.
+  // refs so the once-created subscriptions always read the latest data
   const dByTime = useRef<Map<string, number | null>>(new Map());
-  const pointsRef = useRef<HistoryPoint[]>([]);
+  const barByTime = useRef<Map<string, OhlcBar>>(new Map());
+  const linePointsRef = useRef<HistoryPoint[]>([]);
   useEffect(() => {
-    pointsRef.current = data?.points ?? [];
-    dByTime.current = new Map((data?.points ?? []).map((p) => [p.t, p.d]));
+    if (data && "points" in data) {
+      linePointsRef.current = data.points;
+      dByTime.current = new Map(data.points.map((p) => [p.t, p.d]));
+    } else if (data && "bars" in data) {
+      barByTime.current = new Map(data.bars.map((b) => [b.t, b]));
+    }
   }, [data]);
 
-  // range stats over the currently VISIBLE window (§F): recompute on zoom
   function statsForRange(points: HistoryPoint[], range: LogicalRange | null): Stats | null {
     if (points.length === 0) return null;
     const lo = range ? Math.max(0, Math.ceil(range.from)) : 0;
@@ -122,10 +141,9 @@ export function DetailChart({
     let sum = 0;
     let n = 0;
     for (let i = lo; i <= hi; i++) {
-      const v = points[i].v;
-      mn = Math.min(mn, v);
-      mx = Math.max(mx, v);
-      sum += v;
+      mn = Math.min(mn, points[i].v);
+      mx = Math.max(mx, points[i].v);
+      sum += points[i].v;
       n++;
     }
     return n ? { min: mn, max: mx, avg: sum / n } : null;
@@ -135,34 +153,51 @@ export function DetailChart({
     const el = containerRef.current;
     if (!el) return;
     const chart = createChart(el, buildOptions(width, height));
-    const seriesOptions = {
-      color: resolveLine(), // blue (§9 Pass E)
-      lineWidth: 2 as const,
-      priceLineVisible: false,
-      lastValueVisible: true, // the last-value badge (§C readout)
-    };
-    assertNoCssVars(seriesOptions);
-    const series = chart.addSeries(LineSeries, seriesOptions);
+
+    let series: ISeriesApi<"Line" | "Candlestick">;
+    if (isCandle) {
+      const up = resolveDirection(true); // 상승 빨강
+      const down = resolveDirection(false); // 하락 파랑
+      const opts = {
+        upColor: up,
+        downColor: down,
+        borderUpColor: up,
+        borderDownColor: down,
+        wickUpColor: up,
+        wickDownColor: down,
+      };
+      assertNoCssVars(opts);
+      series = chart.addSeries(CandlestickSeries, opts);
+    } else {
+      const opts = { color: resolveLine(), lineWidth: 2 as const, priceLineVisible: false, lastValueVisible: true };
+      assertNoCssVars(opts);
+      series = chart.addSeries(LineSeries, opts);
+    }
     chartRef.current = chart;
     seriesRef.current = series;
 
     chart.subscribeCrosshairMove((param) => {
-      const pt = param.time as string | undefined;
-      if (!pt || !param.point) {
+      const t = param.time as string | undefined;
+      if (!t || !param.point) {
         setHover(null);
         return;
       }
-      const sd = param.seriesData.get(series) as { value?: number } | undefined;
-      if (sd?.value == null) {
-        setHover(null);
-        return;
+      if (isCandle) {
+        const bar = barByTime.current.get(t);
+        if (!bar) return setHover(null);
+        setHover({ t, x: param.point.x, y: param.point.y, bar });
+      } else {
+        const sd = param.seriesData.get(series) as { value?: number } | undefined;
+        if (sd?.value == null) return setHover(null);
+        setHover({ t, x: param.point.x, y: param.point.y, v: sd.value, d: dByTime.current.get(t) ?? null });
       }
-      setHover({ t: pt, v: sd.value, d: dByTime.current.get(pt) ?? null, x: param.point.x, y: param.point.y });
     });
 
-    const ts = chart.timeScale();
-    const onRange = (r: LogicalRange | null) => setStats(statsForRange(pointsRef.current, r));
-    ts.subscribeVisibleLogicalRangeChange(onRange);
+    if (!isCandle) {
+      chart
+        .timeScale()
+        .subscribeVisibleLogicalRangeChange((r) => setStats(statsForRange(linePointsRef.current, r)));
+    }
 
     return () => {
       chart.remove();
@@ -170,21 +205,37 @@ export function DetailChart({
       seriesRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width, height, themeTick, id]);
+  }, [width, height, themeTick, id, chartType]);
 
   useEffect(() => {
-    if (!data || !seriesRef.current) return;
-    seriesRef.current.setData(data.points.map((p) => ({ time: p.t, value: p.v })));
-    const ts = chartRef.current?.timeScale();
-    ts?.fitContent();
-    setStats(statsForRange(data.points, null));
-    const raf = requestAnimationFrame(() => {
-      if (!chartRef.current || data.points.length === 0) return;
-      assertDomainRendered(
-        chartRef.current.timeScale().getVisibleLogicalRange(),
-        data.points.length,
-        { first: data.points[0].t, last: data.points[data.points.length - 1].t },
+    if (!data || !seriesRef.current || !chartRef.current) return;
+    let count = 0;
+    let first = "";
+    let last = "";
+    if ("bars" in data) {
+      const bars = data.bars;
+      seriesRef.current.setData(
+        bars.map((b) => ({ time: b.t, open: b.o, high: b.h, low: b.l, close: b.c })),
       );
+      count = bars.length;
+      first = bars[0]?.t ?? "";
+      last = bars[bars.length - 1]?.t ?? "";
+    } else {
+      const pts = data.points;
+      seriesRef.current.setData(pts.map((p) => ({ time: p.t, value: p.v })));
+      // stats are set by the visible-range subscription, which fitContent below
+      // fires (empty → full) — no synchronous setState in this effect.
+      count = pts.length;
+      first = pts[0]?.t ?? "";
+      last = pts[pts.length - 1]?.t ?? "";
+    }
+    chartRef.current.timeScale().fitContent();
+    const raf = requestAnimationFrame(() => {
+      const c = chartRef.current;
+      if (!c || count === 0) return;
+      // domain guard (both types) — the candle chart's silently-dropped-bar
+      // failure is exactly this: the rendered domain must span every bar (§G).
+      assertDomainRendered(c.timeScale().getVisibleLogicalRange(), count, { first, last });
     });
     return () => cancelAnimationFrame(raf);
   }, [data, themeTick]);
@@ -197,24 +248,51 @@ export function DetailChart({
     );
   }
 
+  const tip = renderTip(hover, stats, unit, isCandle);
   return (
     <div className="relative" style={{ width, height }}>
       <div ref={containerRef} style={{ width, height }} />
-      {hover && stats && (
+      {tip && (
         <div
           className="pointer-events-none absolute z-10 rounded-[8px] bg-popover p-2 text-[12px] shadow-lg"
-          style={{ left: Math.min(width - 150, hover.x + 12), top: Math.max(4, hover.y - 40), width: 140 }}
+          style={{ left: Math.min(width - 150, hover!.x + 12), top: Math.max(4, hover!.y - 40), width: 140 }}
         >
-          <div className="mb-1 font-semibold">{hover.t}</div>
-          <Row k="레벨" v={fmtLevel(hover.v, unit)} />
-          <Row k="구간 최고" v={fmtLevel(stats.max, unit)} />
-          <Row k="구간 최저" v={fmtLevel(stats.min, unit)} />
-          <Row k="구간 평균" v={fmtLevel(stats.avg, unit)} />
-          <Row k="당일 변화" v={fmtDelta(hover.d, unit)} />
+          {tip}
         </div>
       )}
     </div>
   );
+}
+
+function renderTip(hover: Hover | null, stats: Stats | null, unit: Unit, isCandle: boolean) {
+  if (!hover) return null;
+  if (isCandle && hover.bar) {
+    const b = hover.bar;
+    const chg = b.o !== 0 ? ((b.c - b.o) / b.o) * 100 : 0;
+    return (
+      <>
+        <div className="mb-1 font-semibold">{hover.t}</div>
+        <Row k="시가" v={fmtLevel(b.o, unit)} />
+        <Row k="고가" v={fmtLevel(b.h, unit)} />
+        <Row k="저가" v={fmtLevel(b.l, unit)} />
+        <Row k="종가" v={fmtLevel(b.c, unit)} />
+        <Row k="등락률" v={`${chg >= 0 ? "+" : "−"}${Math.abs(chg).toFixed(2)}%`} />
+      </>
+    );
+  }
+  if (!isCandle && hover.v != null && stats) {
+    return (
+      <>
+        <div className="mb-1 font-semibold">{hover.t}</div>
+        <Row k="레벨" v={fmtLevel(hover.v, unit)} />
+        <Row k="구간 최고" v={fmtLevel(stats.max, unit)} />
+        <Row k="구간 최저" v={fmtLevel(stats.min, unit)} />
+        <Row k="구간 평균" v={fmtLevel(stats.avg, unit)} />
+        <Row k="당일 변화" v={fmtDelta(hover.d ?? null, unit)} />
+      </>
+    );
+  }
+  return null;
 }
 
 function Row({ k, v }: { k: string; v: string }) {

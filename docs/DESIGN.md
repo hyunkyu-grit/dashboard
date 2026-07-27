@@ -227,6 +227,15 @@ drag dismiss; `?tile=series:<id>` keeps working).
 
 - Large chart, full history, plus a **segmented control exposing all six time
   bases** — the full opacity ramp lives here now.
+- **Chart type: 선 · 주봉 · 월봉 [Session 16 §G].** A selector in the popup
+  (line only in the preview — candles need width it lacks). Closes-only data
+  means a true daily candle is impossible (open would equal close), so no 일봉;
+  candles aggregate closes into weekly/monthly OHLC **server-side** (`?interval=
+  w|m`, §16). Bodies use 상승 빨강 / 하락 파랑 (direction tokens, not the line
+  blue, §9). The tooltip changes with the type: line → 레벨 · 당일 변화; candle
+  → 시가 · 고가 · 저가 · 종가 · 등락률. Chart type lives in the URL (`?type=`).
+  `assertDomainRendered` applies to candles too, and the rendered domain must
+  span every supplied bar — a silently dropped bar is worse on a candle chart.
 - A block beneath the chart naming and explaining the instrument (§C1): a
   subtitle plus two or three 합니다체 sentences keyed to its kind.
 - **DV01-neutral leg weights [Session 16 §B].** Curve trades are executed
@@ -794,6 +803,13 @@ all arrive precomputed — the browser never differences a series.
 Choices made to keep the build green where the prompt did not fully specify.
 Confirm or override.
 
+- **Candle interval step-up not needed at current densities [Session 16 §G].**
+  Ten years is ~550 weekly or ~130 monthly bars; both fit the popup's ~900px at
+  minBarSpacing 0.05 without dropping bars, so the auto-step-up to a coarser
+  interval never engages here. The safety is the bar-count / domain assertion
+  (`assertDomainRendered` on the candle series): a dropped bar throws loudly
+  rather than showing a plausible-looking wrong picture. Add the step-up if a
+  much narrower popup or a finer interval is ever introduced.
 - **`당일 변화 +0.0` diagnosis [Session 16 §F].** Not a bug in `d`. On
   2022-11-28 `ONx9M` genuinely moved +0.01bp (4.0584→4.0585) — `d` matched the
   true one-observation change exactly, and downsampling preserves it (`d` is

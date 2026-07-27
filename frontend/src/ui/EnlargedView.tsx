@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchDv01, type WallSummary } from "@/lib/api";
 import { dirClass, fmtBp, fmtRate } from "@/lib/format";
 import { BASIS_LABELS, TIME_BASES, type TimeBasis } from "@/theme/ramp";
-import { DetailChart } from "@/wall/DetailChart";
+import { DetailChart, type ChartType } from "@/wall/DetailChart";
 
 import { ERROR_SENTENCE } from "./copy";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -119,7 +119,52 @@ function StrategyRegion() {
   );
 }
 
-function Body({ row, summary }: { row: Row; summary: WallSummary }) {
+const CHART_TYPES: { id: ChartType; label: string }[] = [
+  { id: "line", label: "선" },
+  { id: "w", label: "주봉" },
+  { id: "m", label: "월봉" },
+];
+
+/** 선 · 주봉 · 월봉 selector (popup only — candles need width the preview lacks,
+ * §G). The type lives in the URL alongside ?tile so a view can be linked. */
+function ChartTypeToggle({
+  chartType,
+  onChartType,
+}: {
+  chartType: ChartType;
+  onChartType: (t: ChartType) => void;
+}) {
+  return (
+    <div className="flex overflow-hidden rounded-[8px] border border-edge text-[13px]">
+      {CHART_TYPES.map((c) => (
+        <button
+          key={c.id}
+          type="button"
+          onClick={() => onChartType(c.id)}
+          className={
+            c.id === chartType
+              ? "bg-ink px-3 py-1 text-page"
+              : "px-3 py-1 opacity-50 hover:opacity-90"
+          }
+        >
+          {c.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Body({
+  row,
+  summary,
+  chartType,
+  onChartType,
+}: {
+  row: Row;
+  summary: WallSummary;
+  chartType: ChartType;
+  onChartType: (t: ChartType) => void;
+}) {
   if (!row.seriesId) {
     // every group now derives a history (outrights, spreads, forwards, vol);
     // this stays only as a defensive fallback.
@@ -132,15 +177,21 @@ function Body({ row, summary }: { row: Row; summary: WallSummary }) {
 
   return (
     <>
-      <div className="mb-1 flex items-baseline justify-between">
+      <div className="mb-2 flex items-baseline justify-between">
         <div>
           <h2 className="text-[17px] font-semibold">{row.label}</h2>
           {/* subtitle naming the construct (§ Pass C1) */}
           <p className="mt-0.5 text-[13px] opacity-55">{instrumentSubtitle(row)}</p>
         </div>
-        <span className="text-[12px] opacity-45">지난 10년 흐름입니다</span>
+        <ChartTypeToggle chartType={chartType} onChartType={onChartType} />
       </div>
-      <DetailChart id={row.seriesId} unit={row.unit} width={900} height={420} />
+      <DetailChart
+        id={row.seriesId}
+        unit={row.unit}
+        chartType={chartType}
+        width={900}
+        height={420}
+      />
       {/* what this instrument IS — static, keyed to kind (§ Pass C1) */}
       <p className="mt-3 max-w-[720px] text-[13px] leading-relaxed opacity-70">
         {instrumentGloss(row)}
@@ -155,10 +206,14 @@ function Body({ row, summary }: { row: Row; summary: WallSummary }) {
 export function EnlargedView({
   row,
   summary,
+  chartType,
+  onChartType,
   onClose,
 }: {
   row: Row;
   summary: WallSummary;
+  chartType: ChartType;
+  onChartType: (t: ChartType) => void;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -196,7 +251,12 @@ export function EnlargedView({
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-edge" />
         <ErrorBoundary fallback={ERROR_SENTENCE}>
-          <Body row={row} summary={summary} />
+          <Body
+            row={row}
+            summary={summary}
+            chartType={chartType}
+            onChartType={onChartType}
+          />
         </ErrorBoundary>
       </motion.div>
     </motion.div>

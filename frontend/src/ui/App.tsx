@@ -16,6 +16,7 @@ import { CommandBar } from "@/wall/CommandBar";
 import { ERROR_SENTENCE, LOADING_SENTENCE } from "./copy";
 import { CurveView } from "./CurveView";
 import { EnlargedView } from "./EnlargedView";
+import type { ChartType } from "@/wall/DetailChart";
 import { InstrumentTable } from "./InstrumentTable";
 import { SHEET_SPRING } from "./motion";
 import { PreviewPane } from "./PreviewPane";
@@ -182,6 +183,19 @@ export function App() {
     return rows.find((r) => r.id === tileParam) ?? null;
   }, [tileParam, rows]);
 
+  // chart type lives in the URL alongside ?tile (§G) so a view can be linked.
+  const typeParam = params.get("type");
+  const chartType: ChartType =
+    typeParam === "w" || typeParam === "m" ? typeParam : "line";
+  const setChartType = useCallback(
+    (t: ChartType) => {
+      if (!tileParam) return;
+      const q = `?tile=${encodeURIComponent(tileParam)}${t === "line" ? "" : `&type=${t}`}`;
+      router.push(`/${q}`, { scroll: false });
+    },
+    [router, tileParam],
+  );
+
   const scrollTo = useCallback((el: HTMLElement) => {
     el.scrollIntoView({ behavior: "smooth", block: "center" });
   }, []);
@@ -283,6 +297,8 @@ export function App() {
           <EnlargedView
             row={enlargedRow}
             summary={summary}
+            chartType={chartType}
+            onChartType={setChartType}
             onClose={closeEnlarged}
           />
         )}

@@ -201,3 +201,27 @@ export async function fetchSeries(
   if (!r.ok) throw new Error(`series ${id}: HTTP ${r.status}`);
   return r.json();
 }
+
+/** Weekly/monthly OHLC candles, aggregated server-side from closes (§G). */
+export type Interval = "w" | "m";
+export interface OhlcBar {
+  t: string;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+}
+export interface CandlesPayload {
+  id: string;
+  asof: string;
+  unit: Unit;
+  interval: Interval;
+  bars: OhlcBar[];
+}
+
+export async function fetchCandles(id: string, interval: Interval): Promise<CandlesPayload> {
+  const url = `${API_BASE}/api/series/${encodeURIComponent(id)}?res=full&interval=${interval}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`candles ${id}: HTTP ${r.status}`);
+  return r.json();
+}

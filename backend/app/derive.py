@@ -287,6 +287,45 @@ def series_history(pairs: list[tuple[str, float]], unit: str,
     return {"unit": unit, "points": points, "stats": stats, "calendar": calendar}
 
 
+def ohlc_buckets(pairs: list[tuple[str, float]], interval: str) -> list[dict]:
+    """Aggregate closes into weekly ('w') or monthly ('m') OHLC bars (§G). A
+    true daily candle is impossible (closes only — open would equal close), so
+    a bar is: open = first close in the period, high = max, low = min, close =
+    last. The bar's date is the last close in the period. Aggregation is
+    calculation, so it happens here, not the browser (§16)."""
+
+    def key(iso: str) -> tuple:
+        y, m, d = (int(x) for x in iso.split("-"))
+        if interval == "m":
+            return (y, m)
+        iso_y, iso_w, _ = dt.date(y, m, d).isocalendar()
+        return (iso_y, iso_w)
+
+    def bar(group: list[tuple[str, float]]) -> dict:
+        vals = [v for _t, v in group]
+        return {
+            "t": group[-1][0],
+            "o": round(vals[0], 4),
+            "h": round(max(vals), 4),
+            "l": round(min(vals), 4),
+            "c": round(vals[-1], 4),
+        }
+
+    bars: list[dict] = []
+    group: list[tuple[str, float]] = []
+    cur = None
+    for t, v in pairs:
+        k = key(t)
+        if cur is not None and k != cur:
+            bars.append(bar(group))
+            group = []
+        cur = k
+        group.append((t, v))
+    if group:
+        bars.append(bar(group))
+    return bars
+
+
 def summarize(dataset: Dataset, series_id: str, label: str, kind: str,
               bases: dict[str, dt.date | None]) -> dict:
     values = [None if v is None else round(v, 4)

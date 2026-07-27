@@ -76,10 +76,16 @@ export function resolveBrand(): string {
   return resolveVar("--bw-brand");
 }
 
-/** Resolve the line-safe orange chart-stroke color to hex for canvas (§9).
- * All plain line charts are orange. */
+/** Resolve the chart-stroke color to hex for canvas (§9). Plain line charts are
+ * blue as of Session 16 (§ Pass E). */
 export function resolveLine(): string {
   return resolveVar("--bw-line");
+}
+
+/** Resolve a direction colour (red up / blue down) to hex for canvas — candle
+ * bodies use the 상승 빨강 / 하락 파랑 convention, not the line blue (§9/§G). */
+export function resolveDirection(up: boolean): string {
+  return resolveVar(up ? "--bw-up" : "--bw-down");
 }
 
 /** Notify `cb` whenever the root data-theme attribute changes. */

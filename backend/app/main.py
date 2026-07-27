@@ -23,6 +23,7 @@ from .derive import (
     basis_dates,
     curve_banner,
     derived_ids,
+    ohlc_buckets,
     series_history,
     series_values,
     summarize,
@@ -105,10 +106,11 @@ def wall_summary() -> dict:
 
 
 @app.get("/api/series/{series_id}")
-def series_detail(series_id: str, res: str = "full") -> dict:
+def series_detail(series_id: str, res: str = "full", interval: str | None = None) -> dict:
     # `res=preview` → ~150 downsampled line points; `res=full` → every day (the
-    # enlarged view). Stats + per-point daily change + the calendar are always
-    # precomputed here — the browser never differences a series (§16).
+    # enlarged view). `interval=w|m` → weekly/monthly OHLC candles instead (§G).
+    # Stats + per-point daily change + the calendar are always precomputed here —
+    # the browser never differences or aggregates a series (§16).
     if series_id.startswith("vol:"):
         # Volatility history: the relative-ATR ratio series for a tenor. Ratio
         # levels are dimensionless; warm-up / floor nulls are simply absent.
@@ -139,6 +141,14 @@ def series_detail(series_id: str, res: str = "full") -> dict:
             for d, v in zip(_dataset.dates, values)
             if v is not None
         ]
+    if interval in ("w", "m"):
+        return {
+            "id": series_id,
+            "asof": _dataset.asof.isoformat(),
+            "unit": unit,
+            "interval": interval,
+            "bars": ohlc_buckets(pairs, interval),
+        }
     return {
         "id": series_id,
         "asof": _dataset.asof.isoformat(),

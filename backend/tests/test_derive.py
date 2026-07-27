@@ -12,6 +12,7 @@ from app.derive import (
     curve_banner,
     derived_ids,
     downsample,
+    ohlc_buckets,
     series_history,
     series_values,
     summarize,
@@ -214,6 +215,33 @@ def test_series_history_preview_downsamples_but_keeps_daily_calendar():
     assert prev["points"][-1]["t"] == pairs[-1][0]  # last point always kept
     # calendar is daily regardless of line resolution: recent 130 changes
     assert len(prev["calendar"]) == 130 == len(full["calendar"])
+
+
+def test_ohlc_monthly_open_high_low_close():
+    pairs = [
+        ("2020-01-02", 1.0), ("2020-01-15", 3.0), ("2020-01-31", 2.0),  # Jan
+        ("2020-02-03", 2.5), ("2020-02-20", 0.5),                       # Feb
+    ]
+    bars = ohlc_buckets(pairs, "m")
+    assert len(bars) == 2
+    jan = bars[0]
+    assert (jan["o"], jan["h"], jan["l"], jan["c"]) == (1.0, 3.0, 1.0, 2.0)
+    assert jan["t"] == "2020-01-31"  # bar dated at the last close in the period
+    feb = bars[1]
+    assert (feb["o"], feb["h"], feb["l"], feb["c"]) == (2.5, 2.5, 0.5, 0.5)
+
+
+def test_ohlc_weekly_buckets_by_iso_week():
+    # Mon 2020-01-06 .. Fri 2020-01-10 is one ISO week; the next Monday starts a
+    # new one.
+    pairs = [
+        ("2020-01-06", 1.0), ("2020-01-08", 4.0), ("2020-01-10", 2.0),
+        ("2020-01-13", 5.0),
+    ]
+    bars = ohlc_buckets(pairs, "w")
+    assert len(bars) == 2
+    assert (bars[0]["o"], bars[0]["h"], bars[0]["l"], bars[0]["c"]) == (1.0, 4.0, 1.0, 2.0)
+    assert bars[1]["o"] == 5.0
 
 
 def test_series_history_empty_is_null_safe():
