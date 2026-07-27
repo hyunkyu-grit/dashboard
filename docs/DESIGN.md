@@ -262,16 +262,39 @@ drag dismiss; `?tile=series:<id>` keeps working).
   outright shows its DV01 alone. DV01 = the par-swap annuity off the
   bootstrapped curve (`backend/app/dv01.py`); the browser never computes it
   (§16). No notional entry / P&L / sizing — those stay in the reserved region.
-- **Pay/Receive curve diagram [final session §A].** Beside the DV01 ratio: a
-  ~200×120 curve sketch with a 페이/리시브 control. **One rule for every kind —
-  Pay profits when the displayed value rises, Receive when it falls** (no
-  special cases, no residual-duration caveat — the DV01-neutral weights make the
-  quoted value the P&L driver). A solid current line at the instrument's legs
-  (1 node + context outright, 2 spread, 3 fly, 1 forward), a dashed ghost of the
-  wanted shape, an up/down arrow per leg (up-colour up, down-colour down), and
-  one desk-term line: 금리 상승/하락 (outright/forward), 스티프닝/플래트닝
-  (spread), 벨리 약세/강세 (fly). Volatility has no rate position → no diagram.
-  Schematic (the ghost shift is a fixed visual amount, not to scale).
+- **Pay/Receive curve diagram [rebuilt on a real curve — diagram session].**
+  Beside the DV01 ratio, a ~260×150 sketch with a 페이/리시브 control. **One rule
+  for every kind — Pay profits when the displayed value rises, Receive when it
+  falls** (no residual-duration caveat — the DV01-neutral weights make the quoted
+  value the P&L driver). **Every kind draws the SAME base: the current par curve
+  across the nine nodes (3M·6M·9M·1Y·1.5Y·2Y·3Y·5Y·10Y, equal-spaced, real data
+  from `summary.outrights`), the instrument's own region at full strength and the
+  rest dimmed to ~35% context, a dashed ~55% ghost of the wanted state, y fitted
+  to both curves with no axis labels.** The accent is the FOCUS colour
+  (`--bw-interactive`, orange) so the diagram reads as an annotation, not another
+  data chart (charts are blue); direction arrows keep red-up/blue-down; labels
+  stay ink. Pure model in `ui/payReceiveModel.ts`, SVG in `ui/PayReceive.tsx`.
+  Per kind:
+  - **Outright** — whole curve full strength, marker + up arrow at the tenor,
+    ghost lifted at that node. 금리 상승/하락.
+  - **Spread** — segment between the legs full strength, rest dimmed; up on the
+    long leg, down on the short; ghost steeper in the segment. 스티프닝/플래트닝.
+  - **Butterfly** — wing-to-wing span full strength; up on the belly, down on
+    both wings; ghost with a pronounced hump. 벨리 약세/강세.
+  - **Forward `AxB`** — the ONE that was broken. `A` and `A+B` are plotted as
+    interpolated points on the curve (**not snapped** to a node); the stretch is
+    shaded (labelled 선도 구간) and drawn full strength, the rest dimmed. The
+    ghost ROTATES that stretch steeper — near end down, far end up (NOT a
+    parallel shift; a forward responds to the SLOPE of the segment, not a node
+    level). Down arrow near, up arrow far. Keeps 선도 금리 상승/하락 and adds a
+    line naming the curve meaning: "{A}~{A+B} 구간이 가팔라질 때 오릅니다"
+    (Receive: 완만해질 때 내립니다).
+  - **Volatility** — no curve statement (a ratio has no direction); the region is
+    rendered empty with one line saying so, rather than inventing a picture.
+
+  Receive is the exact mirror of Pay in every case — same geometry, arrows and
+  ghost inverted (pinned by `guards/pay-receive-arrows.test.ts`). Schematic: the
+  ghost deviation is a fixed fraction of the curve span, not to scale.
 - (The calendar heatmap that used to sit here was removed in §I — see the
   preview note above.)
 - A **clearly-marked empty region reserved for future strategy tooling** — a
