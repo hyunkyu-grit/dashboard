@@ -153,7 +153,9 @@ def forwards_payload(dataset: Dataset, curves: dict[str, np.ndarray]) -> dict:
             "values": values,
             "deltas": deltas,
             "sortKey": [start, tenor if tenor is not None else 0.0],
-            "oneLiner": classify_one_liner(None, deltas, values["now"] is not None),
+            # forwards have no cheap daily-move history (each point needs a
+            # curve bootstrap) and no 10y percentile, so the ladder is silent.
+            "oneLiner": classify_one_liner(None, values["now"] is not None),
         }
         if name is not None:
             out["keyForward"] = name in key_labels

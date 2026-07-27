@@ -18,7 +18,12 @@ export interface SparkPoint {
 /** The `한 줄` classification (§16 exception): the backend decides WHAT is true,
  * the frontend renders the Korean sentence. Levels/deltas stay in their
  * columns — this only carries what no column shows. */
-export type OneLinerKind = "extreme" | "retrace_week" | "retrace_month" | "none";
+export type OneLinerKind =
+  | "move_extreme" // today's move in the top N% of the series' own daily moves
+  | "extreme" // level percentile in an extreme band
+  | "solo_up" // moved up against a falling peer group
+  | "solo_down" // moved down against a rising peer group
+  | "none";
 export interface OneLiner {
   kind: OneLinerKind;
   value: number | null;

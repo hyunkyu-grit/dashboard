@@ -94,17 +94,26 @@ Columns, left to right:
   so the bar triple-encoded. **There is no "Now" column** — Now minus Now is
   zero, which is why the old six-basis selector was wrong; all five bases are
   columns now.
-- **한 줄 [rewritten Session 13]** — must **never restate a value already
-  visible in the same row.** The level and all five change columns are on
-  screen; a phrase like "연초 26bp 상승" only re-prints the YTD cell. So the
-  column carries exactly one of:
-  1. an **extreme-band percentile as a number** — "백분위 99" / "백분위 3"
-     (`pct ≥ 90` or `≤ 10`). The percentile is in no column, so it is new
-     information;
-  2. the **shape** of the move, never a magnitude — a sign flip between
-     adjacent bases reads as "주간 되돌림" (today against the week) or
-     "월중 되돌림" (the week against the month);
-  3. **nothing.** An empty 한 줄 is correct and preferred over a restatement.
+- **한 줄 [ladder, rewritten Session 15]** — must **never restate a value
+  already visible in the same row** ("연초 26bp 상승" only re-prints the YTD
+  cell). A **priority ladder**, the first rung that applies, one item per row:
+  1. **today's move is extreme against the series' OWN history** →
+     "일간 변동 상위 3%". The most valuable rung and the only signal invisible
+     elsewhere: `+5bp` is ordinary for `10Y` and an event for `3M`. Threshold
+     from the Session-15 replay (own-history move percentile ≥ 97).
+  2. **the level sits in an extreme band** → the percentile as a number,
+     "백분위 99" (`pct ≥ 95` or `≤ 5`). **Capped** to the few most-extreme rows
+     per peer group (`LEVEL_CAP`): on a day when the whole curve sits at decade
+     highs an uncapped rung printed the same label on ~20 rows — that regime
+     fact belongs to the "10년 고점권" screener chip, not the column.
+  3. **stands out against its neighbours today** → "단독 상승" / "단독 하락"
+     (moved opposite the day's majority among outrights).
+  4. **nothing.** Most rows are quiet so the few that speak are visible; the
+     replay targets 3–6 speaking rows of ~44.
+
+  The retracement rung (Session 13's "주간/월중 되돌림") is retired — it needed a
+  sign flip, which almost never fires in a trending tape. Diagnosis + thresholds
+  in `docs/diagnostics/color-density.md`.
 
 Behaviour:
 

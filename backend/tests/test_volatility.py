@@ -132,7 +132,7 @@ def test_volatility_payload_shape_matches_the_other_tabs():
         assert row["quoted"] is None
         assert row["id"].startswith("vol:")
         assert set(row["deltas"]) == {"d1", "wtd", "mtd", "qtd", "ytd"}
-        assert row["oneLiner"]["kind"] in {"extreme", "none"}
+        assert row["oneLiner"]["kind"] in {"move_extreme", "extreme", "none"}
         assert len(row["sortKey"]) == 1
         pct = row["range10y"]["pct"]
         assert pct is None or 0 <= pct <= 100

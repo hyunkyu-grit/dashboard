@@ -18,6 +18,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from .curves import build_basis_curves
 from .dataset import DISPLAY_TENORS, SPEC_NODE_ORDER, load_dataset
 from .derive import (
+    apply_level_extreme,
+    apply_solo_direction,
     basis_dates,
     derived_ids,
     series_history,
@@ -73,6 +75,12 @@ def wall_summary() -> dict:
         summarize(_dataset, sid, sid.replace("-", "/"), kind, _bases)
         for sid, kind, _legs in derived_ids()
     ]
+    # 한 줄 rungs 2 & 3 (§C2) are cross-sectional, so they run after the whole
+    # table is built. Rung 2 (level extreme, capped) over outrights + derived;
+    # rung 3 (solo direction) over outrights only. Both fill only silent rows,
+    # so rung 1 (set in summarize) keeps priority.
+    apply_level_extreme(outrights + derived)
+    apply_solo_direction(outrights)
     return {
         "asof": _dataset.asof.isoformat(),
         "basisDates": {

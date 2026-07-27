@@ -30,7 +30,14 @@ import datetime as dt
 from bisect import bisect_left
 
 from .dataset import DISPLAY_TENORS, Dataset, tenor_years
-from .derive import BASIS_KEYS, series_values, value_at
+from .derive import (
+    BASIS_KEYS,
+    apply_level_extreme,
+    classify_one_liner,
+    day_move_pct,
+    series_values,
+    value_at,
+)
 
 SHORT_OBS = 5
 LONG_OBS = 60
@@ -138,13 +145,11 @@ def _volatility_row(dataset: Dataset, tenor: str,
     if clean and now is not None:
         pct = round(bisect_left(clean, now) / len(clean) * 100, 1)
 
-    # Vol classification is percentile-extreme only — the retracement shape's
-    # 0.5bp threshold is meaningless for a dimensionless ratio.
-    one_liner = (
-        {"kind": "extreme", "value": round(pct)}
-        if pct is not None and (pct >= 90 or pct <= 10)
-        else {"kind": "none", "value": None}
-    )
+    # Same 한 줄 ladder as the other tabs (§C2): an extreme daily move in the
+    # ratio, else an extreme level percentile. The ratio's change is a plain
+    # difference (scale 1); no solo/neighbour rung for volatility.
+    move_pct = day_move_pct(aligned, 1.0, deltas["d1"])
+    one_liner = classify_one_liner(move_pct, now is not None)  # rung 2 capped below
 
     return {
         "id": f"vol:{tenor}",
@@ -181,4 +186,6 @@ def volatility_payload(dataset: Dataset, bases: dict[str, dt.date | None]) -> di
             "now": row["now"],
             "prev": round(prev, 4) if prev is not None else None,
         })
+    # rung 2 (§C2), capped, over the volatility peer group.
+    apply_level_extreme(rows, cap=2)
     return {"rows": rows, "curve": curve}

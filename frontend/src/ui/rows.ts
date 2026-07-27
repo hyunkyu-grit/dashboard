@@ -94,12 +94,14 @@ export function traderName(id: string): string {
  * change without a backend deploy. Never restates a visible column (§6). */
 export function renderOneLiner(o: OneLiner): string {
   switch (o.kind) {
+    case "move_extreme":
+      return `일간 변동 상위 ${o.value}%`;
     case "extreme":
       return `백분위 ${o.value}`;
-    case "retrace_week":
-      return "주간 되돌림";
-    case "retrace_month":
-      return "월중 되돌림";
+    case "solo_up":
+      return "단독 상승";
+    case "solo_down":
+      return "단독 하락";
     default:
       return "";
   }
