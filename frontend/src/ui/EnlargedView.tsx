@@ -19,6 +19,7 @@ import { DetailChart } from "@/wall/DetailChart";
 import { CalendarHeatmap } from "./CalendarHeatmap";
 import { ERROR_SENTENCE } from "./copy";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { instrumentGloss, instrumentSubtitle } from "./gloss";
 import { SHEET_SPRING } from "./motion";
 import type { Row } from "./rows";
 
@@ -103,10 +104,18 @@ function Body({ row, summary }: { row: Row; summary: WallSummary }) {
   return (
     <>
       <div className="mb-1 flex items-baseline justify-between">
-        <h2 className="text-[17px] font-semibold">{row.label}</h2>
+        <div>
+          <h2 className="text-[17px] font-semibold">{row.label}</h2>
+          {/* subtitle naming the construct (§ Pass C1) */}
+          <p className="mt-0.5 text-[13px] opacity-55">{instrumentSubtitle(row)}</p>
+        </div>
         <span className="text-[12px] opacity-45">지난 10년 흐름이에요</span>
       </div>
       <DetailChart id={row.seriesId} width={900} height={420} />
+      {/* what this instrument IS — static, keyed to kind (§ Pass C1) */}
+      <p className="mt-3 max-w-[720px] text-[13px] leading-relaxed opacity-70">
+        {instrumentGloss(row)}
+      </p>
       <SixBasisReadout summary={summary} seriesId={row.seriesId} />
       {data && (
         <div className="mt-4 overflow-x-auto">
