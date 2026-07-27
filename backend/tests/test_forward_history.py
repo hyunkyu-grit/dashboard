@@ -43,3 +43,22 @@ def test_forward_history_matches_now(ds):
     kf = next(k for k in payload["keyForwards"] if k["label"] == "2Yx1Y")
     hist_last = forward_history(ds, "2Yx1Y")[-1]["v"]
     assert abs(hist_last - kf["values"]["now"]) < 0.01
+
+
+def test_key_forward_range10y(ds):
+    """The gauge (Pass E) needs a 10y LEVEL range + percentile per key forward:
+    min ≤ now ≤ max, pct in [0,100], and the percentile agrees with the level's
+    position in [min,max] (a level at the max is ~100th percentile)."""
+    from app.curves import build_basis_curves
+    from app.forwards import forwards_payload
+
+    payload = forwards_payload(ds, build_basis_curves(ds))
+    for kf in payload["keyForwards"]:
+        r = kf["range10y"]
+        now = kf["values"]["now"]
+        assert r["min"] is not None and r["max"] is not None and r["pct"] is not None
+        assert r["min"] <= now <= r["max"]
+        assert 0.0 <= r["pct"] <= 100.0
+        # the whole KRW curve is at multi-year highs → every key forward's level
+        # should sit in the upper part of its own 10y range.
+        assert r["pct"] >= 50.0

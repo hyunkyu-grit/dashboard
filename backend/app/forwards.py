@@ -166,6 +166,24 @@ def _cell_move_pct(dataset: Dataset, start: float, tenor: float | None) -> float
     return round(100.0 * sum(1 for d in diffs if d <= x) / len(diffs), 1)
 
 
+def _level_range(dataset: Dataset, start: float, tenor: float | None) -> dict:
+    """10y LEVEL range + percentile for a forward: its own history min/max and
+    where today's level sits within it (§8 gauge, Pass E). In percent to match
+    `values` (×100). This is a LEVEL distribution — distinct from the |Δ| move
+    percentile above that drives the matrix tint. None-filled if too little
+    history. Reuses the shared historical-curve cache (cheap for 6 forwards)."""
+    zcs = _historical_curves(dataset)
+    vals = [forward_par_rate(z, start, tenor) * 100.0 for z in zcs if z is not None]
+    if len(vals) < 30:
+        return {"min": None, "max": None, "pct": None}
+    now = vals[-1]
+    return {
+        "min": round(min(vals), 4),
+        "max": round(max(vals), 4),
+        "pct": round(100.0 * sum(1 for v in vals if v <= now) / len(vals), 1),
+    }
+
+
 def forwards_payload(dataset: Dataset, curves: dict[str, np.ndarray]) -> dict:
     bases = basis_dates(dataset)
     all_keys = ["now", *BASIS_KEYS]
@@ -221,6 +239,7 @@ def forwards_payload(dataset: Dataset, curves: dict[str, np.ndarray]) -> dict:
         "tenors": [label for label, _t in FWD_TENORS],
         "grid": grid,
         "keyForwards": [
-            {"label": label, **cell(s, t)} for label, s, t in KEY_FORWARDS
+            {"label": label, **cell(s, t), "range10y": _level_range(dataset, s, t)}
+            for label, s, t in KEY_FORWARDS
         ],
     }

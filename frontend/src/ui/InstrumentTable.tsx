@@ -14,6 +14,7 @@ import { ForwardMatrix, KeyForwardBlock } from "@/wall/ForwardMatrix";
 import { useRegisterTile } from "@/wall/useRegisterTile";
 
 import { SPRING } from "./motion";
+import { TintLegend } from "./TintLegend";
 import {
   BASIS_ORDER,
   cmpKey,
@@ -321,9 +322,13 @@ export function InstrumentTable({
         {isForward && matrixOpen && forwards ? (
           // wrap the 주요 포워드 block below the matrix rather than clipping it
           // off the right edge (§F); the matrix scrolls horizontally itself.
-          <div className="flex flex-wrap items-start gap-6">
-            <ForwardMatrix payload={forwards} />
-            <KeyForwardBlock payload={forwards} />
+          <div>
+            <div className="flex flex-wrap items-start gap-6">
+              <ForwardMatrix payload={forwards} />
+              <KeyForwardBlock payload={forwards} />
+            </div>
+            {/* what the 168 tinted cells mean (§E2) — same key as the heatmap */}
+            <TintLegend className="mt-4" />
           </div>
         ) : (
           <table

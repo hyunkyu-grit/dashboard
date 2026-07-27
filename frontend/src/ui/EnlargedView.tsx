@@ -23,6 +23,7 @@ import { instrumentGloss, instrumentSubtitle } from "./gloss";
 import { PayReceive } from "./PayReceive";
 import { SHEET_SPRING } from "./motion";
 import type { Row } from "./rows";
+import { TintLegend } from "./TintLegend";
 
 function SixBasisReadout({
   summary,
@@ -202,6 +203,8 @@ function Body({
       {/* the CURVE over time (§D) — context for a fly/spread move, not this
           instrument. Synced to the chart's x-axis + crosshair (§C). */}
       <CurveHeatmap width={900} visibleRange={visibleRange} hoveredDate={hoveredDate} />
+      {/* the shared tint key (§E2) — same scale as the forward matrix */}
+      <TintLegend className="mt-2" />
       {/* what this instrument IS — static, keyed to kind (§ Pass C1) */}
       <p className="mt-3 max-w-[720px] text-[13px] leading-relaxed opacity-70">
         {instrumentGloss(row)}

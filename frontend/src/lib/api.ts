@@ -129,6 +129,8 @@ export interface KeyForward {
   label: string;
   values: Record<AnyBasis, number>;
   deltas: Record<BasisKey, number>;
+  // 10y LEVEL range + percentile (Pass E gauge); min/max/pct in percent.
+  range10y: { min: number | null; max: number | null; pct: number | null };
 }
 
 export interface ForwardsPayload {

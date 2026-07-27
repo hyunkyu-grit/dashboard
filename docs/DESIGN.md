@@ -857,6 +857,36 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
     region of the curve heatmap, which reads near-blank as intended. No as-of
     selector exists to replay a calm date on the main matrix (single-snapshot
     design), so the calm behaviour was verified on the shared heatmap scale.
+- **RESOLVED [closing session, part 2, Pass E1] — key-forward gauges + the
+  level/change header fix.** The 주요 포워드 block holds the six actually-quoted
+  forwards and was the only region on screen with no visual encoding. Two things
+  changed. (1) **Header ambiguity — resolved by removal.** The block used to show
+  the LEVEL at each basis under Now/D-1/WTD/MTD/QTD/YTD headers, identical to the
+  main table's headers which show the CHANGE. Rather than relabel or flip the
+  block to deltas, the per-basis level columns were **dropped**: they were the
+  ambiguous, low-value part (the main table owns the change story; the popup
+  owns the full path). The block now shows only 현재 (the quoted level) + the
+  gauge, so no header is shared with a different quantity. (2) **The gauge.**
+  Each row gets a thin track spanning that forward's **10y level min→max**
+  (`backend/app/forwards.py::_level_range`, a LEVEL distribution — distinct from
+  the |Δ| move percentile that drives the tint), a fill + marker at the current
+  level's POSITION in that range, and the **percentile** as a number at the
+  right. The marker + percentile switch to the accent (`--bw-interactive`) at
+  the tails (≥90th or ≤10th) so a 99th-percentile row is distinct from a 72nd at
+  a glance; secondary ink otherwise. Track ends are labelled 10년 최저 / 10년
+  최고 **once** above the block. This is the only place in the product that shows
+  a level's position within its own range. Verified live (2026-07-24: 1Yx1Y..5Yx5Y
+  at 99–100th in accent, 6Mx3M at 90th in ink).
+- **RESOLVED [closing session, part 2, Pass E2] — the matrix tint has a
+  legend.** 168 tinted cells (plus the popup heatmap on the same scale) with
+  nothing saying what the intensity meant. `ui/TintLegend.tsx` is a compact
+  diverging swatch strip 하락 → untinted middle → 상승 with one line: intensity =
+  today's move vs that series' own 10y daily-change history. Swatch alphas are
+  the real scale endpoints (`MATRIX_FLOOR..MATRIX_FULL` from `tint.ts`) so the
+  key can't drift from the cells; hue flips with the theme via the tokens. The
+  SAME component renders under the forward matrix (표로 보기) and under the popup
+  curve heatmap, so the shared scale is explained identically in both. Small and
+  quiet — a key, not a feature.
 - **RESOLVED [closing session, part 2, Pass D] — the change log is surfaced,
   not deleted.** The events rule (`backend/app/events.py`) is candidate (c) from
   the Session-11 500-day replay (`docs/diagnostics/changelog-firing.md`): band

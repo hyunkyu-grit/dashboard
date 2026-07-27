@@ -8,7 +8,6 @@
  */
 
 import type { ForwardsPayload } from "@/lib/api";
-import { BASIS_LABELS, TIME_BASES } from "@/theme/ramp";
 
 import { matrixTint } from "@/ui/tint";
 
@@ -76,36 +75,97 @@ export function ForwardMatrix({ payload }: { payload: ForwardsPayload }) {
   );
 }
 
+// A level is "extreme" in its own 10y range at the tails (Pass E): the marker
+// switches to the accent so a 99th-percentile row is distinct from a 72nd one.
+const GAUGE_EXTREME_PCT = 90;
+
+function isExtreme(pct: number): boolean {
+  return pct >= GAUGE_EXTREME_PCT || pct <= 100 - GAUGE_EXTREME_PCT;
+}
+
+/** Thin 10y min→max track with a fill up to the current level and a marker on
+ * it (§8 gauge, Pass E). The marker is the accent at the tails, secondary ink
+ * otherwise. `frac` is the level's POSITION in [min,max]; the percentile is
+ * shown separately as a number. */
+function GaugeTrack({ frac, extreme }: { frac: number; extreme: boolean }) {
+  const pos = `${(frac * 100).toFixed(1)}%`;
+  return (
+    <div className="relative h-1.5 w-full min-w-[150px] rounded-full bg-edge">
+      <div
+        className="absolute inset-y-0 left-0 rounded-full bg-ink opacity-20"
+        style={{ width: pos }}
+      />
+      <div
+        className={`absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ${
+          extreme ? "bg-interactive" : "bg-ink"
+        }`}
+        style={{ left: pos }}
+      />
+    </div>
+  );
+}
+
 export function KeyForwardBlock({ payload }: { payload: ForwardsPayload }) {
-  // Plain ink levels — no tint (§J): the own-history scale is d1-only for
-  // forwards, so a per-basis tint here would have no consistent normalisation.
-  // This block stays a numeric reference; the tint story is the matrix.
+  // The six actually-quoted forwards — the most important block in this view,
+  // and (before Pass E) the only region with no visual encoding. It shows the
+  // current LEVEL and, via a gauge, where that level sits in its own 10y range —
+  // which is what a reader wants from a quoted forward. The per-basis LEVEL
+  // columns that used to sit here were REMOVED: they carried the same
+  // WTD/MTD/QTD/YTD headers as the main table's CHANGE columns while showing a
+  // different quantity (level, not change) — the ambiguity §E1 flags. The block
+  // is now unambiguously "current level + position", the table owns changes.
   return (
     <table
       className="text-[13px]"
       style={{ borderCollapse: "separate", borderSpacing: 0 }}
     >
       <thead>
-        <tr className="h-8">
+        <tr className="h-8 align-bottom">
           <th className="w-16 text-left font-semibold">주요 포워드</th>
-          {TIME_BASES.map((b) => (
-            <th key={b} className="w-[74px] text-right font-normal opacity-60">
-              {BASIS_LABELS[b]}
-            </th>
-          ))}
+          <th className="w-[74px] pr-3 text-right font-normal opacity-60">현재</th>
+          {/* track ends labelled ONCE, here, not per row (§E1) */}
+          <th className="min-w-[150px] px-1 font-normal">
+            <div className="flex justify-between text-[11px] opacity-45">
+              <span>10년 최저</span>
+              <span>10년 최고</span>
+            </div>
+          </th>
+          <th className="w-10 pl-2 text-right font-normal opacity-45">백분위</th>
         </tr>
       </thead>
       <tbody>
-        {payload.keyForwards.map((kf) => (
-          <tr key={kf.label} className="h-[26px]">
-            <td>{kf.label}</td>
-            {TIME_BASES.map((b) => (
-              <td key={b} className="px-1 text-right align-middle tabular-nums">
-                {kf.values[b].toFixed(4)}
+        {payload.keyForwards.map((kf) => {
+          const { min, max, pct } = kf.range10y;
+          const now = kf.values.now;
+          const hasGauge =
+            min != null && max != null && pct != null && max > min;
+          const frac = hasGauge
+            ? Math.min(1, Math.max(0, (now - min) / (max - min)))
+            : 0;
+          const extreme = hasGauge && isExtreme(pct);
+          return (
+            <tr key={kf.label} className="h-[26px]">
+              <td className="font-medium">{kf.label}</td>
+              <td className="pr-3 text-right align-middle tabular-nums">
+                {now.toFixed(4)}
               </td>
-            ))}
-          </tr>
-        ))}
+              <td className="px-1 align-middle">
+                {hasGauge ? (
+                  <GaugeTrack frac={frac} extreme={extreme} />
+                ) : (
+                  <span className="opacity-40">–</span>
+                )}
+              </td>
+              <td
+                className={`pl-2 text-right align-middle tabular-nums ${
+                  extreme ? "font-medium text-interactive" : "opacity-55"
+                }`}
+              >
+                {hasGauge ? Math.round(pct) : "–"}
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
