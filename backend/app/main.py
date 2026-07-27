@@ -15,6 +15,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from .cache import cached, data_hash
 from .curves import build_basis_curves
 from .dataset import DISPLAY_TENORS, SPEC_NODE_ORDER, load_dataset
 from .derive import (
@@ -50,11 +51,16 @@ app.add_middleware(
 _dataset = load_dataset(DATA_PATH)
 _bases = basis_dates(_dataset)
 _curves = build_basis_curves(_dataset)
-_forwards = forwards_payload(_dataset, _curves)
 _events = detect_event_clusters(_dataset)
 _volatility = volatility_payload(_dataset, _bases)
 _dv01_table = build_dv01_table(_curves["now"], derived_ids)
-_curve_heatmap = curve_heatmap(_dataset)
+# The own-history distributions are the slow part (§D) — bootstrap each
+# historical curve once and reprice all forwards (~13s) — over a file that
+# changes once a day. Persist them keyed by the data-file hash; recompute only
+# when the data changes (loudly logged).
+_data_hash = data_hash(DATA_PATH)
+_forwards = cached("forwards", _data_hash, lambda: forwards_payload(_dataset, _curves))
+_curve_heatmap = cached("curve_heatmap", _data_hash, lambda: curve_heatmap(_dataset))
 
 
 def _outright_label(tenor: str) -> str:
