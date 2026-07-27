@@ -298,7 +298,11 @@ drag dismiss; `?tile=series:<id>` keeps working).
   accent. Pure model (mode mapping, negation, in-bounds, labels) in
   `ui/payReceiveModel.ts`; SVG in `ui/PayReceive.tsx`; pinned by
   `guards/pay-receive-mode.test.ts`. **The test is readability: can you tell what
-  the trade wants without reading the label?**
+  the trade wants without reading the label?** Verified live in both themes
+  (diagram session 3, Pass C): level reads as an even parallel band, slope as a
+  blue-near/red-far bowtie, curvature as a central arch, forward as a confined
+  tilt in a soft band — each mode legible before the label. The ~25%
+  exaggeration and 16% fill were sufficient; no tuning needed.
 - (The calendar heatmap that used to sit here was removed in §I — see the
   preview note above.)
 - A **clearly-marked empty region reserved for future strategy tooling** — a
