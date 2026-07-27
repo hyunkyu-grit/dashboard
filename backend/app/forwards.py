@@ -133,6 +133,39 @@ def forward_history(dataset: Dataset, fid: str) -> list[dict]:
     return out
 
 
+# ── Forward-cell own-history move percentile (§J colour scale) ──────────────
+# The matrix tint must drop grid-max (cross-sectional lights ~everything) for
+# the own-history scale used product-wide. Each cell needs the percentile of
+# today's |Δ| within THAT forward's daily-change history. Re-bootstrapping per
+# cell is 168× the curve work (~270s); instead bootstrap each historical date's
+# curve ONCE and reprice every forward off the shared cache (~13s at startup).
+
+_hist_zc: list[np.ndarray | None] | None = None
+
+
+def _historical_curves(dataset: Dataset) -> list[np.ndarray | None]:
+    global _hist_zc
+    if _hist_zc is None:
+        out: list[np.ndarray | None] = []
+        for i in range(len(dataset.dates)):
+            pars = par_rates_at_index(dataset, i)
+            out.append(bootstrap_zero_curve(pars) if len(pars) >= 2 else None)
+        _hist_zc = out
+    return _hist_zc
+
+
+def _cell_move_pct(dataset: Dataset, start: float, tenor: float | None) -> float | None:
+    """Percentile of today's |Δ| within this forward's own daily-change history
+    (§J). None if too little history."""
+    zcs = _historical_curves(dataset)
+    vals = [forward_par_rate(z, start, tenor) for z in zcs if z is not None]
+    diffs = [abs(vals[i] - vals[i - 1]) for i in range(1, len(vals))]
+    if len(diffs) < 30:
+        return None
+    x = diffs[-1]
+    return round(100.0 * sum(1 for d in diffs if d <= x) / len(diffs), 1)
+
+
 def forwards_payload(dataset: Dataset, curves: dict[str, np.ndarray]) -> dict:
     bases = basis_dates(dataset)
     all_keys = ["now", *BASIS_KEYS]
@@ -153,9 +186,10 @@ def forwards_payload(dataset: Dataset, curves: dict[str, np.ndarray]) -> dict:
             "values": values,
             "deltas": deltas,
             "sortKey": [start, tenor if tenor is not None else 0.0],
-            # forwards have no cheap daily-move history (each point needs a
-            # curve bootstrap) and no 10y percentile, so the ladder is silent.
+            # forwards have no 10y percentile, so the 한 줄 ladder is silent, but
+            # the own-history move percentile (§J) drives the matrix tint.
             "oneLiner": classify_one_liner(None, values["now"] is not None),
+            "movePct": _cell_move_pct(dataset, start, tenor),
         }
         if name is not None:
             out["keyForward"] = name in key_labels

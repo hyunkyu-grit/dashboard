@@ -7,28 +7,14 @@
  * Live-quoted intersections keep the cell border. Row order is time — no sort.
  */
 
-import { useMemo } from "react";
-
-import type { BasisKey, ForwardsPayload } from "@/lib/api";
+import type { ForwardsPayload } from "@/lib/api";
 import { BASIS_LABELS, TIME_BASES } from "@/theme/ramp";
 
-import { tintStyle } from "@/ui/tint";
+import { matrixTint } from "@/ui/tint";
 
 const YEAR_ROWS = new Set(["2Y", "3Y", "4Y", "5Y"]);
 
 export function ForwardMatrix({ payload }: { payload: ForwardsPayload }) {
-  // one grid tint scale so cells are comparable across the matrix (§2)
-  const gridMax = useMemo(() => {
-    let m = 0;
-    for (const tenor of payload.tenors) {
-      for (const cell of payload.grid[tenor]) {
-        const d = cell.deltas.d1;
-        if (d != null) m = Math.max(m, Math.abs(d));
-      }
-    }
-    return m;
-  }, [payload]);
-
   // The 시작 and 날짜 columns are PINNED (sticky-left) so horizontal scroll
   // never loses row identity (§F). They carry an opaque bg (§G) or cells would
   // bleed through them; opacity goes on the text span, never the sticky cell.
@@ -70,7 +56,9 @@ export function ForwardMatrix({ payload }: { payload: ForwardsPayload }) {
                   return (
                     <td
                       key={tenor}
-                      style={tintStyle(cell.deltas.d1, gridMax)}
+                      // graded own-history tint (§J): the cell's move vs its own
+                      // past, not vs the day's grid-max. Ink on tint.
+                      style={matrixTint(cell.movePct, cell.deltas.d1 > 0)}
                       className={`border px-1 text-right align-middle tabular-nums ${
                         cell.live ? "border-edge-live" : "border-transparent"
                       }${sep}`}
@@ -89,18 +77,9 @@ export function ForwardMatrix({ payload }: { payload: ForwardsPayload }) {
 }
 
 export function KeyForwardBlock({ payload }: { payload: ForwardsPayload }) {
-  // level cells tinted by their change from Now (the "now" column is untinted).
-  // Deltas arrive precomputed on each key forward (§16) — no recompute here.
-  const gridMax = useMemo(() => {
-    let m = 0;
-    for (const kf of payload.keyForwards) {
-      for (const b of TIME_BASES) {
-        if (b !== "now") m = Math.max(m, Math.abs(kf.deltas[b as BasisKey]));
-      }
-    }
-    return m;
-  }, [payload]);
-
+  // Plain ink levels — no tint (§J): the own-history scale is d1-only for
+  // forwards, so a per-basis tint here would have no consistent normalisation.
+  // This block stays a numeric reference; the tint story is the matrix.
   return (
     <table
       className="text-[13px]"
@@ -120,18 +99,11 @@ export function KeyForwardBlock({ payload }: { payload: ForwardsPayload }) {
         {payload.keyForwards.map((kf) => (
           <tr key={kf.label} className="h-[26px]">
             <td>{kf.label}</td>
-            {TIME_BASES.map((b) => {
-              const change = b === "now" ? null : kf.deltas[b as BasisKey];
-              return (
-                <td
-                  key={b}
-                  style={tintStyle(change, gridMax)}
-                  className="px-1 text-right align-middle tabular-nums"
-                >
-                  {kf.values[b].toFixed(4)}
-                </td>
-              );
-            })}
+            {TIME_BASES.map((b) => (
+              <td key={b} className="px-1 text-right align-middle tabular-nums">
+                {kf.values[b].toFixed(4)}
+              </td>
+            ))}
           </tr>
         ))}
       </tbody>

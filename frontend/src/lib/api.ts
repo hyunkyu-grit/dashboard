@@ -98,6 +98,7 @@ export interface ForwardCell {
   sortKey: number[];
   oneLiner: OneLiner;
   keyForward: boolean;
+  movePct: number | null; // own-history percentile of |D-1| — drives the matrix tint (§J)
 }
 
 export interface KeyForward {

@@ -1,47 +1,55 @@
-/* Directional background tint for GRID cells (DESIGN §2/§9, Session 13).
+/* Directional background tint (DESIGN §9/§J). Red for up, blue for down; the
+ * ALPHA carries own-history magnitude — how unusual a move is against that
+ * series' own past, precomputed server-side as a percentile (§16). This
+ * replaced the cross-sectional grid-max scale, which lit 96–99% of the forward
+ * matrix (a big day made every cell a large fraction of that day's max).
  *
- * Red for up, blue for down, alpha scaled by magnitude within the grid being
- * drawn. The number itself stays ink so it reads on the tint — that is what
- * makes a grid scannable (the eye reads the field of colour first). List
- * columns do NOT use this — a coloured number with nothing under it.
+ * Two ceilings share the one own-history scale (§J):
  *
- * Alpha ~8–45% of the direction colour; near-zero cells stay untinted (a
- * barely-there wash is worse than none). 45% keeps ink at ≥4.5:1 on both
- * surfaces (gated in tint-contrast.test.ts). One background property per cell —
- * table cells, not SVG paint, so a color-mix() var is fine here. */
+ *   - Change columns: the number is coloured TEXT at full strength, so alpha
+ *     can only live on the CELL BACKGROUND, never the glyph (fading a 4.5:1 red
+ *     toward the surface drops it below the text floor at once). The tint is
+ *     BINARY — an outlier cell (pct ≥ 97) gets a faint 0.12 wash, nothing else.
+ *   - Forward matrix: the number is INK, which tolerates depth, so the tint is
+ *     GRADED — pct70 → floor, pct97 → the 0.45 ceiling.
+ *
+ * One property per cell (table cells, not SVG paint), so color-mix() is fine. */
 
 import type { CSSProperties } from "react";
 
-export const TINT_MIN = 8; // %
-export const TINT_MAX = 45; // %
-export const TINT_DEADZONE = 0.03; // fraction of gridMax that stays untinted
+// Binary wash on an outlier change cell (§J). The prompt proposed 0.12, but the
+// number sits ON this wash in the SAME hue, and a 0.12 wash drops the up-red
+// (4.78:1 on white) to 3.99:1 — below the text floor. 0.04 is the measured
+// ceiling that keeps the coloured number ≥4.5:1 (guarded); recorded in
+// ## Provisional. Faint, but the coloured glyph is the primary cue; the wash
+// only flags "look here".
+export const COLUMN_TINT = 0.04;
+export const MATRIX_FLOOR = 0.06; // graded tint at pct70 (§J)
+export const MATRIX_FULL = 0.45; // graded tint ceiling at pct97 (§J)
+export const PCT_LO = 70; // below this the matrix cell is untinted
+export const PCT_HI = 97; // binary threshold / graded full point
 
-/** normalized magnitude → alpha percentage, or null if untinted */
-export function tintAlphaPct(
-  delta: number | null,
-  gridMax: number,
-): number | null {
-  if (delta == null || gridMax <= 0) return null;
-  const mag = Math.abs(delta) / gridMax;
-  if (mag < TINT_DEADZONE) return null;
-  return Math.round(TINT_MIN + (TINT_MAX - TINT_MIN) * Math.min(1, mag));
+function hue(up: boolean): string {
+  return up ? "var(--bw-up)" : "var(--bw-down)";
 }
 
-/** inline background style for an HTML grid cell (forward matrix). */
-export function tintStyle(delta: number | null, gridMax: number): CSSProperties {
-  const pct = tintAlphaPct(delta, gridMax);
-  if (pct == null) return {};
-  const c = delta! > 0 ? "var(--bw-up)" : "var(--bw-down)";
-  return { backgroundColor: `color-mix(in srgb, ${c} ${pct}%, transparent)` };
+function wash(alpha: number, up: boolean): CSSProperties {
+  return {
+    backgroundColor: `color-mix(in srgb, ${hue(up)} ${(alpha * 100).toFixed(1)}%, transparent)`,
+  };
 }
 
-/** class + fillOpacity for an SVG grid cell (calendar heatmap), sharing the
- * exact same scale so a cell means the same everywhere. */
-export function tintSvg(
-  delta: number,
-  gridMax: number,
-): { cls: string; op: number } | null {
-  const pct = tintAlphaPct(delta, gridMax);
-  if (pct == null) return null;
-  return { cls: delta > 0 ? "text-up" : "text-down", op: pct / 100 };
+/** Binary outlier wash for a change-column cell: pct ≥ 97 → 0.12 tint, else
+ * none. The number keeps its full-strength direction hue (§J). */
+export function columnTint(pct: number | null, up: boolean): CSSProperties {
+  if (pct == null || pct < PCT_HI) return {};
+  return wash(COLUMN_TINT, up);
+}
+
+/** Graded own-history tint for a forward-matrix cell (ink on tint): pct70 →
+ * floor, pct97 → the 0.45 ceiling, below pct70 untinted (§J). */
+export function matrixTint(pct: number | null, up: boolean): CSSProperties {
+  if (pct == null || pct < PCT_LO) return {};
+  const f = Math.min(1, (pct - PCT_LO) / (PCT_HI - PCT_LO));
+  return wash(MATRIX_FLOOR + (MATRIX_FULL - MATRIX_FLOOR) * f, up);
 }

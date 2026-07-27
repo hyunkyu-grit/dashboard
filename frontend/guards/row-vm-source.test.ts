@@ -64,6 +64,7 @@ const forwards: ForwardsPayload = {
         sortKey: [1, 1],
         oneLiner: NONE,
         keyForward: true,
+        movePct: null,
       },
     ],
   } as ForwardsPayload["grid"],

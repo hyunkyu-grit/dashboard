@@ -56,6 +56,7 @@ function fwdCell(start: string, sortKey: number[]) {
     sortKey,
     oneLiner: NONE,
     keyForward: false,
+    movePct: null,
   };
 }
 

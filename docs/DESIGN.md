@@ -294,7 +294,7 @@ places. Each channel still has exactly one meaning, app-wide:
 | Ink opacity    | Time basis (ramp, see §9)                 |
 | Line width     | Time basis (secondary, disambiguates ramp)|
 | Text weight 600| **Structure** — the row anchors (instrument name + `현재` level), NOT outliers (§ revised Session 15) |
-| Color intensity (alpha) | **Outlier magnitude** — how far a move is from that series' own history (§ Session 15; owner-selected scale, Pass E2) |
+| Color intensity (alpha) | **Outlier magnitude vs the series' OWN history** (own-history percentile, §16). Built Session 16 §J with two ceilings on one scale: change columns **0.04** (binary — tint the cell bg on an outlier, never the coloured glyph; 0.04 not 0.12 — see `## Provisional`); forward matrix 0.45 (graded pct70→pct97, ink on tint). The matrix dropped its cross-sectional grid-max, which lit 96–99% of cells. |
 | Cell border    | Structural: live-quoted (non-interpolated) point |
 | Marker dot     | Live-quoted node on charts                |
 | Mini-bar       | Delta sign+magnitude in tables (center-zero, right=+, left=−) |
@@ -794,6 +794,13 @@ all arrive precomputed — the browser never differences a series.
 Choices made to keep the build green where the prompt did not fully specify.
 Confirm or override.
 
+- **Change-column tint ceiling = 0.04, not 0.12 [Session 16 §J].** The coloured
+  change number sits ON its own faint wash in the same hue; a 0.12 wash drops
+  the up-red from 4.78:1 to 3.99:1 (below the 4.5 text floor — the exact defect
+  the guard exists to catch). 0.04 is the measured max that keeps the glyph
+  legible (`tint-contrast.test.ts`). The matrix's 0.45 ceiling is unaffected
+  because its text is ink, not the hue. Owner may raise it only by moving the
+  outlier signal off the same-hue wash (e.g. a border, or a neutral wash).
 - **Pin clears on tab change [Session 16 §I].** A pinned row from another tab
   was showing silently in the preview. Of the two offered cures — clear the pin,
   or keep it and mark which tab it belongs to — the pin is **cleared** on a tab
