@@ -77,13 +77,13 @@ holiday calendar. braveworld owns only the *node placement* (`curves.TENOR_T`),
 the forward **schedule/label** layer (`forwards.py`), and the DV01 annuity
 (`dv01.py`).
 
-## Round-trip finding (Pass A1) — the one that matters
+## Round-trip finding (Pass A1) — accepted by the owner
 
 The bootstrap does **not** reprice its own par inputs to 1e-8:
 
 - **Exact** (≈1e-12) at the `1D` and `3M` money-market anchors.
 - A **≤ 0.25bp residual** on swap tenors, growing with tenor (~2e-4bp at 6M–1Y,
-  ~0.2bp at 10Y).
+  0.22bp worst at 3Y, ~0.05bp at 10Y).
 
 Cause — **not a convention error** (day count / compounding / spot lag would
 break the short end grossly, and it is exact there): (1) the CD91 `3M` node
@@ -92,9 +92,43 @@ cashflows (1.25Y, 1.75Y, …) are interpolated between the sparse curve nodes in
 a **single-pass** bootstrap. A curve that reprices its inputs to machine
 precision needs an **iterated** bootstrap.
 
-The residual is in **frozen** ported code, so it is reported, not patched
-(krw-fi-pms carries the same bootstrap). Everything **derived** from the curve
-is exact relative to it (forward-annuity identity holds to 1e-17), so forwards,
-spreads, flies, and DV01 are internally consistent; only the recovery of the
-original par quotes carries the ≤0.25bp fit residual. Full detail in
-`docs/diagnostics/curve-validation.md`; pinned by `tests/test_validation.py`.
+**Owner decision (closing session, part 2): this residual is ACCEPTED.** It is
+not to be fixed, wrapped, or re-ported. The strict `xfail`
+(`test_round_trip_swap_tenors_to_1e8`) is kept as documentation of an accepted
+limitation, not a flag of a defect. It stays strict so that if the frozen
+engine is ever re-ported with an iterated bootstrap, the test xpasses and the
+change is noticed.
+
+**What it does and does not affect** — the residual is a smoothly, slowly
+varying function of curve *shape*, roughly common to neighbouring points on the
+curve:
+
+- **Change columns (what the product mostly shows) are barely affected.** A
+  1일/1주/1개월 change is a difference of two same-shape curves, so the residual
+  largely **cancels** — the bias on a move is far smaller than the ≤0.25bp bias
+  on the level it is derived from.
+- **A *level* read carries the full residual.** Anyone quoting a displayed
+  forward or spread level for pricing inherits up to ~0.25bp of fit bias
+  relative to a self-consistent curve.
+- **Relationships are exact regardless** (forward-annuity identity to 1e-17):
+  spreads, flies, and the DV01 ratio between forwards are unaffected — the
+  residual is a level bias in the fit, common to the whole curve, not a
+  per-instrument error.
+
+The residual is in **frozen** ported code, so it is reported, not patched.
+`engine_port.py` is byte-identical to the frozen krw-fi-pms engine (@570a2ff),
+so **that system carries the identical residual** — noted here so it is not
+diagnosed a second time from scratch; fixing it there is not this repo's call.
+Full detail in `docs/diagnostics/curve-validation.md`; pinned by
+`tests/test_validation.py`.
+
+## Displayed precision vs. accuracy of a level
+
+Forwards, spreads, and flies are shown to **four decimals** (e.g. `4.2675`).
+That precision **exceeds the absolute accuracy of a level**: the last one or two
+digits of a level are below the ≤0.25bp fit residual above. The extra digits are
+still meaningful for **comparing cells within a single snapshot** (the residual
+is common to the snapshot, so relative ordering and small differences between
+cells are real), but they are **not** meaningful for **quoting a level** to that
+precision. Four decimals is kept deliberately for intra-snapshot legibility, not
+as a claim of four-decimal absolute accuracy.

@@ -66,11 +66,13 @@ def test_round_trip_money_market_anchors_exact(ds):
 
 @pytest.mark.xfail(
     strict=True,
-    reason="Frozen single-pass bootstrap: swap tenors do not reprice their own "
-    "par inputs to 1e-8 (≤0.25bp residual, grows with tenor). Sub-annual "
-    "cashflows between sparse nodes + CD91 node at 0.2493y. See "
-    "docs/diagnostics/curve-validation.md. Fixing needs an iterated re-port of "
-    "engine_port.bootstrap_zero_curve (owner's call — frozen code).",
+    reason="ACCEPTED LIMITATION (owner decision), not a defect. Swap tenors do "
+    "not reprice their own par inputs to 1e-8: a ≤0.25bp residual, exact at "
+    "1D/3M, from a single-pass sparse-node bootstrap + the CD91 node at "
+    "0.2493y. The owner accepted it and chose NOT to re-port the frozen "
+    "engine. This xfail documents the accepted limitation; it stays strict so a "
+    "future iterated re-port (which would make it xpass) is noticed. See "
+    "docs/CONVENTIONS.md and docs/diagnostics/curve-validation.md.",
 )
 def test_round_trip_swap_tenors_to_1e8(ds):
     zc = bootstrap_zero_curve(par_rates_at(ds, ds.asof))
