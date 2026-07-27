@@ -140,7 +140,7 @@ function Body({ row, summary }: { row: Row; summary: WallSummary }) {
         </div>
         <span className="text-[12px] opacity-45">지난 10년 흐름입니다</span>
       </div>
-      <DetailChart id={row.seriesId} width={900} height={420} />
+      <DetailChart id={row.seriesId} unit={row.unit} width={900} height={420} />
       {/* what this instrument IS — static, keyed to kind (§ Pass C1) */}
       <p className="mt-3 max-w-[720px] text-[13px] leading-relaxed opacity-70">
         {instrumentGloss(row)}
