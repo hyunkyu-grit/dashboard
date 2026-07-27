@@ -94,12 +94,18 @@ export function DetailChart({
   chartType,
   width,
   height,
+  onVisibleRange,
+  onHoverDate,
 }: {
   id: string;
   unit: Unit;
   chartType: ChartType;
   width: number;
   height: number;
+  // §C: let the curve heatmap track the chart — the visible [from,to] date
+  // window (rebucket target) and the crosshair date (hovered column).
+  onVisibleRange?: (from: string | null, to: string | null) => void;
+  onHoverDate?: (date: string | null) => void;
 }) {
   const isCandle = chartType !== "line";
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -108,6 +114,15 @@ export function DetailChart({
   const [themeTick, setThemeTick] = useState(0);
   const [hover, setHover] = useState<Hover | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
+
+  // callbacks read via ref so the once-created subscriptions never go stale;
+  // synced in an effect (refs must not be written during render)
+  const cbRange = useRef(onVisibleRange);
+  const cbHover = useRef(onHoverDate);
+  useEffect(() => {
+    cbRange.current = onVisibleRange;
+    cbHover.current = onHoverDate;
+  });
 
   const { data, isError } = useQuery<CandlesPayload | LineDetail>({
     queryKey: ["chart", id, chartType],
@@ -122,14 +137,27 @@ export function DetailChart({
   const dByTime = useRef<Map<string, number | null>>(new Map());
   const barByTime = useRef<Map<string, OhlcBar>>(new Map());
   const linePointsRef = useRef<HistoryPoint[]>([]);
+  const timesRef = useRef<string[]>([]); // ordered times, both modes
   useEffect(() => {
     if (data && "points" in data) {
       linePointsRef.current = data.points;
       dByTime.current = new Map(data.points.map((p) => [p.t, p.d]));
+      timesRef.current = data.points.map((p) => p.t);
     } else if (data && "bars" in data) {
       barByTime.current = new Map(data.bars.map((b) => [b.t, b]));
+      timesRef.current = data.bars.map((b) => b.t);
     }
   }, [data]);
+
+  // map a logical range (fractional data indices) to the visible date window
+  function emitRange(r: LogicalRange | null) {
+    const times = timesRef.current;
+    if (times.length === 0) return;
+    const clamp = (v: number) => Math.max(0, Math.min(times.length - 1, v));
+    const lo = r ? clamp(Math.round(r.from)) : 0;
+    const hi = r ? clamp(Math.round(r.to)) : times.length - 1;
+    cbRange.current?.(times[lo], times[hi]);
+  }
 
   function statsForRange(points: HistoryPoint[], range: LogicalRange | null): Stats | null {
     if (points.length === 0) return null;
@@ -180,8 +208,10 @@ export function DetailChart({
       const t = param.time as string | undefined;
       if (!t || !param.point) {
         setHover(null);
+        cbHover.current?.(null);
         return;
       }
+      cbHover.current?.(t); // §C: heatmap highlights the hovered column
       if (isCandle) {
         const bar = barByTime.current.get(t);
         if (!bar) return setHover(null);
@@ -193,11 +223,11 @@ export function DetailChart({
       }
     });
 
-    if (!isCandle) {
-      chart
-        .timeScale()
-        .subscribeVisibleLogicalRangeChange((r) => setStats(statsForRange(linePointsRef.current, r)));
-    }
+    // visible range → stats (line) and the heatmap x-domain (§C), both modes
+    chart.timeScale().subscribeVisibleLogicalRangeChange((r) => {
+      if (!isCandle) setStats(statsForRange(linePointsRef.current, r));
+      emitRange(r);
+    });
 
     return () => {
       chart.remove();

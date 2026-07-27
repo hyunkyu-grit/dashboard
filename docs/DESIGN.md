@@ -236,7 +236,10 @@ drag dismiss; `?tile=series:<id>` keeps working).
   `1s2s10s` it is the context explaining why the fly moved (a column one colour
   = parallel shift; top-heavy = front-end led; light middle, dark ends = a fly
   move). This is NOT the removed preview heatmap (that was daily change = the
-  slope of the line). Backend precomputes the grid (§16).
+  slope of the line). Backend precomputes the grid (§16). **Synced to the chart
+  [final §C]:** the x-domain binds to the chart's visible range (rebucket by
+  slicing on zoom, cells kept ≥8px) and the crosshair runs through both — the
+  hovered column takes an orange focus rule aligned to the chart crosshair.
 - **Chart type: 선 · 주봉 · 월봉 [Session 16 §G].** A selector in the popup
   (line only in the preview — candles need width it lacks). Closes-only data
   means a true daily candle is impossible (open would equal close), so no 일봉;
@@ -823,12 +826,12 @@ all arrive precomputed — the browser never differences a series.
 Choices made to keep the build green where the prompt did not fully specify.
 Confirm or override.
 
-- **Curve heatmap is static, not zoom-synced [Session 16 §D].** It covers the
-  full 10y window (~110 buckets) and aligns to the chart width, but does not yet
-  re-bucket on chart zoom or run the crosshair through both — the static
-  full-window view already delivers the parallel/front-led/fly reading. A later
-  session can sync it to the chart's visible logical range and share the
-  crosshair.
+- **RESOLVED [final §C] — the curve heatmap is synced to the chart.** DetailChart
+  emits its visible date window and crosshair date; the heatmap binds its
+  x-domain to that window (shows the buckets in view, stretched to fill width so
+  cells stay ≥8px — the 110-bucket full range is already ~8px, so no step-up is
+  needed) and marks the hovered column with an orange focus rule aligned to the
+  chart crosshair. Moved to §2 popup.
 - **Candle interval step-up not needed at current densities [Session 16 §G].**
   Ten years is ~550 weekly or ~130 monthly bars; both fit the popup's ~900px at
   minBarSpacing 0.05 without dropping bars, so the auto-step-up to a coarser

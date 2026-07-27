@@ -119,10 +119,10 @@ export function PayReceive({ row, summary }: { row: Row; summary: WallSummary })
     nodes.length === 1 ? W / 2 : PAD + (i / (nodes.length - 1)) * (W - 2 * PAD);
   // higher rate → higher on screen (smaller y); leave headroom for the ghost.
   const y = (r: number) => PAD + GHOST / 2 + (1 - (r - lo) / span) * plotH;
-  const yGhost = (n: Node, i: number) => y(n.rate) - n.arrow * GHOST;
+  const yGhost = (n: Node) => y(n.rate) - n.arrow * GHOST;
 
   const solid = nodes.map((n, i) => `${x(i)},${y(n.rate)}`).join(" ");
-  const ghost = nodes.map((n, i) => `${x(i)},${yGhost(n, i)}`).join(" ");
+  const ghost = nodes.map((n, i) => `${x(i)},${yGhost(n)}`).join(" ");
 
   return (
     <div className="mt-4">

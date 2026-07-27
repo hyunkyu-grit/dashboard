@@ -167,6 +167,9 @@ function Body({
   chartType: ChartType;
   onChartType: (t: ChartType) => void;
 }) {
+  // chart → heatmap sync (§C): the visible date window + the crosshair date.
+  const [visibleRange, setVisibleRange] = useState<[string, string] | null>(null);
+  const [hoveredDate, setHoveredDate] = useState<string | null>(null);
   if (!row.seriesId) {
     // every group now derives a history (outrights, spreads, forwards, vol);
     // this stays only as a defensive fallback.
@@ -193,10 +196,12 @@ function Body({
         chartType={chartType}
         width={900}
         height={420}
+        onVisibleRange={(from, to) => setVisibleRange(from && to ? [from, to] : null)}
+        onHoverDate={setHoveredDate}
       />
       {/* the CURVE over time (§D) — context for a fly/spread move, not this
-          instrument. Aligned under the chart. */}
-      <CurveHeatmap width={900} />
+          instrument. Synced to the chart's x-axis + crosshair (§C). */}
+      <CurveHeatmap width={900} visibleRange={visibleRange} hoveredDate={hoveredDate} />
       {/* what this instrument IS — static, keyed to kind (§ Pass C1) */}
       <p className="mt-3 max-w-[720px] text-[13px] leading-relaxed opacity-70">
         {instrumentGloss(row)}

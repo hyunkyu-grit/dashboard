@@ -19,7 +19,17 @@ import { fetchCurveHeatmap } from "@/lib/api";
 
 import { matrixTint } from "./tint";
 
-export function CurveHeatmap({ width }: { width: number }) {
+export function CurveHeatmap({
+  width,
+  visibleRange,
+  hoveredDate,
+}: {
+  width: number;
+  // §C: the chart's visible [from,to] date window and crosshair date, so the
+  // heatmap shares the chart's x-axis and marks the hovered column.
+  visibleRange?: [string, string] | null;
+  hoveredDate?: string | null;
+}) {
   const { data } = useQuery({
     queryKey: ["curve-heatmap"],
     queryFn: fetchCurveHeatmap,
@@ -28,15 +38,32 @@ export function CurveHeatmap({ width }: { width: number }) {
   if (!data) return null;
 
   const nNodes = data.nodes.length;
-  const nCols = data.dates.length;
   const LABEL_W = 42;
   const gridW = Math.max(0, width - LABEL_W);
   const rowH = 12;
 
+  // bind the x-domain to the chart's visible range: show only the buckets in
+  // view, stretched to fill the width (fewer columns when zoomed → wider cells,
+  // so cells stay ≥8px; the 110-bucket full range is already ~8px, §C).
+  const cols = data.dates
+    .map((t, i) => ({ t, i }))
+    .filter(({ t }) =>
+      visibleRange ? t >= visibleRange[0] && t <= visibleRange[1] : true,
+    );
+  const nCols = cols.length;
+
+  // the column under the crosshair = the visible bucket nearest the hovered
+  // date (buckets are period-end dates, so the first with date ≥ hovered).
+  let hoverCol = -1;
+  if (hoveredDate && nCols > 0) {
+    hoverCol = cols.findIndex((c) => c.t >= hoveredDate);
+    if (hoverCol < 0) hoverCol = nCols - 1;
+  }
+
   return (
     <div className="mt-4" style={{ width }}>
       <div className="mb-1 text-[12px] opacity-45">
-        커브 히트맵 · 지난 10년 (이 종목이 아니라 커브 전체입니다)
+        커브 히트맵 (이 종목이 아니라 커브 전체입니다)
       </div>
       <div className="flex">
         {/* node labels, short at top → long at bottom */}
@@ -51,21 +78,38 @@ export function CurveHeatmap({ width }: { width: number }) {
           ))}
         </div>
         {/* contiguous cells; radius only on the block's outer corners */}
-        <div
-          className="grid overflow-hidden rounded-[6px]"
-          style={{
-            width: gridW,
-            gridTemplateColumns: `repeat(${nCols}, 1fr)`,
-            gridTemplateRows: `repeat(${nNodes}, ${rowH}px)`,
-          }}
-        >
-          {data.cells.flatMap((row, ri) =>
-            row.map((cell, ci) => (
-              <div
-                key={`${ri}-${ci}`}
-                style={cell ? matrixTint(cell.pct, cell.d > 0) : undefined}
-              />
-            )),
+        <div className="relative" style={{ width: gridW }}>
+          <div
+            className="grid overflow-hidden rounded-[6px]"
+            style={{
+              width: gridW,
+              gridTemplateColumns: `repeat(${nCols}, 1fr)`,
+              gridTemplateRows: `repeat(${nNodes}, ${rowH}px)`,
+            }}
+          >
+            {data.cells.flatMap((row, ri) =>
+              cols.map(({ i }) => {
+                const cell = row[i];
+                return (
+                  <div
+                    key={`${ri}-${i}`}
+                    style={cell ? matrixTint(cell.pct, cell.d > 0) : undefined}
+                  />
+                );
+              }),
+            )}
+          </div>
+          {/* crosshair through the heatmap: the hovered column takes focus */}
+          {hoverCol >= 0 && nCols > 0 && (
+            <div
+              className="pointer-events-none absolute top-0 bg-interactive"
+              style={{
+                left: `${((hoverCol + 0.5) / nCols) * 100}%`,
+                width: 2,
+                height: nNodes * rowH,
+                transform: "translateX(-1px)",
+              }}
+            />
           )}
         </div>
       </div>
