@@ -41,6 +41,7 @@ export interface SeriesSummary {
   // §16: computed server-side, read straight through by the row builder.
   sortKey: number[];
   quoted: boolean | null;
+  movePct: number | null; // own-history percentile of today's |D-1| move
   oneLiner: OneLiner;
   spark: SparkPoint[];
 }

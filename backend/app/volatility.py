@@ -166,6 +166,7 @@ def _volatility_row(dataset: Dataset, tenor: str,
         },
         "sortKey": [tenor_years(tenor)],
         "quoted": None,
+        "movePct": move_pct,
         "oneLiner": one_liner,
         "spark": [],
     }

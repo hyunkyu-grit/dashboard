@@ -19,6 +19,7 @@ function row(id: string, group: Group): Row {
     seriesId: id,
     oneLiner: "",
     sortKey: [1],
+    movePct: null,
   };
 }
 

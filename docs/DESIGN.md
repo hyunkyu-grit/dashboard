@@ -119,8 +119,16 @@ Behaviour:
 
 - **The global comparison-basis selector is deleted** (its state too) — the
   five bases are columns.
-- **Filter chips** above the table: 전체 / 아웃라이트 / 스프레드 / 포워드 /
-  변동성. Default 전체.
+- **Filter chips (tabs)** above the table: 전체 / 아웃라이트 / 스프레드 /
+  포워드 / 변동성. Default 전체.
+- **Screener presets [§D, Session 15]** — a *second* row of chips beneath the
+  tabs (never a left sidebar; one surface). A named view in plain language that
+  **filters on top of the active tab**: 오늘 많이 움직인 것 (own-history move
+  pct ≥ 90) / 10년 고점권 (pct ≥ 90) / 10년 저점권 (pct ≤ 10) / 되돌림 (sign
+  flip between adjacent bases) / 호가만 (live-quoted only) / 주요 포워드. One at
+  a time, clicking again clears; a one-line 합니다체 description shows beneath
+  the row when active. Data-driven (`ui/screener.ts` — a predicate per view), so
+  a new named view is a definition, not a component. Default: no chip.
 - **Sortable by any change column, both directions.** Default order is
   instrument order (not a ranking). Sorting by |change| is one click = "what
   moved today".

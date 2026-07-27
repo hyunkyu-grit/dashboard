@@ -32,6 +32,7 @@ const src: SeriesSummary = {
   range10y: { min: 1, max: 5, pct: 99 },
   sortKey: [10],
   quoted: true,
+  movePct: 42,
   oneLiner: EXTREME,
   spark: [],
 };

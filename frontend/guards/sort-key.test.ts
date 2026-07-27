@@ -37,6 +37,7 @@ function outright(id: string): SeriesSummary {
     range10y: { min: 1, max: 5, pct: 50 },
     sortKey: id.split("-").map((t) => yr[t]),
     quoted: true,
+    movePct: 50,
     oneLiner: NONE,
     spark: [],
   };

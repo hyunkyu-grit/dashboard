@@ -21,6 +21,7 @@ import {
   type Group,
   type Row,
 } from "./rows";
+import { SCREENERS } from "./screener";
 
 const BASIS_HEAD: Record<BasisKey, string> = {
   d1: "어제",
@@ -133,8 +134,10 @@ export function InstrumentTable({
   const [sortAsc, setSortAsc] = useState(false);
   const [startFilter, setStartFilter] = useState<string>("all");
   const [showMatrix, setShowMatrix] = useState(false);
+  const [screener, setScreener] = useState<string | null>(null);
 
   const isForward = filter === "forward";
+  const activeScreener = SCREENERS.find((s) => s.id === screener) ?? null;
 
   const startOptions = useMemo(() => {
     const s: string[] = [];
@@ -151,6 +154,8 @@ export function InstrumentTable({
     if (isForward && startFilter !== "all") {
       base = base.filter((r) => r.startLabel === startFilter);
     }
+    // a screener preset is a filter on top of the active tab (§D)
+    if (activeScreener) base = base.filter(activeScreener.test);
     if (sortCol) {
       const withVal = base.filter((r) => r.changes[sortCol] != null);
       const without = base.filter((r) => r.changes[sortCol] == null);
@@ -170,7 +175,7 @@ export function InstrumentTable({
       }
       return cmpKey(a.sortKey, b.sortKey);
     });
-  }, [rows, filter, startFilter, sortCol, sortAsc, isForward]);
+  }, [rows, filter, startFilter, sortCol, sortAsc, isForward, activeScreener]);
 
   // interleave group headings for the forward tab in default order (§3)
   const items = useMemo(() => {
@@ -232,6 +237,31 @@ export function InstrumentTable({
           );
         })}
       </div>
+
+      {/* screener presets (§D): a second row of chips, a filter on top of the
+          active tab — one at a time, click again clears. Not a sidebar. */}
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {SCREENERS.map((sc) => {
+          const on = screener === sc.id;
+          return (
+            <button
+              key={sc.id}
+              type="button"
+              onClick={() => setScreener(on ? null : sc.id)}
+              className={`rounded-full px-2.5 py-1 text-[12px] transition-colors ${
+                on
+                  ? "bg-ink text-page"
+                  : "border border-edge opacity-65 hover:opacity-100"
+              }`}
+            >
+              {sc.label}
+            </button>
+          );
+        })}
+      </div>
+      {activeScreener && (
+        <p className="mt-1.5 text-[12px] opacity-55">{activeScreener.description}</p>
+      )}
 
       {/* forward-tab secondary controls (§3): narrow by start point, or flip
           to the 21×8 matrix */}

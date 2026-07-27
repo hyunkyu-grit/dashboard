@@ -313,6 +313,9 @@ def summarize(dataset: Dataset, series_id: str, label: str, kind: str,
         },
         "sortKey": sort_key,
         "quoted": quoted,
+        # own-history move percentile — powers the "오늘 많이 움직인 것" screener
+        # (§D) and rung 1 of the 한 줄; the browser never recomputes it (§16).
+        "movePct": move_pct,
         "oneLiner": classify_one_liner(move_pct, now is not None),
         "spark": [
             {"t": d.isoformat(), "v": v}

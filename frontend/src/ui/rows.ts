@@ -44,6 +44,8 @@ export interface Row {
   oneLiner: string; // rendered from the backend classification (§16)
   /** explicit ascending sort key, supplied by the backend (§6/§16). */
   sortKey: number[];
+  /** own-history move percentile (§D screener); null where unavailable. */
+  movePct: number | null;
   /** true only for the six quoted key forwards (pinned to the top, §3). */
   keyForward?: boolean;
   /** forward start point label, for the secondary start filter (§3). */
@@ -68,6 +70,7 @@ export const ROW_FIELD_SOURCE: Record<keyof Row, "dto" | "format"> = {
   seriesId: "format",
   oneLiner: "format", // rendered string built from the dto classification
   sortKey: "dto",
+  movePct: "dto",
   keyForward: "dto",
   startLabel: "format",
   quoted: "dto",
@@ -119,6 +122,7 @@ function fromSummary(s: SeriesSummary, group: Group, label: string): Row {
     seriesId: s.id,
     oneLiner: renderOneLiner(s.oneLiner),
     sortKey: s.sortKey,
+    movePct: s.movePct,
     quoted: s.quoted ?? undefined,
   };
 }
@@ -155,6 +159,7 @@ export function buildRows(
           seriesId: name, // stage-2 forward history (Session 13)
           oneLiner: renderOneLiner(cell.oneLiner),
           sortKey: cell.sortKey,
+          movePct: null, // forwards have no cheap daily-move history
           keyForward: cell.keyForward,
           startLabel: sp.label,
         });
