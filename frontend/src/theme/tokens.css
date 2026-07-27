@@ -40,11 +40,13 @@
   --bw-interactive: #f58220;
   --bw-on-interactive: #1a1a1a;
 
-  /* Semantic direction (§9) — red up / blue down (Toss, owner-supplied).
-   * Down clears 4.5:1 on white; up #f04452 is 3.71:1 (brand red, above the
-   * 3:1 graphical floor — see ## Provisional). Only directional numbers/marks
-   * use these; levels stay ink. */
-  --bw-up: #f04452;
+  /* Semantic direction (§9) — red up / blue down (Toss convention). These are
+   * used as change-number TEXT, so both must clear 4.5:1, not just the 3:1 mark
+   * floor. Up was #f04452 (3.71:1 on white — the one colour covering most of
+   * the table was too light to read); deepened to #d92d3c (4.78:1 on the tile,
+   * 4.58:1 on the page) keeping hue + saturation (§ Session 15 Pass E1). Down
+   * #0064ff is 4.92:1. Levels stay ink. */
+  --bw-up: #d92d3c;
   --bw-down: #0064ff;
 
   /* Chart line — line-safe orange (§9). #f58220 is only 2.6:1 on white and

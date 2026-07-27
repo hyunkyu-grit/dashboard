@@ -748,10 +748,13 @@ Confirm or override.
 - **Name split**: the product is Sauron (header, `<title>`, all user-facing
   copy). The repo directory, npm package, mirror script, and internal
   identifiers stay `braveworld` — a path rename is churn with no payoff today.
-- **Direction colors**: up `#F04452` (Toss Red) / dark `#F16E77`; down
-  `#0064FF` (Toss Blue) / dark `#4C93FF`. `#0064FF` is ~3.9:1 on the dark tile,
-  so dark lightens to `#4C93FF`; light values clear 4.5:1 as given. Gated in
-  `band-hue-contrast.test.ts`.
+- **Direction colors**: up `#D92D3C` / dark `#F16E77`; down `#0064FF` (Toss
+  Blue) / dark `#4C93FF`. Up was the owner's `#F04452` (Toss Red) but at 3.71:1
+  on white it was too light to read as change-number text — the one colour
+  covering most of the table — so Session 15 Pass E1 deepened it to `#D92D3C`
+  (4.78:1 tile / 4.58:1 page), hue and saturation kept. `#0064FF` is ~3.9:1 on
+  the dark tile, so dark lightens to `#4C93FF`. All four now clear the **4.5:1
+  text floor**; `band-hue-contrast.test.ts` gates by usage (text 4.5, stroke 3).
 - **Line-safe orange**: chart stroke light `#C2560F` (measured ≥3:1 on white),
   dark `#F58220`. The action-button fill stays `#F58220` in both themes (a
   large filled shape with a near-black label tolerates the lower ratio). Swap

@@ -1,10 +1,17 @@
-/* Guard: the data colors that actually ship must clear their legibility floor
- * against the surface they sit on (§9, Session 12 list-first). A future palette
- * edit that drops one below the floor fails here.
+/* Guard: the data colours that actually ship must clear their legibility floor
+ * against the surface they sit on (§9). Split by USAGE (§ Session 15 Pass E1):
+ * a colour used as TEXT needs 4.5:1; a colour used only as a stroke or fill
+ * needs 3:1. The old guard asserted only 3:1 for everything and so passed while
+ * the up-red — used as change-number text — sat at 3.71:1 and was too light to
+ * read. A guard that passes while the thing it guards is broken is worse than
+ * no guard. Hex is read from tokens.css.
  *
- * What ships on data: the line-safe orange chart stroke (graphical, 3:1 floor)
- * and the two direction colors (red up / blue down — used as small change-
- * number text and as mini-bar/heatmap marks). Hex is read from tokens.css. */
+ * Usage map:
+ *   --bw-line  : chart stroke only        → graphical, 3:1
+ *   --bw-up    : change-number TEXT        → text, 4.5:1
+ *   --bw-down  : change-number TEXT        → text, 4.5:1
+ * The direction colours are text on the tile (normal rows) and on the page
+ * (the active/hover row background), so both light surfaces are checked. */
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -41,32 +48,37 @@ function contrast(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-const lightTile = hex(lightBlock, "--bw-tile");
-const darkTile = hex(darkBlock, "--bw-tile");
+const TEXT_FLOOR = 4.5;
+const GRAPHIC_FLOOR = 3;
 
-describe("line-safe orange clears 3:1 on both surfaces (§9)", () => {
-  it("chart stroke is not washed out", () => {
-    expect(contrast(hex(lightBlock, "--bw-line"), lightTile)).toBeGreaterThanOrEqual(3);
-    expect(contrast(hex(darkBlock, "--bw-line"), darkTile)).toBeGreaterThanOrEqual(3);
+const lightTile = hex(lightBlock, "--bw-tile");
+const lightPage = hex(lightBlock, "--bw-page");
+const darkTile = hex(darkBlock, "--bw-tile");
+const darkPage = hex(darkBlock, "--bw-page");
+
+describe("chart stroke clears the 3:1 graphical floor (§9)", () => {
+  it("line-safe orange is not washed out on either surface", () => {
+    expect(contrast(hex(lightBlock, "--bw-line"), lightTile)).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
+    expect(contrast(hex(darkBlock, "--bw-line"), darkTile)).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
   });
 });
 
-describe("direction colors are legible on both surfaces (§9)", () => {
-  // Direction colors are used as small change-number text (4.5:1 ideal) and as
-  // mini-bar/heatmap marks (3:1 graphical floor). Down and both dark variants
-  // clear 4.5:1; up-light #f04452 is the owner-supplied Toss Red at 3.71:1 on
-  // white — above the 3:1 mark floor, below the 4.5 text ideal, kept as brand
-  // (see ## Provisional). All must clear the 3:1 graphical floor.
-  it("every direction color clears the 3:1 mark floor", () => {
-    expect(contrast(hex(lightBlock, "--bw-up"), lightTile)).toBeGreaterThanOrEqual(3);
-    expect(contrast(hex(lightBlock, "--bw-down"), lightTile)).toBeGreaterThanOrEqual(3);
-    expect(contrast(hex(darkBlock, "--bw-up"), darkTile)).toBeGreaterThanOrEqual(3);
-    expect(contrast(hex(darkBlock, "--bw-down"), darkTile)).toBeGreaterThanOrEqual(3);
-  });
-
-  it("everything except owner-brand up-red clears the 4.5:1 text floor", () => {
-    expect(contrast(hex(lightBlock, "--bw-down"), lightTile)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(hex(darkBlock, "--bw-up"), darkTile)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(hex(darkBlock, "--bw-down"), darkTile)).toBeGreaterThanOrEqual(4.5);
-  });
+describe("direction colours clear the 4.5:1 TEXT floor on every surface they sit on", () => {
+  // change-number text lands on the tile (rows) and the page (active/hover row)
+  const cases: [string, string, string][] = [
+    ["up", "--bw-up", "light"],
+    ["down", "--bw-down", "light"],
+    ["up", "--bw-up", "dark"],
+    ["down", "--bw-down", "dark"],
+  ];
+  for (const [name, token, theme] of cases) {
+    const block = theme === "light" ? lightBlock : darkBlock;
+    const surfaces = theme === "light"
+      ? { tile: lightTile, page: lightPage }
+      : { tile: darkTile, page: darkPage };
+    it(`${theme} ${name} is legible as text`, () => {
+      expect(contrast(hex(block, token), surfaces.tile)).toBeGreaterThanOrEqual(TEXT_FLOOR);
+      expect(contrast(hex(block, token), surfaces.page)).toBeGreaterThanOrEqual(TEXT_FLOOR);
+    });
+  }
 });
