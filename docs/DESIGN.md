@@ -259,6 +259,16 @@ drag dismiss; `?tile=series:<id>` keeps working).
   outright shows its DV01 alone. DV01 = the par-swap annuity off the
   bootstrapped curve (`backend/app/dv01.py`); the browser never computes it
   (§16). No notional entry / P&L / sizing — those stay in the reserved region.
+- **Pay/Receive curve diagram [final session §A].** Beside the DV01 ratio: a
+  ~200×120 curve sketch with a 페이/리시브 control. **One rule for every kind —
+  Pay profits when the displayed value rises, Receive when it falls** (no
+  special cases, no residual-duration caveat — the DV01-neutral weights make the
+  quoted value the P&L driver). A solid current line at the instrument's legs
+  (1 node + context outright, 2 spread, 3 fly, 1 forward), a dashed ghost of the
+  wanted shape, an up/down arrow per leg (up-colour up, down-colour down), and
+  one desk-term line: 금리 상승/하락 (outright/forward), 스티프닝/플래트닝
+  (spread), 벨리 약세/강세 (fly). Volatility has no rate position → no diagram.
+  Schematic (the ghost shift is a fixed visual amount, not to scale).
 - (The calendar heatmap that used to sit here was removed in §I — see the
   preview note above.)
 - A **clearly-marked empty region reserved for future strategy tooling** — a

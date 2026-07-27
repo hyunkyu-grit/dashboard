@@ -20,6 +20,7 @@ import { ERROR_SENTENCE } from "./copy";
 import { CurveHeatmap } from "./CurveHeatmap";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { instrumentGloss, instrumentSubtitle } from "./gloss";
+import { PayReceive } from "./PayReceive";
 import { SHEET_SPRING } from "./motion";
 import type { Row } from "./rows";
 
@@ -200,7 +201,11 @@ function Body({
       <p className="mt-3 max-w-[720px] text-[13px] leading-relaxed opacity-70">
         {instrumentGloss(row)}
       </p>
-      <LegWeights seriesId={row.seriesId} />
+      {/* what you execute (DV01 ratio, §B) beside which way it profits (§A) */}
+      <div className="flex flex-wrap items-start gap-10">
+        <LegWeights seriesId={row.seriesId} />
+        <PayReceive row={row} summary={summary} />
+      </div>
       <SixBasisReadout summary={summary} seriesId={row.seriesId} />
       <StrategyRegion />
     </>
