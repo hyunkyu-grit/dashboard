@@ -829,12 +829,40 @@ every entry has a status: **each is a CONFIRMED decision of record unless tagged
 the code and spec; open entries name work genuinely not done. Do not re-litigate
 a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
 
+- **VERIFIED LIVE [closing session, part 2, Pass B] — surfaces looked at in a
+  browser for the first time.** Every one held up; no defect found, no fix
+  needed:
+  - **Dark mode** across every surface (table, popup line + candles, forward
+    matrix tint, curve heatmap, banner, screener chips): contrast is clean,
+    including the blue/red direction numbers, the red banner, and the ink-on-red
+    matrix wash. The theme persists across reload (`localStorage["bw-theme"]` +
+    the pre-hydration init in `layout.tsx`).
+  - **Single-column bottom-sheet fallback** below 1520px: table goes full width,
+    a row click raises the preview as a bottom sheet with a drag handle and the
+    press-to-enlarge line. (The automation window is locked at 1920px, so this
+    was forced by temporarily raising `TWO_PANE_MIN`, screenshotted, and
+    reverted — no code change shipped.)
+  - **Deep-zoom heatmap rebucketing** confirmed: zooming the candle chart into a
+    ~1-year window widened the heatmap cells into far fewer buckets and kept the
+    orange crosshair-synced marker aligned.
+  - **Candles never comb** at any zoom (LWC scales candle width to bar spacing);
+    the interval is user-chosen (선/주봉/월봉) and labelled in the toggle, so the
+    absence of an auto step-up is invisible to the reader (see the entry below).
+  - **Quiet-day tint reads as calm, not broken.** The matrix/heatmap tint is an
+    OWN-HISTORY PERCENTILE with an untinted floor below pct70 (`ui/tint.ts`), so
+    on a calm day most cells fall below pct70 and go **untinted** (clean, numbers
+    still shown) rather than washing uniformly faint. This is exactly the failure
+    the percentile scale was introduced to avoid (it replaced a grid-max scale
+    that lit 96–99% of cells on a big day). Confirmed against the calm 2017–2019
+    region of the curve heatmap, which reads near-blank as intended. No as-of
+    selector exists to replay a calm date on the main matrix (single-snapshot
+    design), so the calm behaviour was verified on the shared heatmap scale.
 - **RESOLVED [final §C] — the curve heatmap is synced to the chart.** DetailChart
   emits its visible date window and crosshair date; the heatmap binds its
   x-domain to that window (shows the buckets in view, stretched to fill width so
   cells stay ≥8px — the 110-bucket full range is already ~8px, so no step-up is
   needed) and marks the hovered column with an orange focus rule aligned to the
-  chart crosshair. Moved to §2 popup.
+  chart crosshair. Moved to §2 popup. **Rebucketing verified live [Pass B].**
 - **Candle interval step-up not needed at current densities [Session 16 §G].**
   Ten years is ~550 weekly or ~130 monthly bars; both fit the popup's ~900px at
   minBarSpacing 0.05 without dropping bars, so the auto-step-up to a coarser
