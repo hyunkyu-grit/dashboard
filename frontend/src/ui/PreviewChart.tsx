@@ -2,7 +2,8 @@
 
 /* Preview line chart (DESIGN §2). Hand-rolled SVG so the floating tooltip is
  * simple and lightweight-charts stays confined to the enlarged view (§11).
- * Orange line (§9). Hovering shows a floating card near the cursor:
+ * Blue line (--bw-line, §9 palette cut). Hovering shows a floating card near
+ * the cursor:
  * 날짜 · 레벨 · 구간 최고 · 구간 최저 · 구간 평균 · 당일 변화. */
 
 import { useState } from "react";

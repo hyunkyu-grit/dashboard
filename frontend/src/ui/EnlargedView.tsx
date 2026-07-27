@@ -1,7 +1,7 @@
 "use client";
 
 /* Enlarged view (DESIGN §2). Full-screen sheet over the list: for a series,
- * the large lightweight-charts history (orange, assertDomainRendered) + a
+ * the large lightweight-charts history (blue line, assertDomainRendered) + a
  * six-basis segmented readout (the full ramp lives here) + the larger calendar
  * heatmap + a reserved-but-empty strategy region. For a forward, the forward
  * matrix instead. Esc / backdrop dismiss (drag added in Pass 4); wrapped in an

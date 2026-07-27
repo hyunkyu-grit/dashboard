@@ -1,7 +1,7 @@
 "use client";
 
 /* Right preview pane (DESIGN §2). Responds to the active table row: an empty
- * sentence before anything is hovered; the series' 10y history (orange) with a
+ * sentence before anything is hovered; the series' 10y history (blue line) with a
  * floating tooltip and a calendar heatmap below; a sentence for forwards /
  * volatility (no stage-2 history). Clicking the chart opens the enlarged view. */
 

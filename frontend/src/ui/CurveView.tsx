@@ -1,8 +1,8 @@
 "use client";
 
 /* Idle right-pane curve (DESIGN §2/§4, restored Session 13). No row hovered →
- * the pane shows the curve for the active tab. Equal-spaced nodes, orange
- * line, two lines only (Now + D-1 comparison — the full six-basis ramp lives
+ * the pane shows the curve for the active tab. Equal-spaced nodes, blue
+ * line (--bw-line, §9 palette cut), two lines only (Now + D-1 comparison — the full six-basis ramp lives
  * in the enlarged view). Hand-rolled SVG (lightweight-charts stays enlarged-
  * only, §11). */
 

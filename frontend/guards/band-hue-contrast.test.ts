@@ -57,7 +57,7 @@ const darkTile = hex(darkBlock, "--bw-tile");
 const darkPage = hex(darkBlock, "--bw-page");
 
 describe("chart stroke clears the 3:1 graphical floor (§9)", () => {
-  it("line-safe orange is not washed out on either surface", () => {
+  it("chart-line blue is not washed out on either surface", () => {
     expect(contrast(hex(lightBlock, "--bw-line"), lightTile)).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
     expect(contrast(hex(darkBlock, "--bw-line"), darkTile)).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
   });
