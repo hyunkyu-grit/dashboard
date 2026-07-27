@@ -794,6 +794,17 @@ all arrive precomputed — the browser never differences a series.
 Choices made to keep the build green where the prompt did not fully specify.
 Confirm or override.
 
+- **`당일 변화 +0.0` diagnosis [Session 16 §F].** Not a bug in `d`. On
+  2022-11-28 `ONx9M` genuinely moved +0.01bp (4.0584→4.0585) — `d` matched the
+  true one-observation change exactly, and downsampling preserves it (`d` is
+  computed on the full series before thinning; `test_d_is_a_true_one_observation_change_after_downsample`
+  pins this regardless of the downsample ratio). The `+0.0` is honest 1-decimal
+  display of a genuinely flat day for that specific forward, not the multi-day-
+  as-daily error Session 14 might have introduced. Left the 1dp bp grammar as-is.
+- **`구간` vs `10년` statistics scope [Session 16 §F].** The preview has no
+  zoom, so its min/max/avg ARE the full history and are labelled **`10년`**. The
+  popup zooms, so its stats follow the **visible range** (recompute on zoom) and
+  are labelled **`구간`** — genuinely selectable there.
 - **Change-column tint ceiling = 0.04, not 0.12 [Session 16 §J].** The coloured
   change number sits ON its own faint wash in the same hue; a 0.12 wash drops
   the up-red from 4.78:1 to 3.99:1 (below the 4.5 text floor — the exact defect

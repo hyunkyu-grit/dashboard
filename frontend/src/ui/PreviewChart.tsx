@@ -96,9 +96,11 @@ export function PreviewChart({
         >
           <div className="mb-1 font-semibold">{hp.t}</div>
           <Line k="레벨" v={lvl(hp.v)} />
-          <Line k="구간 최고" v={lvl(stats.max)} />
-          <Line k="구간 최저" v={lvl(stats.min)} />
-          <Line k="구간 평균" v={lvl(stats.avg)} />
+          {/* the preview has no zoom, so its stats ARE the full 10y — the label
+              says so (§F); the popup, which zooms, uses "구간". */}
+          <Line k="10년 최고" v={lvl(stats.max)} />
+          <Line k="10년 최저" v={lvl(stats.min)} />
+          <Line k="10년 평균" v={lvl(stats.avg)} />
           <div className="mt-1 flex justify-between">
             <span className="opacity-50">당일 변화</span>
             <span className={`tabular-nums ${dirClass(dailyChange)}`}>

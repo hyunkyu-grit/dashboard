@@ -179,6 +179,26 @@ def test_series_history_precomputes_deltas_stats_calendar():
     assert [c["d"] for c in h["calendar"]] == [50.0, 0.0, 50.0]
 
 
+def test_d_is_a_true_one_observation_change_after_downsample():
+    # §F: `d` must be the change vs the PREVIOUS OBSERVATION, never a multi-day
+    # change wearing a daily label — even when the preview downsamples the line
+    # (d is computed on the full series before thinning, and each surviving
+    # point keeps its own d). Distinct increments so a multi-step change differs.
+    pairs = [(f"2020-{1 + i // 28:02d}-{1 + i % 28:02d}", float(i * i))
+             for i in range(600)]
+    full = series_history(pairs, "%", "full")["points"]
+    prev = series_history(pairs, "%", "preview")["points"]
+    assert len(prev) == 150 and len(full) == 600
+    by_date = {t: i for i, (t, _v) in enumerate(pairs)}
+    for pt in prev:
+        idx = by_date[pt["t"]]
+        if idx == 0:
+            assert pt["d"] is None
+            continue
+        true_one_obs = round((pairs[idx][1] - pairs[idx - 1][1]) * 100, 2)
+        assert pt["d"] == true_one_obs, (pt["t"], pt["d"], true_one_obs)
+
+
 def test_series_history_bp_unit_does_not_rescale():
     pairs = [("2020-01-01", 10.0), ("2020-01-02", 10.5)]
     h = series_history(pairs, "bp", "full")
