@@ -401,6 +401,16 @@ The table is for exact value reading; the tiles are for shape. Both exist.
   `--bw-shadow-card` tokens — depth is surface steps + hairlines only, in both
   themes. The single sanctioned drop-shadow left in the app is the chart
   tooltip overlay (Tailwind `shadow-lg`), a transient popover, not a surface.
+- **Sticky layers are opaque [Session 15 §G].** Every `position: sticky`
+  element (the table header, the matrix's pinned 시작/날짜 columns and header,
+  their intersection corner) carries an **opaque** background token so rows
+  disappear cleanly behind it while scrolling — no shadow, a hairline marks the
+  boundary. A muted look on such an element must come from a **text-colour
+  alpha** (`text-ink/50`), never element `opacity` (which sinks the opaque bg
+  and lets rows bleed through — the exact bug that had shown rows through the
+  header). `guards/sticky-opaque.test.ts` enforces both: a bg token on every
+  sticky class, and no element opacity on a sticky element or a `<tr>` wrapping
+  sticky cells.
 
 #### The shell is one continuous surface [OWNER, Session 13]
 

@@ -40,11 +40,14 @@ export function ForwardMatrix({ payload }: { payload: ForwardsPayload }) {
       >
         <thead>
           <tr className="h-8">
-            <th className="sticky left-0 top-0 z-30 w-12 bg-tile text-left font-normal opacity-60">
-              시작
+            {/* opacity goes on the label span, never the sticky cell — an
+                opacity on the cell would sink its opaque bg and let rows bleed
+                through (§G). */}
+            <th className="sticky left-0 top-0 z-30 w-12 bg-tile text-left font-normal">
+              <span className="opacity-60">시작</span>
             </th>
-            <th className="sticky left-12 top-0 z-30 w-24 bg-tile text-left font-normal opacity-60">
-              날짜
+            <th className="sticky left-12 top-0 z-30 w-24 bg-tile text-left font-normal">
+              <span className="opacity-60">날짜</span>
             </th>
             {payload.tenors.map((t) => (
               <th key={t} className="sticky top-0 z-20 w-[74px] bg-tile text-right font-semibold">

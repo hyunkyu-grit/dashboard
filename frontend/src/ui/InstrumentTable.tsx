@@ -311,29 +311,33 @@ export function InstrumentTable({
             onMouseLeave={() => onHover(null)}
           >
             <thead>
-              <tr className="text-left align-bottom opacity-50">
-                <th className="sticky top-0 z-10 bg-tile pb-2 pl-3 font-normal">
+              {/* muting is a TEXT-colour alpha (text-ink/50), never element
+                  opacity — opacity on the row would sink the sticky th
+                  backgrounds and let rows bleed through (§G). A hairline (not a
+                  shadow) marks the boundary. */}
+              <tr className="text-left align-bottom text-ink/50">
+                <th className="sticky top-0 z-10 border-b border-edge bg-tile pb-2 pl-3 font-normal">
                   종목
                 </th>
-                <th className="sticky top-0 z-10 bg-tile pb-2 pr-3 text-right font-normal">
+                <th className="sticky top-0 z-10 border-b border-edge bg-tile pb-2 pr-3 text-right font-normal">
                   현재
                 </th>
                 {BASIS_ORDER.map((b) => (
                   <th
                     key={b}
-                    className="sticky top-0 z-10 bg-tile pb-2 pr-3 text-right font-normal"
+                    className="sticky top-0 z-10 border-b border-edge bg-tile pb-2 pr-3 text-right font-normal"
                   >
                     <button
                       type="button"
                       onClick={() => clickSort(b)}
-                      className="hover:opacity-100"
+                      className="hover:text-ink"
                     >
                       {BASIS_HEAD[b]}
                       {sortCol === b ? (sortAsc ? " ↑" : " ↓") : ""}
                     </button>
                   </th>
                 ))}
-                <th className="sticky top-0 z-10 bg-tile pb-2 pr-3 font-normal">
+                <th className="sticky top-0 z-10 border-b border-edge bg-tile pb-2 pr-3 font-normal">
                   한 줄
                 </th>
               </tr>
