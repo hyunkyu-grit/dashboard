@@ -789,10 +789,44 @@ empty on 153/500 days — a log that can be empty, unlike the prior rule
 band-views are now built — §2. Removed Session 14: the volatility engine is now
 built — relative ATR, §4/§16 and `## Provisional`.)
 
-## 14. Motion [Session 12, list-first]
+## 14. Motion [Session 12, list-first; inventory + reorder/morph/gesture — motion session]
 
 Motion is a channel meaning "state change" (§5), chrome only — never animate
-chart path geometry.
+chart path geometry. (The Pass-E curve gesture animates a GHOST copy, never
+the data line — the rule stands.)
+
+### Inventory [motion session, Pass B — what exists in the CURRENT structure]
+
+Most of Session 12's motion assumed the home → band → detail structure; the
+list-first restructure removed those transitions, and the signature moment (a
+band card expanding into its view) went with them. This list is what later
+sessions work from — do not reinstate motion designed for the retired layout.
+
+**Present:**
+1. **Tab underline** — single sliding indicator (`layoutId`), SPRING.
+2. **Enlarged sheet** — backdrop fade (200ms) + sheet slide-up (SHEET_SPRING)
+   + drag-to-dismiss; the single-column preview sheet mirrors it.
+3. **Preview chart entrance** — fade + scale-from-0.98 pop-in, keyed by
+   series, after the ~120ms hover delay.
+4. **Press-scale (0.98)** — on the preview chart block only. NOT on table
+   rows: the old `<table>` couldn't transform rows; §14's press rule kept it
+   to isolated targets. (The Pass-A grid conversion makes rows transformable
+   again; row press-scale stays out until a session decides it.)
+5. **Changed-number cross-fade** (AnimatedNumber, ~180ms).
+6. `prefers-reduced-motion` → MotionConfig collapses everything to instant.
+
+**Recorded in §14 but NOT in the current build (stale spec):** the heatmap
+hover pulse (the calendar heatmap has no pulse) and "rows scale to 0.98"
+(they never did in the list-first table).
+
+**Missing — structural losses this session addresses:**
+- Row reorder on sort / screener filter teleports → **Pass C** (functional:
+  position continuity is what keeps "which row is which" across a re-sort).
+- Pay/Receive toggle hard-cuts between two static drawings → **Pass D** morph.
+- Preview pane hard-swaps series on hover → **Pass D** cross-fade.
+- Pin has no curve-side acknowledgment → **Pass E** ghost gesture.
+
+### Rules (carried forward)
 
 - Library: `motion` (framer-motion's successor). Springs may overshoot: ~stiff
   400, damping 30; durations 200–280ms.
