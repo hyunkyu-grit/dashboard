@@ -33,6 +33,7 @@ from .derive import (
 from .dv01 import build_dv01_table
 from .events import detect_event_clusters
 from .forwards import forward_history, forwards_payload
+from .staleness import dataset_freshness
 from .volatility import relative_atr_for, volatility_payload
 
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "irsdata.xlsx"
@@ -69,11 +70,14 @@ def _outright_label(tenor: str) -> str:
 
 @app.get("/api/health")
 def health() -> dict:
+    # freshness recomputed per request (its age advances with the wall clock
+    # while the file does not) — see staleness.py.
     return {
         "status": "ok",
         "asof": _dataset.asof.isoformat(),
         "rows": len(_dataset.dates),
         "missingNodes": _dataset.missing_nodes,
+        "freshness": dataset_freshness(_dataset.asof),
     }
 
 

@@ -10,6 +10,25 @@ spec (`CLAUDE.md`, being canonicalized to `docs/DESIGN.md`) is authoritative.
 The `:3000`/`:8000` ports belong to the frozen `krw-fi-pms` system and must
 stay untouched.
 
+## Data refresh — currently manual
+
+`data/irsdata.xlsx` is a **static snapshot**. Nothing in this repo fetches or
+schedules a new close; getting tomorrow's data in is a manual step, and no
+automated feed exists yet (that is an owner decision, out of scope here).
+
+To refresh: replace `data/irsdata.xlsx` with a newer export in the same layout
+(same sheet/columns; the loader keys off the SHA-256 of the file, so any change
+is picked up) and **restart the backend** — the dataset, curves, and the
+own-history caches are all built once at startup, so a running server will not
+notice a new file until it restarts.
+
+Because the file is static, the app measures its own staleness so it never shows
+an old curve as if it were today's: `/api/health` reports `freshness` (the
+dataset's latest date and its age in KR business days), and the header states it
+— quiet when same-day, a visible chip one business day behind, and a red
+"최신 커브가 아닐 수 있습니다" chip beyond that. If you see that chip, the file needs
+refreshing.
+
 ## Run
 
 ```powershell

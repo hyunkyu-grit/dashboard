@@ -9,7 +9,12 @@ import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchForwards, fetchVolatility, fetchWallSummary } from "@/lib/api";
+import {
+  fetchForwards,
+  fetchHealth,
+  fetchVolatility,
+  fetchWallSummary,
+} from "@/lib/api";
 import { syncUiFromDom, useUiStore } from "@/state/ui";
 import { CommandBar } from "@/wall/CommandBar";
 
@@ -73,6 +78,52 @@ function PreviewSheet({
   );
 }
 
+/** Dataset freshness in the chrome (§ Pass C). The file is static, so without
+ * this the product shows yesterday's curve as today's silently. Loudness scales
+ * with age (KR business days): same-day is quiet (just the date), one day behind
+ * is a visible chip, more than that is a red-outlined chip that says so in
+ * words. Monochrome-first: the border + weight + words carry the meaning; the
+ * red is a layer (§5). Polls so the age advances even on a long-lived tab. */
+function DataFreshness() {
+  const { data } = useQuery({
+    queryKey: ["health"],
+    queryFn: fetchHealth,
+    refetchInterval: 5 * 60_000,
+    staleTime: 60_000,
+  });
+  const f = data?.freshness;
+  if (!f) return null;
+
+  const asOf = `${f.asOf} 기준`;
+  const title = `데이터 최신일 ${f.asOf} · 오늘 ${f.today} · ${f.ageBusinessDays}영업일 경과`;
+
+  if (f.level === "stale") {
+    return (
+      <span
+        title={title}
+        className="rounded-[8px] border border-up px-2 py-0.5 text-[12px] font-semibold text-up"
+      >
+        데이터 {f.ageBusinessDays}영업일 지연 — 최신 커브가 아닐 수 있습니다 · {f.asOf}
+      </span>
+    );
+  }
+  if (f.level === "behind") {
+    return (
+      <span
+        title={title}
+        className="rounded-[8px] border border-edge px-2 py-0.5 text-[12px] text-ink"
+      >
+        {asOf} · {f.ageBusinessDays}영업일 지연
+      </span>
+    );
+  }
+  return (
+    <span title={title} className="text-[12px] opacity-45">
+      {asOf}
+    </span>
+  );
+}
+
 function Header() {
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
@@ -84,6 +135,7 @@ function Header() {
       <span className="text-[17px] font-bold text-brand">Sauron</span>
       <span className="text-[13px] opacity-45">KRW IRS</span>
       <span className="flex-1" />
+      <DataFreshness />
       <button
         type="button"
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}

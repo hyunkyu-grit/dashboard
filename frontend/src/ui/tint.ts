@@ -10,7 +10,8 @@
  *   - Change columns: the number is coloured TEXT at full strength. A fill
  *     behind it can NEVER work — it competes with the very contrast the guard
  *     protects, and the largest fill that keeps the text legible (0.04) is
- *     invisible (≈#fef8f8). So the outlier cue is NOT a fill: it is a
+ *     invisible (a ~4% red wash reads as near-white). So the outlier cue is NOT
+ *     a fill: it is a
  *     leading-edge rule (`columnCue`), full-strength hue, off the glyph. The
  *     change columns carry NO background fill — do not re-add one.
  *   - Forward matrix: the number is INK, which tolerates depth, so the tint is

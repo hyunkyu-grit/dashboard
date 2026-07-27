@@ -87,6 +87,30 @@ export async function fetchWallSummary(): Promise<WallSummary> {
   return res.json();
 }
 
+/** Dataset freshness (§ Pass C). `level` drives how loud the header says it:
+ * current = quiet, behind = visible, stale = unmissable in words. Age is in KR
+ * business days and recomputed server-side per request. */
+export type FreshnessLevel = "current" | "behind" | "stale";
+export interface Freshness {
+  asOf: string;
+  today: string;
+  ageBusinessDays: number;
+  level: FreshnessLevel;
+}
+export interface Health {
+  status: string;
+  asof: string;
+  rows: number;
+  missingNodes: string[];
+  freshness: Freshness;
+}
+
+export async function fetchHealth(): Promise<Health> {
+  const res = await fetch(`${API_BASE}/api/health`);
+  if (!res.ok) throw new Error(`health: HTTP ${res.status}`);
+  return res.json();
+}
+
 export type AnyBasis = "now" | BasisKey;
 
 export interface ForwardCell {

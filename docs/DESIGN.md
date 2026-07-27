@@ -857,6 +857,23 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
     region of the curve heatmap, which reads near-blank as intended. No as-of
     selector exists to replay a calm date on the main matrix (single-snapshot
     design), so the calm behaviour was verified on the shared heatmap scale.
+- **RESOLVED [closing session, part 2, Pass C] — the product measures its own
+  staleness.** `data/irsdata.xlsx` is a static snapshot and there is no feed, so
+  without this the app shows yesterday's curve as today's silently — this
+  project's recurring defect class. `backend/app/staleness.py` computes the
+  dataset's age in **KR business days** (reusing the frozen engine's
+  `_is_kr_business_day`, so freshness and the curve share one calendar; weekends
+  and public holidays don't age the data), recomputed per request so the age
+  advances with the wall clock even though the file does not. `/api/health`
+  carries a `freshness` block (`asOf` / `today` / `ageBusinessDays` / `level`).
+  The header's `DataFreshness` scales loudness with `level`: **current** (age 0,
+  incl. a Friday snapshot over the weekend) shows just the date, faint;
+  **behind** (1 business day) an outlined chip `{date} · 1영업일 지연`; **stale**
+  (≥2) a red-outlined, bold chip stating it in words (`데이터 N영업일 지연 — 최신
+  커브가 아닐 수 있습니다`). Monochrome-first: border + weight + words carry it, red
+  is the layer (§5); `text-up`/`border-up` clear 4.5:1 in both themes. The
+  manual refresh procedure is documented honestly in the README. Pinned by
+  `tests/test_staleness.py`.
 - **RESOLVED [final §C] — the curve heatmap is synced to the chart.** DetailChart
   emits its visible date window and crosshair date; the heatmap binds its
   x-domain to that window (shows the buckets in view, stretched to fill width so
