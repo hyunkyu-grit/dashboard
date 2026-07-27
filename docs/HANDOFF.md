@@ -138,7 +138,8 @@ rule:
   selection/focus/pulse.
 - **No elevation / no floating cards** (S13). Depth = surface steps + hairlines.
   The single sanctioned drop-shadow is the chart tooltip overlay.
-- **Volatility is a placeholder only** — no formula until the owner provides one.
+- **Volatility is built** [Session 14] — relative ATR (mean ATR 5 / mean ATR
+  60), close-only form; see DESIGN §4/§16 and `## Provisional`. Not a placeholder.
 - Band 3 and any strategy/scenario tooling are **owner-gated**; leave reserved
   regions, build nothing speculative.
 
@@ -159,12 +160,42 @@ rule:
 
 ---
 
-## 6. Current state (as of Session 14, 2026-07-27)
+## 6. Current state (as of Session 15, 2026-07-27)
 
-- **FINAL HEAD `04bce8f`** on `master`, mirrored to D:.
-- Gates: FE **36 vitest tests / 9 files**, `pnpm build` clean, `pnpm lint`
-  exit 0. Backend **38 tests**.
-- Session 14 landed 4 passes, one commit each:
+- **FINAL HEAD `94931a3`** on `master`, mirrored to D:.
+- Gates: FE **53 vitest tests / 12 files**, `pnpm build` clean, `pnpm lint`
+  exit 0. Backend **41 tests**.
+- Session 15 landed 9 passes, one commit each (A–I; E split E1 autonomous /
+  E2 report-and-stop):
+  1. `a088f4c` **A — whole window.** No max-width; table pane 880px, preview
+     fills the rest (floor 600), curve fills height; single-column bottom-sheet
+     fallback below ~1520px (`ui/useIsWide.ts`).
+  2. `557a746` **B — weight is structure.** Instrument name + `현재` at 600,
+     changes at 400; outlier emphasis moved to colour intensity (§5 updated).
+  3. `a53b7b9` **C1 — popup gloss.** Subtitle + 합니다체 explanation keyed to
+     kind (`ui/gloss.ts`, rendered from kind+legs; `gloss.test.ts` pins copy).
+  4. `70fed5a` **C2 — 한 줄 ladder.** move-extreme (own-history) → level
+     extreme (capped) → solo direction → empty. `day_move_pct` new BE input.
+  5. `fa07d9d` **D — screener chips.** `ui/screener.ts` predicates; `movePct`
+     exposed on the DTO.
+  6. `7236fe8` **E1 — up-color.** `#f04452`→`#d92d3c` (4.5:1 text); hue-contrast
+     guard split by usage (text 4.5 / stroke 3).
+  7. `7269c9e` **E2 — colour-density diagnostic (report, STOP).**
+     `docs/diagnostics/color-density.md` + `backend/scripts/color_density.py`.
+     Colour normalization NOT implemented — owner picks the scale.
+  8. `ebfca5a` **F — matrix full-width mode.** pinned 시작/날짜, key block
+     wraps; `scroll-affordance.test.ts`.
+  9. `0f78ecd` **G — sticky opaque.** header `<tr>` opacity → text-ink/50 alpha;
+     `sticky-opaque.test.ts`. `94931a3` **H — 합니다체 + terminology (§15)**.
+     `e2f8d5d` **I — removed the preview heatmap** (tooltip is the sole readout).
+- **Owner decision pending (Pass E2):** the colour-intensity normalization —
+  recommended own-history percentile (floor pct70, full pct97), same scale for
+  the forward-matrix tint (which today lights ~96–99% of cells). Backend needs a
+  normalized magnitude per cell (§16). Not built.
+
+### Session 14 (superseded head, kept for the pass ledger)
+
+- Session 14 FINAL HEAD was `04bce8f`, landing 4 passes, one commit each:
   1. `0dda57c` **Computation boundary (§16).** Backend computes, frontend
      renders. Moved FE→BE: the 한 줄 classification (ships as `{kind,value}`,
      rendered on the client — the §16 exception), sort keys, the quoted flag,
