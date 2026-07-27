@@ -167,7 +167,24 @@ rule:
 
 ---
 
-## 6. Current state (as of the closing session, part 2 — Passes A–F, 2026-07-27)
+## 6. Current state (as of the band session — Passes A–C, 2026-07-28)
+
+- **HEAD `807b043`** on `master`, mirrored to D:. Gates: FE **97 vitest / 15
+  files**, lint exit 0, build clean. Three passes, one commit each:
+  1. `b586cc8` **A — orange/navy sweep confirmed.** No component carries a
+     retired hue; the guard (`guards/palette.test.ts`) already existed. Only
+     leftovers were six stale comments/labels still saying "orange"/"navy"
+     (component headers, the band-hue-contrast test label, ramp.ts) — scrubbed.
+  2. `17a026f` **B — every kind gets the positional band** in the Pay/Receive
+     mode picture (`payReceiveModel.ts`): outright = tenor (narrow), spread =
+     leg-to-leg, butterfly = wing-to-wing, forward = period; deformation
+     confined to the band (level = smoothstep plateau), `MIN_BAND` = 30% of the
+     plot, band neutral/unlabelled. Guard extended (span, min width, identity
+     outside the band, single unlabelled rect).
+  3. `807b043` **C — verified live both themes:** 1s2s vs 5s10s and 1s2s3s vs
+     2s5s10s now distinguishable at a glance; no tuning needed.
+
+### Earlier — closing session, part 2 (Passes A–F, 2026-07-27)
 
 - **HEAD** = the closing-session-2 Pass F commit on `master`, mirrored to D:.
   See `docs/STATE.md` for the full works-verified / works-unverified / known-
