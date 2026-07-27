@@ -6,9 +6,10 @@
  * three curve modes the instrument bets on and which way.
  *
  * Two curves only: the current shape (thin ink at 35%) and the wanted shape
- * (full-weight ink). The change between them — a parallel lift (level), a tilt
- * (slope), an arch (curvature), or a confined tilt in a band (forward) — is the
- * entire content. A direction-coloured fill between them (red where the wanted
+ * (full-weight ink). The change between them — a lift (level), a tilt (slope),
+ * or an arch (curvature) — is the entire content, and it is confined to a
+ * neutral positional band (every kind) saying where along the curve the trade
+ * lives; outside the band the two curves coincide. A direction-coloured fill between them (red where the wanted
  * shape is above the current, blue where below) makes the mode legible at a
  * glance. No leg markers, no tenor labels, no axis — the tenors already appear
  * twice on this panel; everything that is not the shape is noise. Logic +
@@ -141,17 +142,18 @@ function Diagram({ spec }: { spec: DiagramSpec }) {
       role="img"
       aria-label={`pay/receive 커브 모드: ${spec.term}`}
     >
-      {/* forward: a soft unlabelled band marking the stretch */}
-      {spec.band && (
-        <rect
-          x={xAt(spec.band[0])}
-          y={PLOT.top}
-          width={xAt(spec.band[1]) - xAt(spec.band[0])}
-          height={PLOT.bot - PLOT.top}
-          fill="currentColor"
-          fillOpacity={0.05}
-        />
-      )}
+      {/* positional band (every kind): a soft, unlabelled neutral wash marking
+          where along the curve the trade lives — front vs belly vs long end.
+          A region, not a measurement: no boundary marks, no tenors, and never
+          a direction colour (that is reserved for the fill). */}
+      <rect
+        x={xAt(spec.band[0])}
+        y={PLOT.top}
+        width={xAt(spec.band[1]) - xAt(spec.band[0])}
+        height={PLOT.bot - PLOT.top}
+        fill="currentColor"
+        fillOpacity={0.05}
+      />
 
       {/* direction-coloured fill between the two curves (the mode made legible) */}
       {regions.map((r, k) => (

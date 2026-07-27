@@ -12,6 +12,7 @@ import type { Construct } from "../src/ui/gloss";
 import {
   baseValue,
   diagramSpec,
+  MIN_BAND,
   N,
   wantedValue,
 } from "../src/ui/payReceiveModel";
@@ -28,14 +29,72 @@ describe("each instrument kind maps to its curve mode", () => {
     expect(diagramSpec(c, "pay")!.mode).toBe(mode);
   });
 
-  it("a forward is a slope confined to a band; a spread is not", () => {
-    expect(diagramSpec({ kind: "forward", start: "5Y", tenor: "5Y" }, "pay")!.band).toBeDefined();
-    expect(diagramSpec({ kind: "spread", short: "1Y", long: "10Y" }, "pay")!.band).toBeUndefined();
-  });
-
   it("volatility and unknown have no diagram", () => {
     expect(diagramSpec({ kind: "volatility", tenor: "3Y" }, "pay")).toBeNull();
     expect(diagramSpec({ kind: "unknown" }, "pay")).toBeNull();
+  });
+});
+
+describe("every kind carries exactly one positional band (band session)", () => {
+  it.each(KINDS)("%s renders a band", (_n, c) => {
+    const band = diagramSpec(c, "pay")!.band;
+    expect(band).toBeDefined();
+    expect(band[1]).toBeGreaterThan(band[0]);
+  });
+
+  it("the band's span matches the instrument's legs (10y x-domain)", () => {
+    // forward 5Y×5Y covers years 5..10; spread/fly span leg to leg / wing to wing
+    expect(diagramSpec({ kind: "forward", start: "5Y", tenor: "5Y" }, "pay")!.band).toEqual([0.5, 1]);
+    expect(diagramSpec({ kind: "spread", short: "1Y", long: "10Y" }, "pay")!.band).toEqual([0.1, 1]);
+    expect(
+      diagramSpec({ kind: "butterfly", short: "1Y", belly: "3Y", long: "5Y" }, "pay")!.band,
+    ).toEqual([0.1, 0.5]);
+  });
+
+  it("an outright's band is narrow, centred on its tenor", () => {
+    const band = diagramSpec({ kind: "outright", tenor: "5Y" }, "pay")!.band;
+    expect((band[0] + band[1]) / 2).toBeCloseTo(0.5, 9);
+    expect(band[1] - band[0]).toBeCloseTo(MIN_BAND, 9);
+  });
+
+  it("a narrow-span instrument gets the minimum band width, inside the plot", () => {
+    // 1s1.5s raw span is 5% of the plot — a sliver; it widens to MIN_BAND
+    const band = diagramSpec({ kind: "spread", short: "1Y", long: "1.5Y" }, "pay")!.band;
+    expect(band[1] - band[0]).toBeCloseTo(MIN_BAND, 9);
+    expect(band[0]).toBeGreaterThanOrEqual(0);
+    expect(band[1]).toBeLessThanOrEqual(1);
+  });
+
+  it("bands distinguish same-mode instruments (1s2s vs 5s10s)", () => {
+    const near = diagramSpec({ kind: "spread", short: "1Y", long: "2Y" }, "pay")!.band;
+    const far = diagramSpec({ kind: "spread", short: "5Y", long: "10Y" }, "pay")!.band;
+    expect(near).not.toEqual(far);
+  });
+
+  it.each(KINDS)("%s: the wanted curve equals the current curve outside the band", (_n, c) => {
+    for (const side of ["pay", "receive"] as const) {
+      const spec = diagramSpec(c, side)!;
+      const [t0, t1] = spec.band;
+      for (let i = 0; i < N; i++) {
+        const t = i / (N - 1);
+        if (t <= t0 || t >= t1) {
+          expect(wantedValue(spec, t)).toBeCloseTo(baseValue(t), 12);
+        }
+      }
+    }
+  });
+
+  it.each(KINDS)("%s: the deformation is non-trivial inside the band", (_n, c) => {
+    const spec = diagramSpec(c, "pay")!;
+    const [t0, t1] = spec.band;
+    let maxAbs = 0;
+    for (let i = 0; i < N; i++) {
+      const t = i / (N - 1);
+      if (t > t0 && t < t1) {
+        maxAbs = Math.max(maxAbs, Math.abs(wantedValue(spec, t) - baseValue(t)));
+      }
+    }
+    expect(maxAbs).toBeGreaterThan(0.1); // exaggerated, not a sliver
   });
 });
 
@@ -96,5 +155,11 @@ describe("the SVG carries only the shape — no markers, no tenor text", () => {
   it("draws exactly the two curve paths (current + wanted)", () => {
     expect(src).toContain("smoothPath(cur)");
     expect(src).toContain("smoothPath(want)");
+  });
+  it("draws exactly one band rect, and it carries no text or boundary marks", () => {
+    // one <rect> = the positional band; the no-<text> check above keeps it
+    // unlabelled, and there is no <line> that could mark its boundaries
+    expect(src.match(/<rect/g)).toHaveLength(1);
+    expect(src).not.toMatch(/<line/);
   });
 });

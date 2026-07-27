@@ -280,12 +280,23 @@ drag dismiss; `?tile=series:<id>` keeps working).
   | **곡률** (curvature) | the curve arches, belly bulging/sagging | butterfly |
 
   Two curves only: the **current** shape (thin ink, ~35%) and the **wanted**
-  shape (full-weight ink). Deformation, for Pay (Receive = exact negation):
-  **level** translates the whole curve up parallel; **slope** pivots about the
-  midpoint (far up, near down); **curvature** holds the ends and arches the
-  middle up; **forward** is a slope confined to a soft unlabelled band (near-half
-  down, far-half up, meeting the current curve at the band ends), positioned by
-  the forward's period. The deformation is **exaggerated** (~25% of plot height,
+  shape (full-weight ink). **Every kind carries a positional band** (band
+  session — forwards had one first; leaving the rest bandless made `1s2s` and
+  `5s10s` render identically): outright = its tenor, narrow; spread = leg to
+  leg; butterfly = wing to wing; forward = its period, all on a 10y schematic
+  x-domain. The deformation is **confined to the band** — outside it the wanted
+  curve coincides with the current one, so the eye goes straight to the region
+  the trade is about. For Pay (Receive = exact negation): **level** lifts the
+  banded stretch (smoothstep plateau, tapering to the band ends); **slope**
+  tilts inside the band, meeting the current curve at each end (near-half down,
+  far-half up); **curvature** arches, band ends holding. Band rules: it is a
+  **region, not a measurement** — no labels, no boundary marks, no tenors ever;
+  it is **neutral** (faint ink wash, ~5% alpha — never a direction colour, which
+  is reserved for the fill); and it never shrinks below **30% of the plot**
+  (`MIN_BAND`) so a narrow-span instrument like `1s1.5s` still shows a legible
+  deformation instead of a sliver — the band is impressionistic, exact
+  proportionality would make short-span trades invisible.
+  The deformation is **exaggerated** (~25% of plot height,
   comparable to the arc's own rise) — a subtle diagram is a failed diagram. A
   **direction-coloured fill** between the two curves (up-red where wanted is
   above current, down-blue where below, ~16% alpha) is what makes the mode
