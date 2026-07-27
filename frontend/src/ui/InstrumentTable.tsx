@@ -75,7 +75,7 @@ function TableRow({
     >
       <td className="relative py-3 pl-3 font-semibold">
         {pinned && (
-          <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-interactive" />
+          <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-ink" />
         )}
         {/* quoted vs interpolated (§6): a filled dot = live-quoted node, a
             hollow dot = interpolated tenor (4Y/6Y/7Y/8Y/9Y). A dot, not a
@@ -247,7 +247,7 @@ export function InstrumentTable({
                 <motion.div
                   layoutId="tab-underline"
                   transition={SPRING}
-                  className="absolute inset-x-2 -bottom-px h-[2.5px] rounded-full bg-interactive"
+                  className="absolute inset-x-2 -bottom-px h-[2.5px] rounded-full bg-ink"
                 />
               )}
             </button>

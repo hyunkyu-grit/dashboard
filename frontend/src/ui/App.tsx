@@ -142,7 +142,7 @@ function Header({
   // card, no radius. It is chrome, not content.
   return (
     <header className="flex shrink-0 items-center gap-3 border-b border-edge bg-tile px-5 py-3">
-      <span className="text-[17px] font-bold text-brand">Sauron</span>
+      <span className="text-[17px] font-bold text-ink">Sauron</span>
       <span className="text-[13px] opacity-45">KRW IRS</span>
       <span className="flex-1" />
       <ChangeLog events={events} onFocus={onFocus} />

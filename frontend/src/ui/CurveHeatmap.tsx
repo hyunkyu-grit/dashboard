@@ -102,7 +102,7 @@ export function CurveHeatmap({
           {/* crosshair through the heatmap: the hovered column takes focus */}
           {hoverCol >= 0 && nCols > 0 && (
             <div
-              className="pointer-events-none absolute top-0 bg-interactive"
+              className="pointer-events-none absolute top-0 bg-ink"
               style={{
                 left: `${((hoverCol + 0.5) / nCols) * 100}%`,
                 width: 2,

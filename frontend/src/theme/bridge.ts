@@ -55,26 +55,10 @@ export function resolveTheme(): ResolvedTheme {
   return out;
 }
 
-export type BandHue = "curve" | "vol" | "fwd" | "outright" | "spread";
-
-const BAND_VARS: Record<BandHue, string> = {
-  curve: "--bw-hue-curve",
-  vol: "--bw-hue-vol",
-  fwd: "--bw-hue-fwd",
-  outright: "--bw-hue-outright",
-  spread: "--bw-hue-spread",
-};
-
-/** Resolve a band hue to concrete hex/rgb for canvas-bound options (§9).
- * Same path as surfaces so canvas never sees a `var(...)`. */
-export function resolveBandHue(band: BandHue): string {
-  return resolveVar(BAND_VARS[band]);
-}
-
-/** Resolve the navy product-lockup color to hex (§9). Not used on data. */
-export function resolveBrand(): string {
-  return resolveVar("--bw-brand");
-}
+/* The band sub-palette resolvers (resolveBandHue) and the navy lockup resolver
+ * (resolveBrand) were removed with the palette cut — nothing referenced them and
+ * the palette is red/blue/grey now. The sub-palette stays defined-but-unused in
+ * tokens.css only. */
 
 /** Resolve the chart-stroke color to hex for canvas (§9). Plain line charts are
  * blue as of Session 16 (§ Pass E). */

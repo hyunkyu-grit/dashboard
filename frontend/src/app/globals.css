@@ -10,15 +10,10 @@
   --color-ink: var(--bw-ink);
   --color-edge: var(--bw-border);
   --color-edge-live: var(--bw-border-live);
-  /* hue layer (§9) */
-  --color-brand: var(--bw-brand);
-  --color-interactive: var(--bw-interactive);
-  --color-on-interactive: var(--bw-on-interactive);
-  --color-hue-curve: var(--bw-hue-curve);
-  --color-hue-vol: var(--bw-hue-vol);
-  --color-hue-fwd: var(--bw-hue-fwd);
-  --color-hue-outright: var(--bw-hue-outright);
-  --color-hue-spread: var(--bw-hue-spread);
+  /* Hue layer (§9) — RED/BLUE ONLY. brand (navy), interactive (orange), and the
+   * sub-palette are RETIRED (palette cut): still defined in tokens.css but not
+   * exposed as utilities here, so `bg-interactive` / `text-brand` no longer
+   * exist. Everything non-directional is ink/grey. */
   /* semantic direction + chart line + card elevation (§9) */
   --color-up: var(--bw-up);
   --color-down: var(--bw-down);
@@ -28,16 +23,16 @@
   --font-sans: "Pretendard Variable", Pretendard, sans-serif;
 }
 
-/* Focus + selection are ORANGE again (§9, Session 16 Pass E): the chart line
- * moved to blue, so orange returns to its proper job — action, selection,
- * focus, hover pulse. */
+/* Focus + selection are INK (§9, palette cut): the product carries only
+ * red/blue/grey, so every non-directional interactive state is ink. `--bw-ink`
+ * inverts with the theme, so the outline/selection read on both surfaces. */
 :focus-visible {
-  outline: 2px solid var(--bw-interactive);
+  outline: 2px solid var(--bw-ink);
   outline-offset: 1px;
 }
 ::selection {
-  background: var(--bw-interactive);
-  color: var(--bw-on-interactive);
+  background: var(--bw-ink);
+  color: var(--bw-page);
 }
 
 html {

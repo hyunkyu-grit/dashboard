@@ -95,9 +95,11 @@ function GaugeTrack({ frac, extreme }: { frac: number; extreme: boolean }) {
         className="absolute inset-y-0 left-0 rounded-full bg-ink opacity-20"
         style={{ width: pos }}
       />
+      {/* extreme vs not is distinguished by LIGHTNESS, not hue (palette cut):
+          full ink at the tails, half-ink otherwise. */}
       <div
         className={`absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ${
-          extreme ? "bg-interactive" : "bg-ink"
+          extreme ? "bg-ink" : "bg-ink/50"
         }`}
         style={{ left: pos }}
       />
@@ -158,7 +160,7 @@ export function KeyForwardBlock({ payload }: { payload: ForwardsPayload }) {
               </td>
               <td
                 className={`pl-2 text-right align-middle tabular-nums ${
-                  extreme ? "font-medium text-interactive" : "opacity-55"
+                  extreme ? "font-semibold text-ink" : "opacity-55"
                 }`}
               >
                 {hasGauge ? Math.round(pct) : "–"}

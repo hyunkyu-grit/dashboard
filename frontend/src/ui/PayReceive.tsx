@@ -13,9 +13,10 @@
  * slope of the stretch, not any single node. See payReceiveModel.ts for the
  * sign-convention logic (unit-tested).
  *
- * The accent is the FOCUS colour (`--bw-interactive`, orange), not the data-blue
- * used by the real charts, so the diagram reads as an annotation. Direction
- * arrows keep the red-up / blue-down hue (§9); node labels stay ink. */
+ * No annotation accent (palette cut, §9): the curve takes the chart-stroke blue
+ * (`--bw-line`, `text-line`) and markers ride it; the direction arrows keep the
+ * red-up / blue-down hue; the shaded forward interval and all labels are
+ * grey/ink. The palette is red/blue/grey. */
 
 import { useState } from "react";
 
@@ -152,19 +153,21 @@ export function PayReceive({ row, summary }: { row: Row; summary: WallSummary })
       <svg
         width={W}
         height={H}
-        className="text-interactive"
+        className="text-line"
         role="img"
         aria-label="pay/receive 커브 모양"
       >
-        {/* shaded stretch (forward's 선도 구간) */}
+        {/* shaded stretch (forward's 선도 구간) — neutral grey, not the curve
+            colour: it is context, not data. */}
         {model.shaded && (
           <rect
+            className="text-ink"
             x={xAt(rLo)}
             y={BAND_TOP - 6}
             width={xAt(rHi) - xAt(rLo)}
             height={plotH + 12}
             fill="currentColor"
-            fillOpacity={0.08}
+            fillOpacity={0.06}
           />
         )}
 
