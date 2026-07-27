@@ -160,13 +160,40 @@ rule:
 
 ---
 
-## 6. Current state (as of Session 15, 2026-07-27)
+## 6. Current state (as of Session 16, 2026-07-27)
 
-- **FINAL HEAD `94931a3`** on `master`, mirrored to D:.
-- Gates: FE **53 vitest tests / 12 files**, `pnpm build` clean, `pnpm lint`
-  exit 0. Backend **41 tests**.
-- Session 15 landed 9 passes, one commit each (A–I; E split E1 autonomous /
-  E2 report-and-stop):
+- **FINAL HEAD `3fc5a52`** on `master`, mirrored to D:.
+- Gates: FE **58 vitest tests / 14 files**, `pnpm build` clean, `pnpm lint`
+  exit 0. Backend **50 tests**.
+- **Backend startup is now ~15–20s**: the forward-matrix own-history percentiles
+  (§J) and the curve heatmap (§D) bootstrap each historical date's curve once at
+  startup. One-time; live server unaffected, only dev restarts.
+- Session 16 landed 10 passes (A–J), one commit each:
+  1. `2d998d9` **E — chart line → blue**, orange back to selection/focus.
+  2. `8f062e7` **H — full-bleed**: dropped the outer card, header is a
+     full-width band.
+  3. `7fad8ed` **I — curve-level 한 줄 banner** (커브 전 구간이 10년 고점권),
+     pin clears on tab change, `{start}xSPOT` dropped from the forward list.
+  4. `7dfbdd9` **B — DV01-neutral leg weights** (`dv01.py`, par-swap annuity off
+     the bootstrapped curve; `/api/dv01/{id}`; popup ratio).
+  5. `c150df1` **J — own-history colour scale**: change-column binary tint 0.04
+     (not 0.12 — text contrast), forward matrix graded 0.45, grid-max dropped.
+  6. `a3af070` **F — 당일 변화 +0.0 diagnosed** (genuine flat day, d correct);
+     구간 vs 10년 stat labels.
+  7. `505007c` **C — popup ⊇ preview**: DetailChart crosshair tooltip + stats +
+     last-value badge; `readout-parity.test.ts`.
+  8. `fc19cb9` **G — candlesticks** 주봉/월봉 (`?interval=w|m`, OHLC from closes,
+     상승 빨강/하락 파랑, `?type=` in URL).
+  9. `3fc5a52` **D — tenor × date curve heatmap** in the popup (own-history
+     tint, shows the curve not the instrument).
+- **New backend endpoints:** `/api/dv01/{id}`, `/api/curve-heatmap`;
+  `/api/series/{id}?interval=w|m` for OHLC. **New DTO fields:** ForwardCell
+  `movePct`; WallSummary `curveBanner`.
+
+### Session 15 (superseded head, kept for the pass ledger)
+
+- Session 15 FINAL HEAD was `94931a3`, landing 9 passes (A–I; E split E1
+  autonomous / E2 report-and-stop):
   1. `a088f4c` **A — whole window.** No max-width; table pane 880px, preview
      fills the rest (floor 600), curve fills height; single-column bottom-sheet
      fallback below ~1520px (`ui/useIsWide.ts`).
