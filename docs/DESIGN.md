@@ -826,6 +826,23 @@ hover pulse (the calendar heatmap has no pulse) and "rows scale to 0.98"
 - Preview pane hard-swaps series on hover → **Pass D** cross-fade.
 - Pin has no curve-side acknowledgment → **Pass E** ghost gesture.
 
+### Row reorder [motion session, Pass C]
+
+Sorting and screener-filtering slide rows to their new positions (transform-
+only FLIP, `layout="position"`, the standard SPRING — may overshoot slightly).
+Rows leaving the set fade out in place (`popLayout` pops them from the flow so
+survivors slide simultaneously); entrants fade in at their destination.
+Rules, pinned by `guards/reorder.test.ts`:
+- **Cause-gated**: only sort and screener toggles animate — same view, new
+  arrangement. A tab or start-filter switch is a view change and snaps.
+- **Viewport-culled**: a row animates only if its old or new position is
+  within one viewport-height of the visible window; everything else jumps.
+- **Threshold = 400 rows** (`FLIP_MAX_ROWS`): above it the reorder is instant.
+  With culling, the 168-row forward tab and ~200-row 전체 stay animated —
+  only ~15–30 rows actually move on screen; the threshold bounds the
+  per-row DOM-read bookkeeping, not the paint cost.
+- `prefers-reduced-motion` reorders instantly (MotionConfig).
+
 ### Rules (carried forward)
 
 - Library: `motion` (framer-motion's successor). Springs may overshoot: ~stiff

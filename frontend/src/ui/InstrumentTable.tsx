@@ -5,16 +5,17 @@
  * any change column, hover → preview, click → pin, Esc unpins (in App). Rows
  * self-register in the tile registry so the command bar can scroll to them. */
 
-import { motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { useMemo, useRef, useState } from "react";
 
 import type { BasisKey, CurveBanner, ForwardsPayload } from "@/lib/api";
 import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 import { ForwardMatrix, KeyForwardBlock } from "@/wall/ForwardMatrix";
+import { getTile } from "@/wall/tileRegistry";
 import { useRegisterTile } from "@/wall/useRegisterTile";
 
 import { GRID_TEMPLATE } from "./columns";
-import { SPRING } from "./motion";
+import { reorderAnimates, rowShouldFlip, SPRING } from "./motion";
 import { TintLegend } from "./TintLegend";
 import {
   BASIS_ORDER,
@@ -52,12 +53,21 @@ function TableRow({
   pinned,
   onHover,
   onPin,
+  flip,
+  orderKey,
+  enter,
 }: {
   row: Row;
   active: boolean;
   pinned: boolean;
   onHover: (row: Row | null) => void;
   onPin: (row: Row) => void;
+  /** FLIP this row on the next reorder (Pass C) — transform-only. */
+  flip: boolean;
+  /** reorder generation: layout is measured only when this changes. */
+  orderKey: string;
+  /** row entered the set via a screener toggle → fade in at destination. */
+  enter: boolean;
 }) {
   const registerRef = useRegisterTile(row.id, row.label, [
     row.label,
@@ -65,9 +75,24 @@ function TableRow({
     row.id,
   ]);
   return (
-    <div
+    <motion.div
       role="row"
       ref={registerRef}
+      layout={flip ? "position" : false}
+      layoutDependency={orderKey}
+      transition={SPRING}
+      initial={enter ? { opacity: 0 } : false}
+      animate={{ opacity: 1 }}
+      variants={{
+        // exits fade in place (popLayout pops them out of the flow so the
+        // survivors slide at the same time); the cause decides whether the
+        // fade runs at all — a tab switch snaps.
+        exit: (fade: boolean) => ({
+          opacity: 0,
+          transition: { duration: fade ? 0.14 : 0 },
+        }),
+      }}
+      exit="exit"
       onMouseEnter={() => onHover(row)}
       onMouseLeave={() => onHover(null)}
       onClick={() => onPin(row)}
@@ -121,7 +146,7 @@ function TableRow({
       <div role="cell" className="truncate pr-3 text-[13px] opacity-55">
         {row.oneLiner}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -156,6 +181,10 @@ export function InstrumentTable({
   const [sortAsc, setSortAsc] = useState(false);
   const [startFilter, setStartFilter] = useState<string>("all");
   const [screener, setScreener] = useState<string | null>(null);
+  // what caused the CURRENT arrangement (Pass C): only sort and screener
+  // reorders animate — a tab or start-filter switch is a view change, snaps.
+  const causeRef = useRef<"sort" | "screener" | "other">("other");
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const isForward = filter === "forward";
   const activeScreener = SCREENERS.find((s) => s.id === screener) ?? null;
@@ -217,6 +246,7 @@ export function InstrumentTable({
   }, [shown, isForward, sortCol]);
 
   const clickSort = (b: BasisKey) => {
+    causeRef.current = "sort";
     if (sortCol !== b) {
       setSortCol(b);
       setSortAsc(false);
@@ -226,6 +256,17 @@ export function InstrumentTable({
       setSortCol(null); // third click → back to instrument order
     }
   };
+
+  // Reorder motion (Pass C): FLIP rows to their new positions on sort and on
+  // screener filtering. Transform-only (layout="position"); measured only
+  // when orderKey changes; culled to the viewport's neighbourhood; instant
+  // above FLIP_MAX_ROWS and under prefers-reduced-motion (MotionConfig).
+  const orderKey = `${sortCol ?? ""}|${sortAsc}|${screener ?? ""}`;
+  const flipOn = reorderAnimates(causeRef.current, shown.length);
+  const vp = scrollRef.current;
+  const scrollTop = vp?.scrollTop ?? 0;
+  const viewH = vp?.clientHeight ?? 800;
+  const ROW_H = 48; // h-12 — used only to estimate a row's destination
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -241,7 +282,10 @@ export function InstrumentTable({
             <button
               key={f.id}
               type="button"
-              onClick={() => onFilter(f.id)}
+              onClick={() => {
+                causeRef.current = "other"; // view change — reorder snaps
+                onFilter(f.id);
+              }}
               className={`relative px-3 py-2 text-[13px] transition-opacity ${
                 on ? "font-semibold" : "opacity-55 hover:opacity-90"
               }`}
@@ -278,7 +322,10 @@ export function InstrumentTable({
             <button
               key={sc.id}
               type="button"
-              onClick={() => setScreener(on ? null : sc.id)}
+              onClick={() => {
+                causeRef.current = "screener";
+                setScreener(on ? null : sc.id);
+              }}
               className={`rounded-full px-2.5 py-1 text-[12px] transition-colors ${
                 on
                   ? "bg-ink text-page"
@@ -300,7 +347,10 @@ export function InstrumentTable({
         <div className="mt-2 flex items-center gap-3 text-[13px]">
           <select
             value={startFilter}
-            onChange={(e) => setStartFilter(e.target.value)}
+            onChange={(e) => {
+              causeRef.current = "other"; // view change — reorder snaps
+              setStartFilter(e.target.value);
+            }}
             className="rounded-[8px] bg-page px-2 py-1 opacity-70"
           >
             <option value="all">전체 시작</option>
@@ -325,7 +375,10 @@ export function InstrumentTable({
           scrollbar-gutter keeps the usable width constant whether or not the
           scrollbar is present (§ Pass A) — without it the grid would shift on
           every filter that crosses the overflow boundary. */}
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-4 pt-3 [scrollbar-gutter:stable]">
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-4 pt-3 [scrollbar-gutter:stable]"
+      >
         {isForward && matrixOpen && forwards ? (
           // wrap the 주요 포워드 block below the matrix rather than clipping it
           // off the right edge (§F); the matrix scrolls horizontally itself.
@@ -377,27 +430,46 @@ export function InstrumentTable({
                 한 줄
               </div>
             </div>
+            {/* relative: popLayout pops exiting rows out of the flow so they
+                fade in place while the survivors slide (Pass C). */}
             <div role="rowgroup" className="relative">
-              {items.map((it, i) =>
-                it.row ? (
-                  <TableRow
-                    key={it.row.id}
-                    row={it.row}
-                    active={it.row.id === activeId}
-                    pinned={it.row.id === pinnedId}
-                    onHover={onHover}
-                    onPin={onPin}
-                  />
-                ) : (
-                  <div
-                    role="row"
-                    key={`head-${i}`}
-                    className="border-t-2 border-t-edge pb-1 pl-3 pt-4 text-[12px] font-semibold opacity-45"
-                  >
-                    {it.head}
-                  </div>
-                ),
-              )}
+              <AnimatePresence
+                initial={false}
+                mode="popLayout"
+                custom={flipOn && causeRef.current === "screener"}
+              >
+                {items.map((it, i) =>
+                  it.row ? (
+                    <TableRow
+                      key={it.row.id}
+                      row={it.row}
+                      active={it.row.id === activeId}
+                      pinned={it.row.id === pinnedId}
+                      onHover={onHover}
+                      onPin={onPin}
+                      orderKey={orderKey}
+                      flip={
+                        flipOn &&
+                        rowShouldFlip(
+                          getTile(it.row.id)?.el.offsetTop ?? null,
+                          i * ROW_H,
+                          scrollTop,
+                          viewH,
+                        )
+                      }
+                      enter={flipOn && causeRef.current === "screener"}
+                    />
+                  ) : (
+                    <div
+                      role="row"
+                      key={`head-${i}`}
+                      className="border-t-2 border-t-edge pb-1 pl-3 pt-4 text-[12px] font-semibold opacity-45"
+                    >
+                      {it.head}
+                    </div>
+                  ),
+                )}
+              </AnimatePresence>
             </div>
           </div>
         )}
