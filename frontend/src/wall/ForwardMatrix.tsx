@@ -29,48 +29,59 @@ export function ForwardMatrix({ payload }: { payload: ForwardsPayload }) {
     return m;
   }, [payload]);
 
+  // The 시작 and 날짜 columns are PINNED (sticky-left) so horizontal scroll
+  // never loses row identity (§F). They carry an opaque bg (§G) or cells would
+  // bleed through them; opacity goes on the text span, never the sticky cell.
   return (
-    <table
-      className="text-[13px]"
-      style={{ borderCollapse: "separate", borderSpacing: 0 }}
-    >
-      <thead>
-        <tr className="h-8">
-          <th className="w-12 text-left font-normal opacity-60">시작</th>
-          <th className="w-24 text-left font-normal opacity-60">날짜</th>
-          {payload.tenors.map((t) => (
-            <th key={t} className="w-[74px] text-right font-semibold">
-              {t}
+    <div className="max-w-full overflow-x-auto">
+      <table
+        className="text-[13px]"
+        style={{ borderCollapse: "separate", borderSpacing: 0 }}
+      >
+        <thead>
+          <tr className="h-8">
+            <th className="sticky left-0 top-0 z-30 w-12 bg-tile text-left font-normal opacity-60">
+              시작
             </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {payload.startPoints.map((sp, i) => {
-          const sep = YEAR_ROWS.has(sp.label) ? " border-t-2 border-t-edge" : "";
-          return (
-            <tr key={sp.label} className="h-[26px]">
-              <td className={sep}>{sp.label}</td>
-              <td className={`opacity-60${sep}`}>{sp.date}</td>
-              {payload.tenors.map((tenor) => {
-                const cell = payload.grid[tenor][i];
-                return (
-                  <td
-                    key={tenor}
-                    style={tintStyle(cell.deltas.d1, gridMax)}
-                    className={`border px-1 text-right align-middle tabular-nums ${
-                      cell.live ? "border-edge-live" : "border-transparent"
-                    }${sep}`}
-                  >
-                    {cell.values.now.toFixed(4)}
-                  </td>
-                );
-              })}
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+            <th className="sticky left-12 top-0 z-30 w-24 bg-tile text-left font-normal opacity-60">
+              날짜
+            </th>
+            {payload.tenors.map((t) => (
+              <th key={t} className="sticky top-0 z-20 w-[74px] bg-tile text-right font-semibold">
+                {t}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {payload.startPoints.map((sp, i) => {
+            const sep = YEAR_ROWS.has(sp.label) ? " border-t-2 border-t-edge" : "";
+            return (
+              <tr key={sp.label} className="h-[26px]">
+                <td className={`sticky left-0 z-10 bg-tile${sep}`}>{sp.label}</td>
+                <td className={`sticky left-12 z-10 bg-tile${sep}`}>
+                  <span className="opacity-60">{sp.date}</span>
+                </td>
+                {payload.tenors.map((tenor) => {
+                  const cell = payload.grid[tenor][i];
+                  return (
+                    <td
+                      key={tenor}
+                      style={tintStyle(cell.deltas.d1, gridMax)}
+                      className={`border px-1 text-right align-middle tabular-nums ${
+                        cell.live ? "border-edge-live" : "border-transparent"
+                      }${sep}`}
+                    >
+                      {cell.values.now.toFixed(4)}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

@@ -120,7 +120,10 @@ export function App() {
   const [hovered, setHovered] = useState<Row | null>(null);
   const [pinned, setPinned] = useState<Row | null>(null);
   const [tab, setTab] = useState<Group | "all">("all");
+  const [matrixOpenRaw, setMatrixOpenRaw] = useState(false);
   const active = hovered ?? pinned;
+  // the 표로 보기 matrix is a full-width MODE, only on the forward tab (§F)
+  const matrixOpen = matrixOpenRaw && tab === "forward";
 
   // ~120ms hover delay so crossing the table does not strobe the preview (§2).
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -200,12 +203,13 @@ export function App() {
         )}
         {summary && (
           <div className="flex min-h-0 flex-1">
-            {/* left pane: content-sized in two panes, full width in one column */}
+            {/* left pane: content-sized in two panes; full width in one column
+                OR while the forward matrix mode is open (§F). */}
             <div
               className={`flex min-w-0 flex-col ${
-                wide ? "shrink-0 border-r border-edge" : "flex-1"
+                wide && !matrixOpen ? "shrink-0 border-r border-edge" : "flex-1"
               }`}
-              style={wide ? { width: TABLE_W } : undefined}
+              style={wide && !matrixOpen ? { width: TABLE_W } : undefined}
             >
               <InstrumentTable
                 rows={rows}
@@ -216,11 +220,14 @@ export function App() {
                 pinnedId={pinned?.id ?? null}
                 onHover={handleHover}
                 onPin={setPinned}
+                matrixOpen={matrixOpen}
+                onToggleMatrix={() => setMatrixOpenRaw((v) => !v)}
               />
             </div>
-            {/* right pane (two-pane only): takes the leftover width, floored at
-                600px; the idle curve fills its full height (§ layout). */}
-            {wide && (
+            {/* right pane: hidden in one column and while the matrix mode is
+                open; else takes the leftover width, floored at 600px, and the
+                idle curve fills its full height (§ layout / §F). */}
+            {wide && !matrixOpen && (
               <div
                 ref={paneRef}
                 className="min-w-[600px] flex-1 overflow-y-auto overflow-x-hidden p-5"

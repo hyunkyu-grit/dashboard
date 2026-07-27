@@ -120,6 +120,8 @@ export function InstrumentTable({
   pinnedId,
   onHover,
   onPin,
+  matrixOpen,
+  onToggleMatrix,
 }: {
   rows: Row[];
   forwards?: ForwardsPayload;
@@ -129,11 +131,14 @@ export function InstrumentTable({
   pinnedId: string | null;
   onHover: (row: Row | null) => void;
   onPin: (row: Row) => void;
+  // matrix mode is lifted to App: while open it takes the full surface width
+  // and the preview pane is hidden (§F).
+  matrixOpen: boolean;
+  onToggleMatrix: () => void;
 }) {
   const [sortCol, setSortCol] = useState<BasisKey | null>(null);
   const [sortAsc, setSortAsc] = useState(false);
   const [startFilter, setStartFilter] = useState<string>("all");
-  const [showMatrix, setShowMatrix] = useState(false);
   const [screener, setScreener] = useState<string | null>(null);
 
   const isForward = filter === "forward";
@@ -281,10 +286,10 @@ export function InstrumentTable({
           </select>
           <button
             type="button"
-            onClick={() => setShowMatrix((v) => !v)}
+            onClick={onToggleMatrix}
             className="opacity-60 hover:opacity-100"
           >
-            {showMatrix ? "▾ 목록으로" : "▸ 표로 보기"}
+            {matrixOpen ? "▾ 목록으로" : "▸ 표로 보기"}
           </button>
         </div>
       )}
@@ -292,8 +297,10 @@ export function InstrumentTable({
 
       {/* scroll: the table body scrolls under the fixed header (§shell) */}
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-4 pt-3">
-        {isForward && showMatrix && forwards ? (
-          <div className="flex items-start gap-6 overflow-x-auto">
+        {isForward && matrixOpen && forwards ? (
+          // wrap the 주요 포워드 block below the matrix rather than clipping it
+          // off the right edge (§F); the matrix scrolls horizontally itself.
+          <div className="flex flex-wrap items-start gap-6">
             <ForwardMatrix payload={forwards} />
             <KeyForwardBlock payload={forwards} />
           </div>

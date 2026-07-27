@@ -353,6 +353,13 @@ The table is for exact value reading; the tiles are for shape. Both exist.
 - Bold row separator above each integer-year row (2Y, 3Y, 4Y, 5Y).
 - Header row and the two left columns are pinned. NO sorting (row order is
   time; sorting would destroy it).
+- **A mode, not a panel [Session 15 §F].** Opening 표로 보기 takes the **full
+  surface width** and hides the preview pane; closing it restores the split. The
+  matrix scrolls horizontally inside its own `overflow-x-auto` (a visible
+  affordance), the pinned 시작/날짜 columns are sticky-left with an **opaque**
+  background (§G) so scroll never loses row identity, and the key-forward block
+  **wraps below** the matrix rather than clipping off the right edge.
+  `guards/scroll-affordance.test.ts` fires if a silent clip returns.
 - Hovering a cell highlights the corresponding point in the matching column-
   slice tile above (linked highlight).
 - **Key-forward block** (right of matrix): rows = the named forwards from the
