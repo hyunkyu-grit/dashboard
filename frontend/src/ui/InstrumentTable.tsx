@@ -13,6 +13,7 @@ import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 import { ForwardMatrix, KeyForwardBlock } from "@/wall/ForwardMatrix";
 import { useRegisterTile } from "@/wall/useRegisterTile";
 
+import { GRID_TEMPLATE } from "./columns";
 import { SPRING } from "./motion";
 import { TintLegend } from "./TintLegend";
 import {
@@ -64,16 +65,18 @@ function TableRow({
     row.id,
   ]);
   return (
-    <tr
-      ref={registerRef as ((el: HTMLTableRowElement | null) => void) | undefined}
+    <div
+      role="row"
+      ref={registerRef}
       onMouseEnter={() => onHover(row)}
       onMouseLeave={() => onHover(null)}
       onClick={() => onPin(row)}
-      className={`h-12 cursor-pointer border-b border-edge ${
+      style={{ gridTemplateColumns: GRID_TEMPLATE }}
+      className={`grid h-12 cursor-pointer items-center border-b border-edge ${
         active ? "bg-page" : "hover:bg-page/50"
       }`}
     >
-      <td className="relative py-3 pl-3 font-semibold">
+      <div role="cell" className="relative pl-3 font-semibold">
         {pinned && (
           <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-ink" />
         )}
@@ -93,13 +96,14 @@ function TableRow({
           />
         )}
         {row.label}
-      </td>
+      </div>
       {/* 현재 is a structural anchor: weight 600, tabular, ink (§5) */}
-      <td className="pr-3 text-right font-semibold tabular-nums text-ink">
+      <div role="cell" className="pr-3 text-right font-semibold tabular-nums text-ink">
         {levelText(row)}
-      </td>
+      </div>
       {BASIS_ORDER.map((b) => (
-        <td
+        <div
+          role="cell"
           key={b}
           // own-history outlier cue on the live 어제 column only (§B): an
           // outlier day gets a leading-edge rule (not a fill — a fill behind
@@ -109,15 +113,15 @@ function TableRow({
               ? columnCue(row.movePct, (row.changes.d1 ?? 0) > 0)
               : undefined
           }
-          className={`pr-3 text-right tabular-nums ${dirClass(row.changes[b])}`}
+          className={`self-stretch content-center pr-3 text-right tabular-nums ${dirClass(row.changes[b])}`}
         >
           {fmtDelta(row.changes[b], row.unit)}
-        </td>
+        </div>
       ))}
-      <td className="whitespace-nowrap pr-3 text-[13px] opacity-55">
+      <div role="cell" className="truncate pr-3 text-[13px] opacity-55">
         {row.oneLiner}
-      </td>
-    </tr>
+      </div>
+    </div>
   );
 }
 
@@ -317,8 +321,11 @@ export function InstrumentTable({
       )}
       </div>
 
-      {/* scroll: the table body scrolls under the fixed header (§shell) */}
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-4 pt-3">
+      {/* scroll: the table body scrolls under the fixed header (§shell).
+          scrollbar-gutter keeps the usable width constant whether or not the
+          scrollbar is present (§ Pass A) — without it the grid would shift on
+          every filter that crosses the overflow boundary. */}
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-4 pt-3 [scrollbar-gutter:stable]">
         {isForward && matrixOpen && forwards ? (
           // wrap the 주요 포워드 block below the matrix rather than clipping it
           // off the right edge (§F); the matrix scrolls horizontally itself.
@@ -331,44 +338,46 @@ export function InstrumentTable({
             <TintLegend className="mt-4" />
           </div>
         ) : (
-          <table
+          <div
+            role="table"
             className="w-full text-[13px]"
-            style={{ borderCollapse: "separate", borderSpacing: 0 }}
             onMouseLeave={() => onHover(null)}
           >
-            <thead>
-              {/* muting is a TEXT-colour alpha (text-ink/50), never element
-                  opacity — opacity on the row would sink the sticky th
-                  backgrounds and let rows bleed through (§G). A hairline (not a
-                  shadow) marks the boundary. */}
-              <tr className="text-left align-bottom text-ink/50">
-                <th className="sticky top-0 z-10 border-b border-edge bg-tile pb-2 pl-3 font-normal">
-                  종목
-                </th>
-                <th className="sticky top-0 z-10 border-b border-edge bg-tile pb-2 pr-3 text-right font-normal">
-                  현재
-                </th>
-                {BASIS_ORDER.map((b) => (
-                  <th
-                    key={b}
-                    className="sticky top-0 z-10 border-b border-edge bg-tile pb-2 pr-3 text-right font-normal"
+            {/* THE column grid (§ Pass A): one template, format-derived and
+                frozen (columns.ts), shared by the header row and every body
+                row — widths never depend on today's values or the open tab.
+                Muting is a TEXT-colour alpha (text-ink/50), never element
+                opacity — opacity on the row would sink the sticky header
+                background and let rows bleed through (§G). A hairline (not a
+                shadow) marks the boundary. */}
+            <div
+              role="row"
+              style={{ gridTemplateColumns: GRID_TEMPLATE }}
+              className="sticky top-0 z-10 grid items-end border-b border-edge bg-tile pb-2 text-left text-ink/50"
+            >
+              <div role="columnheader" className="pl-3">
+                종목
+              </div>
+              <div role="columnheader" className="pr-3 text-right">
+                현재
+              </div>
+              {BASIS_ORDER.map((b) => (
+                <div key={b} role="columnheader" className="pr-3 text-right">
+                  <button
+                    type="button"
+                    onClick={() => clickSort(b)}
+                    className="hover:text-ink"
                   >
-                    <button
-                      type="button"
-                      onClick={() => clickSort(b)}
-                      className="hover:text-ink"
-                    >
-                      {BASIS_HEAD[b]}
-                      {sortCol === b ? (sortAsc ? " ↑" : " ↓") : ""}
-                    </button>
-                  </th>
-                ))}
-                <th className="sticky top-0 z-10 border-b border-edge bg-tile pb-2 pr-3 font-normal">
-                  한 줄
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                    {BASIS_HEAD[b]}
+                    {sortCol === b ? (sortAsc ? " ↑" : " ↓") : ""}
+                  </button>
+                </div>
+              ))}
+              <div role="columnheader" className="pr-3">
+                한 줄
+              </div>
+            </div>
+            <div role="rowgroup" className="relative">
               {items.map((it, i) =>
                 it.row ? (
                   <TableRow
@@ -380,18 +389,17 @@ export function InstrumentTable({
                     onPin={onPin}
                   />
                 ) : (
-                  <tr key={`head-${i}`}>
-                    <td
-                      colSpan={8}
-                      className="border-t-2 border-t-edge pb-1 pl-3 pt-4 text-[12px] font-semibold opacity-45"
-                    >
-                      {it.head}
-                    </td>
-                  </tr>
+                  <div
+                    role="row"
+                    key={`head-${i}`}
+                    className="border-t-2 border-t-edge pb-1 pl-3 pt-4 text-[12px] font-semibold opacity-45"
+                  >
+                    {it.head}
+                  </div>
                 ),
               )}
-            </tbody>
-          </table>
+            </div>
+          </div>
         )}
       </div>
     </div>

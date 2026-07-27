@@ -137,6 +137,18 @@ Behaviour:
   a time, clicking again clears; a one-line 합니다체 description shows beneath
   the row when active. Data-driven (`ui/screener.ts` — a predicate per view), so
   a new named view is a definition, not a component. Default: no chip.
+- **The column grid is format-derived and frozen [grid session, Pass A].**
+  Column widths come from each column's widest possible RENDERING — `1s1.5s10s`
+  for 종목, six tabular glyphs for 현재 (`−100.5` / `4.2446` / `12.00`) and for
+  each change column (`−999.9`) — never from today's data, so the grid is
+  byte-identical across tabs, sorts, and filters and the header never moves.
+  한 줄 is the only flexible column: all horizontal slack lives in the
+  sentence, never in the numbers. One template string (`ui/columns.ts
+  GRID_TEMPLATE`) is shared by the header row and every body row (a CSS-grid
+  row list, not `<table>` — §14's press-feedback note already recorded that
+  transforms don't reach `table-row`, and the reorder motion needs
+  transformable rows). `scrollbar-gutter: stable` keeps the usable width
+  constant when the scrollbar appears. Pinned by `guards/table-grid.test.ts`.
 - **Sortable by any change column, both directions.** Default order is
   instrument order (not a ranking). Sorting by |change| is one click = "what
   moved today".
