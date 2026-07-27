@@ -67,6 +67,7 @@ const summary: WallSummary = {
   specNodeOrder: [],
   displayTenors: ["1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y"],
   missingNodes: [],
+  curveBanner: { kind: null },
   outrights: [
     "1D", "3M", "6M", "9M", "1Y", "1.5Y", "2Y", "3Y", "4Y", "5Y",
     "6Y", "7Y", "8Y", "9Y", "10Y",

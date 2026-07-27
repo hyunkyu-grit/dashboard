@@ -21,6 +21,7 @@ from .derive import (
     apply_level_extreme,
     apply_solo_direction,
     basis_dates,
+    curve_banner,
     derived_ids,
     series_history,
     series_values,
@@ -75,11 +76,15 @@ def wall_summary() -> dict:
         summarize(_dataset, sid, sid.replace("-", "/"), kind, _bases)
         for sid, kind, _legs in derived_ids()
     ]
-    # 한 줄 rungs 2 & 3 (§C2) are cross-sectional, so they run after the whole
-    # table is built. Rung 2 (level extreme, capped) over outrights + derived;
-    # rung 3 (solo direction) over outrights only. Both fill only silent rows,
-    # so rung 1 (set in summarize) keeps priority.
-    apply_level_extreme(outrights + derived)
+    # 한 줄 rungs 2 & 3 (§C2/§I) are cross-sectional, so they run after the whole
+    # table is built. When the whole curve sits at a 10y extreme (§I), that is a
+    # curve fact stated once in the banner, so the per-row level rung is
+    # SUPPRESSED on outrights; spreads/flies keep it (a spread at a 10y extreme
+    # is genuinely distinctive, not restated by the banner). Rung 3 (solo
+    # direction) over outrights only. Both fill only silent rows, so rung 1
+    # (set in summarize) keeps priority.
+    banner = curve_banner(outrights)
+    apply_level_extreme(derived if banner["kind"] else outrights + derived)
     apply_solo_direction(outrights)
     return {
         "asof": _dataset.asof.isoformat(),
@@ -89,6 +94,7 @@ def wall_summary() -> dict:
         "specNodeOrder": SPEC_NODE_ORDER,
         "displayTenors": DISPLAY_TENORS,
         "missingNodes": _dataset.missing_nodes,
+        "curveBanner": banner,  # §I: whole-curve extreme stated once, not per row
         "outrights": outrights,
         "derived": derived,
         # Change-log EVENTS (D-1 fixed, collapsed) — DESIGN §12 rule (c).

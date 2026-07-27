@@ -8,7 +8,7 @@
 import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 
-import type { BasisKey, ForwardsPayload } from "@/lib/api";
+import type { BasisKey, CurveBanner, ForwardsPayload } from "@/lib/api";
 import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 import { ForwardMatrix, KeyForwardBlock } from "@/wall/ForwardMatrix";
 import { useRegisterTile } from "@/wall/useRegisterTile";
@@ -114,6 +114,7 @@ function TableRow({
 export function InstrumentTable({
   rows,
   forwards,
+  curveBanner,
   filter,
   onFilter,
   activeId,
@@ -125,6 +126,7 @@ export function InstrumentTable({
 }: {
   rows: Row[];
   forwards?: ForwardsPayload;
+  curveBanner?: CurveBanner;
   filter: Group | "all";
   onFilter: (f: Group | "all") => void;
   activeId: string | null;
@@ -242,6 +244,16 @@ export function InstrumentTable({
           );
         })}
       </div>
+
+      {/* curve-level extreme, stated once (§I) — a fact about the whole curve,
+          not any row, so the per-row percentile is suppressed on outrights. */}
+      {curveBanner?.kind && (
+        <p className="mt-2 text-[12px] text-up">
+          {curveBanner.kind === "curve_high"
+            ? "커브 전 구간이 10년 고점권입니다"
+            : "커브 전 구간이 10년 저점권입니다"}
+        </p>
+      )}
 
       {/* screener presets (§D): a second row of chips, a filter on top of the
           active tab — one at a time, click again clears. Not a sidebar. */}

@@ -145,6 +145,11 @@ export function buildRows(
     for (const sp of forwards.startPoints) {
       for (const tenor of forwards.tenors) {
         const clean = tenor.replace("F", ""); // "1YF"→"1Y", "SPOT" stays
+        // {start}xSPOT is a spot-starting par rate — the outright at that
+        // start, with no forward period — so it is a duplicate in the forward
+        // LIST (§I). It stays in the matrix (표로 보기) as the spot reference
+        // column, but is dropped from the row list here.
+        if (clean === "SPOT") continue;
         const name = `${sp.label}x${clean}`;
         const cell = forwards.grid[tenor].find((c) => c.start === sp.label);
         if (!cell) continue;

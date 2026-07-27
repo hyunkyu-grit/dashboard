@@ -64,12 +64,18 @@ export interface EventCluster {
   count: number;
 }
 
+/** Whole-curve extreme, stated once above the table (§I). */
+export interface CurveBanner {
+  kind: "curve_high" | "curve_low" | null;
+}
+
 export interface WallSummary {
   asof: string;
   basisDates: Record<BasisKey, string | null>;
   specNodeOrder: string[];
   displayTenors: string[];
   missingNodes: string[];
+  curveBanner: CurveBanner;
   outrights: SeriesSummary[];
   derived: SeriesSummary[];
   events: EventCluster[];

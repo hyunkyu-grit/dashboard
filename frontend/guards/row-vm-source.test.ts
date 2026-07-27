@@ -43,6 +43,7 @@ const summary: WallSummary = {
   specNodeOrder: [],
   displayTenors: [],
   missingNodes: [],
+  curveBanner: { kind: null },
   outrights: [src],
   derived: [{ ...src, id: "1Y-10Y", kind: "spread", unit: "bp", quoted: null, sortKey: [1, 10] }],
   events: [],

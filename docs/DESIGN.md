@@ -114,6 +114,14 @@ Columns, left to right:
   The retracement rung (Session 13's "주간/월중 되돌림") is retired — it needed a
   sign flip, which almost never fires in a trending tape. Diagnosis + thresholds
   in `docs/diagnostics/color-density.md`.
+- **Curve-level extreme is a banner, not a column [Session 16 §I].** When most
+  of the outright curve (≥ `CURVE_REGIME_FRAC`) sits in one extreme band, "this
+  tenor is at a decade high" is a fact about the *curve*, not any row. It is
+  stated once in a line under the tabs — "커브 전 구간이 10년 고점권입니다" — and
+  the per-row level rung (rung 2) is **suppressed on outrights**. Spreads/flies
+  keep the per-row rung (a spread at a 10y extreme is genuinely distinctive, not
+  restated by the banner). Backend classifies (`curve_banner`), the browser
+  renders the Korean (§16).
 
 Behaviour:
 
@@ -774,6 +782,17 @@ all arrive precomputed — the browser never differences a series.
 
 Choices made to keep the build green where the prompt did not fully specify.
 Confirm or override.
+
+- **Pin clears on tab change [Session 16 §I].** A pinned row from another tab
+  was showing silently in the preview. Of the two offered cures — clear the pin,
+  or keep it and mark which tab it belongs to — the pin is **cleared** on a tab
+  change (simplest, removes the ambiguous state entirely). The preview falls
+  back to the tab's idle curve.
+- **`{start}xSPOT` dropped from the forward LIST [Session 16 §I].** A
+  spot-starting par rate is the outright at that start with no forward period —
+  a duplicate. It stays in the 표로 보기 matrix as the spot reference column but
+  no longer appears as a forward row (so no confusing `1Y3MxSPOT` label in the
+  list).
 
 - **Two-pane breakpoint = 1520px [Session 15].** The prompt said "about 1440",
   but that assumed a narrower table; with the table at 880px and the preview

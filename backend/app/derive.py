@@ -194,6 +194,28 @@ def apply_level_extreme(rows: list[dict], cap: int = LEVEL_CAP) -> None:
         r["oneLiner"] = {"kind": "extreme", "value": round(pct)}
 
 
+# When most of the curve sits in one extreme band, "this tenor is at a decade
+# high" is a fact about the CURVE, not any row — it belongs in one line above
+# the table, not repeated down it (§I). Above this fraction of outrights, the
+# per-row level rung is suppressed and the banner speaks instead.
+CURVE_REGIME_FRAC = 0.6
+
+
+def curve_banner(outrights: list[dict]) -> dict:
+    """Classify whether the outright curve as a whole sits at a 10y extreme (§I).
+    Backend decides WHAT is true; the browser renders the Korean."""
+    pcts = [o["range10y"]["pct"] for o in outrights if o["range10y"]["pct"] is not None]
+    if not pcts:
+        return {"kind": None}
+    hi = sum(1 for p in pcts if p >= 90) / len(pcts)
+    lo = sum(1 for p in pcts if p <= 10) / len(pcts)
+    if hi >= CURVE_REGIME_FRAC:
+        return {"kind": "curve_high"}
+    if lo >= CURVE_REGIME_FRAC:
+        return {"kind": "curve_low"}
+    return {"kind": None}
+
+
 def apply_solo_direction(rows: list[dict]) -> None:
     """Rung 3 (§C2), cross-sectional over a peer group (outrights): a row that
     is still silent and moved OPPOSITE the day's majority stands out. Mutates

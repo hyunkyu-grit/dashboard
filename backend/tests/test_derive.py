@@ -9,6 +9,7 @@ from app.derive import (
     apply_solo_direction,
     basis_dates,
     classify_one_liner,
+    curve_banner,
     derived_ids,
     downsample,
     series_history,
@@ -136,6 +137,19 @@ def test_apply_level_extreme_leaves_higher_rungs_and_uses_both_bands():
     assert rows[0]["oneLiner"]["kind"] == "move_extreme"  # rung 1 kept
     assert rows[1]["oneLiner"]["kind"] == "extreme"  # top band
     assert rows[2]["oneLiner"]["kind"] == "extreme"  # bottom band
+
+
+def test_curve_banner_fires_only_on_a_whole_curve_extreme():
+    def outs(pcts):
+        return [{"range10y": {"pct": p}} for p in pcts]
+
+    # most of the curve at highs → curve_high
+    assert curve_banner(outs([99, 98, 97, 96, 95, 50]))["kind"] == "curve_high"
+    # most at lows → curve_low
+    assert curve_banner(outs([1, 2, 3, 4, 5, 60]))["kind"] == "curve_low"
+    # only a couple extreme (distinctive, not a regime) → no banner
+    assert curve_banner(outs([99, 98, 50, 40, 30, 20]))["kind"] is None
+    assert curve_banner([])["kind"] is None
 
 
 def test_apply_solo_direction_marks_the_lone_mover():

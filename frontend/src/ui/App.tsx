@@ -139,6 +139,15 @@ export function App() {
     [summary, forwards, volatility],
   );
 
+  // Clear the pin on a tab change (§I): a pinned row from another tab shown
+  // silently in the preview is the defect; dropping it is the simplest cure
+  // (recorded under DESIGN ## Provisional).
+  const onTab = useCallback((t: Group | "all") => {
+    setTab(t);
+    setPinned(null);
+    setHovered(null);
+  }, []);
+
   useEffect(() => {
     syncUiFromDom();
   }, []);
@@ -217,8 +226,9 @@ export function App() {
               <InstrumentTable
                 rows={rows}
                 forwards={forwards}
+                curveBanner={summary.curveBanner}
                 filter={tab}
-                onFilter={setTab}
+                onFilter={onTab}
                 activeId={(wide ? active : pinned)?.id ?? null}
                 pinnedId={pinned?.id ?? null}
                 onHover={handleHover}
