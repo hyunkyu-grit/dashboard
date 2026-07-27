@@ -181,10 +181,18 @@ export function InstrumentTable({
   const [sortAsc, setSortAsc] = useState(false);
   const [startFilter, setStartFilter] = useState<string>("all");
   const [screener, setScreener] = useState<string | null>(null);
-  // what caused the CURRENT arrangement (Pass C): only sort and screener
-  // reorders animate — a tab or start-filter switch is a view change, snaps.
-  const causeRef = useRef<"sort" | "screener" | "other">("other");
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Reorder snapshot (Pass C): captured in the EVENT HANDLER, before the
+  // state update, so render stays pure (no ref/DOM reads during render —
+  // compiler rule). Holds what caused the current arrangement (only sort and
+  // screener animate; a tab / start-filter switch is a view change and
+  // snaps), the pre-change row positions, and the viewport window.
+  const [flipSnap, setFlipSnap] = useState<{
+    cause: "sort" | "screener" | "other";
+    scrollTop: number;
+    viewH: number;
+    tops: ReadonlyMap<string, number>;
+  }>({ cause: "other", scrollTop: 0, viewH: 800, tops: new Map() });
 
   const isForward = filter === "forward";
   const activeScreener = SCREENERS.find((s) => s.id === screener) ?? null;
@@ -245,8 +253,28 @@ export function InstrumentTable({
     return out;
   }, [shown, isForward, sortCol]);
 
+  /** Event-time snapshot: old row tops (tile registry) + viewport window. */
+  const snapReorder = (cause: "sort" | "screener" | "other") => {
+    if (cause === "other") {
+      setFlipSnap({ cause, scrollTop: 0, viewH: 800, tops: new Map() });
+      return;
+    }
+    const tops = new Map<string, number>();
+    for (const r of shown) {
+      const el = getTile(r.id)?.el;
+      if (el) tops.set(r.id, el.offsetTop);
+    }
+    const vp = scrollRef.current;
+    setFlipSnap({
+      cause,
+      scrollTop: vp?.scrollTop ?? 0,
+      viewH: vp?.clientHeight ?? 800,
+      tops,
+    });
+  };
+
   const clickSort = (b: BasisKey) => {
-    causeRef.current = "sort";
+    snapReorder("sort");
     if (sortCol !== b) {
       setSortCol(b);
       setSortAsc(false);
@@ -262,10 +290,7 @@ export function InstrumentTable({
   // when orderKey changes; culled to the viewport's neighbourhood; instant
   // above FLIP_MAX_ROWS and under prefers-reduced-motion (MotionConfig).
   const orderKey = `${sortCol ?? ""}|${sortAsc}|${screener ?? ""}`;
-  const flipOn = reorderAnimates(causeRef.current, shown.length);
-  const vp = scrollRef.current;
-  const scrollTop = vp?.scrollTop ?? 0;
-  const viewH = vp?.clientHeight ?? 800;
+  const flipOn = reorderAnimates(flipSnap.cause, shown.length);
   const ROW_H = 48; // h-12 — used only to estimate a row's destination
 
   return (
@@ -283,7 +308,7 @@ export function InstrumentTable({
               key={f.id}
               type="button"
               onClick={() => {
-                causeRef.current = "other"; // view change — reorder snaps
+                snapReorder("other"); // view change — reorder snaps
                 onFilter(f.id);
               }}
               className={`relative px-3 py-2 text-[13px] transition-opacity ${
@@ -323,7 +348,7 @@ export function InstrumentTable({
               key={sc.id}
               type="button"
               onClick={() => {
-                causeRef.current = "screener";
+                snapReorder("screener");
                 setScreener(on ? null : sc.id);
               }}
               className={`rounded-full px-2.5 py-1 text-[12px] transition-colors ${
@@ -348,7 +373,7 @@ export function InstrumentTable({
           <select
             value={startFilter}
             onChange={(e) => {
-              causeRef.current = "other"; // view change — reorder snaps
+              snapReorder("other"); // view change — reorder snaps
               setStartFilter(e.target.value);
             }}
             className="rounded-[8px] bg-page px-2 py-1 opacity-70"
@@ -436,7 +461,7 @@ export function InstrumentTable({
               <AnimatePresence
                 initial={false}
                 mode="popLayout"
-                custom={flipOn && causeRef.current === "screener"}
+                custom={flipOn && flipSnap.cause === "screener"}
               >
                 {items.map((it, i) =>
                   it.row ? (
@@ -451,13 +476,13 @@ export function InstrumentTable({
                       flip={
                         flipOn &&
                         rowShouldFlip(
-                          getTile(it.row.id)?.el.offsetTop ?? null,
+                          flipSnap.tops.get(it.row.id) ?? null,
                           i * ROW_H,
-                          scrollTop,
-                          viewH,
+                          flipSnap.scrollTop,
+                          flipSnap.viewH,
                         )
                       }
-                      enter={flipOn && causeRef.current === "screener"}
+                      enter={flipOn && flipSnap.cause === "screener"}
                     />
                   ) : (
                     <div
