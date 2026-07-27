@@ -26,6 +26,7 @@ from .derive import (
 )
 from .events import detect_event_clusters
 from .forwards import forward_history, forwards_payload
+from .volatility import relative_atr_for, volatility_payload
 
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "irsdata.xlsx"
 
@@ -45,6 +46,7 @@ _bases = basis_dates(_dataset)
 _curves = build_basis_curves(_dataset)
 _forwards = forwards_payload(_dataset, _curves)
 _events = detect_event_clusters(_dataset)
+_volatility = volatility_payload(_dataset, _bases)
 
 
 def _outright_label(tenor: str) -> str:
@@ -91,7 +93,16 @@ def series_detail(series_id: str, res: str = "full") -> dict:
     # `res=preview` → ~150 downsampled line points; `res=full` → every day (the
     # enlarged view). Stats + per-point daily change + the calendar are always
     # precomputed here — the browser never differences a series (§16).
-    if "x" in series_id:
+    if series_id.startswith("vol:"):
+        # Volatility history: the relative-ATR ratio series for a tenor. Ratio
+        # levels are dimensionless; warm-up / floor nulls are simply absent.
+        try:
+            ratios = relative_atr_for(_dataset, series_id[len("vol:"):])
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"unknown series {series_id}")
+        pairs = [(t, r) for t, r in ratios if r is not None]
+        unit = "ratio"
+    elif "x" in series_id:
         # Forward ids carry an 'x' (e.g. 2Yx1Y); their history is derived from
         # each date's curve, lazily and cached (§2 stage-2). Levels are %.
         try:
@@ -122,3 +133,15 @@ def series_detail(series_id: str, res: str = "full") -> dict:
 @app.get("/api/forwards")
 def forwards() -> dict:
     return _forwards
+
+
+@app.get("/api/volatility")
+def volatility() -> dict:
+    # Relative-ATR list rows + across-tenor curve, all precomputed (§16).
+    return {
+        "asof": _dataset.asof.isoformat(),
+        "basisDates": {
+            k: (d.isoformat() if d else None) for k, d in _bases.items()
+        },
+        **_volatility,
+    }

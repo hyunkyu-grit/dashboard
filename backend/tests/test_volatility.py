@@ -5,13 +5,16 @@ from pathlib import Path
 
 import pytest
 
-from app.dataset import load_dataset
+from app.dataset import DISPLAY_TENORS, load_dataset
+from app.derive import basis_dates
 from app.volatility import (
     LONG_MEAN_FLOOR_BP,
     LONG_OBS,
     WARMUP_OBS,
     relative_atr,
+    relative_atr_aligned,
     relative_atr_for,
+    volatility_payload,
 )
 
 DATA = Path(__file__).resolve().parents[2] / "data" / "irsdata.xlsx"
@@ -105,3 +108,34 @@ def test_relative_atr_for_real_series_is_cached_and_aligned():
     # early dates are warm-up nulls; the tail has real ratios
     assert a[0][1] is None
     assert any(r is not None for _t, r in a)
+
+
+def test_aligned_matches_dataset_dates():
+    ds = load_dataset(DATA)
+    aligned = relative_atr_aligned(ds, "10Y")
+    assert len(aligned) == len(ds.dates)
+    assert aligned[0] is None  # warm-up
+
+
+def test_volatility_payload_shape_matches_the_other_tabs():
+    ds = load_dataset(DATA)
+    payload = volatility_payload(ds, basis_dates(ds))
+    assert len(payload["rows"]) == len(DISPLAY_TENORS)
+    assert len(payload["curve"]) == len(DISPLAY_TENORS)
+    for row in payload["rows"]:
+        # SeriesSummary-like so the FE table component never branches
+        assert set(row) >= {
+            "id", "label", "unit", "now", "deltas", "range10y",
+            "sortKey", "quoted", "oneLiner",
+        }
+        assert row["unit"] == "ratio"
+        assert row["quoted"] is None
+        assert row["id"].startswith("vol:")
+        assert set(row["deltas"]) == {"d1", "wtd", "mtd", "qtd", "ytd"}
+        assert row["oneLiner"]["kind"] in {"extreme", "none"}
+        assert len(row["sortKey"]) == 1
+        pct = row["range10y"]["pct"]
+        assert pct is None or 0 <= pct <= 100
+    # the 10Y ratio is well past warm-up, so it is a real number, not null
+    r10 = next(r for r in payload["rows"] if r["id"] == "vol:10Y")
+    assert isinstance(r10["now"], float)

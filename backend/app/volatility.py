@@ -26,8 +26,11 @@ never calendar days — so a holiday cannot silently shorten a window.
 
 from __future__ import annotations
 
-from .dataset import Dataset
-from .derive import series_values
+import datetime as dt
+from bisect import bisect_left
+
+from .dataset import DISPLAY_TENORS, Dataset, tenor_years
+from .derive import BASIS_KEYS, series_values, value_at
 
 SHORT_OBS = 5
 LONG_OBS = 60
@@ -95,3 +98,87 @@ def relative_atr_for(dataset: Dataset, series_id: str) -> list[tuple[str, float 
     out = relative_atr(pairs, scale)
     _rel_atr_cache[series_id] = out
     return out
+
+
+def relative_atr_aligned(dataset: Dataset, series_id: str) -> list[float | None]:
+    """Relative-ATR ratios aligned to `dataset.dates` (None where there is no
+    close, or during warm-up / below the floor) — so the summary machinery
+    (`value_at`, percentile) can read it like any other series."""
+    by_date = {t: r for t, r in relative_atr_for(dataset, series_id)}
+    return [by_date.get(d.isoformat()) for d in dataset.dates]
+
+
+# ── Volatility tab payload (Session 14 Pass 3) ──────────────────────────────
+# Same DTO shape as the other tabs (SeriesSummary-like) so the table component
+# never branches. Everything is precomputed here (§16): the current ratio, the
+# five basis deltas as RATIO DIFFERENCES (not bp), the 10y percentile, the sort
+# key, and the summary classification.
+
+def _volatility_row(dataset: Dataset, tenor: str,
+                    bases: dict[str, dt.date | None],
+                    aligned: list[float | None]) -> dict:
+    now: float | None = None
+    for v in reversed(aligned):
+        if v is not None:
+            now = v
+            break
+
+    deltas: dict[str, float | None] = {}
+    basis_values: dict[str, float | None] = {}
+    for key in BASIS_KEYS:
+        bv = value_at(dataset, aligned, bases[key])
+        basis_values[key] = round(bv, 4) if bv is not None else None
+        # a change in the ratio is a ratio DIFFERENCE, never a bp figure (§ vol).
+        deltas[key] = (
+            round(now - bv, 4) if now is not None and bv is not None else None
+        )
+
+    clean = sorted(v for v in aligned if v is not None)
+    pct = None
+    if clean and now is not None:
+        pct = round(bisect_left(clean, now) / len(clean) * 100, 1)
+
+    # Vol classification is percentile-extreme only — the retracement shape's
+    # 0.5bp threshold is meaningless for a dimensionless ratio.
+    one_liner = (
+        {"kind": "extreme", "value": round(pct)}
+        if pct is not None and (pct >= 90 or pct <= 10)
+        else {"kind": "none", "value": None}
+    )
+
+    return {
+        "id": f"vol:{tenor}",
+        "label": f"{tenor} σ",
+        "kind": "vol",
+        "unit": "ratio",
+        "now": round(now, 4) if now is not None else None,
+        "deltas": deltas,
+        "basisValues": basis_values,
+        "range10y": {
+            "min": clean[0] if clean else None,
+            "max": clean[-1] if clean else None,
+            "pct": pct,
+        },
+        "sortKey": [tenor_years(tenor)],
+        "quoted": None,
+        "oneLiner": one_liner,
+        "spark": [],
+    }
+
+
+def volatility_payload(dataset: Dataset, bases: dict[str, dt.date | None]) -> dict:
+    """List rows + the across-tenor curve for the volatility tab. Nulls travel
+    as null all the way out — zero is never substituted (§ vol)."""
+    rows: list[dict] = []
+    curve: list[dict] = []
+    for tenor in DISPLAY_TENORS:
+        aligned = relative_atr_aligned(dataset, tenor)
+        row = _volatility_row(dataset, tenor, bases, aligned)
+        rows.append(row)
+        prev = value_at(dataset, aligned, bases["d1"])
+        curve.append({
+            "label": tenor,
+            "now": row["now"],
+            "prev": round(prev, 4) if prev is not None else None,
+        })
+    return {"rows": rows, "curve": curve}
