@@ -212,7 +212,7 @@ function Body({
       {/* what you execute (DV01 ratio, §B) beside which way it profits (§A) */}
       <div className="flex flex-wrap items-start gap-10">
         <LegWeights seriesId={row.seriesId} />
-        <PayReceive row={row} summary={summary} />
+        <PayReceive row={row} />
       </div>
       <SixBasisReadout summary={summary} seriesId={row.seriesId} />
       <StrategyRegion />

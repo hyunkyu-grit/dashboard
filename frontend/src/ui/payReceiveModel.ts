@@ -1,48 +1,41 @@
-/* Pay/Receive diagram MODEL (closing session — diagram rebuild). Pure, no React,
- * so the arrow directions are unit-testable against the sign convention
- * (guards/pay-receive-arrows.test.ts): **Pay profits when the displayed value
- * rises; Receive is the exact mirror.**
+/* Pay/Receive diagram MODEL — a MODE picture, not a data plot (diagram rebuild).
  *
- * Every kind is drawn on the SAME base: the current par curve across nine
- * equal-spaced nodes. Outrights / spreads / flies move NODE LEVELS (arrows at
- * nodes). A forward is different — it responds to the SLOPE of a segment, not a
- * node level — so it rotates a stretch (near end down, far end up) instead of
- * lifting a node. This module produces, per kind and side: the full-strength
- * region, the leg markers + arrow directions, and the dashed "wanted-state"
- * ghost as control points in rate space. The SVG is in PayReceive.tsx. */
+ * Curve moves decompose into three modes, and every instrument here bets on
+ * exactly one: LEVEL (the whole curve shifts up — outright), SLOPE (it tilts,
+ * steeper/flatter — spread, forward), CURVATURE (it arches, belly bulging or
+ * sagging — butterfly). The diagram says which mode and which direction and
+ * nothing else — no real data, no tenors, no axis. This module is pure so the
+ * mode mapping, the Pay/Receive negation, the labels, and the "wanted stays in
+ * the plot" bound are unit-testable (guards/pay-receive-mode.test.ts).
+ *
+ * Sign convention: `sign = +1` for Pay (profits when the displayed value rises),
+ * `-1` for Receive — the exact negation of the deformation for every mode. */
 
 import type { Construct } from "./gloss";
 
 export type Side = "pay" | "receive";
-export type ArrowDir = 1 | -1;
+// A forward is a SLOPE confined to a band (spec Pass B: "forward to slope"), so
+// it shares the slope mode and carries a `band`; it is not a separate mode.
+export type Mode = "level" | "slope" | "curvature" | "none";
 
-// The nine standard curve nodes, equal-spaced on screen (§8/CurveView).
-export const DIAGRAM_NODES = [
-  "3M", "6M", "9M", "1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y",
-] as const;
-export const NODE_YEARS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5, 10];
+// ≥ 320×180; fixed y-domain, no axis. Deformation headroom top and bottom.
+export const PLOT = { w: 340, h: 190, ml: 18, mr: 18, top: 16, bot: 174 };
+export const N = 64; // samples across the width
 
-export interface Leg {
-  frac: number; // fractional node index (0..8), interpolated for forwards
-  arrow: ArrowDir;
-}
-export interface GhostPoint {
-  frac: number;
-  rate: number;
-}
-export interface DiagramModel {
-  kind: "outright" | "spread" | "butterfly" | "forward";
+// Exaggerated on purpose — comparable to the curve's own rise (~0.32 of the
+// band), not a fraction of it. A subtle diagram is a failed diagram.
+const DEFORM = 0.26;
+const DEFORM_FWD = 0.24;
+const MAX_YEARS = 10; // maps a forward's period onto the schematic x-domain
+
+export interface DiagramSpec {
+  mode: Mode;
   term: string;
-  note?: string; // extra line under the diagram (forward)
-  regionLabel?: string; // label for the shaded stretch (forward: 선도 구간)
-  region: [number, number]; // fractional bounds drawn at full strength
-  shaded: boolean; // light fill behind the region (forward)
-  legs: Leg[];
-  ghost: GhostPoint[]; // wanted-state control points, rate space
+  sign: 1 | -1;
+  band?: [number, number]; // forward only: [t0, t1] in [0, 1]
 }
 
-/** Label → years. Handles the composite forward starts ("1Y3M" = 1.25),
- * halves ("1.5Y"), months ("9M" = 0.75), and the overnight "1D". */
+/** Label → years, for positioning a forward's band ("1Y3M" = 1.25, "9M" = 0.75). */
 export function labelToYears(label: string): number {
   if (label === "1D") return 1 / 365;
   if (label === "SPOT") return 0;
@@ -54,161 +47,71 @@ export function labelToYears(label: string): number {
   return y;
 }
 
-/** Years → a readable label in the product's composite style (1.25 → 1Y3M,
- * 10 → 10Y, 0.75 → 9M) — used for the forward's "A~B 구간" line. */
-export function yearsToLabel(y: number): string {
-  const whole = Math.floor(y + 1e-9);
-  const months = Math.round((y - whole) * 12);
-  if (months === 0) return `${whole}Y`;
-  if (whole === 0) return `${months}M`;
-  return `${whole}Y${months}M`;
-}
+// [pay term, receive term] per mode, in the established register.
+const TERMS: Record<Exclude<Mode, "none">, [string, string]> = {
+  level: ["금리 상승", "금리 하락"],
+  slope: ["스티프닝", "플래트닝"], // spread and forward both read as a tilt
+  curvature: ["벨리 약세", "벨리 강세"],
+};
 
-/** Years → fractional index along the equal-spaced nodes (clamped 0..8). */
-export function yearsToFrac(y: number): number {
-  const n = NODE_YEARS.length;
-  if (y <= NODE_YEARS[0]) return 0;
-  if (y >= NODE_YEARS[n - 1]) return n - 1;
-  for (let k = 0; k < n - 1; k++) {
-    if (y >= NODE_YEARS[k] && y <= NODE_YEARS[k + 1]) {
-      return k + (y - NODE_YEARS[k]) / (NODE_YEARS[k + 1] - NODE_YEARS[k]);
-    }
-  }
-  return n - 1;
-}
-
-export function rateAtFrac(rates: number[], frac: number): number {
-  const lo = Math.floor(frac);
-  const hi = Math.ceil(frac);
-  if (lo === hi) return rates[lo];
-  return rates[lo] + (rates[hi] - rates[lo]) * (frac - lo);
-}
-
-function nodeIndex(id: string): number {
-  return (DIAGRAM_NODES as readonly string[]).indexOf(id);
-}
-
-/** Schematic ghost deviation, in rate units — a fraction of the curve's own
- * span so it is visible but obviously not to scale. */
-function liftFor(rates: number[]): number {
-  const lo = Math.min(...rates);
-  const hi = Math.max(...rates);
-  const span = hi - lo;
-  return span > 1e-6 ? span * 0.35 : 0.1;
-}
-
-/**
- * Build the diagram for a construct + side against a full nine-node par curve
- * (rates aligned to DIAGRAM_NODES, all non-null). Returns null for kinds with
- * no curve statement (volatility) or when a leg is missing.
- *
- * Sign convention, enforced here and tested: for a Pay position (`s = +1`) the
- * PRIMARY leg — the node whose rise defines "the displayed value rises" — gets
- * an UP arrow. Receive (`s = -1`) flips every arrow and mirrors the ghost.
- */
-export function buildDiagramModel(
-  c: Construct,
-  rates: number[],
-  side: Side,
-): DiagramModel | null {
-  if (rates.length !== DIAGRAM_NODES.length || rates.some((r) => r == null)) {
-    return null;
-  }
-  const s: ArrowDir = side === "pay" ? 1 : -1;
-  const lift = liftFor(rates);
-  const base: GhostPoint[] = rates.map((rate, frac) => ({ frac, rate }));
+export function diagramSpec(c: Construct, side: Side): DiagramSpec | null {
+  const sign: 1 | -1 = side === "pay" ? 1 : -1;
+  const term = (m: Exclude<Mode, "none">) => (sign > 0 ? TERMS[m][0] : TERMS[m][1]);
 
   if (c.kind === "outright" || c.kind === "call") {
-    const tenor = c.kind === "call" ? "1D" : c.tenor;
-    const frac = yearsToFrac(labelToYears(tenor));
-    const k = Math.round(frac);
-    const ghost = base.map((p) => ({ ...p }));
-    ghost[k] = { frac: k, rate: ghost[k].rate + s * lift };
-    return {
-      kind: "outright",
-      term: s > 0 ? "금리 상승" : "금리 하락",
-      // an outright statement is about the whole level curve → all of it is the
-      // instrument's region (spec: "the whole curve at full strength").
-      region: [0, DIAGRAM_NODES.length - 1],
-      shaded: false,
-      legs: [{ frac, arrow: s }],
-      ghost,
-    };
+    return { mode: "level", term: term("level"), sign };
   }
-
   if (c.kind === "spread") {
-    const a = nodeIndex(c.short);
-    const b = nodeIndex(c.long);
-    if (a < 0 || b < 0) return null;
-    const ghost = base.map((p) => ({ ...p }));
-    ghost[b] = { frac: b, rate: ghost[b].rate + s * lift }; // long up (pay)
-    ghost[a] = { frac: a, rate: ghost[a].rate - s * lift }; // short down
-    return {
-      kind: "spread",
-      term: s > 0 ? "스티프닝" : "플래트닝",
-      region: [Math.min(a, b), Math.max(a, b)],
-      shaded: false,
-      legs: [
-        { frac: b, arrow: s }, // long leg
-        { frac: a, arrow: (-s) as ArrowDir }, // short leg
-      ],
-      ghost,
-    };
+    return { mode: "slope", term: term("slope"), sign };
   }
-
   if (c.kind === "butterfly") {
-    const a = nodeIndex(c.short);
-    const m = nodeIndex(c.belly);
-    const b = nodeIndex(c.long);
-    if (a < 0 || m < 0 || b < 0) return null;
-    const ghost = base.map((p) => ({ ...p }));
-    ghost[m] = { frac: m, rate: ghost[m].rate + s * lift }; // belly up (pay)
-    ghost[a] = { frac: a, rate: ghost[a].rate - s * lift * 0.6 }; // wings down
-    ghost[b] = { frac: b, rate: ghost[b].rate - s * lift * 0.6 };
-    return {
-      kind: "butterfly",
-      term: s > 0 ? "벨리 약세" : "벨리 강세",
-      region: [Math.min(a, b), Math.max(a, b)],
-      shaded: false,
-      legs: [
-        { frac: m, arrow: s }, // belly
-        { frac: a, arrow: (-s) as ArrowDir }, // short wing
-        { frac: b, arrow: (-s) as ArrowDir }, // long wing
-      ],
-      ghost,
-    };
+    return { mode: "curvature", term: term("curvature"), sign };
   }
-
   if (c.kind === "forward") {
-    const startY = labelToYears(c.start);
-    const endY = c.tenor === "SPOT" ? startY : startY + labelToYears(c.tenor);
-    const iA = yearsToFrac(startY);
-    const iEnd = yearsToFrac(endY);
-    if (iEnd <= iA) return null;
-    const rateA = rateAtFrac(rates, iA);
-    const rateEnd = rateAtFrac(rates, iEnd);
-    // A forward rises when its segment STEEPENS: near end down, far end up — a
-    // rotation, not a parallel shift. Pay (s>0) = steepen; Receive mirrors.
-    const ghost: GhostPoint[] = [
-      { frac: iA, rate: rateA - s * lift },
-      { frac: iEnd, rate: rateEnd + s * lift },
-    ];
-    const steepenWord =
-      s > 0 ? "가팔라질 때 오릅니다" : "완만해질 때 내립니다";
-    return {
-      kind: "forward",
-      term: s > 0 ? "선도 금리 상승" : "선도 금리 하락",
-      note: `${c.start}~${yearsToLabel(endY)} 구간이 ${steepenWord}.`,
-      regionLabel: "선도 구간",
-      region: [iA, iEnd],
-      shaded: true,
-      legs: [
-        { frac: iEnd, arrow: s }, // far end
-        { frac: iA, arrow: (-s) as ArrowDir }, // near end
-      ],
-      ghost,
-    };
+    const a = labelToYears(c.start);
+    const e = c.tenor === "SPOT" ? a : a + labelToYears(c.tenor);
+    let t0 = Math.max(0, Math.min(1, a / MAX_YEARS));
+    let t1 = Math.max(0, Math.min(1, e / MAX_YEARS));
+    if (t1 - t0 < 0.14) {
+      // keep the band wide enough to read even for a short/near forward
+      const mid = Math.max(0.09, Math.min(0.91, (t0 + t1) / 2));
+      t0 = mid - 0.07;
+      t1 = mid + 0.07;
+    }
+    return { mode: "slope", term: term("slope"), sign, band: [t0, t1] };
   }
-
   return null; // volatility / unknown — no curve statement
+}
+
+/** The fixed schematic curve: one gentle upward arc, in value units [0, 1]
+ * (higher = higher on screen). Sits in [0.30, 0.62] so a full deformation has
+ * headroom both ways. Identical every render — no relation to today's data. */
+export function baseValue(t: number): number {
+  return 0.3 + 0.32 * (1 - Math.pow(1 - t, 1.6));
+}
+
+/** The wanted shape for a spec at position t, in value units. Pay lifts/tilts/
+ * arches; Receive (sign −1) is the exact negation. */
+export function wantedValue(spec: DiagramSpec, t: number): number {
+  const b = baseValue(t);
+  const s = spec.sign;
+  switch (spec.mode) {
+    case "level": // whole curve translates up, parallel
+      return b + s * DEFORM;
+    case "slope":
+      if (spec.band) {
+        // forward: a slope confined to a band, meeting the current curve at
+        // both band ends (near half down, far half up → the segment steepens)
+        const [t0, t1] = spec.band;
+        if (t <= t0 || t >= t1) return b;
+        const u = (t - t0) / (t1 - t0);
+        return b + s * DEFORM_FWD * -Math.sin(2 * Math.PI * u);
+      }
+      // spread: pivot about the midpoint — far up, near down
+      return b + s * DEFORM * (2 * t - 1);
+    case "curvature": // ends hold, middle arches
+      return b + s * DEFORM * Math.sin(Math.PI * t);
+    default:
+      return b;
+  }
 }

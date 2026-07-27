@@ -1,45 +1,109 @@
 "use client";
 
-/* Pay/Receive curve diagram (DESIGN §2 popup; rebuilt to draw the CURVE).
- * The companion to the DV01 ratio: the ratio says what to execute, this shows
- * the SHAPE you are betting on and which way it must move to profit.
+/* Pay/Receive diagram — a MODE picture (diagram rebuild). Beside the DV01 block:
+ * a fixed schematic curve (a gentle upward arc, identical every time — NOT
+ * today's data, which is on screen in the curve view) showing which of the
+ * three curve modes the instrument bets on and which way.
  *
- * One rule covers every kind: **Pay profits when the displayed value rises,
- * Receive when it falls.** Every kind renders the same base — the current par
- * curve across the nine standard nodes — with the instrument's own region at
- * full strength, the rest dimmed to context, and a dashed ghost of the wanted
- * state. Outrights/spreads/flies move node levels (arrows on nodes); a forward
- * ROTATES a segment (near end down, far end up), because it responds to the
- * slope of the stretch, not any single node. See payReceiveModel.ts for the
- * sign-convention logic (unit-tested).
- *
- * No annotation accent (palette cut, §9): the curve takes the chart-stroke blue
- * (`--bw-line`, `text-line`) and markers ride it; the direction arrows keep the
- * red-up / blue-down hue; the shaded forward interval and all labels are
- * grey/ink. The palette is red/blue/grey. */
+ * Two curves only: the current shape (thin ink at 35%) and the wanted shape
+ * (full-weight ink). The change between them — a parallel lift (level), a tilt
+ * (slope), an arch (curvature), or a confined tilt in a band (forward) — is the
+ * entire content. A direction-coloured fill between them (red where the wanted
+ * shape is above the current, blue where below) makes the mode legible at a
+ * glance. No leg markers, no tenor labels, no axis — the tenors already appear
+ * twice on this panel; everything that is not the shape is noise. Logic +
+ * bounds are in payReceiveModel.ts (unit-tested). Colours follow the palette
+ * (ink structure, red/blue direction) — the palette session owns those. */
 
 import { useState } from "react";
 
-import type { WallSummary } from "@/lib/api";
-
 import { classify } from "./gloss";
 import {
-  buildDiagramModel,
-  DIAGRAM_NODES,
-  labelToYears,
-  rateAtFrac,
-  yearsToLabel,
+  baseValue,
+  diagramSpec,
+  N,
+  PLOT,
+  wantedValue,
+  type DiagramSpec,
   type Side,
 } from "./payReceiveModel";
 import type { Row } from "./rows";
 
-const W = 260;
-const H = 150;
-const ML = 16;
-const MR = 16;
-const BAND_TOP = 26; // headroom for the up-arrow + lifted ghost
-const BAND_BOT = 118; // leaves room for down-arrow + node labels
-const ARROW = 15;
+type Pt = [number, number];
+
+const xAt = (t: number) => PLOT.ml + t * (PLOT.w - PLOT.ml - PLOT.mr);
+const yAt = (v: number) => PLOT.top + (1 - v) * (PLOT.bot - PLOT.top);
+
+/** Catmull-Rom → cubic bezier: a smooth path through the sampled points. */
+function smoothPath(pts: Pt[]): string {
+  if (pts.length < 2) return "";
+  const f = (n: number) => n.toFixed(2);
+  let d = `M ${f(pts[0][0])},${f(pts[0][1])}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] ?? p2;
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C ${f(c1x)},${f(c1y)} ${f(c2x)},${f(c2y)} ${f(p2[0])},${f(p2[1])}`;
+  }
+  return d;
+}
+
+interface FillRegion {
+  up: boolean;
+  pts: Pt[];
+}
+
+/** Split the area between the two curves into runs of constant sign (wanted
+ * above vs below current), so each run is filled with one direction colour and
+ * the colour flips exactly where the curves cross. */
+function fillRegions(cur: Pt[], want: Pt[], dv: number[]): FillRegion[] {
+  const EPS = 1e-9;
+  const cross = (a: number, b: number): Pt | null => {
+    const da = dv[a];
+    const db = dv[b];
+    if ((da < 0 && db > 0) || (da > 0 && db < 0)) {
+      const g = da / (da - db);
+      // at the crossing the two curves meet, so the point lies on the curve
+      return [cur[a][0] + (cur[b][0] - cur[a][0]) * g, cur[a][1] + (cur[b][1] - cur[a][1]) * g];
+    }
+    return null;
+  };
+  const out: FillRegion[] = [];
+  let i = 0;
+  while (i < cur.length) {
+    const s = dv[i] > EPS ? 1 : dv[i] < -EPS ? -1 : 0;
+    if (s === 0) {
+      i++;
+      continue;
+    }
+    const curPts: Pt[] = [];
+    const wantPts: Pt[] = [];
+    const head = i > 0 ? cross(i - 1, i) : null;
+    if (head) {
+      curPts.push(head);
+      wantPts.push(head);
+    }
+    let j = i;
+    while (j < cur.length && (dv[j] > EPS ? 1 : dv[j] < -EPS ? -1 : 0) !== -s) {
+      curPts.push(cur[j]);
+      wantPts.push(want[j]);
+      j++;
+    }
+    const tail = j < cur.length ? cross(j - 1, j) : null;
+    if (tail) {
+      curPts.push(tail);
+      wantPts.push(tail);
+    }
+    out.push({ up: s > 0, pts: [...curPts, ...wantPts.reverse()] });
+    i = j;
+  }
+  return out;
+}
 
 function Toggle({ side, onSide }: { side: Side; onSide: (s: Side) => void }) {
   return (
@@ -62,184 +126,93 @@ function Toggle({ side, onSide }: { side: Side; onSide: (s: Side) => void }) {
   );
 }
 
-/** A short arrow from a point in the wanted direction — red up / blue down. */
-function Arrow({ x, y, up }: { x: number; y: number; up: boolean }) {
-  const tip = up ? y - ARROW : y + ARROW;
-  const head = up ? tip + 5 : tip - 5;
+function Diagram({ spec }: { spec: DiagramSpec }) {
+  const ts = Array.from({ length: N }, (_, i) => i / (N - 1));
+  const cur: Pt[] = ts.map((t) => [xAt(t), yAt(baseValue(t))]);
+  const want: Pt[] = ts.map((t) => [xAt(t), yAt(wantedValue(spec, t))]);
+  const dv = ts.map((t) => wantedValue(spec, t) - baseValue(t)); // +ve = above
+  const regions = fillRegions(cur, want, dv);
+
   return (
-    <g className={up ? "text-up" : "text-down"} stroke="currentColor" fill="currentColor">
-      <line x1={x} y1={y} x2={x} y2={tip} strokeWidth={1.5} />
-      <polygon points={`${x},${tip} ${x - 3},${head} ${x + 3},${head}`} stroke="none" />
-    </g>
+    <svg
+      width={PLOT.w}
+      height={PLOT.h}
+      className="text-ink"
+      role="img"
+      aria-label={`pay/receive 커브 모드: ${spec.term}`}
+    >
+      {/* forward: a soft unlabelled band marking the stretch */}
+      {spec.band && (
+        <rect
+          x={xAt(spec.band[0])}
+          y={PLOT.top}
+          width={xAt(spec.band[1]) - xAt(spec.band[0])}
+          height={PLOT.bot - PLOT.top}
+          fill="currentColor"
+          fillOpacity={0.05}
+        />
+      )}
+
+      {/* direction-coloured fill between the two curves (the mode made legible) */}
+      {regions.map((r, k) => (
+        <polygon
+          key={k}
+          className={r.up ? "text-up" : "text-down"}
+          points={r.pts.map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(" ")}
+          fill="currentColor"
+          fillOpacity={0.16}
+        />
+      ))}
+
+      {/* current shape — thin, faint */}
+      <path
+        d={smoothPath(cur)}
+        fill="none"
+        stroke="currentColor"
+        strokeOpacity={0.35}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* wanted shape — confident, full weight */}
+      <path
+        d={smoothPath(want)}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
-export function PayReceive({ row, summary }: { row: Row; summary: WallSummary }) {
+export function PayReceive({ row }: { row: Row }) {
   const [side, setSide] = useState<Side>("pay");
   const c = classify(row);
 
   // Volatility (and anything with no curve statement): say so, don't invent a
-  // picture (a ratio has no direction on the curve).
+  // picture — a ratio has no shape on the curve.
   if (c.kind === "volatility") {
     return (
       <div className="mt-4">
-        <div
-          className="flex h-[110px] w-[260px] items-center justify-center rounded-[10px] border border-dashed border-edge px-4 text-center text-[12px] leading-relaxed opacity-45"
-        >
-          변동성은 커브 위의 방향이 아니라 크기의 비율이라, 페이/리시브 그림으로 나타내지 않습니다.
+        <div className="flex h-[180px] w-[340px] items-center justify-center rounded-[10px] border border-dashed border-edge px-6 text-center text-[12px] leading-relaxed opacity-45">
+          변동성은 커브의 모양이 아니라 크기의 비율이라, 페이/리시브 그림으로 나타내지 않습니다.
         </div>
       </div>
     );
   }
 
-  // The nine-node current par curve (same source as CurveView).
-  const byId = new Map(summary.outrights.map((o) => [o.id, o.now] as const));
-  const rates = DIAGRAM_NODES.map((t) => byId.get(t) ?? null);
-  if (rates.some((r) => r == null)) return null;
-  const solid = rates as number[];
-
-  const model = buildDiagramModel(c, solid, side);
-  if (!model) return null;
-
-  // y-fit over BOTH curves (solid + ghost) with a small pad, into the band that
-  // leaves arrow headroom top and bottom.
-  const ghostRates = model.ghost.map((g) => g.rate);
-  const lo = Math.min(...solid, ...ghostRates);
-  const hi = Math.max(...solid, ...ghostRates);
-  const pad = (hi - lo) * 0.12 || 0.05;
-  const yLo = lo - pad;
-  const yHi = hi + pad;
-  const plotH = BAND_BOT - BAND_TOP;
-  const plotW = W - ML - MR;
-
-  const xAt = (frac: number) => ML + (frac / (DIAGRAM_NODES.length - 1)) * plotW;
-  const yAt = (rate: number) => BAND_TOP + (1 - (rate - yLo) / (yHi - yLo)) * plotH;
-  const solidY = (frac: number) => yAt(rateAtFrac(solid, frac));
-
-  // full solid curve (context), dimmed
-  const solidAll = solid.map((r, i) => `${xAt(i)},${yAt(r)}`).join(" ");
-
-  // region overlay at full strength: interpolated endpoints + integer nodes between
-  const [rLo, rHi] = model.region;
-  const regionPts: string[] = [`${xAt(rLo)},${solidY(rLo)}`];
-  for (let i = Math.ceil(rLo + 1e-9); i <= Math.floor(rHi - 1e-9); i++) {
-    regionPts.push(`${xAt(i)},${yAt(solid[i])}`);
-  }
-  regionPts.push(`${xAt(rHi)},${solidY(rHi)}`);
-  const regionLine = regionPts.join(" ");
-
-  const ghostLine = model.ghost.map((g) => `${xAt(g.frac)},${yAt(g.rate)}`).join(" ");
-
-  // labels for the leg tenors (node kinds) / the forward interval
-  const legLabel = (frac: number): string => {
-    if (model.kind === "forward") {
-      const startY = labelToYears(c.kind === "forward" ? c.start : "");
-      return Math.abs(frac - model.region[0]) < 1e-6
-        ? (c.kind === "forward" ? c.start : "")
-        : yearsToLabel(
-            startY + labelToYears(c.kind === "forward" ? c.tenor : ""),
-          );
-    }
-    return DIAGRAM_NODES[Math.round(frac)];
-  };
+  const spec = diagramSpec(c, side);
+  if (!spec) return null;
 
   return (
     <div className="mt-4">
       <div className="mb-1 flex items-center gap-2">
         <Toggle side={side} onSide={setSide} />
-        <span className="text-[13px] font-semibold">{model.term}</span>
+        <span className="text-[13px] font-semibold">{spec.term}</span>
       </div>
-
-      <svg
-        width={W}
-        height={H}
-        className="text-line"
-        role="img"
-        aria-label="pay/receive 커브 모양"
-      >
-        {/* shaded stretch (forward's 선도 구간) — neutral grey, not the curve
-            colour: it is context, not data. */}
-        {model.shaded && (
-          <rect
-            className="text-ink"
-            x={xAt(rLo)}
-            y={BAND_TOP - 6}
-            width={xAt(rHi) - xAt(rLo)}
-            height={plotH + 12}
-            fill="currentColor"
-            fillOpacity={0.06}
-          />
-        )}
-
-        {/* full current curve — context, dimmed */}
-        <polyline
-          points={solidAll}
-          fill="none"
-          stroke="currentColor"
-          strokeOpacity={0.35}
-          strokeWidth={1.5}
-          strokeLinejoin="round"
-        />
-        {/* the instrument's own region — full strength */}
-        <polyline
-          points={regionLine}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinejoin="round"
-        />
-        {/* wanted state — dashed ghost */}
-        <polyline
-          points={ghostLine}
-          fill="none"
-          stroke="currentColor"
-          strokeOpacity={0.55}
-          strokeWidth={1.5}
-          strokeDasharray="3 3"
-          strokeLinejoin="round"
-        />
-
-        {/* leg markers + direction arrows */}
-        {model.legs.map((leg) => {
-          const lx = xAt(leg.frac);
-          const ly = solidY(leg.frac);
-          return (
-            <g key={`leg-${leg.frac}`}>
-              <circle cx={lx} cy={ly} r={3} fill="currentColor" />
-              <Arrow x={lx} y={ly} up={leg.arrow > 0} />
-              <text
-                x={lx}
-                y={H - 5}
-                textAnchor="middle"
-                className="fill-ink"
-                style={{ fontSize: 9, opacity: 0.55 }}
-              >
-                {legLabel(leg.frac)}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* region caption (forward: 선도 구간, centred under the stretch) */}
-        {model.regionLabel && (
-          <text
-            x={(xAt(rLo) + xAt(rHi)) / 2}
-            y={BAND_TOP - 12}
-            textAnchor="middle"
-            className="fill-ink"
-            style={{ fontSize: 9, opacity: 0.5 }}
-          >
-            {model.regionLabel}
-          </text>
-        )}
-      </svg>
-
-      {/* the curve meaning of the move (forward) */}
-      {model.note && (
-        <p className="mt-1 max-w-[260px] text-[12px] leading-snug opacity-55">
-          {model.note}
-        </p>
-      )}
+      <Diagram spec={spec} />
     </div>
   );
 }
