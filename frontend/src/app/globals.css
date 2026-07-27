@@ -28,15 +28,16 @@
   --font-sans: "Pretendard Variable", Pretendard, sans-serif;
 }
 
-/* Focus + selection are INK now (§9, list-first): the chart line is orange,
- * so focus/selection move off orange to avoid two oranges on one pane. */
+/* Focus + selection are ORANGE again (§9, Session 16 Pass E): the chart line
+ * moved to blue, so orange returns to its proper job — action, selection,
+ * focus, hover pulse. */
 :focus-visible {
-  outline: 2px solid var(--bw-ink);
+  outline: 2px solid var(--bw-interactive);
   outline-offset: 1px;
 }
 ::selection {
-  background: var(--bw-ink);
-  color: var(--bw-page);
+  background: var(--bw-interactive);
+  color: var(--bw-on-interactive);
 }
 
 html {

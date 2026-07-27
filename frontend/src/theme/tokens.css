@@ -49,10 +49,12 @@
   --bw-up: #d92d3c;
   --bw-down: #0064ff;
 
-  /* Chart line — line-safe orange (§9). #f58220 is only 2.6:1 on white and
-   * washes out, so light deepens to #d97316 (≥3:1); the action-button fill
-   * keeps #f58220 (below is --bw-interactive). */
-  --bw-line: #d97316;
+  /* Chart line — BLUE (§9, Session 16 Pass E). Moved off orange for product
+   * consistency; this frees orange to return to action/selection/focus. Same
+   * blue as the down-delta (a line has no sign, so there is nothing to
+   * confuse). Navy was rejected — §9 forbids navy on data. #0064ff is 4.92:1
+   * on white (clears the 3:1 stroke floor). */
+  --bw-line: #0064ff;
 
   /* Sub-palette — DEFINED BUT UNREFERENCED (Session 12). Chart lines are navy
    * (--bw-brand). Kept for a possible future multi-object view. */
@@ -86,7 +88,8 @@
    * only ~3.9:1 there). Chart line uses #f58220 directly in dark. */
   --bw-up: #f16e77;
   --bw-down: #4c93ff;
-  --bw-line: #f58220;
+  /* line = blue on dark too (§9 Pass E); #4c93ff is 5.37:1 on the dark tile. */
+  --bw-line: #4c93ff;
 
   /* Dark-mode band substitutes (sub-palette, unreferenced). */
   --bw-hue-curve: #8dc8e8;

@@ -187,14 +187,14 @@ diverge the moment the quarter advances a month.
   curve viewing is priority 1 (§1). No row hovered → outrights show the IRS
   par curve (9 equal-spaced nodes 3M…10Y); forwards show the 1YF forward
   ladder (x = start point); spreads show the two-point-spread curve; volatility
-  shows the relative-ATR curve across tenors [Session 14]. Orange line, two
+  shows the relative-ATR curve across tenors [Session 14]. Blue line, two
   lines only (Now + D-1) — the six-basis ramp is enlarged-view only. Hand-rolled
   SVG (§11).
 - Hovering a row replaces the curve with that series' history line; leaving the
   table returns to the curve; pinning keeps the history until Esc.
 - On row hover, after a ~120ms delay (so crossing the table does not strobe),
   the chart springs in (§14).
-- Chart: that series' 10-year history, **orange line** (§9), from the stage-2
+- Chart: that series' 10-year history, **blue line** (§9 Pass E), from the stage-2
   endpoint. `assertDomainRendered` still applies.
 - Hovering the chart shows a floating card near the cursor: **날짜 · 레벨 ·
   구간 최고 · 구간 최저 · 구간 평균 · 당일 변화**. This tooltip is the **sole
@@ -296,8 +296,8 @@ Sign is carried by BOTH hue and the mini-bar direction — the mini-bar keeps it
 legible in grayscale, so nothing DEPENDS on hue alone. **Only numbers with a
 direction get hue**: a change, a percentage, a mini-bar, a heatmap cell. A
 level has no direction, so the `현재` column and any level readout stay ink.
-The plain line chart is orange (a line has no per-point up/down sense); a
-directional mark (heatmap cell, mini-bar, a future candle) is red/blue. Navy
+The plain line chart is blue (a line has no per-point up/down sense — §9 Pass E);
+a directional mark (heatmap cell, candle body) is red/blue. Navy
 is freed to the product lockup only and never touches data (§9).
 
 ## 6. Tile spec — curve overlay (Band 1)
@@ -444,7 +444,7 @@ Chart canvases cannot resolve CSS variables: the theme bridge injects RESOLVED
 hex into canvas-bound options and triggers redraw on theme switch — gated by a
 test that rejects `var(` strings in canvas-bound option objects.
 
-### Color — achromatic + semantic direction + orange line [OWNER, Session 12]
+### Color — achromatic + semantic direction + blue line [OWNER; line recoloured Session 16]
 
 Reference: the Toss ranking table. **Almost entirely achromatic** — light-grey
 page, white panes, no borders, near-black numbers, grey labels. Hue appears
@@ -479,31 +479,37 @@ carries direction the bar triple-encodes and adds noise. Instead:
 `## Provisional` records the exact verified values; both clear 4.5:1 on their
 surface, gated in `band-hue-contrast.test.ts`.
 
-#### Chart line — orange, and it must be line-safe
+#### Chart line — blue [revised Session 16 Pass E]
 
-A plain line chart has no per-point up/down sense, so it is one color: orange.
-But `#F58220` on white is only ~2.6:1 — under the 3:1 floor for a graphical
-object; a thin orange line washes out. Light mode uses a **line-safe orange**
-(hue kept, deepened until ≥3:1 — measured, not assumed). Dark mode uses
-`#F58220` directly (comfortably above the floor there).
+A plain line chart has no per-point up/down sense, so it is one colour. As of
+Session 16 that colour is **blue**, not orange — moved for product consistency,
+which frees orange to return to action/selection/focus. It is the **same blue
+as the down-delta**; a line has no sign, so there is nothing to confuse, and
+the line and the down-numbers live in different panes. Navy `#043B72` was
+rejected for strokes because §9 forbids navy on data.
 
 | Role | Light | Dark |
 |---|---|---|
-| Line-safe orange (chart stroke) | `#C2560F` (measured ≥3:1 on white) | `#F58220` |
-| Primary action (filled button) | `#F58220` (near-black `#1A1A1A` label) | `#F58220` |
+| Chart line (stroke) | `#0064FF` (4.92:1 on white) | `#4C93FF` (5.37:1 on the dark tile) |
 
-Note the action fill and the chart stroke are different oranges: the button is
-a filled shape (2.6:1 is fine for a large fill with a dark label); the line
-needs the deeper 3:1 stroke.
+**Candles are the exception [Session 16, write it here so a later session does
+not reinvent it].** A candle body has a sign (close vs open), so it uses the
+**domestic convention: 상승 빨강 / 하락 파랑** — the direction tokens
+(`--bw-up` / `--bw-down`), NOT the blue line colour. Line charts stay blue;
+only candle bodies take the red/blue direction pair.
 
-#### Selected / focus / pulse — ink, not orange
+#### Selected / focus / pulse — orange again [revised Session 16 Pass E]
 
-Because the chart line is orange now, selection and focus move **off** orange
-to avoid two oranges on one pane (reference: the ranking screen's tab control
-is a dark filled pill). Selected = a dark ink-filled pill with a light label;
-focus ring and the calendar-heatmap pulse are an **ink outline**. (The owner
-asked for a blue pulse; blue means "down"; an earlier note said orange, but
-orange is now the line — so ink. Chain recorded in `## Provisional`.)
+The chart line moved to blue, so orange returns to its proper job: **primary
+action, selection, focus, hover pulse** all use `#F58220`. `:focus-visible` and
+`::selection` are orange; the active-tab underline and the pinned-row marker are
+orange. (This reverses Session 15's "focus/selection are ink" note, which
+existed only because the line was orange then.)
+
+| Role | Colour |
+|---|---|
+| Primary action (filled button) | `#F58220` (near-black `#1A1A1A` label) |
+| Selection / focus / hover pulse | `#F58220` |
 
 #### What stays grey / navy
 
@@ -513,12 +519,12 @@ enlarged view is the opacity ramp, unchanged. The sub-palette (`#CB6015`,
 `#84888B`, `#AD624E`, `#0086B8`, …) stays defined in the token module and
 **unreferenced on data**.
 
-`band-hue-contrast.test.ts` is rewritten for what ships: the line-safe orange
-at every ramp step it is used at, and both direction colors against both
-surfaces. Mechanism unchanged: hex lives only in the token layer (raw-hex
-lint); SVG lines take orange via one `currentColor` on a wrapping `<g>` (never
-per-element `var()`); canvas lines resolve orange to hex through the theme
-bridge and pass `assertNoCssVars()`.
+`band-hue-contrast.test.ts` gates what ships: the chart-line blue at the 3:1
+stroke floor on both surfaces, and both direction colours at the 4.5:1 text
+floor (§ Session 15 Pass E1 split the guard by usage). Mechanism unchanged: hex
+lives only in the token layer (raw-hex lint); SVG lines take the stroke colour
+via `currentColor`; canvas lines resolve it to hex through the theme bridge and
+pass `assertNoCssVars()`.
 
 ### Typography [revised Session 12]
 
