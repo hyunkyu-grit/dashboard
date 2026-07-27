@@ -1,24 +1,27 @@
 "use client";
 
-/* Measure an element's content width so the hand-rolled charts fit the pane on
+/* Measure an element's content box so the hand-rolled charts fit the pane on
  * any viewport. A callback ref measures synchronously on mount (more reliable
- * than useRef + useEffect here) and a ResizeObserver keeps it current. */
+ * than useRef + useEffect here) and a ResizeObserver keeps it current.
+ * Returns [ref, width, height]. */
 
 import { useCallback, useRef, useState } from "react";
 
 export function useMeasure<T extends HTMLElement>(): [
   (node: T | null) => void,
   number,
+  number,
 ] {
-  const [width, setWidth] = useState(0);
+  const [size, setSize] = useState({ w: 0, h: 0 });
   const ro = useRef<ResizeObserver | null>(null);
   const refCb = useCallback((node: T | null) => {
     ro.current?.disconnect();
     if (node) {
-      setWidth(node.clientWidth);
-      ro.current = new ResizeObserver(() => setWidth(node.clientWidth));
+      const read = () => setSize({ w: node.clientWidth, h: node.clientHeight });
+      read();
+      ro.current = new ResizeObserver(read);
       ro.current.observe(node);
     }
   }, []);
-  return [refCb, width];
+  return [refCb, size.w, size.h];
 }

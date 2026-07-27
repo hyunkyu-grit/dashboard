@@ -58,9 +58,20 @@ implemented speculatively — leave explicit extension points instead.
 ## 2. Core layout — list-first, two panes
 
 [OWNER, Session 12] The wall and the band-card column are both retired. One
-screen, two panes, no navigation: a dense instrument **table on the left
-(~55%)** that is always visible, and a **preview pane on the right (~45%,
-sticky)** that responds to the table. Reference: the Toss ranking table.
+screen, two panes, no navigation: a dense instrument **table on the left** that
+is always visible, and a **preview pane on the right** that responds to the
+table. Reference: the Toss ranking table.
+
+**Width [Session 15].** The surface spans the viewport (a small margin, no
+max-width — the earlier cap was a casual-app leftover). Panes split by content
+need, not percentage: the table pane sizes to its columns (~880px) and the
+preview takes everything left over with a **~600px floor**. On an ultrawide the
+chart grows; the table does not stretch into a sparse mess. Below the point
+where the preview would drop under its floor (~1520px viewport, see
+`## Provisional`) the shell falls back to a **single column** — table full
+width, preview as a bottom sheet opened by a row click — rather than squeezing
+two panes into a space that cannot hold them. The idle curve fills the full
+height of the right pane.
 
 ### Left pane — the instrument table
 
@@ -686,6 +697,13 @@ all arrive precomputed — the browser never differences a series.
 
 Choices made to keep the build green where the prompt did not fully specify.
 Confirm or override.
+
+- **Two-pane breakpoint = 1520px [Session 15].** The prompt said "about 1440",
+  but that assumed a narrower table; with the table at 880px and the preview
+  floor at 600px plus the surface margin, the preview actually reaches its floor
+  at ~1520px viewport, which is where the single-column fallback engages
+  (`ui/useIsWide.ts::TWO_PANE_MIN`). Table width 880 and floor 600 are the
+  low end of the spec's "roughly 880–1100" / "about 600"; adjust freely.
 
 - **Volatility = relative ATR [Session 14].** `mean(ATR over 5 obs) /
   mean(ATR over 60 obs)`, a dimensionless short-vs-long realised-vol ratio

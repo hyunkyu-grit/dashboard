@@ -5,7 +5,7 @@
  * `?tile=…` opens the enlarged view. No navigation, no basis selector. */
 
 import { useQuery } from "@tanstack/react-query";
-import { AnimatePresence, MotionConfig } from "motion/react";
+import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -17,9 +17,60 @@ import { ERROR_SENTENCE, LOADING_SENTENCE } from "./copy";
 import { CurveView } from "./CurveView";
 import { EnlargedView } from "./EnlargedView";
 import { InstrumentTable } from "./InstrumentTable";
+import { SHEET_SPRING } from "./motion";
 import { PreviewPane } from "./PreviewPane";
 import { buildRows, type Group, type Row } from "./rows";
+import { useIsWide } from "./useIsWide";
 import { useMeasure } from "./useMeasure";
+
+// Table pane sizes to its columns (§ layout); the preview takes the rest with a
+// floor. On an ultrawide the chart grows and the table does not stretch sparse.
+const TABLE_W = 880;
+const PANE_PAD = 40; // p-5 both sides
+
+/** Single-column preview: a bottom sheet over the full-width table (§ layout).
+ * Opened by a row click (pin), dismissed by Esc / backdrop / downward drag. */
+function PreviewSheet({
+  row,
+  onOpen,
+  onClose,
+}: {
+  row: Row;
+  onOpen: (row: Row) => void;
+  onClose: () => void;
+}) {
+  const [ref, w] = useMeasure<HTMLDivElement>();
+  return (
+    <motion.div
+      className="fixed inset-0 z-20 flex items-end justify-center bg-page/70"
+      onClick={onClose}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+    >
+      <motion.div
+        className="max-h-[85vh] w-full overflow-y-auto rounded-t-[20px] bg-popover p-5"
+        onClick={(e) => e.stopPropagation()}
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={SHEET_SPRING}
+        drag="y"
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0, bottom: 0.5 }}
+        onDragEnd={(_, info) => {
+          if (info.offset.y > 120 || info.velocity.y > 500) onClose();
+        }}
+      >
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-edge" />
+        <div ref={ref}>
+          {w > 0 && <PreviewPane row={row} onOpen={onOpen} width={w} />}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
 
 function Header() {
   const theme = useUiStore((s) => s.theme);
@@ -122,14 +173,19 @@ export function App() {
     el.scrollIntoView({ behavior: "smooth", block: "center" });
   }, []);
 
-  const [paneRef, paneW] = useMeasure<HTMLDivElement>();
+  const wide = useIsWide();
+  const [paneRef, paneW, paneH] = useMeasure<HTMLDivElement>();
+
+  // Two panes: hover or pin drives the preview. Single column: only a click
+  // (pin) opens the bottom sheet — there is no pane for a hover preview.
+  const previewRow = wide ? active : null;
 
   return (
     <MotionConfig reducedMotion="user">
     {/* The page never scrolls; grey shows only as a thin margin around the one
-        continuous surface (§ shell, Session 13). */}
-    <div className="h-screen bg-page p-3">
-      <div className="mx-auto flex h-full max-w-[1400px] flex-col overflow-hidden rounded-[16px] bg-tile">
+        continuous surface that now spans the viewport (§ layout, Session 15). */}
+    <div className="h-screen bg-page p-2">
+      <div className="flex h-full flex-col overflow-hidden rounded-[16px] bg-tile">
         <Header />
 
         {isError && (
@@ -144,28 +200,37 @@ export function App() {
         )}
         {summary && (
           <div className="flex min-h-0 flex-1">
-            {/* left pane: tabs fixed, rows scroll inside (InstrumentTable) */}
-            <div className="flex min-w-0 basis-[55%] flex-col border-r border-edge">
+            {/* left pane: content-sized in two panes, full width in one column */}
+            <div
+              className={`flex min-w-0 flex-col ${
+                wide ? "shrink-0 border-r border-edge" : "flex-1"
+              }`}
+              style={wide ? { width: TABLE_W } : undefined}
+            >
               <InstrumentTable
                 rows={rows}
                 forwards={forwards}
                 filter={tab}
                 onFilter={setTab}
-                activeId={active?.id ?? null}
+                activeId={(wide ? active : pinned)?.id ?? null}
                 pinnedId={pinned?.id ?? null}
                 onHover={handleHover}
                 onPin={setPinned}
               />
             </div>
-            {/* right pane: within the surface, does not scroll with the rows */}
-            <div className="basis-[45%] overflow-y-auto overflow-x-hidden p-5">
-              <div ref={paneRef}>
+            {/* right pane (two-pane only): takes the leftover width, floored at
+                600px; the idle curve fills its full height (§ layout). */}
+            {wide && (
+              <div
+                ref={paneRef}
+                className="min-w-[600px] flex-1 overflow-y-auto overflow-x-hidden p-5"
+              >
                 {paneW > 0 &&
-                  (active ? (
+                  (previewRow ? (
                     <PreviewPane
-                      row={active}
+                      row={previewRow}
                       onOpen={openEnlarged}
-                      width={paneW}
+                      width={paneW - PANE_PAD}
                     />
                   ) : (
                     <CurveView
@@ -173,15 +238,26 @@ export function App() {
                       summary={summary}
                       forwards={forwards}
                       volatility={volatility}
-                      width={paneW}
-                      height={300}
+                      width={paneW - PANE_PAD}
+                      height={Math.max(300, paneH - PANE_PAD)}
                     />
                   ))}
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* single-column preview: a bottom sheet opened by a row click */}
+      <AnimatePresence>
+        {summary && !wide && pinned && (
+          <PreviewSheet
+            row={pinned}
+            onOpen={openEnlarged}
+            onClose={() => setPinned(null)}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {enlargedRow && summary && (
