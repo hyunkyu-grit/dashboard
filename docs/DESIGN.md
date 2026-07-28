@@ -189,6 +189,26 @@ Behaviour:
   transforms don't reach `table-row`, and the reorder motion needs
   transformable rows). `scrollbar-gutter: stable` keeps the usable width
   constant when the scrollbar appears. Pinned by `guards/table-grid.test.ts`.
+  **Columns give way, not shrink [columns session].** Fixed widths stopped
+  the header from jumping, but eight fixed columns sum to ~600px; below that
+  neither squeezing nor scrolling reads well. `ui/columns.ts::visibleColumns`
+  renders the longest PREFIX of a priority ladder that fits the measured
+  container — 종목 · 현재 · [the sorted column] · 어제 · YTD · WTD · MTD ·
+  QTD · 한 줄 (first to go, last to return) — pure arithmetic against the
+  fixed widths and a runtime-measured `ch` (no magic breakpoints; the maths
+  stays correct if a width changes). **The sorted column is never dropped**:
+  a list ordered by a column the reader cannot see is unreadable, so it takes
+  slot 3 and whatever it displaced falls off. Displayed columns keep the
+  CANONICAL order (어제 · WTD · MTD · QTD · YTD) — the ladder decides which,
+  never where. Header and body derive from the same `visible` set and share
+  one `gridTemplate(visible)` string, so they cannot disagree. Dropping and
+  restoring never animates (a layout change, not a state change — the FLIP's
+  layoutDependency does not include it). When anything is hidden, the
+  header's flexible tail states it — "N열 숨김", names on hover — a
+  statement, not a control; no column picker. `overflow-x-auto` stays as the
+  final backstop below even 종목+현재, unreachable in practice. Pinned by
+  `guards/table-grid.test.ts` (prefix property, forced sort column,
+  canonical order, fit arithmetic, shared template).
   **Padding at the card edges [carry session, Pass D]:** the card keeps its
   ~20px inner horizontal gutter (px-5) in every layout; 한 줄 has a track
   FLOOR (`ONE_LINER_MIN_PX` = 120) and the scroll container is

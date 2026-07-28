@@ -6,7 +6,7 @@
  * self-register in the tile registry so the command bar can scroll to them. */
 
 import { AnimatePresence, motion } from "motion/react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { BasisKey, CurveBanner, ForwardsPayload } from "@/lib/api";
 import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
@@ -14,7 +14,7 @@ import { ForwardMatrix, KeyForwardBlock } from "@/wall/ForwardMatrix";
 import { getTile } from "@/wall/tileRegistry";
 import { useRegisterTile } from "@/wall/useRegisterTile";
 
-import { GRID_TEMPLATE } from "./columns";
+import { gridTemplate, visibleColumns, type VisibleColumns } from "./columns";
 import { reorderAnimates, rowShouldFlip, SPRING } from "./motion";
 import { TintLegend } from "./TintLegend";
 import {
@@ -56,6 +56,8 @@ function TableRow({
   flip,
   orderKey,
   enter,
+  template,
+  visible,
 }: {
   row: Row;
   active: boolean;
@@ -68,6 +70,10 @@ function TableRow({
   orderKey: string;
   /** row entered the set via a screener toggle → fade in at destination. */
   enter: boolean;
+  /** the ONE grid definition, shared with the header (columns session). */
+  template: string;
+  /** which columns fit — the ladder's prefix, sorted column forced in. */
+  visible: VisibleColumns;
 }) {
   const registerRef = useRegisterTile(row.id, row.label, [
     row.label,
@@ -96,7 +102,7 @@ function TableRow({
       onMouseEnter={() => onHover(row)}
       onMouseLeave={() => onHover(null)}
       onClick={() => onPin(row)}
-      style={{ gridTemplateColumns: GRID_TEMPLATE }}
+      style={{ gridTemplateColumns: template }}
       className={`grid h-12 cursor-pointer items-center border-b border-edge ${
         active ? "bg-page" : "hover:bg-page/50"
       }`}
@@ -126,7 +132,7 @@ function TableRow({
       <div role="cell" className="pr-3 text-right font-semibold tabular-nums text-ink">
         {levelText(row)}
       </div>
-      {BASIS_ORDER.map((b) => (
+      {visible.bases.map((b) => (
         <div
           role="cell"
           key={b}
@@ -143,9 +149,11 @@ function TableRow({
           {fmtDelta(row.changes[b], row.unit)}
         </div>
       ))}
-      <div role="cell" className="truncate pr-3 text-[13px] opacity-55">
-        {row.oneLiner}
-      </div>
+      {visible.oneLiner && (
+        <div role="cell" className="truncate pr-3 text-[13px] opacity-55">
+          {row.oneLiner}
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -182,6 +190,34 @@ export function InstrumentTable({
   const [startFilter, setStartFilter] = useState<string>("all");
   const [screener, setScreener] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Column ladder measurements (columns session): the table's content width
+  // (ResizeObserver) and the real `ch` advance in its font (probe span, re-
+  // measured once webfonts settle). Before the first measurement every
+  // column renders (Infinity width) — corrected on mount, without animation.
+  const tableRef = useRef<HTMLDivElement | null>(null);
+  const [tableW, setTableW] = useState(Number.POSITIVE_INFINITY);
+  const [chPx, setChPx] = useState(8);
+  useEffect(() => {
+    const el = tableRef.current;
+    if (!el) return;
+    const measureCh = () => {
+      const probe = document.createElement("span");
+      probe.style.position = "absolute";
+      probe.style.visibility = "hidden";
+      probe.style.width = "1ch";
+      el.appendChild(probe);
+      const w = probe.getBoundingClientRect().width;
+      probe.remove();
+      if (w > 0) setChPx(w);
+    };
+    measureCh();
+    document.fonts?.ready.then(measureCh).catch(() => undefined);
+    const ro = new ResizeObserver((entries) => {
+      setTableW(entries[0].contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [matrixOpen]);
   // Reorder snapshot (Pass C): captured in the EVENT HANDLER, before the
   // state update, so render stays pure (no ref/DOM reads during render —
   // compiler rule). Holds what caused the current arrangement (only sort and
@@ -292,6 +328,20 @@ export function InstrumentTable({
   const orderKey = `${sortCol ?? ""}|${sortAsc}|${screener ?? ""}`;
   const flipOn = reorderAnimates(flipSnap.cause, shown.length);
   const ROW_H = 48; // h-12 — used only to estimate a row's destination
+
+  // The column ladder (columns session): which columns fit the measured
+  // width, sorted column forced in; header and body share the template.
+  const visible = useMemo(
+    () => visibleColumns(tableW, chPx, sortCol),
+    [tableW, chPx, sortCol],
+  );
+  const template = gridTemplate(visible);
+  const hiddenNames = [
+    ...BASIS_ORDER.filter((b) => !visible.bases.includes(b)).map(
+      (b) => BASIS_HEAD[b],
+    ),
+    ...(visible.oneLiner ? [] : ["한 줄"]),
+  ];
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -421,6 +471,7 @@ export function InstrumentTable({
           </div>
         ) : (
           <div
+            ref={tableRef}
             role="table"
             className="w-full text-[13px]"
             onMouseLeave={() => onHover(null)}
@@ -428,13 +479,15 @@ export function InstrumentTable({
             {/* THE column grid (§ Pass A): one template, format-derived and
                 frozen (columns.ts), shared by the header row and every body
                 row — widths never depend on today's values or the open tab.
-                Muting is a TEXT-colour alpha (text-ink/50), never element
-                opacity — opacity on the row would sink the sticky header
-                background and let rows bleed through (§G). A hairline (not a
-                shadow) marks the boundary. */}
+                When width runs out, columns DROP in ladder order rather than
+                shrink (columns session); header and body derive from the same
+                `visible` set so they cannot disagree. Muting is a TEXT-colour
+                alpha (text-ink/50), never element opacity — opacity on the
+                row would sink the sticky header background and let rows bleed
+                through (§G). A hairline (not a shadow) marks the boundary. */}
             <div
               role="row"
-              style={{ gridTemplateColumns: GRID_TEMPLATE }}
+              style={{ gridTemplateColumns: template }}
               className="sticky top-0 z-10 grid items-end border-b border-edge bg-tile pb-2 text-left text-ink/50"
             >
               <div role="columnheader" className="pl-3">
@@ -443,7 +496,7 @@ export function InstrumentTable({
               <div role="columnheader" className="pr-3 text-right">
                 현재
               </div>
-              {BASIS_ORDER.map((b) => (
+              {visible.bases.map((b) => (
                 <div key={b} role="columnheader" className="pr-3 text-right">
                   <button
                     type="button"
@@ -455,9 +508,21 @@ export function InstrumentTable({
                   </button>
                 </div>
               ))}
-              <div role="columnheader" className="pr-3">
-                한 줄
-              </div>
+              {visible.oneLiner ? (
+                <div role="columnheader" className="pr-3">
+                  한 줄
+                </div>
+              ) : (
+                // what is hidden, stated (Pass B) — a statement, not a
+                // control: the reader must not wonder whether a column is
+                // missing or merely empty. Lives in the empty filler track.
+                <div
+                  className="whitespace-nowrap pr-1 text-right text-[11px] opacity-45"
+                  title={hiddenNames.join(" · ")}
+                >
+                  {visible.hidden}열 숨김
+                </div>
+              )}
             </div>
             {/* relative: popLayout pops exiting rows out of the flow so they
                 fade in place while the survivors slide (Pass C). */}
@@ -487,6 +552,8 @@ export function InstrumentTable({
                         )
                       }
                       enter={flipOn && flipSnap.cause === "screener"}
+                      template={template}
+                      visible={visible}
                     />
                   ) : (
                     <div
