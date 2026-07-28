@@ -1315,6 +1315,55 @@ at **build** time — pointing at another host needs a rebuild, not a restart.
 
 **Enforced by** `guards/failure-visible.test.ts`.
 
+## 18. The data file must earn trust [stability session, Pass C]
+
+`data/irsdata.xlsx` is hand-updated, so it is where breakage will actually
+come from. Pass A mutated a synthetic copy one cell at a time; four mutations
+loaded **without a word** and produced confidently wrong numbers. The loader
+now refuses them.
+
+**Unusable — `DataFileError`, and the server does not start.** A duplicated
+date, a swapped pair, any non-ascending step, a value outside
+`−5%..25%`, text where a number belongs, a wholly blank series, a missing
+`일자` header, two columns claiming one tenor, no data rows.
+
+The first three matter more than they look. Every date lookup in the product
+is `derive.value_at`, a bisect over an assumed-ascending, assumed-unique list:
+a duplicate or a swap does not crash it, it silently returns the **wrong row**,
+so D-1/WTD/MTD/QTD/YTD are all wrong while the levels look perfect. The
+orientation check reads `dates[0] < dates[-1]` alone, so a mid-file swap used
+to sail straight past it — the check is now every step.
+
+The band is a **magnitude** check, not a view: wide enough that no rate this
+market has printed would fire it, narrow enough to catch a decimal slip
+(`4135` for `4.135`) or a sign error. Its limit is on the record as a test —
+a rate written as a fraction (`0.0413`) sits inside the band and is not caught.
+
+**Every message names the CELL** — `C6`, not "row 6, third series". The person
+fixing this is looking at a spreadsheet, and a cell reference goes into the
+name box.
+
+**Stale ≠ unusable.** A gap over 10 days, a last observation over 10 days old,
+or a blank cell: the file loads, and the reason lands in `Dataset.warnings`
+and the startup log. Refusing to start on an old file would take the product
+down for something the reader can ride out.
+
+**Cache.** Any unreadable `.cache/*.json` — truncated, empty, valid JSON that
+is not an object, binary — recomputes with a warning; that was already true
+and is now pinned by test, because the risk is someone tightening the `except`
+later. Writes go through a temp file and `os.replace`, so a killed process
+leaves the old file or the new one, never a torn one.
+
+**Concurrency.** `forward_history` and `_historical_curves` fill their caches
+under a lock. Two readers asking for the same uncached series used to compute
+it twice (~3.7s of duplicated bootstraps, growing with the number of readers);
+endpoints run in FastAPI's threadpool, so this was real. The forward lock is
+**per series**, so different forwards still build in parallel, and id
+validation happens outside it so a typo fails immediately.
+
+**Enforced by** `tests/test_dataset_validation.py`, `tests/test_cache.py`,
+`tests/test_forward_history.py`.
+
 ## Settled decisions & open items [closed out, final session Pass E]
 
 These accumulated as "Provisional" across sessions. As of the final session

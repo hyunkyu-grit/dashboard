@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Callable
 
@@ -58,14 +59,25 @@ def cached(
             log.warning(
                 "[cache] %s: STALE — source data changed, recomputing", name
             )
-        except (OSError, ValueError, KeyError) as e:
+        # AttributeError/TypeError are in here for a reason: a file holding
+        # valid JSON that is not an object (`[1,2,3]`, `null`) has no `.get`,
+        # and that used to escape as a crash on startup rather than a
+        # recompute. Every unreadable cache must degrade the same way.
+        except (OSError, ValueError, KeyError, AttributeError, TypeError) as e:
             log.warning("[cache] %s: unreadable (%s), recomputing", name, e)
     else:
         log.warning("[cache] %s: MISSING, computing", name)
 
     payload = compute()
     Path(cache_dir).mkdir(parents=True, exist_ok=True)
-    f.write_text(
+    # Write through a temp file and rename. A direct write that dies partway
+    # leaves a half file which the next start recovers from — correctly, but
+    # only after paying the full recompute. os.replace is atomic on both
+    # POSIX and Windows, so a killed process leaves either the old file or
+    # the new one, never a torn one.
+    tmp = f.with_suffix(".json.tmp")
+    tmp.write_text(
         json.dumps({"hash": current_hash, "payload": payload}), encoding="utf-8"
     )
+    os.replace(tmp, f)
     return payload

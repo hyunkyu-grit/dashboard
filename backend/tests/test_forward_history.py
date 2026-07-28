@@ -45,6 +45,55 @@ def test_forward_history_matches_now(ds):
     assert abs(hist_last - kf["values"]["now"]) < 0.01
 
 
+def test_concurrent_readers_compute_a_series_once(ds):
+    """Pass A, §4: two readers asking for the same UNCACHED forward computed
+    it twice — 5,216 bootstraps where one pass is 2,608, ~3.7s of duplicated
+    work, growing with the number of simultaneous readers. Endpoints run in
+    FastAPI's threadpool, so this is real concurrency, not a hypothetical.
+    """
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app import forwards as fwd
+
+    fid = "3Yx2Y"
+    fwd._forward_history_cache.pop(fid, None)
+
+    calls = {"n": 0}
+    counter_lock = threading.Lock()
+    real = fwd.bootstrap_zero_curve
+    started = threading.Barrier(4)
+
+    def counting(pars):
+        with counter_lock:
+            calls["n"] += 1
+        return real(pars)
+
+    fwd.bootstrap_zero_curve = counting
+    try:
+        def ask():
+            started.wait(timeout=30)  # all four inside at once, cache empty
+            return fwd.forward_history(ds, fid)
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            results = [f.result() for f in [pool.submit(ask) for _ in range(4)]]
+    finally:
+        fwd.bootstrap_zero_curve = real
+        fwd._forward_history_cache.pop(fid, None)
+
+    # one pass, not four — and every reader gets the same object back
+    assert calls["n"] == len(ds.dates)
+    for r in results:
+        assert r is results[0]
+
+
+def test_a_bad_id_fails_fast_without_waiting_on_the_lock(ds):
+    """Validation happens outside the per-series lock, so a typo does not
+    queue behind someone else's 3.7s bootstrap run."""
+    with pytest.raises(KeyError):
+        forward_history(ds, "9Yx9Y")
+
+
 def test_key_forward_range1y(ds):
     """The gauge needs a 52-week LEVEL range + average + percentile per key
     forward (annual-stats session): min ≤ now ≤ max, min ≤ avg ≤ max, pct in

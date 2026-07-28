@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import calendar as _cal
 import datetime as dt
+import threading
 
 import numpy as np
 
@@ -107,6 +108,20 @@ TENOR_YEARS = {label.replace("F", ""): t for label, t in FWD_TENORS}  # SPOT→N
 
 _forward_history_cache: dict[str, list[dict]] = {}
 
+# Two readers asking for the same UNCACHED series computed it twice: 5,216
+# bootstraps where one pass is 2,608, ~3.7s wall (Pass A, §4). Identical
+# results, so this was waste rather than error — but waste proportional to the
+# number of simultaneous readers, and endpoints run in FastAPI's threadpool so
+# it is genuinely concurrent. The lock is PER SERIES: two different forwards
+# still build in parallel, only the duplicate is serialised.
+_fh_locks: dict[str, threading.Lock] = {}
+_fh_locks_guard = threading.Lock()
+
+
+def _lock_for(fid: str) -> threading.Lock:
+    with _fh_locks_guard:
+        return _fh_locks.setdefault(fid, threading.Lock())
+
 
 def parse_forward_id(fid: str) -> tuple[float, float | None]:
     """'2Yx1Y' → (start_years, tenor_years); '2YxSPOT' → (start_years, None)."""
@@ -118,19 +133,27 @@ def parse_forward_id(fid: str) -> tuple[float, float | None]:
 
 def forward_history(dataset: Dataset, fid: str) -> list[dict]:
     """10y daily history of a forward, rebuilt from each date's curve. Cached."""
-    if fid in _forward_history_cache:
-        return _forward_history_cache[fid]
+    hit = _forward_history_cache.get(fid)
+    if hit is not None:
+        return hit
+    # validate OUTSIDE the lock: a bad id should fail immediately rather than
+    # queue behind someone else's 3.7s bootstrap run
     start_y, tenor_y = parse_forward_id(fid)
-    out: list[dict] = []
-    for i, date in enumerate(dataset.dates):
-        pars = par_rates_at_index(dataset, i)
-        if len(pars) < 2:
-            continue
-        zc = bootstrap_zero_curve(pars)
-        r = forward_par_rate(zc, start_y, tenor_y)
-        out.append({"t": date.isoformat(), "v": round(r * 100, 4)})
-    _forward_history_cache[fid] = out
-    return out
+    with _lock_for(fid):
+        # the wait may have been for exactly this series being filled in
+        hit = _forward_history_cache.get(fid)
+        if hit is not None:
+            return hit
+        out: list[dict] = []
+        for i, date in enumerate(dataset.dates):
+            pars = par_rates_at_index(dataset, i)
+            if len(pars) < 2:
+                continue
+            zc = bootstrap_zero_curve(pars)
+            r = forward_par_rate(zc, start_y, tenor_y)
+            out.append({"t": date.isoformat(), "v": round(r * 100, 4)})
+        _forward_history_cache[fid] = out
+        return out
 
 
 # ── Forward-cell own-history move percentile (§J colour scale) ──────────────
@@ -141,16 +164,24 @@ def forward_history(dataset: Dataset, fid: str) -> list[dict]:
 # curve ONCE and reprice every forward off the shared cache (~13s at startup).
 
 _hist_zc: list[np.ndarray | None] | None = None
+_hist_zc_lock = threading.Lock()
 
 
 def _historical_curves(dataset: Dataset) -> list[np.ndarray | None]:
+    """The whole 10y of bootstrapped curves, built once (~13s)."""
     global _hist_zc
-    if _hist_zc is None:
-        out: list[np.ndarray | None] = []
-        for i in range(len(dataset.dates)):
-            pars = par_rates_at_index(dataset, i)
-            out.append(bootstrap_zero_curve(pars) if len(pars) >= 2 else None)
-        _hist_zc = out
+    if _hist_zc is not None:
+        return _hist_zc
+    # Same duplicated-work shape as forward_history, and 13s of it: without
+    # the lock, every reader who arrives before the first one finishes builds
+    # their own copy.
+    with _hist_zc_lock:
+        if _hist_zc is None:
+            out: list[np.ndarray | None] = []
+            for i in range(len(dataset.dates)):
+                pars = par_rates_at_index(dataset, i)
+                out.append(bootstrap_zero_curve(pars) if len(pars) >= 2 else None)
+            _hist_zc = out
     return _hist_zc
 
 

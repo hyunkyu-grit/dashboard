@@ -13,11 +13,50 @@ Values are percent (e.g. 4.135 = 4.135%).
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import openpyxl
+from openpyxl.utils import get_column_letter
+
+log = logging.getLogger(__name__)
+
+
+class DataFileError(ValueError):
+    """The workbook cannot be trusted, so the server does not start.
+
+    Raised for the failures Pass A classified PLAUSIBLE-WRONG: a duplicated or
+    out-of-order date silently misdirects every basis lookup, and an unbounded
+    value (a decimal slip) flows into the bootstrap and out through every
+    derived number. Both used to load without a word.
+
+    The message always names the CELL — `D57`, not "row 57" and not "the 3Y
+    series" — because the person fixing this is looking at a spreadsheet, and
+    a cell reference is what they can type into the name box.
+    """
+
+
+# Sheet geometry: metadata, merged labels, field names, then data.
+FIRST_DATA_ROW = 4
+
+# Plausible band for a KRW par rate in percent. Wide on purpose — this is a
+# nonsense check, not a view. It catches a decimal slip (4135 for 4.135) and a
+# sign error, and would not fire on any rate this market has printed.
+RATE_MIN_PCT = -5.0
+RATE_MAX_PCT = 25.0
+
+# Calendar days between consecutive observations before the file is called
+# stale. Four-day weekends and Chuseok/Seollal clusters are ordinary; ten days
+# means the update stopped. STALE, not unusable — the numbers are still true,
+# they are just old, and refusing to start would be the wrong answer.
+MAX_GAP_DAYS = 10
+
+
+def _cell(row_no: int, col: int) -> str:
+    """`(57, 3)` → `'D57'`. Columns are 0-based here, 1-based in the sheet."""
+    return f"{get_column_letter(col + 1)}{row_no}"
 
 # Wall node order. 3M (CD91) is in the product spec but ABSENT from the
 # current data export — the loader records it in `missing_nodes` instead of
@@ -75,6 +114,11 @@ class Dataset:
     series: dict[str, list[float | None]]      # tenor id -> values aligned to dates
     tenor_order: list[str]                     # as found in the sheet, 1D first
     missing_nodes: list[str] = field(default_factory=list)
+    # Things wrong with the file that do NOT make it untrustworthy: gaps,
+    # blanks, an old last observation. STALE is not UNUSABLE — these are
+    # logged at startup and the server runs. Anything that would make a
+    # displayed number wrong raises DataFileError instead.
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def asof(self) -> dt.date:
@@ -94,7 +138,10 @@ def load_dataset(xlsx_path: Path) -> Dataset:
     fields = next(rows)        # row 3: field names
 
     if fields[0] != "일자":
-        raise ValueError(f"expected date column first, got {fields[0]!r}")
+        raise DataFileError(
+            f"A3: expected the date column header '일자', found {fields[0]!r} "
+            f"— is this the Infomax export, with its metadata row on top?"
+        )
 
     # Resolve merged-cell label gaps: a None label belongs to the previous
     # cell's series (the code cell is merged across two columns).
@@ -108,39 +155,126 @@ def load_dataset(xlsx_path: Path) -> Dataset:
         if col == 0:
             continue  # date column
         if prev_label is None:
-            raise ValueError(f"no series label for column {col}")
-        col_tenors[col] = _tenor_id(prev_label)
+            raise DataFileError(f"{_cell(2, col)}: no series label")
+        try:
+            col_tenors[col] = _tenor_id(prev_label)
+        except ValueError as exc:
+            raise DataFileError(f"{_cell(2, col)}: {exc}") from None
 
     tenor_order = [col_tenors[c] for c in sorted(col_tenors)]
     if len(set(tenor_order)) != len(tenor_order):
-        raise ValueError(f"duplicate tenor columns: {tenor_order}")
+        dupes = sorted({t for t in tenor_order if tenor_order.count(t) > 1})
+        cols = [
+            _cell(2, c) for c in sorted(col_tenors) if col_tenors[c] in dupes
+        ]
+        raise DataFileError(
+            f"two columns carry the same tenor {dupes}: {', '.join(cols)}"
+        )
 
     dates_desc: list[dt.date] = []
+    sheet_rows: list[int] = []   # sheet row per observation, for error messages
     values_desc: dict[str, list[float | None]] = {t: [] for t in tenor_order}
-    for row in rows:
+    blanks: dict[str, int] = {t: 0 for t in tenor_order}
+
+    for row_no, row in enumerate(rows, start=FIRST_DATA_ROW):
         raw_date = row[0]
         if raw_date is None:
             continue
         if not isinstance(raw_date, dt.datetime):
-            raise ValueError(f"unexpected date cell: {raw_date!r}")
+            raise DataFileError(
+                f"{_cell(row_no, 0)}: expected a date, found {raw_date!r}"
+            )
         dates_desc.append(raw_date.date())
+        sheet_rows.append(row_no)
         for col, tenor in col_tenors.items():
             v = row[col] if col < len(row) else None
-            values_desc[tenor].append(float(v) if v is not None else None)
+            if v is None:
+                blanks[tenor] += 1
+                values_desc[tenor].append(None)
+                continue
+            try:
+                fv = float(v)
+            except (TypeError, ValueError):
+                raise DataFileError(
+                    f"{_cell(row_no, col)} ({tenor}): expected a number, "
+                    f"found {v!r}"
+                ) from None
+            # A decimal slip is invisible without this: 4135 bootstraps just
+            # as happily as 4.135, and every derived number inherits it.
+            if not RATE_MIN_PCT <= fv <= RATE_MAX_PCT:
+                raise DataFileError(
+                    f"{_cell(row_no, col)} ({tenor}): {fv} is outside "
+                    f"{RATE_MIN_PCT}%..{RATE_MAX_PCT}% — check for a "
+                    f"misplaced decimal point or a sign"
+                )
+            values_desc[tenor].append(fv)
     wb.close()
 
     if not dates_desc:
-        raise ValueError("no data rows found")
+        raise DataFileError("no data rows found")
+
+    # Every date lookup in the product is a bisect on an assumed-ascending,
+    # assumed-unique list (`derive.value_at`). A duplicate or a swapped pair
+    # does not crash it — it silently returns the wrong row, so D-1/WTD/MTD/
+    # QTD/YTD all read the wrong day while the levels look perfect. This is
+    # the single most dangerous thing a hand-updated sheet can do.
+    first_seen: dict[dt.date, int] = {}
+    for date, row_no in zip(dates_desc, sheet_rows):
+        if date in first_seen:
+            raise DataFileError(
+                f"{_cell(row_no, 0)}: {date} already appears at row "
+                f"{first_seen[date]} — every date must be unique"
+            )
+        first_seen[date] = row_no
 
     ascending = dates_desc[0] < dates_desc[-1]
     dates = dates_desc if ascending else list(reversed(dates_desc))
+    order_rows = sheet_rows if ascending else list(reversed(sheet_rows))
     series = {
         t: (vals if ascending else list(reversed(vals)))
         for t, vals in values_desc.items()
     }
 
+    # Orientation is decided from the first and last row alone, so a swapped
+    # pair in the middle survives that check untouched. Check every step.
+    for i in range(1, len(dates)):
+        if dates[i] <= dates[i - 1]:
+            raise DataFileError(
+                f"rows {order_rows[i - 1]} and {order_rows[i]}: dates run "
+                f"{dates[i - 1]} then {dates[i]} — rows must be in date "
+                f"order, with no repeats"
+            )
+
+    warnings: list[str] = []
+
+    # A column of nothing is not a series. Everything downstream would read
+    # `None` forever and show an em dash where a rate belongs.
+    for tenor, n in blanks.items():
+        if n == len(dates_desc):
+            raise DataFileError(f"{tenor}: every value is blank")
+        if n:
+            warnings.append(f"{tenor}: {n} blank value(s)")
+
+    # STALE, not unusable: say it and carry on.
+    gaps = [
+        (dates[i] - dates[i - 1]).days
+        for i in range(1, len(dates))
+    ]
+    if gaps and max(gaps) > MAX_GAP_DAYS:
+        i = gaps.index(max(gaps)) + 1
+        warnings.append(
+            f"{max(gaps)}-day gap between {dates[i - 1]} and {dates[i]} "
+            f"(row {order_rows[i]}) — the file may have gone unupdated"
+        )
+    age = (dt.date.today() - dates[-1]).days
+    if age > MAX_GAP_DAYS:
+        warnings.append(f"last observation {dates[-1]} is {age} days old")
+
+    for w in warnings:
+        log.warning("[dataset] %s", w)
+
     # 1D (call) first, then the sheet's IRS tenor order.
     ordered = sorted(tenor_order, key=lambda t: (t != "1D", tenor_order.index(t)))
     missing = [t for t in SPEC_NODE_ORDER if t not in series]
     return Dataset(dates=dates, series=series, tenor_order=ordered,
-                   missing_nodes=missing)
+                   missing_nodes=missing, warnings=warnings)
