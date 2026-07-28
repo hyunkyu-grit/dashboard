@@ -45,3 +45,19 @@ describe("forward matrix has a visible scroll affordance, never a silent clip (�
     expect(matrix).toMatch(/sticky left-12/);
   });
 });
+
+describe("the grid is one continuous field — no separator rules inside it (carry Pass B)", () => {
+  // No dedicated contiguity guard existed, so the rule lives here with the
+  // matrix's other structural pins. Cells share edges; the tint makes the
+  // shape; structure comes from the pinned header/left columns. The ONLY
+  // border allowed is the live-quoted CELL cue (border-edge-live /
+  // border-transparent pair) — a property of one cell, never a rule between
+  // rows or columns.
+  it("no border-t/border-b row separators inside the matrix", () => {
+    expect(matrix).not.toMatch(/border-t-|border-b-/);
+  });
+  it("the live-cell cue pair is still the only bordered thing", () => {
+    expect(matrix).toMatch(/border-edge-live/);
+    expect(matrix).toMatch(/border-transparent/);
+  });
+});

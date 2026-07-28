@@ -1125,7 +1125,15 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
   diverging swatch strip 하락 → untinted middle → 상승 with one line: intensity =
   today's move vs that series' own 10y daily-change history. (The tint scale
   is a CHANGE percentile and stays on the FULL history on purpose — see the
-  LEVEL-window ruling; do not narrow it to 52 weeks.) Swatch alphas are
+  LEVEL-window ruling; do not narrow it to 52 weeks.)
+  **No separator rules inside grids [carry session, Pass B].** Cells share
+  edges and form one continuous field — the tint makes the shape; structure
+  comes from the pinned header and left columns. The year-boundary border-t
+  rules that had crept into the matrix are removed and pinned against in
+  `guards/scroll-affordance.test.ts` (no dedicated contiguity guard existed,
+  so the rule lives there with the matrix's other structural pins). The
+  live-quoted CELL border (§8) is a property of one cell, not a rule between
+  cells, and stays. Swatch alphas are
   the real scale endpoints (`MATRIX_FLOOR..MATRIX_FULL` from `tint.ts`) so the
   key can't drift from the cells; hue flips with the theme via the tokens. The
   SAME component renders under the forward matrix (표로 보기) and under the popup

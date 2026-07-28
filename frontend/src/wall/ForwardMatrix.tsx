@@ -11,7 +11,13 @@ import type { ForwardsPayload } from "@/lib/api";
 
 import { matrixTint } from "@/ui/tint";
 
-const YEAR_ROWS = new Set(["2Y", "3Y", "4Y", "5Y"]);
+/* No separator rules inside the grid (carry session, Pass B): cells share
+ * edges and form one continuous field — the tint makes the shape, and rules
+ * chop it back into the scattered look that was the original complaint.
+ * Structure comes from the tint, the pinned header, and the left columns.
+ * The year-boundary border-t rules that had crept in are gone. The only
+ * border left is the live-quoted CELL cue (§8) — a property of one cell,
+ * not a rule between cells. */
 
 export function ForwardMatrix({ payload }: { payload: ForwardsPayload }) {
   // The 시작 and 날짜 columns are PINNED (sticky-left) so horizontal scroll
@@ -42,38 +48,35 @@ export function ForwardMatrix({ payload }: { payload: ForwardsPayload }) {
           </tr>
         </thead>
         <tbody>
-          {payload.startPoints.map((sp, i) => {
-            const sep = YEAR_ROWS.has(sp.label) ? " border-t-2 border-t-edge" : "";
-            return (
-              <tr key={sp.label} className="h-[26px]">
-                {/* the ON row is the grid's anchor but it IS the spot curve
-                    (an overnight start is today) — label it as such rather
-                    than presenting it as forwards (carry session, Pass A). */}
-                <td className={`sticky left-0 z-10 bg-tile${sep}`}>
-                  {sp.label === "ON" ? "현물" : sp.label}
-                </td>
-                <td className={`sticky left-12 z-10 bg-tile${sep}`}>
-                  <span className="opacity-60">{sp.date}</span>
-                </td>
-                {payload.tenors.map((tenor) => {
-                  const cell = payload.grid[tenor][i];
-                  return (
-                    <td
-                      key={tenor}
-                      // graded own-history tint (§J): the cell's move vs its own
-                      // past, not vs the day's grid-max. Ink on tint.
-                      style={matrixTint(cell.movePct, cell.deltas.d1 > 0)}
-                      className={`border px-1 text-right align-middle tabular-nums ${
-                        cell.live ? "border-edge-live" : "border-transparent"
-                      }${sep}`}
-                    >
-                      {cell.values.now.toFixed(4)}
-                    </td>
-                  );
-                })}
-              </tr>
-            );
-          })}
+          {payload.startPoints.map((sp, i) => (
+            <tr key={sp.label} className="h-[26px]">
+              {/* the ON row is the grid's anchor but it IS the spot curve
+                  (an overnight start is today) — label it as such rather
+                  than presenting it as forwards (carry session, Pass A). */}
+              <td className="sticky left-0 z-10 bg-tile">
+                {sp.label === "ON" ? "현물" : sp.label}
+              </td>
+              <td className="sticky left-12 z-10 bg-tile">
+                <span className="opacity-60">{sp.date}</span>
+              </td>
+              {payload.tenors.map((tenor) => {
+                const cell = payload.grid[tenor][i];
+                return (
+                  <td
+                    key={tenor}
+                    // graded own-history tint (§J): the cell's move vs its own
+                    // past, not vs the day's grid-max. Ink on tint.
+                    style={matrixTint(cell.movePct, cell.deltas.d1 > 0)}
+                    className={`border px-1 text-right align-middle tabular-nums ${
+                      cell.live ? "border-edge-live" : "border-transparent"
+                    }`}
+                  >
+                    {cell.values.now.toFixed(4)}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
