@@ -169,7 +169,42 @@ rule:
 
 ---
 
-## 6. Current state (as of the calendar session — Passes A–G, 2026-07-28)
+## 6. Current state (as of the removal session — Passes A–D, 2026-07-28)
+
+- **HEAD** = the removal-session Pass D commit on `master`, mirrored to D:.
+  Gates: FE **170 passed / 1 skipped**, lint 0, build 0; BE **70 pass / 1
+  skip / 1 xfail**.
+- **Carry & roll is GONE** (popup block, `app/carry.py`, its endpoint, FE
+  types/fetcher, tests). Two recorded faults: the headline and the breakeven
+  printed the same number, and the components did not sum to the total at the
+  displayed precision. **If it returns it is a sortable table COLUMN, not a
+  popup block** — screening question, so sorting is the point; and with the
+  column ladder already tight it would be first to drop in a narrow window.
+  **The freed popup space is deliberately empty** — two features have now
+  been removed from that spot; do not fill it to balance the layout.
+- **The calendar is DISCONNECTED from the UI but KEPT.** `ui/calendar.ts`,
+  `data/calendar.json` and `guards/calendar.test.ts` stay, unreferenced by
+  design — verified 2026 dates, sources, `verified` filtering, LPR rule. **A
+  session reading only the code will see an unused module: do NOT delete
+  it.** Removed: the strip's next-event slot, the chart's meeting rules (with
+  their density + average-gap thresholds and the transparent-canvas underlay
+  that existed only for them), and the `일정 파일 갱신 필요` state.
+  **Re-wiring means restoring the strip slot, the chart rules AND the
+  staleness guard together.**
+- **The staleness gate is PARKED, not disabled.** It skips while
+  `ui/calendar.ts` has no importer — computed by a source scan, not
+  hard-coded — and the reason prints in the test title beside the skip
+  marker. Adding any consumer revives it automatically (proved both ways with
+  a throwaway importer).
+- **Strip layout without the calendar**: the collapse chevron moved to sit
+  with the anchors (it was a lone control ~1,700px from them); the collapsed
+  handle keeps its centred grabber pill but the whole 12px bar is the hit
+  target.
+- Owner-open: real-narrow-window eyeball (carried); vol carry one-liner
+  glance is now moot (carry removed); verified PRC holiday dates remain
+  relevant only if the calendar is ever re-wired.
+
+### Earlier — calendar session (Passes A–G, 2026-07-28)
 
 - **HEAD** = the calendar-session Pass G commit on `master`, mirrored to D:.
   Gates: FE **191 vitest / 23 files**, lint 0, build 0 (BE untouched,

@@ -433,6 +433,19 @@ drag dismiss; `?tile=series:<id>` keeps working).
   source scan rather than hard-coded, and the skip message says so, so adding
   any consumer brings the gate back by itself. It must never be switched off
   by hand. (Verified: a throwaway importer flipped it from skipped to live.)
+- **Verified [removal session, Pass D].** Backend restarted on the new code:
+  `/api/carry/{id}` returns 404 and is absent from the OpenAPI paths, which
+  now read health / wall.summary / series / forwards / dv01 / volatility;
+  wall.summary and dv01 still 200. No reference to `CarryPanel`,
+  `carryReadout`, `fetchCarry`, `carry_payload` or `/api/carry` survives
+  anywhere in `backend/app`, `backend/tests`, `frontend/src` or
+  `frontend/guards`. The popup shows no 캐리 text, and its DV01 block and mode
+  diagram are intact. The strip shows its three anchors and no event on all
+  five tabs and in the narrow single-column layout. The enlarged chart draws
+  0 meeting rules at every zoom tried (10y, ~2y, ~6m, ~1m). Sorting still
+  reorders (어제 ↓), and pinning still works from a strip anchor — the pane's
+  corner label read `3s10s · 스티프닝`. Calendar module: 25 of its own tests
+  pass and the horizon gate skips with its reason printed. Both themes.
 - **Policy-meeting calendar [strip session Pass D; REBUILT ON VERIFIED DATA,
   calendar session].** A hand-maintained JSON file in the repo
   (`frontend/src/data/calendar.json`) — no feed, no API. **Every entry was
