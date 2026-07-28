@@ -47,6 +47,7 @@ import {
   resolveTheme,
 } from "@/theme/bridge";
 import { assertDomainRendered } from "@/theme/domainGuard";
+import { meetingsInRange } from "@/ui/calendar";
 import { dateLabels } from "@/ui/timeAxis";
 
 export type ChartType = "line" | Interval;
@@ -64,12 +65,23 @@ async function fetchLine(id: string): Promise<LineDetail> {
 // height of the date-label strip under the chart (dates session, Pass B)
 const AXIS_H = 18;
 
+/** Policy-meeting rules (strip session, Pass E) are dropped above this many
+ * in view [recorded threshold]: at ~16 meetings a year this is about two
+ * years of them, the point where the rules still read as separate marks. A
+ * decade in one view is ~180 rules — a hatch, worse than nothing. */
+const MEETING_RULE_MAX = 32;
+
 function buildOptions(width: number, height: number) {
   const t = resolveTheme();
   const options = {
     width,
     height,
-    layout: { background: { color: t.tile }, textColor: t.ink, attributionLogo: false },
+    // TRANSPARENT background (strip session, Pass E): the wrapper carries the
+    // tile colour, so the meeting rules can be a DOM underlay that paints
+    // genuinely BEHIND the series rather than a faint wash over it. (The
+    // alternative — an overlay above the canvas — would put a backdrop on
+    // top of data, and this project has enough LWC z-order history already.)
+    layout: { background: { color: "transparent" }, textColor: t.ink, attributionLogo: false },
     grid: { vertLines: { visible: false }, horzLines: { color: t.border } },
     rightPriceScale: { borderColor: t.border },
     // LWC's own time axis is hidden: the date strip below renders our sparse
@@ -124,6 +136,8 @@ export function DetailChart({
   // sparse date labels for the strip under the chart, recomputed on every
   // visible-range change (zoom / pan / candle interval — Pass B)
   const [axisLabels, setAxisLabels] = useState<{ x: number; text: string }[]>([]);
+  // x positions of policy meetings inside the visible range (Pass E)
+  const [meetingX, setMeetingX] = useState<number[]>([]);
 
   // callbacks read via ref so the once-created subscriptions never go stale;
   // synced in an effect (refs must not be written during render)
@@ -247,14 +261,35 @@ export function DetailChart({
       const clamp = (v: number) => Math.max(0, Math.min(times.length - 1, v));
       const lo = r ? clamp(Math.round(r.from)) : 0;
       const hi = r ? clamp(Math.round(r.to)) : times.length - 1;
+      // x for the first bar on or after an ISO date, within the view
+      const xFor = (iso: string): number | null => {
+        let i = lo;
+        while (i < hi && times[i] < iso) i++;
+        const x = chart.timeScale().logicalToCoordinate(i as Logical);
+        return x != null && x >= 0 && x <= width ? x : null;
+      };
       const out: { x: number; text: string }[] = [];
       for (const l of dateLabels(times[lo], times[hi])) {
-        let i = lo;
-        while (i < hi && times[i] < l.iso) i++;
-        const x = chart.timeScale().logicalToCoordinate(i as Logical);
-        if (x != null && x >= 0 && x <= width) out.push({ x, text: l.text });
+        const x = xFor(l.iso);
+        if (x != null) out.push({ x, text: l.text });
       }
       setAxisLabels(out);
+
+      // policy-meeting rules (Pass E): a faint backdrop, only where they are
+      // sparse enough to read. Above MEETING_RULE_MAX they are DROPPED
+      // entirely — a decade of meetings is ~180 rules and reads as a hatch,
+      // which is worse than nothing.
+      const inView = meetingsInRange(times[lo], times[hi]);
+      if (inView.length > MEETING_RULE_MAX) {
+        setMeetingX([]);
+      } else {
+        const xs: number[] = [];
+        for (const m of inView) {
+          const x = xFor(m.date);
+          if (x != null) xs.push(x);
+        }
+        setMeetingX(xs);
+      }
     });
 
     return () => {
@@ -309,7 +344,20 @@ export function DetailChart({
   const tip = renderTip(hover, stats, unit, isCandle);
   return (
     <div className="relative" style={{ width, height }}>
-      <div ref={containerRef} style={{ width, height: height - AXIS_H }} />
+      {/* the chart surface: tile colour on the WRAPPER, meeting rules
+          underneath, the transparent-backed canvas on top (Pass E) */}
+      <div className="relative bg-tile" style={{ width, height: height - AXIS_H }}>
+        <div className="pointer-events-none absolute inset-0">
+          {meetingX.map((x, i) => (
+            <span
+              key={`${x}-${i}`}
+              className="absolute top-0 w-px bg-ink/15"
+              style={{ left: x, height: height - AXIS_H }}
+            />
+          ))}
+        </div>
+        <div ref={containerRef} className="relative" style={{ width, height: height - AXIS_H }} />
+      </div>
       {/* date strip (Pass B): sparse orientation labels at round boundaries —
           no ticks, no rule; they update with zoom / pan / candle interval. */}
       <div className="relative" style={{ width, height: AXIS_H }}>

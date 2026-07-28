@@ -416,6 +416,20 @@ drag dismiss; `?tile=series:<id>` keeps working).
   through `useSyncExternalStore`, not an effect — the compiler lint rejects
   setState-in-effect and it would cascade a render on every mount. Pinned by
   `guards/bottom-strip.test.ts`.
+- **Meeting rules on the enlarged chart [strip session, Pass E].** A faint
+  vertical rule at each policy meeting inside the visible range — where the
+  calendar earns most of its keep. **A backdrop, not data:** neutral ink at
+  15% alpha, one pixel wide, `pointer-events-none`, and genuinely BEHIND the
+  series — the chart's own background is set transparent so a DOM underlay
+  can sit under the canvas while the wrapper carries the tile colour. (An
+  overlay above the canvas would paint a backdrop on top of data, and this
+  project has enough LWC z-order history.) **Enlarged chart only**; the
+  preview stays clean. **Density: dropped, never hatched** — above
+  `MEETING_RULE_MAX` = **32 in view** [recorded threshold] the rules are
+  removed entirely. At ~16 meetings a year that is about two years of them,
+  the point where they still read as separate marks; a decade in one view is
+  ~180 rules and reads as a hatch. Verified live: the 10y view draws 0, a
+  ~1.6y view draws 25. Pinned by `guards/meeting-rules.test.ts`.
 - **Policy-meeting calendar [strip session, Pass D].** A hand-maintained
   JSON file in the repo (`frontend/src/data/calendar.json`) — no feed, no
   API, ~16 entries a year. **Two kinds only: 금통위 and FOMC.** Each is about
