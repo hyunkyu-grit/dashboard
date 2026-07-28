@@ -105,6 +105,13 @@ describe("every row has an explicit numeric sort key (§6)", () => {
     expect(rows.length).toBeGreaterThan(15);
   });
 
+  it("never lists an ON-start forward — that is the spot curve (carry Pass A)", () => {
+    // the fixture's grid contains ON cells on purpose; the list must skip
+    // them (they equal outrights by construction), while non-ON starts stay
+    expect(rows.some((r) => r.id.startsWith("ONx"))).toBe(false);
+    expect(rows.some((r) => r.id === "2Yx1Y")).toBe(true);
+  });
+
   it("no row lacks a sort key or carries a non-finite entry", () => {
     for (const r of rows) {
       expect(r.sortKey.length, `${r.id} has an empty sort key`).toBeGreaterThan(0);

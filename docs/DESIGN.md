@@ -1212,6 +1212,14 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
   a duplicate. It stays in the 표로 보기 matrix as the spot reference column but
   no longer appears as a forward row (so no confusing `1Y3MxSPOT` label in the
   list).
+- **`ONx*` dropped from the forward LIST too [carry session, Pass A].** An
+  overnight start IS today, so `ONx3M` is the spot 3M rate wearing a
+  forward's name and the whole ON row restates the outright tab — identical
+  by construction, not coincidence (the only such degenerate family besides
+  `{start}xSPOT` above). In the matrix the ON row STAYS as the grid's spot
+  anchor but its row label reads **현물**, so it is presented as the spot
+  curve rather than as forwards. Pinned by `guards/sort-key.test.ts`. The
+  forward list is now 20 starts × 7 tenors = 140 rows.
 
 - **Two-pane breakpoint = 1520px [Session 15].** The prompt said "about 1440",
   but that assumed a narrower table; with the table at 880px and the preview

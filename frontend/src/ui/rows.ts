@@ -141,8 +141,14 @@ export function buildRows(
     rows.push(fromSummary(d, "spread", traderName(d.id)));
   }
   if (forwards) {
-    // every forward in the matrix (21 starts × 8 tenors), start-major (§3)
+    // every non-degenerate forward in the matrix, start-major (§3)
     for (const sp of forwards.startPoints) {
+      // ONx* is the spot curve wearing a forward's name (carry session,
+      // Pass A): an overnight start IS today, so every ON-start "forward"
+      // equals the outright of its tenor by construction and the whole row
+      // duplicates the outright tab. The ON row stays in the matrix (표로
+      // 보기) as the grid's spot anchor, relabelled 현물 — never in the list.
+      if (sp.label === "ON") continue;
       for (const tenor of forwards.tenors) {
         const clean = tenor.replace("F", ""); // "1YF"→"1Y", "SPOT" stays
         // {start}xSPOT is a spot-starting par rate — the outright at that

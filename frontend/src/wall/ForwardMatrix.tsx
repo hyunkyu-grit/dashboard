@@ -46,7 +46,12 @@ export function ForwardMatrix({ payload }: { payload: ForwardsPayload }) {
             const sep = YEAR_ROWS.has(sp.label) ? " border-t-2 border-t-edge" : "";
             return (
               <tr key={sp.label} className="h-[26px]">
-                <td className={`sticky left-0 z-10 bg-tile${sep}`}>{sp.label}</td>
+                {/* the ON row is the grid's anchor but it IS the spot curve
+                    (an overnight start is today) — label it as such rather
+                    than presenting it as forwards (carry session, Pass A). */}
+                <td className={`sticky left-0 z-10 bg-tile${sep}`}>
+                  {sp.label === "ON" ? "현물" : sp.label}
+                </td>
                 <td className={`sticky left-12 z-10 bg-tile${sep}`}>
                   <span className="opacity-60">{sp.date}</span>
                 </td>
