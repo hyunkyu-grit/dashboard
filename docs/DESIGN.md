@@ -1364,6 +1364,40 @@ validation happens outside it so a typo fails immediately.
 **Enforced by** `tests/test_dataset_validation.py`, `tests/test_cache.py`,
 `tests/test_forward_history.py`.
 
+## 19. Guard hygiene [stability session, Pass D]
+
+Most guards work by scanning source text for a token that must be present or
+absent. The absent case has a recurring failure with four occurrences on
+record — pane-still, carry-copy, calendar, bottom-strip:
+
+1. a guard bans a token
+2. the thing is removed, and a comment explains why
+3. the comment contains the token
+4. the guard fails on the explanation of its own success
+
+Each was fixed in place with a hand-rolled regex pair, so the next guard
+started the cycle over. **`guards/_source.ts` is now the only reader.**
+
+| | strips | use for |
+|---|---|---|
+| `code(path)` | comments | a banned **value** — a raw hex, a class name, a Korean phrase. A string occurrence *is* the violation. |
+| `identifiers(path)` | comments **and** string contents | a banned **identifier** — an import, a hook, a component. A mention inside a label is not a use. |
+| `css(path)` | block comments | token files |
+| `walk(dir)` | either | whole-tree scans |
+
+It is a scanner, not a regex pair, because both cheap approaches are wrong:
+`//` inside a URL is not a comment, and a whole-line-only regex leaves every
+**trailing** comment intact — which is how the old version let tokens through.
+Removed text becomes spaces and newlines, so reported line numbers still match
+the real file.
+
+**Enforced by** `guards/guard-hygiene.test.ts`, which checks the stripper
+against each trap (trailing comment, URL, quote inside a comment, escaped
+quote, template literal), checks it does **not** over-strip (real files keep
+their declarations and their line count — an over-eager stripper fails
+silently, forever), and fails any guard that reads a file without importing
+the shared stripper.
+
 ## Settled decisions & open items [closed out, final session Pass E]
 
 These accumulated as "Provisional" across sessions. As of the final session

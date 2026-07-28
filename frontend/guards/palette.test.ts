@@ -15,6 +15,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { css as cssOf, stripComments } from "./_source";
+
 const SRC = join(__dirname, "..", "src");
 
 // the palette's definition layer — allowed to name the retired tokens
@@ -47,7 +49,9 @@ describe("palette: components carry only red/blue/grey (§9)", () => {
       ) {
         continue;
       }
-      readFileSync(file, "utf8")
+      // comments stripped, strings kept (Pass D): a note naming a retired
+      // token is not a use of it, but a class name in a string is
+      stripComments(readFileSync(file, "utf8"))
         .split("\n")
         .forEach((line, i) => {
           if (UTIL.test(line) || VAR.test(line)) {
@@ -62,7 +66,7 @@ describe("palette: components carry only red/blue/grey (§9)", () => {
 // ── the ink fill/pill must stay legible (spec: verify against the contrast
 // guard in both themes — a dark pill in dark mode is the obvious failure) ──
 
-const css = readFileSync(join(SRC, "theme", "tokens.css"), "utf8");
+const css = cssOf("theme/tokens.css");
 const DARK_AT = css.indexOf('[data-theme="dark"]');
 const lightBlock = css.slice(0, DARK_AT);
 const darkBlock = css.slice(DARK_AT);

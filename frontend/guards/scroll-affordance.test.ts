@@ -9,15 +9,12 @@
  * (b) sit beside the key-forward block in a `flex-wrap` row so that block wraps
  * BELOW rather than being clipped. It fires if either is reverted. */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const src = (p: string) =>
-  readFileSync(join(__dirname, "..", "src", p), "utf8");
+import { code } from "./_source";
 
-const matrix = src("wall/ForwardMatrix.tsx");
-const table = src("ui/InstrumentTable.tsx");
+const matrix = code("wall/ForwardMatrix.tsx");
+const table = code("ui/InstrumentTable.tsx");
 
 describe("forward matrix has a visible scroll affordance, never a silent clip (§F)", () => {
   it("the matrix table sits in an overflow-x-auto container", () => {

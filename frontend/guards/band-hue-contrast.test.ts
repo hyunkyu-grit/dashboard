@@ -13,14 +13,11 @@
  * The direction colours are text on the tile (normal rows) and on the page
  * (the active/hover row background), so both light surfaces are checked. */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const css = readFileSync(
-  join(__dirname, "..", "src", "theme", "tokens.css"),
-  "utf8",
-);
+import { css as cssOf } from "./_source";
+
+const css = cssOf("theme/tokens.css");
 const DARK_AT = css.indexOf('[data-theme="dark"]');
 const lightBlock = css.slice(0, DARK_AT);
 const darkBlock = css.slice(DARK_AT);

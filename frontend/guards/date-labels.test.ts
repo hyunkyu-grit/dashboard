@@ -2,9 +2,9 @@
  * not an axis: 3–4 labels at ROUND boundaries, format follows the span
  * (years → year+month → month+day), and the strip carries no ticks or rule. */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+
+import { code } from "./_source";
 
 import { dateLabels } from "../src/ui/timeAxis";
 
@@ -58,18 +58,12 @@ describe("label count and roundness by span", () => {
 
 describe("the strip is orientation, not an axis", () => {
   it("DetailChart hides LWC's own time axis and draws the strip", () => {
-    const src = readFileSync(
-      join(__dirname, "..", "src", "wall", "DetailChart.tsx"),
-      "utf8",
-    );
+    const src = code("wall/DetailChart.tsx");
     expect(src).toMatch(/timeScale: \{ visible: false/);
     expect(src).toContain("dateLabels(");
   });
   it("PreviewChart draws labels from the same ladder", () => {
-    const src = readFileSync(
-      join(__dirname, "..", "src", "ui", "PreviewChart.tsx"),
-      "utf8",
-    );
+    const src = code("ui/PreviewChart.tsx");
     expect(src).toContain("dateLabels(");
   });
 });

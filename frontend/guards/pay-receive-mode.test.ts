@@ -4,9 +4,9 @@
  * direction; and the SVG draws only the two curves + the fill (no markers, no
  * tenor text — the regression that came back twice). */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+
+import { code } from "./_source";
 
 import type { Construct } from "../src/ui/gloss";
 import {
@@ -144,10 +144,7 @@ describe("the label matches the mode and direction", () => {
 });
 
 describe("the SVG carries only the shape — no markers, no tenor text", () => {
-  const src = readFileSync(
-    join(__dirname, "..", "src", "ui", "PayReceive.tsx"),
-    "utf8",
-  );
+  const src = code("ui/PayReceive.tsx");
   it("renders no leg markers (<circle>) and no in-svg text (<text>)", () => {
     expect(src).not.toMatch(/<circle/);
     expect(src).not.toMatch(/<text/);

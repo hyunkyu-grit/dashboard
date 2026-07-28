@@ -11,16 +11,13 @@
  *
  * Hex is read from tokens.css. */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+
+import { css as cssOf } from "./_source";
 
 import { MATRIX_FULL } from "../src/ui/tint";
 
-const css = readFileSync(
-  join(__dirname, "..", "src", "theme", "tokens.css"),
-  "utf8",
-);
+const css = cssOf("theme/tokens.css");
 const DARK_AT = css.indexOf('[data-theme="dark"]');
 const lightBlock = css.slice(0, DARK_AT);
 const darkBlock = css.slice(DARK_AT);

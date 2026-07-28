@@ -15,6 +15,7 @@ import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import raw from "../src/data/calendar.json";
+import { code, stripComments } from "./_source";
 import {
   CALENDAR_FROM,
   countdown,
@@ -53,7 +54,10 @@ const consumers = (() => {
       else if (/\.tsx?$/.test(e.name)) {
         const rel = relative(dir, p).replace(/\\/g, "/");
         if (rel === "ui/calendar.ts") continue;
-        if (/from "(@\/ui\/calendar|\.\/calendar)"/.test(readFileSync(p, "utf8"))) {
+        // comments stripped (Pass D): the removal is explained in prose in
+        // several files, and an explanation is not an import
+        const text = stripComments(readFileSync(p, "utf8"));
+        if (/from "(@\/ui\/calendar|\.\/calendar)"/.test(text)) {
           found.push(rel);
         }
       }
@@ -219,7 +223,8 @@ describe("verified is load-bearing: unverified renders NOWHERE", () => {
         else if (/\.tsx?$/.test(e.name)) {
           const rel = relative(dir, p).replace(/\\/g, "/");
           if (rel === "ui/calendar.ts") continue;
-          if (/data\/calendar\.json/.test(readFileSync(p, "utf8"))) offenders.push(rel);
+          const text = stripComments(readFileSync(p, "utf8"));
+          if (/data\/calendar\.json/.test(text)) offenders.push(rel);
         }
       }
     };
@@ -231,9 +236,7 @@ describe("verified is load-bearing: unverified renders NOWHERE", () => {
     // CODE only — the contract is also described in prose in that file, and
     // a comment saying "the raw file is not exported" must not trip a check
     // looking for an export of the raw file
-    const mod = readFileSync(join(__dirname, "..", "src", "ui", "calendar.ts"), "utf8")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
+    const mod = code("ui/calendar.ts");
     // `raw` and `file` stay module-private; every export derives from MEETINGS
     expect(mod).not.toMatch(/export .*\braw\b/);
     expect(mod).not.toMatch(/export const file/);

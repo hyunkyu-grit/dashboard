@@ -4,9 +4,9 @@
  * — the header must never move. One template string is shared by the header
  * row and every body row so the two cannot drift apart. */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+
+import { code } from "./_source";
 
 import { fmtDelta, fmtLevel } from "../src/lib/format";
 import {
@@ -63,10 +63,7 @@ describe("the WIDEST templates actually cover the display grammar", () => {
 });
 
 describe("one grid definition shared by header and body; stable gutter", () => {
-  const src = readFileSync(
-    join(__dirname, "..", "src", "ui", "InstrumentTable.tsx"),
-    "utf8",
-  );
+  const src = code("ui/InstrumentTable.tsx");
 
   it("header row and body rows both use the ONE shared template", () => {
     const uses = src.match(/gridTemplateColumns: template/g) ?? [];

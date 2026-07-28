@@ -4,9 +4,9 @@
  * reorder above the row-count threshold. Transform-only FLIP — the rows'
  * layout prop is "position", asserted against the source. */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+
+import { code } from "./_source";
 
 import {
   FLIP_MAX_ROWS,
@@ -52,10 +52,7 @@ describe("viewport cull: a row animates only near the visible window", () => {
 });
 
 describe("the FLIP is transform-only", () => {
-  const src = readFileSync(
-    join(__dirname, "..", "src", "ui", "InstrumentTable.tsx"),
-    "utf8",
-  );
+  const src = code("ui/InstrumentTable.tsx");
   it('rows use layout="position" (never full layout, which animates size)', () => {
     expect(src).toContain('layout={flip ? "position" : false}');
     expect(src).not.toMatch(/layout=\{true\}/);

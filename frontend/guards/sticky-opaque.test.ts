@@ -8,23 +8,21 @@
  * A muted look must come from a text-colour alpha (text-ink/50), never element
  * opacity. Source-scan (jsdom has no layout), the project's guard style. */
 
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+
+import { walk } from "./_source";
 
 const ROOTS = ["ui", "wall"];
 const BG = /bg-(tile|page|popover)/;
 const OPACITY = /\bopacity-\d/;
 
+/** Comments stripped (Pass D): a note about a sticky element that was made
+ * opaque must not read as a sticky element that is not. Class strings are
+ * kept, since the class strings ARE what this guard inspects. */
 function sources(): [string, string][] {
-  const out: [string, string][] = [];
-  for (const r of ROOTS) {
-    const dir = join(__dirname, "..", "src", r);
-    for (const f of readdirSync(dir)) {
-      if (f.endsWith(".tsx")) out.push([`${r}/${f}`, readFileSync(join(dir, f), "utf8")]);
-    }
-  }
-  return out;
+  return ROOTS.flatMap((r) =>
+    walk(r).map(([f, src]): [string, string] => [`${r}/${f}`, src]),
+  ).filter(([name]) => name.endsWith(".tsx"));
 }
 
 function classNames(src: string): string[] {

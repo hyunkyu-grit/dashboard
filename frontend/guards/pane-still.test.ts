@@ -11,17 +11,15 @@
  * The diagram's own geometry (diagramSpec / toBand / modeShape) stays — the
  * popup still uses it; only the curve-view rendering of it is gone. */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const src = (p: string) => readFileSync(join(__dirname, "..", "src", p), "utf8");
-/** Strip comments: the removal is EXPLAINED in prose in both files, so the
- * ban must look at code only or the explanation trips its own guard. */
-const code = (p: string) =>
-  src(p)
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "");
+/* Comments stripped: the removal is EXPLAINED in prose in both files, so the
+ * ban must look at code only or the explanation trips its own guard. This was
+ * the first of four occurrences; the shared reader is Pass D's answer. */
+import { code } from "./_source";
+
 const curveView = code("ui/CurveView.tsx");
 const app = code("ui/App.tsx");
 
@@ -53,7 +51,7 @@ describe("what survived: the pane's corner label", () => {
 
 describe("the diagram's geometry is untouched", () => {
   it("payReceiveModel still exports the shared mode helpers", () => {
-    const model = src("ui/payReceiveModel.ts");
+    const model = code("ui/payReceiveModel.ts");
     expect(model).toMatch(/export function modeShape/);
     expect(model).toMatch(/export function diagramSpec/);
   });

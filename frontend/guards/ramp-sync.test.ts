@@ -3,9 +3,9 @@
  * through the theme bridge. Divergence = two ramps on one wall.
  */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+
+import { css as cssOf } from "./_source";
 
 import {
   EDGE_OPACITY,
@@ -14,10 +14,7 @@ import {
   TIME_BASES,
 } from "../src/theme/ramp";
 
-const css = readFileSync(
-  join(__dirname, "..", "src", "theme", "tokens.css"),
-  "utf8",
-);
+const css = cssOf("theme/tokens.css");
 
 const lightBlock = css.slice(0, css.indexOf('[data-theme="dark"]'));
 const darkBlock = css.slice(css.indexOf('[data-theme="dark"]'));

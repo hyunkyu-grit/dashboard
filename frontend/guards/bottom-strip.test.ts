@@ -6,15 +6,16 @@
  * (a level, a slope, a forward), read from the summary payload the table
  * already has: the strip added nothing to the backend. */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { ANCHOR_IDS, STRIP_H } from "../src/ui/BottomStrip";
+import { code } from "./_source";
 
-const src = (p: string) => readFileSync(join(__dirname, "..", "src", p), "utf8");
-const strip = src("ui/BottomStrip.tsx");
-const app = src("ui/App.tsx");
+// comments stripped at the source (Pass D): this file's header explains at
+// length what the strip used to hold, and that prose kept tripping the guards
+// against the things it names
+const strip = code("ui/BottomStrip.tsx");
+const app = code("ui/App.tsx");
 
 describe("the anchors are a level, a slope and a forward", () => {
   it("three ids, one of each mode", () => {
@@ -63,15 +64,10 @@ describe("it is chrome, not content", () => {
 
 describe("the calendar is disconnected (removal session, Pass B)", () => {
   it("the strip reads no calendar and shows no event", () => {
-    // CODE only: the header comment explains what the right side USED to
-    // hold and why it went, and that explanation must not trip its own guard
-    const code = strip
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
-    expect(code).not.toMatch(/from "\.\/calendar"/);
-    expect(code).not.toMatch(/nextMeeting|countdown|shortDate|todayISO/);
+    expect(strip).not.toMatch(/from "\.\/calendar"/);
+    expect(strip).not.toMatch(/nextMeeting|countdown|shortDate|todayISO/);
     // and no leftover of the run-out state, which had nothing left to guard
-    expect(code).not.toContain("일정 파일 갱신 필요");
+    expect(strip).not.toContain("일정 파일 갱신 필요");
   });
 
   it("the anchors — the reason the strip exists — are untouched", () => {
@@ -85,7 +81,6 @@ describe("register: terse labels and tabular numerals, no prose", () => {
     expect(strip.match(/tabular-nums/g)?.length).toBeGreaterThanOrEqual(2);
   });
   it("no sentence endings anywhere in the strip's copy", () => {
-    const copy = strip.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-    expect(copy).not.toMatch(/합니다|입니다/);
+    expect(strip).not.toMatch(/합니다|입니다/);
   });
 });

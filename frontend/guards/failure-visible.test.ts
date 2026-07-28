@@ -9,18 +9,9 @@
  * Source-scanning, so every read STRIPS COMMENTS FIRST — prose about the old
  * behaviour would otherwise trip the guard against the old behaviour. */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const read = (p: string) =>
-  readFileSync(join(__dirname, "..", "src", p), "utf8");
-
-/** code with comments removed — what actually runs */
-const code = (p: string) =>
-  read(p)
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "");
+import { code, stripComments } from "./_source";
 
 const app = code("ui/App.tsx");
 const preview = code("ui/PreviewPane.tsx");
@@ -129,12 +120,9 @@ describe("the guard does not trip on prose about the thing it bans", () => {
   it("a comment naming a banned token is stripped before matching", () => {
     const sample = `
       /* historically this used setTimeout to dismiss the toast */
-      // and a stray localhost:8100 in a note
-      const x = 1;
+      const x = 1; // and a stray localhost:8100 in a trailing note
     `;
-    const stripped = sample
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
+    const stripped = stripComments(sample);
     expect(stripped).not.toContain("setTimeout");
     expect(stripped).not.toContain("localhost:8100");
     expect(stripped).toContain("const x = 1");
