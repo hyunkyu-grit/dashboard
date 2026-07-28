@@ -480,10 +480,13 @@ drag dismiss; `?tile=series:<id>` keeps working).
   appear at all. The file may still be used as a staging area.
   **Staleness** stays a hard gate: `guards/calendar.test.ts` fails when the
   last verified LISTED entry is under **60 days** out. With the data ending
-  2026-12-18 it will fire around late October 2026 — correct behaviour, not a
-  defect. The failure message and the README name the four sources and note
-  that the FOMC usually publishes ~2 years ahead while the others publish ~1,
-  so the next year arrives piecemeal.
+  2026-12-18 it fires on **2026-10-19** — correct behaviour, not a defect.
+  The failure message and the README §"Policy calendar" both name the four
+  sources (bok.or.kr / federalreserve.gov / boj.or.jp / ecb.europa.eu), say
+  **read the dates off the source and never fill a gap from memory** (that is
+  what produced the file this one replaced), and note that the FOMC usually
+  publishes ~2 years ahead while the others publish ~1, so the next year
+  arrives piecemeal and a partial year is fine.
   **D-0 [recorded choice]:** the countdown shows `D-0` on the meeting day
   itself and the event stays on screen through that day. Dates compare as ISO
   strings in the LOCAL calendar (`todayISO`), so a countdown never shifts with
