@@ -372,9 +372,15 @@ drag dismiss; `?tile=series:<id>` keeps working).
   D-30`), from the calendar below; when the file has run out it says
   `일정 파일 갱신 필요` rather than showing nothing or a stale date.
   *(The next-event slot was removed with the calendar — removal session,
-  Pass B. The right end now carries only the collapse control, which keeps
-  the bar anchored at both ends instead of trailing off; the anchors are and
-  always were the reason the strip exists.)*
+  Pass B. The anchors are, and always were, the reason the strip exists.
+  **Layout without it [Pass C]:** the collapse control moved to sit WITH the
+  anchors rather than at the far edge — measured on a 2,133px bar it was
+  otherwise a lone 18px chevron ~1,700px from the thing it controls, which
+  reads as an artefact. Everything the strip offers is now one group at the
+  left and the rest of the bar is quiet chrome. The COLLAPSED handle keeps
+  its centred grabber pill — the same shape the sheets use, so it reads as
+  something folded away — but the whole 12px bar is now the hit target,
+  because a centred 32px pill at that height is a cruel one.)*
   Clicking an anchor **pins** that instrument, exactly as clicking its row
   does (`setPinned`, no tab switch). Collapsible, remembered in
   `localStorage` (`bw-strip`); collapsed leaves a thin handle. It is chrome:

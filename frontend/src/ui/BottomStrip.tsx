@@ -71,15 +71,20 @@ export function BottomStrip({
   );
 
   if (collapsed) {
+    // The whole bar is the target: at 12px tall a centred 32px pill is a
+    // cruel hit area, and with nothing else on the row there is no reason
+    // for anything else to be clickable. The pill stays centred because that
+    // is the grabber shape used by the sheets elsewhere in the product — it
+    // reads as something folded away, not as an artefact.
     return (
       <div
-        className="fixed inset-x-0 bottom-0 z-40 flex justify-center border-t border-edge bg-tile"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-edge bg-tile"
         style={{ height: STRIP_H.collapsed }}
       >
         <button
           type="button"
           onClick={() => onCollapsed(false)}
-          className="h-full px-6"
+          className="flex h-full w-full items-center justify-center"
           title="지표 바 펼치기"
         >
           <span className="block h-[3px] w-8 rounded-full bg-edge" />
@@ -96,13 +101,15 @@ export function BottomStrip({
       {anchors.map((r) => (
         <Anchor key={r.id} row={r} onPin={onPin} />
       ))}
-      {/* the right end carries only the collapse control now, which keeps the
-          bar anchored at both ends instead of trailing off into empty space */}
-      <span className="flex-1" />
+      {/* The collapse control sits WITH the anchors, not at the far edge.
+          With the calendar's slot gone the bar has no right-hand content, and
+          a lone chevron marooned ~1,700px from the thing it controls read as
+          an artefact. Everything the strip offers is now one group at the
+          left; the rest of the bar is quiet chrome. */}
       <button
         type="button"
         onClick={() => onCollapsed(true)}
-        className="ml-2 px-1 opacity-45 hover:opacity-100"
+        className="ml-1 px-1 opacity-45 hover:opacity-100"
         title="지표 바 접기"
       >
         ▾
