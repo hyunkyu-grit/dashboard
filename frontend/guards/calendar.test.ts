@@ -98,6 +98,42 @@ describe("every entry is verified and sourced", () => {
     expect(MEETINGS).toHaveLength(32);
   });
 
+  /* The dates themselves, transcribed once from the verified lists. This is
+   * the hand-check that matters: a rule drawn on a wrong day would have a
+   * reader attribute a curve move to a meeting that never happened, and no
+   * amount of pixel-probing in a browser proves the dates. */
+  it("every date matches the verified list", () => {
+    const on = (k: string) => MEETINGS.filter((e) => e.kind === k).map((e) => e.date);
+    expect(on("mpc")).toEqual([
+      "2026-01-15", "2026-02-26", "2026-04-10", "2026-05-28",
+      "2026-07-16", "2026-08-27", "2026-10-22", "2026-11-26",
+    ]);
+    expect(on("fomc")).toEqual([
+      "2026-01-28", "2026-03-18", "2026-04-29", "2026-06-17",
+      "2026-07-29", "2026-09-16", "2026-10-28", "2026-12-09",
+    ]);
+    expect(on("boj")).toEqual([
+      "2026-01-23", "2026-03-19", "2026-04-28", "2026-06-16",
+      "2026-07-31", "2026-09-18", "2026-10-30", "2026-12-18",
+    ]);
+    expect(on("ecb")).toEqual([
+      "2026-02-05", "2026-03-19", "2026-04-30", "2026-06-11",
+      "2026-07-23", "2026-09-10", "2026-10-29", "2026-12-17",
+    ]);
+    // the ECB has no January meeting in 2026
+    expect(on("ecb").some((d) => d.startsWith("2026-01"))).toBe(false);
+  });
+
+  it("draws exactly the expected set in a stated 2026 window", () => {
+    // 2026-01-01 → 2026-07-24 (the dataset's last close): 18 listed + 7 LPR
+    const got = meetingsInRange("2026-01-01", "2026-07-24");
+    expect(got.filter((e) => e.kind !== "lpr")).toHaveLength(18);
+    expect(got.filter((e) => e.kind === "lpr").map((e) => e.date)).toEqual([
+      "2026-01-20", "2026-02-20", "2026-03-20", "2026-04-20",
+      "2026-05-20", "2026-06-22", "2026-07-20",
+    ]);
+  });
+
   it("is 2026 only — the fabricated history was deleted, not repaired", () => {
     for (const e of MEETINGS) expect(e.date.startsWith("2026-")).toBe(true);
     // NOTHING draws before the verified era — not a listed meeting and not a

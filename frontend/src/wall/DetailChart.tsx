@@ -71,6 +71,17 @@ const AXIS_H = 18;
  * decade in one view is ~180 rules — a hatch, worse than nothing. */
 const MEETING_RULE_MAX = 32;
 
+/** Minimum average gap, in px, between adjacent rules before the whole set is
+ * dropped [calendar session, Pass G]. The count threshold above assumed the
+ * events were SPREAD across the view; with a 2026-only calendar they are all
+ * bunched at the right edge of a ten-year chart, where 25 rules land inside
+ * ~35px and read as exactly the hatch the count was meant to prevent. Count
+ * and spacing together say what the count alone used to: "still separate
+ * marks". Same-day meetings (BOJ and ECB both sat on 2026-03-19) give a gap
+ * of 0, which is legitimate overlap, so this averages rather than taking the
+ * minimum. */
+const MEETING_RULE_MIN_GAP_PX = 6;
+
 /* Rules distinguish the kinds by DASH and WEIGHT, never by hue — they are a
  * backdrop, and hue is reserved for direction (§9). The colour comes from a
  * `text-ink/NN` class through `currentColor`, so the pattern inherits the
@@ -305,7 +316,14 @@ export function DetailChart({
           const x = xFor(m.date);
           if (x != null) xs.push({ x, kind: m.kind });
         }
-        setMeetingX(xs);
+        // …and drop them if they are packed too tightly to read as separate
+        // marks, however few there are (see MEETING_RULE_MIN_GAP_PX)
+        let gap = Infinity;
+        if (xs.length > 1) {
+          const sorted = xs.map((v) => v.x).sort((a, b) => a - b);
+          gap = (sorted[sorted.length - 1] - sorted[0]) / (sorted.length - 1);
+        }
+        setMeetingX(gap < MEETING_RULE_MIN_GAP_PX ? [] : xs);
       }
     });
 

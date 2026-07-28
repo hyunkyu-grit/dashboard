@@ -62,6 +62,18 @@ describe("a backdrop, not data", () => {
 
 describe("density: dropped, never hatched", () => {
   const MAX = Number(detail.match(/const MEETING_RULE_MAX = (\d+)/)?.[1]);
+  const GAP = Number(detail.match(/const MEETING_RULE_MIN_GAP_PX = (\d+)/)?.[1]);
+
+  it("spacing is checked as well as count", () => {
+    // the count alone assumed the events were SPREAD across the view; with a
+    // 2026-only calendar they bunch at the right edge of a 10y chart, where
+    // ~25 rules land inside ~35px and read as a hatch
+    expect(GAP).toBeGreaterThan(0);
+    expect(detail).toMatch(/gap < MEETING_RULE_MIN_GAP_PX \? \[\] : xs/);
+    // averaged, not min: same-day meetings legitimately give a gap of 0
+    expect(detail).toMatch(/sorted\[sorted\.length - 1\] - sorted\[0\]\) \/ \(sorted\.length - 1\)/);
+    expect(meetingsInRange("2026-03-19", "2026-03-19").length).toBe(2); // BOJ + ECB
+  });
 
   it("the threshold is recorded in the source", () => {
     expect(MAX).toBeGreaterThan(0);

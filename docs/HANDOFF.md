@@ -169,7 +169,42 @@ rule:
 
 ---
 
-## 6. Current state (as of the strip session — Passes A–F, 2026-07-28)
+## 6. Current state (as of the calendar session — Passes A–G, 2026-07-28)
+
+- **HEAD** = the calendar-session Pass G commit on `master`, mirrored to D:.
+  Gates: FE **191 vitest / 23 files**, lint 0, build 0 (BE untouched,
+  79/1s/1xf).
+- **The fabricated calendar is gone.** All 182 reconstructed entries were
+  DELETED, not repaired (~1 in 8 was on the wrong weekday and there was no way
+  to tell which from inside the file). In their place: **32 entries, 2026
+  only**, read off the publishing banks and carrying their source — 금통위,
+  FOMC, BOJ, ECB, eight each. **Historical entries are not replaced**; nothing
+  renders before `CALENDAR_FROM` = 2026-01-01, deliberately.
+- **`verified` is load-bearing and structural**: the raw file is reachable
+  from one module only (`ui/calendar.ts`), which exports filtered lists — a
+  render path cannot obtain an unverified row. Unverified rows do not count
+  toward the horizon, so staging a 2027 cannot silence the gate. Guards
+  enforce both. Staging IS allowed (the file is a staging area); presence is
+  counted, never fatal.
+- **PBOC LPR is generated, not listed**: the 20th of the month rolled forward
+  to a business day. **`PRC_HOLIDAYS` ships EMPTY** — weekend rolling works,
+  holiday rolling does not yet, so an LPR rule can sit a few days early in a
+  month whose roll lands on a holiday (**check 2026-02 first, 춘절 is near the
+  20th**). LPR draws chart rules only and never counts down.
+- **Countdown scope**: 금통위, FOMC, BOJ only. ECB and LPR are rules, never
+  the next event.
+- **The staleness gate fires on 2026-10-19** (60 days before 2026-12-18). That
+  is the design. The failure message and README §"Policy calendar" name the
+  four sources and say to READ THE DATES OFF THE SOURCE, never from memory.
+- **Defect found and fixed in Pass G**: the meeting-rule density threshold was
+  count-only, which assumed events spread across the view; a 2026-only
+  calendar bunches 25 rules into ~35px at the right edge of a 10y chart and
+  the count passed (25 ≤ 32) while the screen showed a hatch. A minimum
+  average-gap test (6px) was added alongside the count.
+- Owner-open: real-narrow-window eyeball (carried); vol carry one-liner glance
+  (carried); verified PRC holiday dates for `PRC_HOLIDAYS`.
+
+### Earlier — strip session (Passes A–F, 2026-07-28)
 
 - **HEAD** = the strip-session Pass F commit on `master`, mirrored to D:.
   Gates: FE **177 vitest / 23 files**, lint 0, build 0 (BE untouched, 79/1s/1xf).

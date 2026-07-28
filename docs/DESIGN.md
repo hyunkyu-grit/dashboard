@@ -430,11 +430,28 @@ drag dismiss; `?tile=series:<id>` keeps working).
   dotted and faintest — all neutral ink through `currentColor`, so each
   pattern inherits the theme and its alpha.
   **Density: dropped, never hatched** — above
-  `MEETING_RULE_MAX` = **32 in view** [recorded threshold] the rules are
-  removed entirely. At ~16 meetings a year that is about two years of them,
+  `MEETING_RULE_MAX` = **32 in view** [recorded threshold], OR when the
+  average gap between adjacent rules falls under `MEETING_RULE_MIN_GAP_PX` =
+  **6px** [added calendar session, Pass G], the rules are removed entirely.
+  The spacing test had to be added: the count alone assumed the events were
+  SPREAD across the view, and a 2026-only calendar bunches all 25 of them into
+  ~35px at the right edge of a ten-year chart — 25 ≤ 32, so the count passed
+  while the screen showed exactly the hatch the threshold exists to prevent.
+  Count and spacing together now say what the count alone used to. It averages
+  rather than taking the minimum because same-day meetings are legitimate (BOJ
+  and ECB both sit on 2026-03-19) and give a gap of zero. At ~16 meetings a year that is about two years of them,
   the point where they still read as separate marks; a decade in one view is
-  ~180 rules and reads as a hatch. Verified live: the 10y view draws 0, a
-  ~1.6y view draws 25. Pinned by `guards/meeting-rules.test.ts`.
+  ~180 rules and reads as a hatch.
+  **Verified [calendar session, Pass G]:** the 10y view draws 0 (the 2026
+  cluster is caught by the spacing test), a 2025-26 window draws 13 across
+  four distinct tones, and a 2017-19 window draws 0 — nothing before 2026
+  anywhere. The strip's next event on 2026-07-28 read `FOMC 7월 29일 · D-1`,
+  hand-checked against the verified lists (it correctly skips the past
+  2026-07-23 ECB, which is not a countdown kind either). Staging an
+  unverified 2027-03-17 FOMC left the strip unchanged and the horizon at 143
+  days rather than 232. LPR hand-checked against the 20th-and-roll rule:
+  01-20 Tue, 03-20 Fri and 05-20 Wed stay put; 06-20 Sat → 06-22 Mon, 09-20
+  Sun → 09-21 Mon, 12-20 Sun → 12-21 Mon. Both themes. Pinned by `guards/meeting-rules.test.ts`.
 - **Verified [strip session, Pass F].** Strip present on all five tabs
   (전체/아웃라이트/스프레드/포워드/변동성) and in the narrow single-column
   layout, light and dark. The scroll container's bottom edge lands exactly on
