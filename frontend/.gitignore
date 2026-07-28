@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the template: it holds no secrets, only the defaults, and it is
+# the only place the API base is discoverable without reading lib/api.ts
+!.env.example
 
 # vercel
 .vercel

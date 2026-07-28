@@ -12,7 +12,7 @@ import { fetchSeries } from "@/lib/api";
 import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 
 import { AnimatedNumber } from "./AnimatedNumber";
-import { ERROR_SENTENCE, LOADING_SENTENCE } from "./copy";
+import { ErrorState, LoadingState } from "./DataState";
 import { PRESS_SCALE, SPRING } from "./motion";
 import { PreviewChart } from "./PreviewChart";
 import type { Row } from "./rows";
@@ -62,7 +62,7 @@ export function PreviewPane({
   onOpen: (row: Row) => void;
   width: number;
 }) {
-  const { data, isError, isLoading } = useQuery({
+  const { data, isError, isLoading, isFetching, refetch } = useQuery({
     // preview resolution: ~150 downsampled line points (§16); the enlarged view
     // fetches full resolution under a distinct key.
     queryKey: ["series", row?.seriesId, "preview"],
@@ -96,6 +96,8 @@ export function PreviewPane({
             data={data}
             isError={isError}
             isLoading={isLoading}
+            retrying={isFetching}
+            onRetry={() => void refetch()}
           />
         </motion.div>
       </AnimatePresence>
@@ -110,6 +112,8 @@ function PreviewBody({
   data,
   isError,
   isLoading,
+  retrying,
+  onRetry,
 }: {
   row: Row;
   onOpen: (row: Row) => void;
@@ -117,6 +121,8 @@ function PreviewBody({
   data: Awaited<ReturnType<typeof fetchSeries>> | undefined;
   isError: boolean;
   isLoading: boolean;
+  retrying: boolean;
+  onRetry: () => void;
 }) {
   if (!row.seriesId) {
     return (
@@ -130,8 +136,17 @@ function PreviewBody({
   return (
     <>
       <Header row={row} />
-      {isError && <Sentence>{ERROR_SENTENCE}</Sentence>}
-      {isLoading && <Sentence>{LOADING_SENTENCE}</Sentence>}
+      {/* stage-2 detail: its own retry, so a failed series fetch does not
+          require reloading the page or moving to another row and back
+          (stability session, Pass B) */}
+      {isError && (
+        <ErrorState
+          what="이 종목의 과거 흐름을"
+          onRetry={onRetry}
+          retrying={retrying}
+        />
+      )}
+      {isLoading && <LoadingState />}
       {data && (
         <motion.div
           key={row.seriesId}

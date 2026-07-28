@@ -22,9 +22,10 @@ import { getTile } from "@/wall/tileRegistry";
 
 import { ChangeLog } from "./ChangeLog";
 
-import { ERROR_SENTENCE, LOADING_SENTENCE } from "./copy";
 import { BottomStrip, STRIP_H, useStripCollapsed } from "./BottomStrip";
 import { CurveView } from "./CurveView";
+import { ErrorState, LoadingState } from "./DataState";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { classify } from "./gloss";
 import { diagramSpec } from "./payReceiveModel";
 import { EnlargedView } from "./EnlargedView";
@@ -166,7 +167,12 @@ export function App() {
   const params = useSearchParams();
   const tileParam = params.get("tile");
 
-  const { data: summary, isError } = useQuery({
+  const {
+    data: summary,
+    isError,
+    isFetching: summaryFetching,
+    refetch: refetchSummary,
+  } = useQuery({
     queryKey: ["wall-summary"],
     queryFn: fetchWallSummary,
     refetchInterval: 60_000,
@@ -243,6 +249,13 @@ export function App() {
     [router],
   );
 
+  /* An unknown `?tile=` used to render the ordinary screen with the bogus
+   * parameter still in the URL, no sheet and no message (Pass A finding).
+   * Now the id is cleared and named. The notice is derived from the URL
+   * rather than held in state — a `setState` inside the clearing effect is
+   * what the compiler lint rejects, and the URL is the honest home for it. */
+  const missingTile = params.get("missing");
+
   const enlargedRow = useMemo(() => {
     if (!tileParam) return null;
     if (tileParam.startsWith("series:")) {
@@ -251,6 +264,16 @@ export function App() {
     }
     return rows.find((r) => r.id === tileParam) ?? null;
   }, [tileParam, rows]);
+
+  /* Clear a `?tile=` that names nothing. Guarded on rows being loaded: before
+   * the summary arrives EVERY id is unknown, and clearing then would break the
+   * ordinary case of opening a shared link cold. */
+  useEffect(() => {
+    if (!tileParam || rows.length === 0 || enlargedRow) return;
+    router.replace(`/?missing=${encodeURIComponent(tileParam)}`, {
+      scroll: false,
+    });
+  }, [tileParam, rows.length, enlargedRow, router]);
 
   // chart type lives in the URL alongside ?tile (§G) so a view can be linked.
   const typeParam = params.get("type");
@@ -318,14 +341,24 @@ export function App() {
     >
         <Header events={summary?.events ?? []} onFocus={focusFromChangeLog} />
 
-        {isError && (
-          <p className="p-10 text-center text-[15px] opacity-60">
-            {ERROR_SENTENCE}
-          </p>
+        {/* A failure must LOOK different from a wait, and carry a way out
+            (stability session, Pass B). Before this, both rendered the same
+            sentence and the failure never arrived at all — the screen said
+            "loading" indefinitely with the backend down. The retry does not
+            wait for the fetch layer's retry budget: it is a button. */}
+        {!summary && isError && (
+          <ErrorState
+            what="커브를"
+            onRetry={() => void refetchSummary()}
+            retrying={summaryFetching}
+          />
         )}
-        {!summary && !isError && (
-          <p className="p-10 text-center text-[15px] opacity-50">
-            {LOADING_SENTENCE}
+        {!summary && !isError && <LoadingState />}
+        {/* an unknown ?tile= id: the parameter is cleared and said, rather
+            than leaving a bogus URL rendering nothing (Pass B) */}
+        {missingTile && (
+          <p className="px-5 pb-2 text-center text-[12px] opacity-55">
+            {missingTile} 종목을 찾지 못해 닫았어요
           </p>
         )}
         {summary && (
@@ -338,19 +371,26 @@ export function App() {
               }`}
               style={wide && !matrixOpen ? { width: TABLE_W } : undefined}
             >
-              <InstrumentTable
-                rows={rows}
-                forwards={forwards}
-                curveBanner={summary.curveBanner}
-                filter={tab}
-                onFilter={onTab}
-                activeId={(wide ? active : pinned)?.id ?? null}
-                pinnedId={pinned?.id ?? null}
-                onHover={handleHover}
-                onPin={setPinned}
-                matrixOpen={matrixOpen}
-                onToggleMatrix={() => setMatrixOpenRaw((v) => !v)}
-              />
+              {/* Each region gets its OWN boundary (stability session, Pass B).
+                  A throw anywhere under the root used to unmount the whole
+                  tree and leave a white page — one bad row killed the strip,
+                  the preview and the header with it. Bounded here, a failing
+                  table leaves the rest of the screen usable. */}
+              <ErrorBoundary region="table" fallback="표를 그리지 못했어요">
+                <InstrumentTable
+                  rows={rows}
+                  forwards={forwards}
+                  curveBanner={summary.curveBanner}
+                  filter={tab}
+                  onFilter={onTab}
+                  activeId={(wide ? active : pinned)?.id ?? null}
+                  pinnedId={pinned?.id ?? null}
+                  onHover={handleHover}
+                  onPin={setPinned}
+                  matrixOpen={matrixOpen}
+                  onToggleMatrix={() => setMatrixOpenRaw((v) => !v)}
+                />
+              </ErrorBoundary>
             </div>
             {/* right pane: hidden in one column and while the matrix mode is
                 open; else takes the leftover width, floored at 600px, and the
@@ -360,23 +400,25 @@ export function App() {
                 ref={paneRef}
                 className="relative min-w-[600px] flex-1 overflow-y-auto overflow-x-hidden p-5"
               >
-                {paneW > 0 &&
-                  (previewRow ? (
-                    <PreviewPane
-                      row={previewRow}
-                      onOpen={openEnlarged}
-                      width={paneW - PANE_PAD}
-                    />
-                  ) : (
-                    <CurveView
-                      tab={tab}
-                      summary={summary}
-                      forwards={forwards}
-                      volatility={volatility}
-                      width={paneW - PANE_PAD}
-                      height={Math.max(300, paneH - PANE_PAD)}
-                    />
-                  ))}
+                <ErrorBoundary region="pane" fallback="이 화면을 그리지 못했어요">
+                  {paneW > 0 &&
+                    (previewRow ? (
+                      <PreviewPane
+                        row={previewRow}
+                        onOpen={openEnlarged}
+                        width={paneW - PANE_PAD}
+                      />
+                    ) : (
+                      <CurveView
+                        tab={tab}
+                        summary={summary}
+                        forwards={forwards}
+                        volatility={volatility}
+                        width={paneW - PANE_PAD}
+                        height={Math.max(300, paneH - PANE_PAD)}
+                      />
+                    ))}
+                </ErrorBoundary>
                 {/* what is selected, stated in the pane's corner (strip
                     session, Pass A — all that survives of the removed pin
                     gesture): the pinned instrument and its curve MODE, e.g.
@@ -409,13 +451,22 @@ export function App() {
 
       <AnimatePresence>
         {enlargedRow && summary && (
-          <EnlargedView
-            row={enlargedRow}
-            summary={summary}
-            chartType={chartType}
-            onChartType={setChartType}
-            onClose={closeEnlarged}
-          />
+          // the popup already boundaries its CHART; this covers the sheet
+          // itself, so a throw in the header or the stats grid leaves the
+          // table behind it alive and the popup closable
+          <ErrorBoundary
+            key="enlarged"
+            region="popup"
+            fallback="상세 화면을 그리지 못했어요"
+          >
+            <EnlargedView
+              row={enlargedRow}
+              summary={summary}
+              chartType={chartType}
+              onChartType={setChartType}
+              onClose={closeEnlarged}
+            />
+          </ErrorBoundary>
         )}
       </AnimatePresence>
 
@@ -425,12 +476,14 @@ export function App() {
           (strip session, Pass C). Chrome: fixed above the card, never
           scrolling with content. */}
       {summary && (
-        <BottomStrip
-          rows={rows}
-          onPin={setPinned}
-          collapsed={stripCollapsed}
-          onCollapsed={setStripCollapsed}
-        />
+        <ErrorBoundary region="strip" compact fallback="지표 바를 그리지 못했어요">
+          <BottomStrip
+            rows={rows}
+            onPin={setPinned}
+            collapsed={stripCollapsed}
+            onCollapsed={setStripCollapsed}
+          />
+        </ErrorBoundary>
       )}
     </div>
     </MotionConfig>

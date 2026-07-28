@@ -1274,6 +1274,47 @@ resolution is a separate request for the enlarged view. Range statistics
 (min/max/avg), per-point daily change, and the calendar's daily-change series
 all arrive precomputed — the browser never differences a series.
 
+## 17. Failure states [stability session, Pass B]
+
+The diagnosis in `docs/diagnostics/failure-modes.md` found one appearance for
+every backend failure: backend stopped, a 500, and a 200 carrying a truncated
+body all rendered `불러오는 중입니다`, permanently — still "loading" at 81
+seconds. A reader could not tell a slow morning from a dead service, and had
+nothing to do about either. Four rules follow.
+
+**A failure looks different from a wait.** `LoadingState` and `ErrorState`
+(`ui/DataState.tsx`) are separate components with different shapes. The error
+names what failed in the reader's terms (`커브를 불러오지 못했어요`), offers
+the likeliest cause, and carries `role="alert"`.
+
+**A failure is retryable in place.** The error state holds a **button**, not a
+toast — nothing dismisses itself, and recovery never requires knowing to
+reload. It calls the failing query's own `refetch`, so it does not wait on the
+fetch layer's retry budget (which, in the diagnosis, never expired). Both the
+first fetch and stage-2 detail have one; the button disables and says
+`다시 시도하는 중` while a retry is in flight.
+
+**Regions fail independently.** Four boundaries — `table`, `pane`, `popup`,
+`strip` — each wrap one region. Before this, a single throw anywhere under the
+root unmounted the whole tree: one bad row took the header, the preview and the
+strip with it. The strip's boundary is `compact`: it stands in as a 34px bar in
+the strip's own place, because a centred block inside fixed chrome would push
+the layout it is pinned under.
+
+**A URL that names nothing says so.** An unknown `?tile=` is replaced with
+`?missing=<id>` and a line naming the id, rather than leaving a bogus parameter
+rendering an ordinary screen with no sheet. The notice is *derived from the
+URL*, never held in state — `setState` inside the clearing effect is what the
+compiler lint rejects, and the URL is the honest home for it. Clearing waits
+for rows to load, or a cold shared link would clear itself before it could
+resolve.
+
+**API base.** `NEXT_PUBLIC_API_BASE`, defaulting to `http://localhost:8100`
+(`lib/api.ts`); template in `frontend/.env.example`. `NEXT_PUBLIC_` is inlined
+at **build** time — pointing at another host needs a rebuild, not a restart.
+
+**Enforced by** `guards/failure-visible.test.ts`.
+
 ## Settled decisions & open items [closed out, final session Pass E]
 
 These accumulated as "Provisional" across sessions. As of the final session
