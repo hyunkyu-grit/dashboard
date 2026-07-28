@@ -858,6 +858,34 @@ Rules, pinned by `guards/reorder.test.ts`:
   the outgoing pane leaves the flow immediately) — moving between rows is the
   most frequent action in the product and it hard-swapped before.
 
+### The curve gesture [motion session, Pass E]
+
+The popup diagram teaches the mode in the abstract; **the curve view shows
+what that mode looks like on today's shape — as a gesture, not a picture.**
+Motion is perceptible far below the threshold where static shape difference
+is: a few bp of curvature is invisible as a drawing but obvious as movement.
+
+- **The data line never appears to move** — an animating curve on a rates
+  monitor reads as a live update, and that misreading is worse than the
+  feature. A GHOST copy (dashed ink — cannot be confused with the blue data
+  line or the D-1 comparison) starts coincident, springs out to the wanted
+  shape (~400ms), holds (~600ms), fades (~300ms) — slower than the
+  interface's other motion because it is meant to be watched.
+- **Trigger: pin.** The gesture is a transient overlay on the right pane (the
+  par curve regardless of tab — mode semantics live on the par curve), then
+  the pane returns to the pinned preview. Never on hover. **Replay = re-pin
+  the same row** [recorded choice]: the spec's "replay on Pay/Receive toggle"
+  is unreachable in this structure — the toggle lives inside the enlarged
+  sheet, which covers the pane — so re-pin is the replay affordance, and a
+  deliberate click deserves a response.
+- Geometry is REUSED from the diagram (`diagramSpec`/`toBand`/`modeShape` via
+  `ui/gesture.ts`) — one geometry, two renderings. **Exaggeration is a fixed
+  visible amount** (`GESTURE_AMP_PX` = 10px at the deformation peak), never
+  the true bp — magnitude is stated in numbers a few centimetres away.
+- Volatility makes no curve statement → nothing plays. Reduced motion shows
+  the deformed ghost statically for the hold, then removes it.
+- Pinned by `guards/curve-gesture.test.ts`.
+
 ### Rules (carried forward)
 
 - Library: `motion` (framer-motion's successor). Springs may overshoot: ~stiff

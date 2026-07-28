@@ -127,6 +127,32 @@ function plateau(u: number): number {
   return x * x * (3 - 2 * x);
 }
 
+/** THE mode geometry — the unit deformation shape at band position u ∈ [0,1],
+ * in [−1, 1]: level = plateau lift, slope = tilt meeting the current curve at
+ * both ends (near half down, far half up → steepens for Pay), curvature =
+ * arch with the ends holding. Shared by the diagram (wantedValue) and the
+ * curve gesture (ui/gesture.ts) so there is exactly one geometry. */
+export function modeShape(mode: Mode, u: number): number {
+  switch (mode) {
+    case "level":
+      return plateau(u);
+    case "slope":
+      return -Math.sin(2 * Math.PI * u);
+    case "curvature":
+      return Math.sin(Math.PI * u);
+    default:
+      return 0;
+  }
+}
+
+// per-mode exaggeration in the diagram's value units
+const AMP: Record<Mode, number> = {
+  level: DEFORM,
+  slope: DEFORM_TILT,
+  curvature: DEFORM,
+  none: 0,
+};
+
 /** The wanted shape for a spec at position t, in value units. Pay lifts/tilts/
  * arches; Receive (sign −1) is the exact negation. The deformation is confined
  * to the band: outside it the wanted curve coincides with the current one, so
@@ -136,16 +162,5 @@ export function wantedValue(spec: DiagramSpec, t: number): number {
   const [t0, t1] = spec.band;
   if (t <= t0 || t >= t1) return b;
   const u = (t - t0) / (t1 - t0);
-  const s = spec.sign;
-  switch (spec.mode) {
-    case "level": // the banded stretch lifts, tapering to the band ends
-      return b + s * DEFORM * plateau(u);
-    case "slope": // tilt meeting the current curve at both band ends
-      // (near half down, far half up → the segment steepens for Pay)
-      return b + s * DEFORM_TILT * -Math.sin(2 * Math.PI * u);
-    case "curvature": // arch — band ends hold, the middle bulges
-      return b + s * DEFORM * Math.sin(Math.PI * u);
-    default:
-      return b;
-  }
+  return b + spec.sign * AMP[spec.mode] * modeShape(spec.mode, u);
 }
