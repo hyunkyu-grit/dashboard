@@ -58,9 +58,11 @@ cd frontend; pnpm vitest run; pnpm lint; pnpm build
   pulls in test files that use a newer regex flag and errors spuriously. The
   real typecheck is inside `pnpm build` ("Running TypeScript…"). vitest
   transpiles via esbuild and doesn't care.
-- vitest has **no `@/` path alias**. Guard tests in `guards/` import with
-  **relative paths** (`../src/ui/rows`), not `@/ui/rows`. (A type-only `@/`
-  import can appear to "work" because it's erased — a value import will fail.)
+- vitest **now HAS the `@/` alias** (added in the strip session for the first
+  runtime `@/…` import inside src, `data/calendar.json`). Guard tests in
+  `guards/` still import with **relative paths** by convention. The old trap
+  is worth remembering: a type-only `@/` import appears to "work" because it
+  is erased — before the alias, a value import failed at resolve time.
 - `pnpm lint` prints a `$ eslint` banner to stderr; PowerShell wraps that as a
   scary-looking `NativeCommandError` even on success. Check the **exit code**
   (run it via the Bash tool: `pnpm lint; echo EXIT=$?`).
@@ -167,7 +169,40 @@ rule:
 
 ---
 
-## 6. Current state (as of the columns session — Passes A–C, 2026-07-28)
+## 6. Current state (as of the strip session — Passes A–F, 2026-07-28)
+
+- **HEAD** = the strip-session Pass F commit on `master`, mirrored to D:.
+  Gates: FE **177 vitest / 23 files**, lint 0, build 0 (BE untouched, 79/1s/1xf).
+- Passes (commits in dependency order — D lands before C, which reads it):
+  1. **A — the curve gesture is REMOVED** (component, trigger, `ui/gesture.ts`).
+     Too small to read at a 10px peak against a 136bp curve, big enough to
+     distract; the popup's schematic diagram does the job properly. What
+     survives is the pane's corner label (pinned instrument · mode).
+     `guards/pane-still.test.ts`. `diagramSpec`/`toBand`/`modeShape` stay.
+  2. **B — the carry block speaks the product's register**: label + total,
+     breakdown + directional breakeven beneath. `carrySentence` →
+     `carryReadout`. Zero components print unsigned.
+  3. **D — `src/data/calendar.json`** (182 entries, 2016→2026; 금통위 + FOMC
+     only) + `ui/calendar.ts`. **`verified: false` — the dates are a SEED
+     reconstructed from the published-schedule pattern; ~23 fail a weekday
+     cross-check, so some are wrong. The owner must check them against
+     bok.or.kr / federalreserve.gov and flip the flag.** The horizon guard
+     catches a file that STOPS, never one that is WRONG.
+  4. **C — the bottom strip**: three anchors (10Y / 3s10s / 1Yx1Y) + the next
+     meeting, fixed chrome, collapsible+remembered, app root pads by its
+     height. No backend change; change shown vs D-1.
+  5. **E — meeting rules** on the enlarged chart only, behind the series via a
+     transparent canvas + DOM underlay; dropped above 32 in view.
+  6. **F — verified** (DESIGN §2 "Verified [strip session, Pass F]").
+- **Gotchas this session**: the compiler lint rejects setState-in-effect —
+  client-only reads (wall clock, localStorage) go through
+  `useSyncExternalStore`. `vitest.config` needed the `@/` alias for the first
+  RUNTIME `@/…` import in src. Backticks in a bash-quoted commit message get
+  eaten by the shell — use a heredoc (`git commit -F -`).
+- Owner-open: verify the calendar dates; real-narrow-window eyeball
+  (carried); vol carry one-liner glance (carried).
+
+### Earlier — columns session (Passes A–C, 2026-07-28)
 
 - **HEAD** = the columns-session Pass C commit on `master`, mirrored to D:.
   Gates: FE **141 vitest / 20 files**, lint 0, build 0 (BE untouched).

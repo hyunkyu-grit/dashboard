@@ -430,6 +430,22 @@ drag dismiss; `?tile=series:<id>` keeps working).
   the point where they still read as separate marks; a decade in one view is
   ~180 rules and reads as a hatch. Verified live: the 10y view draws 0, a
   ~1.6y view draws 25. Pinned by `guards/meeting-rules.test.ts`.
+- **Verified [strip session, Pass F].** Strip present on all five tabs
+  (전체/아웃라이트/스프레드/포워드/변동성) and in the narrow single-column
+  layout, light and dark. The scroll container's bottom edge lands exactly on
+  the strip's top in both states (978px open / 1000px collapsed) and the last
+  of 196 rows clears it (947 < 978); collapsed leaves the handle and the flag
+  persists (`bw-strip`). Clicking the 3s10s anchor pinned it — the pane's
+  corner label then read `3s10s · 스티프닝`, which also confirms Pass A's
+  survivor. Countdown correct: on 2026-07-28 the strip read `FOMC 7월 29일 ·
+  D-1`; D-0 and the weekend crossing are unit-pinned. Truncating the calendar
+  fired the staleness guard with an actionable message ("runs out in 1 days
+  … Top it up"), and truncating it entirely into the past made the strip say
+  `일정 파일 갱신 필요` rather than showing nothing — file restored after.
+  Meeting rules: 0 at the 10y view, 25 at ~1.6y. Pay/Receive flips the carry
+  block: `−4.6bp · 4.6bp 올라야 본전` ↔ `+4.6bp · 4.6bp 올라도 본전` — the
+  same physical move, the modality flipping with who you are. Nothing
+  animates in the pane on pin.
 - **Policy-meeting calendar [strip session, Pass D].** A hand-maintained
   JSON file in the repo (`frontend/src/data/calendar.json`) — no feed, no
   API, ~16 entries a year. **Two kinds only: 금통위 and FOMC.** Each is about
