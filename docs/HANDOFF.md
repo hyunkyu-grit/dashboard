@@ -169,11 +169,39 @@ rule:
 
 ---
 
-## 6. Current state (as of the removal session — Passes A–D, 2026-07-28)
+## 6. Current state (as of the stability session — Passes A–F, 2026-07-29)
 
-- **HEAD** = the removal-session Pass D commit on `master`, mirrored to D:.
-  Gates: FE **170 passed / 1 skipped**, lint 0, build 0; BE **70 pass / 1
-  skip / 1 xfail**.
+- **HEAD** = the stability-session Pass F commit `92badff` on `master`,
+  mirrored to D:. Gates: FE **265 passed / 1 skipped**, lint 0, build 0; BE
+  **104 pass / 1 skip / 1 xfail**.
+- **The stability session ran A–F.** A diagnosed the failure paths
+  (`docs/diagnostics/failure-modes.md`); B gave the client visible failure
+  (independent error boundaries, `ui/DataState.tsx`, a persistent retryable
+  error, `?tile=` self-clearing, `NEXT_PUBLIC_API_BASE`); C made the server
+  refuse untrustworthy data at load and recompute a torn cache loudly; D put
+  every source-scanning guard on one comment/string stripper
+  (`guards/_source.ts`); E measured before optimising
+  (`docs/diagnostics/perf-baseline.md` — §20); F closed the two label items.
+- **Read `docs/diagnostics/perf-baseline.md` before any performance work.** It
+  records what was changed (per-row `spark` deleted, gzip on, chart lazy) AND
+  what measured healthy and was deliberately left alone (tab render, heap,
+  chart disposal, the four parallel stage-1 requests). Two traps in there:
+  the automation tab is **occluded**, so rAF, paint timing and DOM polling all
+  lie — use the performance timeline; and gate timings mean nothing unless the
+  dev servers are stopped (201s vs 70s for the same suite).
+- **Stage 1 carries no series** (§20). A summary row is numbers about an
+  instrument, never history — enforced by shape, not just size, in
+  `backend/tests/test_wire_format.py`.
+- **"Popup-only" ≠ "loaded with the popup"** (§20). lightweight-charts obeyed
+  §11 and still shipped in the initial chunk. `guards/lazy-chart.test.ts` pins
+  the import edge. Note that guard uses `code()`, not `identifiers()` — a
+  module specifier IS a string literal, so the stronger stripper erases the
+  very thing being matched.
+- **Blue's double duty was re-checked at its worst case and stands** (§9). The
+  old revisit trigger is retired, not re-armed; reopen only on evidence of a
+  reader misreading a stroke as a direction. `--bw-line` must stay its own
+  token (`guards/label-quantity.test.ts`) — same value as `--bw-down` is fine,
+  one shared name is not.
 - **Carry & roll is GONE** (popup block, `app/carry.py`, its endpoint, FE
   types/fetcher, tests). Two recorded faults: the headline and the breakeven
   printed the same number, and the components did not sum to the total at the
@@ -611,6 +639,19 @@ rule:
 - **Computation boundary (§16) is now enforced** — if you add a row field,
   declare it `dto|format` in `ROW_FIELD_SOURCE` or the guard fails. Anything
   that needs a calculation goes in the backend.
+- **CLOSED by the stability session, do not carry forward as open:** the
+  key-forward level/change header collision (resolved earlier by removal,
+  re-verified against the code in Pass F) and blue's double duty (re-checked
+  at its worst case in Pass F, strokes stay blue, trigger retired).
+- **Still open, and NOT exercisable from a headless session** — these need a
+  real screen and stay with the owner: the real-narrow-window eyeball
+  (carried), frame rate, the single-column narrow layout, and OS-level
+  `prefers-reduced-motion`. Pass E could not measure true first paint or
+  frames-to-pixels for the same reason (occluded renderer); it measured
+  time-to-DOM-committed instead and says so.
+- **Deliberately out of scope of the stability session:** deployment, hosting,
+  and any build-time data pipeline. Nothing in Passes A–F presupposes a
+  deployment decision.
 
 ---
 
