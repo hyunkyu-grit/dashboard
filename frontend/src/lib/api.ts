@@ -183,21 +183,27 @@ export async function fetchVolatility(): Promise<VolatilityPayload> {
   return res.json();
 }
 
-/** Tenor × date curve heatmap (§D). Rows = nodes (short→long), cols = date
- * buckets; each cell is the node's change + its own-history percentile. */
-export interface HeatCell {
-  d: number;
-  pct: number | null;
+/** Carry & roll over a horizon (carry session, Pass C) — mechanics from
+ * today's curve, no prediction. Figures are the PAY side in bp of the quoted
+ * value; Receive is the exact negation (applied in the browser, like the
+ * Pay/Receive diagram). A null horizon = no statement (volatility, the 1D
+ * call, or the instrument matures inside the horizon). */
+export type CarryHorizon = "1M" | "3M" | "6M" | "1Y";
+export interface CarryFigures {
+  carry: number;
+  roll: number;
+  total: number;
 }
-export interface CurveHeatmapPayload {
-  nodes: string[];
-  dates: string[];
-  cells: (HeatCell | null)[][];
+export interface CarryPayload {
+  id: string;
+  unit: "bp";
+  side: "pay";
+  horizons: Record<CarryHorizon, CarryFigures | null>;
 }
 
-export async function fetchCurveHeatmap(): Promise<CurveHeatmapPayload> {
-  const res = await fetch(`${API_BASE}/api/curve-heatmap`);
-  if (!res.ok) throw new Error(`curve-heatmap: HTTP ${res.status}`);
+export async function fetchCarry(id: string): Promise<CarryPayload> {
+  const res = await fetch(`${API_BASE}/api/carry/${encodeURIComponent(id)}`);
+  if (!res.ok) throw new Error(`carry ${id}: HTTP ${res.status}`);
   return res.json();
 }
 

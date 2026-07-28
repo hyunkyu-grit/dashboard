@@ -279,19 +279,42 @@ drag dismiss; `?tile=series:<id>` keeps working).
 
 - Large chart, full history, plus a **segmented control exposing all six time
   bases** — the full opacity ramp lives here now.
-- **Tenor × date curve heatmap [Session 16 §D].** Below the chart, a grid:
-  rows = the 10 curve nodes (short top, long bottom), columns = ~110 date
-  buckets over the 10y window (cells ≥ ~8px), cell = that node's change over the
-  bucket, own-history tint (the same scale as the forward matrix, §J), contiguous
-  with radius only on the block's outer corners, untinted below the floor so the
-  shape emerges. It shows the **curve**, not the popup's instrument — for
-  `1s2s10s` it is the context explaining why the fly moved (a column one colour
-  = parallel shift; top-heavy = front-end led; light middle, dark ends = a fly
-  move). This is NOT the removed preview heatmap (that was daily change = the
-  slope of the line). Backend precomputes the grid (§16). **Synced to the chart
-  [final §C]:** the x-domain binds to the chart's visible range (rebucket by
-  slicing on zoom, cells kept ≥8px) and the crosshair runs through both — the
-  hovered column takes an ink focus rule aligned to the chart crosshair.
+- **REMOVED [carry session, Pass C] — the tenor × date curve heatmap.** Its
+  intent (was a move parallel or led by one part of the curve?) is answered
+  faster by reading the 어제 column down the outright tab, and at daily
+  resolution over ten years the picture was noise. The endpoint, cached
+  payload, and component are gone. **Carry & roll took its place** — the
+  thing the popup lacked: the product said what an instrument IS, where it
+  SITS, and what shape it WANTS, but not what HOLDING it earns, and that is
+  half of any entry decision.
+- **Carry & roll [carry session, Pass C]. Mechanics, not prediction.** The
+  figures follow deterministically from today's curve — no forecast, and
+  deliberately NO scores, ratings, or "good entry" badges (those compress a
+  judgement into a word and hide the reasoning; `guards/carry-copy.test.ts`
+  bans the vocabulary). Backend computes (`app/carry.py`, §16), PAY side on
+  the wire; the browser negates for Receive in the copy layer, driven by the
+  SAME lifted Pay/Receive toggle that signs the diagram, so the two can
+  never disagree. Formulas (bp of the quoted value, horizon h, tenor T):
+  carry_pay = S(T) − F(h, T−h); roll_pay = S(T−h) − S(T); total = their sum
+  = S(T−h) − F(h, T−h) — on an upward curve every term is negative for the
+  payer (the Pass E sign check, pinned in `tests/test_carry.py` along with
+  the first-order accrual identity). Spreads/flies combine legs by QUOTE
+  weights (+1/−1; +2/−1/−1): the DV01-neutral notionals from dv01.py are
+  already embedded in "bp of the quoted value", so re-applying the ratios
+  would double-count. A forward a×b is pure roll (F(a−h,b) − F(a,b), carry
+  0; a−h floored at 0 — recorded approximation). Off-grid tenors (the 1M
+  horizon) price on an end-anchored quarterly schedule with a front stub —
+  par interpolation would extrapolate past the curve's 10y edge, and the
+  raw engine would quantize 1M roll to exactly 0.
+  **Presentation: a sentence, not a table** (합니다체, §15): headline at
+  hero weight ("3개월 동안 4.2bp 벌고 들어갑니다" / "…물고 갑니다"), the
+  캐리·롤 breakdown beneath as a caption — numbers carry direction colour,
+  the sentence does not. Horizon control 1개월·3개월·6개월·1년, default
+  3개월. **NEAR_ZERO_BP = 0.5**: below it the sentence says 캐리는 거의
+  없습니다 rather than printing a figure that invites over-reading
+  (recorded; same "too small to mean" line as SOLO_MIN_BP). Volatility gets
+  one line — a ratio has no carry statement — never zeros. An instrument
+  maturing inside the horizon gets "셈할 수 없습니다", not a null figure.
 - **Chart type: 선 · 주봉 · 월봉 [Session 16 §G].** A selector in the popup
   (line only in the preview — candles need width it lacks). Closes-only data
   means a true daily candle is impossible (open would equal close), so no 일봉;

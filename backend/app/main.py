@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .cache import cached, data_hash
+from .carry import carry_payload
 from .curves import build_basis_curves
 from .dataset import DISPLAY_TENORS, SPEC_NODE_ORDER, load_dataset
 from .derive import (
@@ -23,7 +24,6 @@ from .derive import (
     apply_solo_direction,
     basis_dates,
     curve_banner,
-    curve_heatmap,
     derived_ids,
     ohlc_buckets,
     series_history,
@@ -61,7 +61,9 @@ _dv01_table = build_dv01_table(_curves["now"], derived_ids)
 # when the data changes (loudly logged).
 _data_hash = data_hash(DATA_PATH)
 _forwards = cached("forwards", _data_hash, lambda: forwards_payload(_dataset, _curves))
-_curve_heatmap = cached("curve_heatmap", _data_hash, lambda: curve_heatmap(_dataset))
+# the curve heatmap (and its cached payload) was removed in the carry session
+# (Pass C): the 어제 column answers "parallel or led?" faster, and daily
+# resolution over ten years was noise. Carry/roll took its place.
 
 
 def _outright_label(tenor: str) -> str:
@@ -173,11 +175,11 @@ def forwards() -> dict:
     return _forwards
 
 
-@app.get("/api/curve-heatmap")
-def curve_heatmap_endpoint() -> dict:
-    # Tenor × date grid of curve changes, own-history normalised (§D). Static
-    # across instruments — it is the curve, not the popup's instrument.
-    return _curve_heatmap
+@app.get("/api/carry/{series_id}")
+def carry(series_id: str) -> dict:
+    # Carry & roll over 1M/3M/6M/1Y from TODAY's curve (§16) — mechanics,
+    # not prediction. PAY side; the browser negates for Receive.
+    return carry_payload(series_id, _curves["now"])
 
 
 @app.get("/api/dv01/{series_id}")

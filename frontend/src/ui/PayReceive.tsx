@@ -224,8 +224,17 @@ function Diagram({ spec }: { spec: DiagramSpec }) {
   );
 }
 
-export function PayReceive({ row }: { row: Row }) {
-  const [side, setSide] = useState<Side>("pay");
+/* side is CONTROLLED by the popup (carry session, Pass C): the same toggle
+ * signs the diagram and the carry panel, so the two can never disagree. */
+export function PayReceive({
+  row,
+  side,
+  onSide,
+}: {
+  row: Row;
+  side: Side;
+  onSide: (s: Side) => void;
+}) {
   const c = classify(row);
 
   // Volatility (and anything with no curve statement): say so, don't invent a
@@ -246,7 +255,7 @@ export function PayReceive({ row }: { row: Row }) {
   return (
     <div className="mt-4">
       <div className="mb-1 flex items-center gap-2">
-        <Toggle side={side} onSide={setSide} />
+        <Toggle side={side} onSide={onSide} />
         <span className="text-[13px] font-semibold">{spec.term}</span>
       </div>
       <Diagram spec={spec} />
