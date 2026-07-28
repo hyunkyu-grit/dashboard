@@ -886,6 +886,31 @@ is: a few bp of curvature is invisible as a drawing but obvious as movement.
   the deformed ghost statically for the hold, then removes it.
 - Pinned by `guards/curve-gesture.test.ts`.
 
+### Verified [motion session, Pass F]
+
+- **Grid**: header pixel-stable across tab switch, sort, screener toggle, and
+  during reorders/gestures (screenshot-compared).
+- **Reorder cost**: sort/screener commit measured 0.6–1.4ms main-thread on
+  the 147-row forward view and 203-row 전체 — the slide itself is
+  compositor-side transforms on ≤~30 culled rows. Caveat: the verification
+  environment's display was occluded (Chrome throttles rAF to zero), so
+  on-screen frame-rate could not be sampled; the mechanism (transform-only +
+  cull + tiny commits) leaves no jank path, but an eyeball pass on a live
+  screen remains for the owner.
+- **Gesture**: pinned a spread (`1s10s`), a fly (`1s2s3s`), a forward
+  (`1Yx2Y`) in dark — dashed-ink ghost springs out, holds, fades; the data
+  line never moves; the pane settles into the pinned preview. Reads as a
+  demonstration (dashed + `label · term` caption), not a live tick.
+- **Morph**: spread mid-frame caught passing THROUGH the base curve (one
+  transformation); outright and fly settle to exact mirrors with labels and
+  fill colour flipped (light theme); forward shares the spread path.
+- **Reduced motion**: MotionConfig `reducedMotion="user"` +
+  `guards/reduced-motion.test.ts` (instant()), static-ghost path pinned by
+  `guards/curve-gesture.test.ts`. OS-level emulation was not run (needs an
+  OS toggle or a Chrome relaunch flag, neither available mid-session).
+- **Themes**: passes A–E exercised in dark; grid + morphs re-checked in
+  light.
+
 ### Rules (carried forward)
 
 - Library: `motion` (framer-motion's successor). Springs may overshoot: ~stiff

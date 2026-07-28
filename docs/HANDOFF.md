@@ -167,7 +167,41 @@ rule:
 
 ---
 
-## 6. Current state (as of the band session — Passes A–C, 2026-07-28)
+## 6. Current state (as of the motion session — Passes A–F, 2026-07-28)
+
+- **HEAD** = the motion-session Pass F commit on `master`, mirrored to D:.
+  Gates: FE **119 vitest / 18 files**, lint exit 0, build clean.
+- Passes (one commit each + one lint fixup):
+  1. **A `fa5a8dd` — the column grid is frozen.** Widths derive from the
+     FORMAT's widest rendering (`ui/columns.ts` GRID_TEMPLATE — `1s1.5s10s`,
+     six tabular glyphs per numeric column), 한 줄 is the only flexible
+     track, one template shared by header + body, `scrollbar-gutter: stable`.
+     **The `<table>` became a CSS-grid row list** (role semantics kept) —
+     transforms don't reach `table-row` and Pass C needs transformable rows.
+     `guards/table-grid.test.ts`.
+  2. **B `705a643` — §14 motion inventory** (present / stale-spec / missing).
+  3. **C `02be623` + fix `a42fc86` — FLIP reorder** on sort & screener
+     (transform-only `layout="position"`, popLayout exits fade in place,
+     cause-gated, viewport-culled, `FLIP_MAX_ROWS`=400; snapshot measured at
+     EVENT time — compiler lint forbids ref/DOM reads in render; NOTE the
+     Pass C commit itself went in red because `pnpm lint | tail` masks the
+     exit code — pipe swallows it, don't gate through a pipe).
+     `guards/reorder.test.ts`.
+  4. **D `aea1500` — Pay/Receive morph + preview cross-fade.** One factor
+     q ∈ [−1,1] morphs the ghost (deformation is linear in sign); preview
+     pane cross-fades 150ms on series switch.
+  5. **E `cc2de57` — curve gesture on pin.** Dashed-ink ghost on the par
+     curve springs to the wanted shape / holds / fades (400/600/300ms),
+     `GESTURE_AMP_PX`=10 fixed, geometry reused via `ui/gesture.ts` +
+     `modeShape` (exported from payReceiveModel). Replay = re-pin (recorded
+     choice). Vol rows play nothing. `guards/curve-gesture.test.ts`.
+  6. **F — verified** (see DESIGN §14 "Verified"): grid stable, morphs and
+     gestures correct in both themes; reorder commits 0.6–1.4ms. **Open for
+     the owner:** an eyeball frame-rate pass on a live screen (the session's
+     display was occluded → rAF throttled, FPS unsampleable) and an OS-level
+     `prefers-reduced-motion` check (mechanism is guarded + MotionConfig).
+
+### Earlier — band session (Passes A–C, 2026-07-28)
 
 - **HEAD `807b043`** on `master`, mirrored to D:. Gates: FE **97 vitest / 15
   files**, lint exit 0, build clean. Three passes, one commit each:
