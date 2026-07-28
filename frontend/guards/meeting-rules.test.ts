@@ -24,9 +24,23 @@ describe("only the enlarged chart carries them", () => {
 
 describe("a backdrop, not data", () => {
   it("neutral ink at low alpha, one pixel wide", () => {
-    expect(detail).toMatch(/w-px bg-ink\/15/);
-    // never a direction colour — that is reserved for data (§9)
-    expect(detail).not.toMatch(/bg-(up|down)/);
+    expect(detail).toMatch(/w-px \$\{RULE_STYLE\[m\.kind\]\.tone\}/);
+    // every kind's tone is neutral ink — never a direction colour, which is
+    // reserved for data (§9)
+    for (const [, tone] of detail.matchAll(/tone: "([^"]+)"/g)) {
+      expect(tone).toMatch(/^text-ink\//);
+    }
+    expect(detail).not.toMatch(/text-(up|down)|bg-(up|down)/);
+  });
+
+  it("the kinds are told apart by dash and weight, not hue", () => {
+    const tones = [...detail.matchAll(/tone: "([^"]+)"/g)].map((m) => m[1]);
+    const dashes = [...detail.matchAll(/dash: (SOLID|DASH|DOT)/g)].map((m) => m[1]);
+    expect(tones).toHaveLength(5); // mpc, fomc, boj, ecb, lpr
+    expect(new Set(dashes).size).toBeGreaterThan(1); // more than one pattern
+    expect(new Set(tones).size).toBeGreaterThan(1); // and more than one weight
+    // 금통위 is the most prominent — it is the KRW curve's own bank
+    expect(detail).toMatch(/mpc: \{ tone: "text-ink\/25", dash: SOLID \}/);
   });
 
   it("sits BEHIND the series: transparent canvas over a DOM underlay", () => {

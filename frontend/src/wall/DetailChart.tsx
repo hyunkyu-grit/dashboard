@@ -47,7 +47,7 @@ import {
   resolveTheme,
 } from "@/theme/bridge";
 import { assertDomainRendered } from "@/theme/domainGuard";
-import { meetingsInRange } from "@/ui/calendar";
+import { type EventKind, meetingsInRange } from "@/ui/calendar";
 import { dateLabels } from "@/ui/timeAxis";
 
 export type ChartType = "line" | Interval;
@@ -70,6 +70,23 @@ const AXIS_H = 18;
  * years of them, the point where the rules still read as separate marks. A
  * decade in one view is ~180 rules — a hatch, worse than nothing. */
 const MEETING_RULE_MAX = 32;
+
+/* Rules distinguish the kinds by DASH and WEIGHT, never by hue — they are a
+ * backdrop, and hue is reserved for direction (§9). The colour comes from a
+ * `text-ink/NN` class through `currentColor`, so the pattern inherits the
+ * theme and its alpha. Order of prominence follows what moves the KRW curve:
+ * 금통위 solid and strongest, FOMC solid, BOJ dashed, ECB dashed and fainter,
+ * LPR dotted and faintest. */
+const SOLID = "linear-gradient(currentColor, currentColor)";
+const DASH = "repeating-linear-gradient(to bottom, currentColor 0 4px, transparent 4px 9px)";
+const DOT = "repeating-linear-gradient(to bottom, currentColor 0 1.5px, transparent 1.5px 6px)";
+const RULE_STYLE: Record<EventKind, { tone: string; dash: string }> = {
+  mpc: { tone: "text-ink/25", dash: SOLID },
+  fomc: { tone: "text-ink/[0.18]", dash: SOLID },
+  boj: { tone: "text-ink/[0.18]", dash: DASH },
+  ecb: { tone: "text-ink/[0.12]", dash: DASH },
+  lpr: { tone: "text-ink/[0.10]", dash: DOT },
+};
 
 function buildOptions(width: number, height: number) {
   const t = resolveTheme();
@@ -136,8 +153,8 @@ export function DetailChart({
   // sparse date labels for the strip under the chart, recomputed on every
   // visible-range change (zoom / pan / candle interval — Pass B)
   const [axisLabels, setAxisLabels] = useState<{ x: number; text: string }[]>([]);
-  // x positions of policy meetings inside the visible range (Pass E)
-  const [meetingX, setMeetingX] = useState<number[]>([]);
+  // x positions + kind of the policy meetings inside the visible range
+  const [meetingX, setMeetingX] = useState<{ x: number; kind: EventKind }[]>([]);
 
   // callbacks read via ref so the once-created subscriptions never go stale;
   // synced in an effect (refs must not be written during render)
@@ -283,10 +300,10 @@ export function DetailChart({
       if (inView.length > MEETING_RULE_MAX) {
         setMeetingX([]);
       } else {
-        const xs: number[] = [];
+        const xs: { x: number; kind: EventKind }[] = [];
         for (const m of inView) {
           const x = xFor(m.date);
-          if (x != null) xs.push(x);
+          if (x != null) xs.push({ x, kind: m.kind });
         }
         setMeetingX(xs);
       }
@@ -348,11 +365,15 @@ export function DetailChart({
           underneath, the transparent-backed canvas on top (Pass E) */}
       <div className="relative bg-tile" style={{ width, height: height - AXIS_H }}>
         <div className="pointer-events-none absolute inset-0">
-          {meetingX.map((x, i) => (
+          {meetingX.map((m, i) => (
             <span
-              key={`${x}-${i}`}
-              className="absolute top-0 w-px bg-ink/15"
-              style={{ left: x, height: height - AXIS_H }}
+              key={`${m.x}-${i}`}
+              className={`absolute top-0 w-px ${RULE_STYLE[m.kind].tone}`}
+              style={{
+                left: m.x,
+                height: height - AXIS_H,
+                backgroundImage: RULE_STYLE[m.kind].dash,
+              }}
             />
           ))}
         </div>

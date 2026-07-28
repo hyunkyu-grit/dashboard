@@ -424,7 +424,12 @@ drag dismiss; `?tile=series:<id>` keeps working).
   can sit under the canvas while the wrapper carries the tile colour. (An
   overlay above the canvas would paint a backdrop on top of data, and this
   project has enough LWC z-order history.) **Enlarged chart only**; the
-  preview stays clean. **Density: dropped, never hatched** — above
+  preview stays clean. **The kinds are told apart by dash and weight, never
+  by hue** [calendar session, Pass E]: 금통위 solid and strongest (the KRW
+  curve's own bank), FOMC solid, BOJ dashed, ECB dashed and fainter, LPR
+  dotted and faintest — all neutral ink through `currentColor`, so each
+  pattern inherits the theme and its alpha.
+  **Density: dropped, never hatched** — above
   `MEETING_RULE_MAX` = **32 in view** [recorded threshold] the rules are
   removed entirely. At ~16 meetings a year that is about two years of them,
   the point where they still read as separate marks; a decade in one view is
@@ -446,34 +451,63 @@ drag dismiss; `?tile=series:<id>` keeps working).
   block: `−4.6bp · 4.6bp 올라야 본전` ↔ `+4.6bp · 4.6bp 올라도 본전` — the
   same physical move, the modality flipping with who you are. Nothing
   animates in the pane on pin.
-- **Policy-meeting calendar [strip session, Pass D].** A hand-maintained
-  JSON file in the repo (`frontend/src/data/calendar.json`) — no feed, no
-  API, ~16 entries a year. **Two kinds only: 금통위 and FOMC.** Each is about
-  eight meetings a year, published a year ahead, and between them they are
-  what actually moves the KRW curve; CPI prints and bond auctions would push
-  the file past fifty entries a year and turn it into a maintenance job for a
-  fraction of the value — they stay out until they earn a place. Fields are
-  **date, kind, label and nothing else**; provenance and the `verified` flag
-  live at the file level, not per entry. Coverage runs back through the data
-  range (2016→), which means Korea's twelve-meetings-a-year MPC era through
-  2016 and eight from 2017, plus the unscheduled meetings that matter — the
-  **2020-03-16 emergency cut** above all.
-  **Staleness is the failure it is built against:** a file that stops at last
-  December leaves the screen looking correct while the countdown is wrong.
-  `guards/calendar.test.ts` FAILS when the last entry is less than **60 days**
-  out, and the strip says so plainly rather than showing a stale date or
-  nothing. That guard catches a file that STOPS, never one that is WRONG —
-  hence `verified`, which the shipped seed sets to **false**: the dates were
-  reconstructed from the published-schedule pattern, a weekday cross-check
-  flagged ~23 as landing off the usual MPC-Thursday / FOMC-Wednesday, and
-  they must be checked against bok.or.kr and federalreserve.gov before the
-  flag is flipped.
+- **Policy-meeting calendar [strip session Pass D; REBUILT ON VERIFIED DATA,
+  calendar session].** A hand-maintained JSON file in the repo
+  (`frontend/src/data/calendar.json`) — no feed, no API. **Every entry was
+  read off the publishing central bank and carries the source it came from**;
+  for two-day meetings the date is the DECISION day (the second day).
+  Four banks, eight 2026 meetings each: **금통위** (한국은행 통화정책방향
+  결정회의 — note the BOK holds 24 regular meetings a year and only these
+  eight set the policy rate; the 금융안정회의 in March/June/September/December
+  are not rate decisions and are excluded), **FOMC**, **BOJ** (no fixed
+  announcement time, so the date is stored and no time is displayed), and
+  **ECB** (no January meeting in 2026).
+  **2026 only, and the gap before it is deliberate.** The previous file's
+  2016-2025 history was reconstructed from memory; ~23 of 182 entries landed
+  on the wrong weekday and there was no way to tell which from inside the
+  file, so all of it was DELETED rather than repaired. Chart rules drawn on
+  wrong dates are worse than no rules — a reader would attribute a curve move
+  to a meeting that never happened — so **nothing renders before
+  `CALENDAR_FROM` = 2026-01-01**, including the generated LPR (generating it
+  backwards would re-introduce invented history through the side door, and
+  would draw rules across a decade that has no meeting rules).
+  **`verified` is LOAD-BEARING, not documentation [Pass C].** An entry with
+  `verified: false` renders NOWHERE — not in the strip, not in the countdown,
+  not as a chart rule — and does not count toward the staleness horizon, so
+  staging an unverified 2027 cannot silence the guard. `MEETINGS` is the
+  filtered list and the only export a render path may read; the raw file is
+  not exported. That is stronger than an "unverified" badge: bad data cannot
+  appear at all. The file may still be used as a staging area.
+  **Staleness** stays a hard gate: `guards/calendar.test.ts` fails when the
+  last verified LISTED entry is under **60 days** out. With the data ending
+  2026-12-18 it will fire around late October 2026 — correct behaviour, not a
+  defect. The failure message and the README name the four sources and note
+  that the FOMC usually publishes ~2 years ahead while the others publish ~1,
+  so the next year arrives piecemeal.
   **D-0 [recorded choice]:** the countdown shows `D-0` on the meeting day
-  itself and the event stays on screen through that whole day, rather than
-  vanishing at midnight and jumping to the next meeting. Dates are compared as
-  ISO strings in the LOCAL calendar (`todayISO`), so a countdown never shifts
-  with the browser's side of UTC midnight; `daysBetween` parses at UTC noon so
-  a DST shift cannot round it to the wrong integer.
+  itself and the event stays on screen through that day. Dates compare as ISO
+  strings in the LOCAL calendar (`todayISO`), so a countdown never shifts with
+  the browser's side of UTC midnight; `daysBetween` parses at UTC noon so DST
+  cannot round it wrong.
+- **PBOC LPR — generated, not listed [calendar session, Pass D].** The PBOC
+  holds no scheduled meeting: the LPR is announced at 09:30 CST on the 20th of
+  each month, so it is COMPUTED. Rule: start at the 20th and advance one day
+  at a time until the date is a business day — Saturday/Sunday roll to Monday,
+  and a holiday on that Monday rolls to Tuesday, chaining as far as needed.
+  The holiday list is scoped to PRC public holidays that can fall between the
+  20th and the 25th — in practice 춘절, 단오, 중추절 (원단, 청명, 노동절 and
+  국경절 cannot reach the 20th). **`PRC_HOLIDAYS` ships EMPTY**: no verified
+  PRC holiday dates were available, so **weekend rolling works and holiday
+  rolling does not yet** — an LPR rule can sit a few days early in a month
+  whose roll lands on a holiday (2026-02 is the one to check first, 춘절 falls
+  near the 20th). **LPR draws chart rules only and never counts down**: it is
+  MLF-dependent and rarely surprises, so a countdown to it would train the
+  reader to ignore the strip, and a one-day error in a rule is harmless where
+  a wrong countdown is not.
+- **Countdown scope [calendar session, Pass E].** The strip counts down to
+  **금통위, FOMC and BOJ only** (`COUNTDOWN_KINDS`) — what moves the KRW
+  curve, in that order. ECB and LPR render as chart rules but are never the
+  next event.
 - **Chart type: 선 · 주봉 · 월봉 [Session 16 §G].** A selector in the popup
   (line only in the preview — candles need width it lacks). Closes-only data
   means a true daily candle is impossible (open would equal close), so no 일봉;
