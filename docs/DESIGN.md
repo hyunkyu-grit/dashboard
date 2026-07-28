@@ -189,6 +189,19 @@ Behaviour:
   transforms don't reach `table-row`, and the reorder motion needs
   transformable rows). `scrollbar-gutter: stable` keeps the usable width
   constant when the scrollbar appears. Pinned by `guards/table-grid.test.ts`.
+  **Padding at the card edges [carry session, Pass D]:** the card keeps its
+  ~20px inner horizontal gutter (px-5) in every layout; 한 줄 has a track
+  FLOOR (`ONE_LINER_MIN_PX` = 120) and the scroll container is
+  `overflow-x-auto`, so a viewport narrower than the columns scrolls
+  horizontally instead of crushing the sentence flush against the card edge;
+  the scroll container's bottom padding (pb-8) keeps the last row off the
+  card's edge. The dark circle bottom-left in dev screenshots is the Next.js
+  dev indicator, NOT the product — now disabled via `devIndicators: false`
+  in next.config; never design layout around it. (The exact flush-edge
+  state in the owner's narrow-layout screenshot did not reproduce in the
+  session's verification environment, whose viewport is emulated wide — the
+  fixes above make that state impossible by construction; an eyeball pass
+  on a real narrow window remains with the owner.)
 - **Sortable by any change column, both directions.** Default order is
   instrument order (not a ranking). Sorting by |change| is one click = "what
   moved today".

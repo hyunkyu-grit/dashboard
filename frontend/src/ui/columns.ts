@@ -31,5 +31,10 @@ const DELTA_W = `calc(${WIDEST.delta.length}ch + 18px)`;
 
 /** THE one grid definition, shared by the header row and every body row —
  * a single source so the two can never drift apart. Tracks: 종목 · 현재 ·
- * five change columns · 한 줄 (the only flexible one). */
-export const GRID_TEMPLATE = `${LABEL_W} ${LEVEL_W} repeat(5, ${DELTA_W}) minmax(0, 1fr)`;
+ * five change columns · 한 줄 (the only flexible one). 한 줄 keeps a small
+ * FLOOR (carry session, Pass D): without it a narrow viewport crushed the
+ * track to 0 and the sentence clipped flush against the card edge; with it
+ * the row overflows into a horizontal scroll instead, and no column ever
+ * touches the edge. */
+export const ONE_LINER_MIN_PX = 120;
+export const GRID_TEMPLATE = `${LABEL_W} ${LEVEL_W} repeat(5, ${DELTA_W}) minmax(${ONE_LINER_MIN_PX}px, 1fr)`;

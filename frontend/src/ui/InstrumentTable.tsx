@@ -399,10 +399,14 @@ export function InstrumentTable({
       {/* scroll: the table body scrolls under the fixed header (§shell).
           scrollbar-gutter keeps the usable width constant whether or not the
           scrollbar is present (§ Pass A) — without it the grid would shift on
-          every filter that crosses the overflow boundary. */}
+          every filter that crosses the overflow boundary. overflow-x-auto +
+          the 한 줄 track floor (carry session, Pass D): a viewport narrower
+          than the columns scrolls horizontally instead of clipping content
+          flush against the card edge; pb-8 keeps the last row off the card's
+          bottom edge and clear of anything floating there. */}
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-4 pt-3 [scrollbar-gutter:stable]"
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-auto px-5 pb-8 pt-3 [scrollbar-gutter:stable]"
       >
         {isForward && matrixOpen && forwards ? (
           // wrap the 주요 포워드 block below the matrix rather than clipping it

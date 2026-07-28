@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { fmtDelta, fmtLevel } from "../src/lib/format";
-import { GRID_TEMPLATE, WIDEST } from "../src/ui/columns";
+import { GRID_TEMPLATE, ONE_LINER_MIN_PX, WIDEST } from "../src/ui/columns";
 import { traderName } from "../src/ui/rows";
 
 describe("column widths derive from the format, not the data", () => {
@@ -18,13 +18,16 @@ describe("column widths derive from the format, not the data", () => {
     const level = `calc(${WIDEST.level.length}ch + 18px)`;
     const delta = `calc(${WIDEST.delta.length}ch + 18px)`;
     expect(GRID_TEMPLATE).toBe(
-      `${label} ${level} repeat(5, ${delta}) minmax(0, 1fr)`,
+      `${label} ${level} repeat(5, ${delta}) minmax(${ONE_LINER_MIN_PX}px, 1fr)`,
     );
   });
 
-  it("한 줄 is the only flexible track", () => {
+  it("한 줄 is the only flexible track, floored so it never clips to zero", () => {
     expect(GRID_TEMPLATE.match(/1fr/g)).toHaveLength(1);
-    expect(GRID_TEMPLATE.endsWith("minmax(0, 1fr)")).toBe(true);
+    // the floor (carry session, Pass D): a narrow viewport scrolls instead
+    // of crushing the sentence flush against the card edge
+    expect(ONE_LINER_MIN_PX).toBeGreaterThanOrEqual(80);
+    expect(GRID_TEMPLATE.endsWith(`minmax(${ONE_LINER_MIN_PX}px, 1fr)`)).toBe(true);
   });
 });
 
