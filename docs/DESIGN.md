@@ -354,11 +354,28 @@ drag dismiss; `?tile=series:<id>` keeps working).
   horizon) price on an end-anchored quarterly schedule with a front stub —
   par interpolation would extrapolate past the curve's 10y edge, and the
   raw engine would quantize 1M roll to exactly 0.
-  **Presentation: a sentence, not a table** (합니다체, §15): headline at
-  hero weight ("3개월 동안 4.2bp 벌고 들어갑니다" / "…물고 갑니다"), the
-  캐리·롤 breakdown beneath as a caption — numbers carry direction colour,
-  the sentence does not. Horizon control 1개월·3개월·6개월·1년, default
-  3개월. **NEAR_ZERO_BP = 0.5**: below it the sentence says 캐리는 거의
+  **Presentation: a label and a number [REWRITTEN, strip session Pass B].**
+  The first draft spoke in full sentences and was the only place in the
+  product that did — prose reads as chatty beside a table of bp figures. It
+  also stated the same number twice ("8.7bp 물고 갑니다" / "8.7bp 움직여야
+  본전"), omitted the direction of the breakeven, and signed a zero
+  (`캐리 +0.0`). The form is now:
+
+  ```
+  3개월 캐리·롤              −8.7bp
+  캐리 0.0 · 롤 −8.7 · 8.7bp 올라야 본전
+  ```
+
+  Headline = the horizon label + the total, the total at hero weight and the
+  ONLY thing carrying direction colour. Caption = breakdown + breakeven, all
+  secondary ink. **The breakeven states its direction**, following the
+  Pay/Receive toggle: a payer profits when the quoted value rises, a receiver
+  when it falls, so bleeding carry needs a favourable move (올라야/내려야) and
+  earning carry can absorb that much of an adverse one (내려도/올라도 —
+  recorded choice: the same mechanical fact stated for the profitable case,
+  not a new claim). A component that ROUNDS to zero prints `0.0` unsigned.
+  An instrument maturing inside the horizon reads `—` / `만기 도래`, not a
+  zero. Horizon control 1개월·3개월·6개월·1년, default 3개월. **NEAR_ZERO_BP = 0.5**: below it the sentence says 캐리는 거의
   없습니다 rather than printing a figure that invites over-reading
   (recorded; same "too small to mean" line as SOLO_MIN_BP). Volatility gets
   one line — a ratio has no carry statement — never zeros. An instrument

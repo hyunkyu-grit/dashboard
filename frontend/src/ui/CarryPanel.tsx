@@ -1,13 +1,16 @@
 "use client";
 
-/* Carry & roll panel (carry session, Pass C) — the thing the popup lacked:
- * what HOLDING the trade earns over a horizon, from today's curve. Mechanics,
- * not prediction (no scores, no ratings). Replaces the curve heatmap.
+/* Carry & roll panel (carry session, Pass C; register rewritten strip
+ * session, Pass B) — the thing the popup lacked: what HOLDING the trade
+ * earns over a horizon, from today's curve. Mechanics, not prediction (no
+ * scores, no ratings). Replaces the curve heatmap.
  *
- * Headline sentence at hero weight; the carry/roll breakdown beneath as a
- * caption in secondary ink. The NUMBERS carry direction colour; the sentence
- * does not. Sign follows the Pay/Receive toggle (lifted to the popup),
- * exactly as the diagram does. Volatility rows get one line, not zeros. */
+ * A LABEL AND A NUMBER, matching the register used everywhere else — prose
+ * was the first draft's mistake. Headline: label + total, the total at hero
+ * weight in its DIRECTION colour. Caption beneath: breakdown + breakeven, all
+ * secondary ink (the second line carries no direction colour of its own).
+ * Sign follows the Pay/Receive toggle (lifted to the popup), exactly as the
+ * diagram does. Volatility rows get one line, not zeros. */
 
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -15,7 +18,7 @@ import { useState } from "react";
 import { fetchCarry, type CarryHorizon } from "@/lib/api";
 import { dirClass } from "@/lib/format";
 
-import { carrySentence, fmtSigned, HORIZON_LABEL } from "./carryCopy";
+import { carryReadout, HORIZON_LABEL } from "./carryCopy";
 import type { Side } from "./payReceiveModel";
 import type { Row } from "./rows";
 
@@ -43,7 +46,7 @@ export function CarryPanel({ row, side }: { row: Row; side: Side }) {
   }
   if (!data) return null;
 
-  const s = carrySentence(horizon, data.horizons[horizon], side);
+  const r = carryReadout(horizon, data.horizons[horizon], side);
 
   return (
     <div className="mt-4 max-w-[720px]">
@@ -67,16 +70,20 @@ export function CarryPanel({ row, side }: { row: Row; side: Side }) {
           ))}
         </div>
       </div>
-      <p className="text-[17px] font-semibold">{s.headline}</p>
-      {s.kind !== "none" && (
-        <p className="mt-0.5 text-[13px] opacity-70">
-          <span className="opacity-70">캐리 </span>
-          <span className={`tabular-nums ${dirClass(s.carry)}`}>{fmtSigned(s.carry)}</span>
-          <span className="opacity-45"> · </span>
-          <span className="opacity-70">롤 </span>
-          <span className={`tabular-nums ${dirClass(s.roll)}`}>{fmtSigned(s.roll)}</span>
-          {s.tail && <span className="opacity-45"> · {s.tail}</span>}
-        </p>
+      {/* label · total — the total is the only thing at hero weight, and the
+          only thing carrying direction colour */}
+      <div className="flex items-baseline gap-3">
+        <span className="text-[13px] opacity-55">{r.label}</span>
+        <span
+          className={`text-[22px] font-bold tabular-nums leading-none ${
+            r.total == null ? "text-ink" : dirClass(r.total)
+          }`}
+        >
+          {r.totalText}
+        </span>
+      </div>
+      {r.detail && (
+        <p className="mt-1 text-[12px] tabular-nums opacity-55">{r.detail}</p>
       )}
     </div>
   );
