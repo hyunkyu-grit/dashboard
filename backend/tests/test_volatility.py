@@ -125,7 +125,7 @@ def test_volatility_payload_shape_matches_the_other_tabs():
     for row in payload["rows"]:
         # SeriesSummary-like so the FE table component never branches
         assert set(row) >= {
-            "id", "label", "unit", "now", "deltas", "range10y",
+            "id", "label", "unit", "now", "deltas", "range1y",
             "sortKey", "quoted", "oneLiner",
         }
         assert row["unit"] == "ratio"
@@ -134,7 +134,7 @@ def test_volatility_payload_shape_matches_the_other_tabs():
         assert set(row["deltas"]) == {"d1", "wtd", "mtd", "qtd", "ytd"}
         assert row["oneLiner"]["kind"] in {"move_extreme", "extreme", "none"}
         assert len(row["sortKey"]) == 1
-        pct = row["range10y"]["pct"]
+        pct = row["range1y"]["pct"]
         assert pct is None or 0 <= pct <= 100
     # the 10Y ratio is well past warm-up, so it is a real number, not null
     r10 = next(r for r in payload["rows"] if r["id"] == "vol:10Y")

@@ -34,7 +34,7 @@ function outright(id: string): SeriesSummary {
     now: 3,
     deltas: { ...nullDeltas },
     basisValues: { d1: 3, wtd: 3, mtd: 3, qtd: 3, ytd: 3 },
-    range10y: { min: 1, max: 5, pct: 50 },
+    range1y: { min: 1, max: 5, avg: 3, pct: 50 },
     sortKey: id.split("-").map((t) => yr[t]),
     quoted: true,
     movePct: 50,

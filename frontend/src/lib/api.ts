@@ -37,7 +37,16 @@ export interface SeriesSummary {
   now: number | null;
   deltas: Record<BasisKey, number | null>;
   basisValues: Record<BasisKey, number | null>;
-  range10y: { min: number | null; max: number | null; pct: number | null };
+  // 52-week LEVEL stats (annual-stats session): trailing 252 observations.
+  // The 10y window straddled the 2020-21 regime break and pinned every level
+  // at the 99th-100th percentile — do not widen it back. CHANGE statistics
+  // (movePct, tint) stay full-history on purpose.
+  range1y: {
+    min: number | null;
+    max: number | null;
+    avg: number | null;
+    pct: number | null;
+  };
   // §16: computed server-side, read straight through by the row builder.
   sortKey: number[];
   quoted: boolean | null;
@@ -129,8 +138,14 @@ export interface KeyForward {
   label: string;
   values: Record<AnyBasis, number>;
   deltas: Record<BasisKey, number>;
-  // 10y LEVEL range + percentile (Pass E gauge); min/max/pct in percent.
-  range10y: { min: number | null; max: number | null; pct: number | null };
+  // 52-week LEVEL range + average + percentile (Pass E gauge; annual-stats
+  // session); min/max/avg/pct in percent.
+  range1y: {
+    min: number | null;
+    max: number | null;
+    avg: number | null;
+    pct: number | null;
+  };
 }
 
 export interface ForwardsPayload {

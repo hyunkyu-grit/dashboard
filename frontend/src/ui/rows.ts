@@ -39,7 +39,7 @@ export interface Row {
   unit: Unit;
   now: number | null;
   changes: Record<BasisKey, number | null>; // bp vs each basis
-  pct: number | null; // 10y percentile, null if none
+  pct: number | null; // 52-week LEVEL percentile, null if none
   seriesId: string | null; // stage-2 history id, null = no history
   oneLiner: string; // rendered from the backend classification (§16)
   /** explicit ascending sort key, supplied by the backend (§6/§16). */
@@ -118,7 +118,7 @@ function fromSummary(s: SeriesSummary, group: Group, label: string): Row {
     unit: s.unit,
     now: s.now,
     changes: { ...s.deltas },
-    pct: s.range10y.pct,
+    pct: s.range1y.pct,
     seriesId: s.id,
     oneLiner: renderOneLiner(s.oneLiner),
     sortKey: s.sortKey,

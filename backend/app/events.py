@@ -22,7 +22,7 @@ from bisect import bisect_left
 import numpy as np
 
 from .dataset import Dataset
-from .derive import derived_ids, series_values
+from .derive import ANNUAL_OBS, derived_ids, series_values
 
 OUTLIER_PCT = 95
 MIN_CHANGE_HISTORY = 20  # need enough own-Δ history to trust the percentile
@@ -33,8 +33,12 @@ def _extreme(pct: float | None) -> bool:
 
 
 def _pct_of(values: list[float | None], upto: int, x: float) -> float | None:
-    """Percentile of x within the non-null values[0..upto] (bisect_left/len)."""
-    clean = sorted(v for v in values[: upto + 1] if v is not None)
+    """Percentile of x within the trailing ANNUAL_OBS non-null values up to
+    values[upto]. This is a LEVEL percentile, so it uses the 52-week window
+    (annual-stats session) — on the full history the regime break kept every
+    level permanently extreme and the transition reason never fired. The
+    'move' reason below stays on the FULL change history on purpose."""
+    clean = sorted([v for v in values[: upto + 1] if v is not None][-ANNUAL_OBS:])
     if not clean:
         return None
     return round(bisect_left(clean, x) / len(clean) * 100, 1)

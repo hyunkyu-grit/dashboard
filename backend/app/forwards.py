@@ -23,7 +23,7 @@ import numpy as np
 
 from .curves import par_rates_at_index
 from .dataset import Dataset
-from .derive import BASIS_KEYS, basis_dates, classify_one_liner
+from .derive import ANNUAL_OBS, BASIS_KEYS, basis_dates, classify_one_liner
 from .engine_port import _modfol_bd, bootstrap_zero_curve, df
 
 # 21 forward start points: ON, then 3M steps out to 5Y (§7).
@@ -167,19 +167,23 @@ def _cell_move_pct(dataset: Dataset, start: float, tenor: float | None) -> float
 
 
 def _level_range(dataset: Dataset, start: float, tenor: float | None) -> dict:
-    """10y LEVEL range + percentile for a forward: its own history min/max and
-    where today's level sits within it (§8 gauge, Pass E). In percent to match
-    `values` (×100). This is a LEVEL distribution — distinct from the |Δ| move
-    percentile above that drives the matrix tint. None-filled if too little
-    history. Reuses the shared historical-curve cache (cheap for 6 forwards)."""
+    """52-week LEVEL range + average + percentile for a forward (§8 gauge,
+    Pass E; annual window per the annual-stats session — the 10y window
+    straddled the regime break and pinned every gauge at the top). In percent
+    to match `values` (×100). This is a LEVEL distribution — distinct from
+    the |Δ| move percentile above that drives the matrix tint, which stays on
+    the FULL history on purpose. None-filled if too little history. Reuses
+    the shared historical-curve cache (cheap for 6 forwards)."""
     zcs = _historical_curves(dataset)
     vals = [forward_par_rate(z, start, tenor) * 100.0 for z in zcs if z is not None]
+    vals = vals[-ANNUAL_OBS:]
     if len(vals) < 30:
-        return {"min": None, "max": None, "pct": None}
+        return {"min": None, "max": None, "avg": None, "pct": None}
     now = vals[-1]
     return {
         "min": round(min(vals), 4),
         "max": round(max(vals), 4),
+        "avg": round(sum(vals) / len(vals), 4),
         "pct": round(100.0 * sum(1 for v in vals if v <= now) / len(vals), 1),
     }
 
@@ -239,7 +243,7 @@ def forwards_payload(dataset: Dataset, curves: dict[str, np.ndarray]) -> dict:
         "tenors": [label for label, _t in FWD_TENORS],
         "grid": grid,
         "keyForwards": [
-            {"label": label, **cell(s, t), "range10y": _level_range(dataset, s, t)}
+            {"label": label, **cell(s, t), "range1y": _level_range(dataset, s, t)}
             for label, s, t in KEY_FORWARDS
         ],
     }

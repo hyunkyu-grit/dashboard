@@ -42,16 +42,18 @@ export const SCREENERS: Screener[] = [
     description: "자기 과거 대비 오늘 변동이 큰 종목만 봅니다.",
     test: (r) => r.movePct != null && r.movePct >= 90,
   },
+  // level chips read the 52-week percentile (annual-stats session): the 10y
+  // window kept every level permanently at the top band.
   {
     id: "high",
-    label: "10년 고점권",
-    description: "10년 레인지에서 상위 10% 안에 있는 레벨만 봅니다.",
+    label: "52주 고점권",
+    description: "52주 레인지에서 상위 10% 안에 있는 레벨만 봅니다.",
     test: (r) => r.pct != null && r.pct >= 90,
   },
   {
     id: "low",
-    label: "10년 저점권",
-    description: "10년 레인지에서 하위 10% 안에 있는 레벨만 봅니다.",
+    label: "52주 저점권",
+    description: "52주 레인지에서 하위 10% 안에 있는 레벨만 봅니다.",
     test: (r) => r.pct != null && r.pct <= 10,
   },
   {

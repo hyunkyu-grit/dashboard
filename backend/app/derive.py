@@ -23,6 +23,32 @@ BASIS_KEYS = ["d1", "wtd", "mtd", "qtd", "ytd"]
 SPARK_POINTS = 150  # ~150-pt downsampled sparkline / preview series (§4/§16)
 CALENDAR_DAYS = 130  # ~26 trading weeks of daily changes for the heatmap (§2)
 
+# LEVEL statistics window (annual-stats session): trailing one year of
+# observations, the 52-week convention. A ten-year window straddles the
+# 2020-21 near-zero regime, so every level sat at the 99th-100th percentile
+# of it permanently — no discriminating power. Trailing (not calendar-YTD:
+# a January YTD range is a handful of days). CHANGE-based statistics
+# (movePct, tint, move-extreme rung) deliberately stay on the FULL history:
+# daily changes are far more stationary than levels, so the regime break
+# does not distort them and the longer window estimates better.
+ANNUAL_OBS = 252
+
+
+def annual_stats(values: list[float | None]) -> dict:
+    """52-week level stats: min/max/avg of the trailing ANNUAL_OBS non-null
+    observations + the percentile of the latest level within that window."""
+    clean = [v for v in values if v is not None][-ANNUAL_OBS:]
+    if not clean:
+        return {"min": None, "max": None, "avg": None, "pct": None}
+    now = clean[-1]
+    s = sorted(clean)
+    return {
+        "min": s[0],
+        "max": s[-1],
+        "avg": round(sum(clean) / len(clean), 4),
+        "pct": round(bisect_left(s, now) / len(s) * 100, 1),
+    }
+
 
 def basis_dates(dataset: Dataset) -> dict[str, dt.date | None]:
     """Last close strictly BEFORE each period containing the as-of date.
@@ -184,13 +210,15 @@ def classify_one_liner(move_pct: float | None, has_data: bool) -> dict:
 def apply_level_extreme(rows: list[dict], cap: int = LEVEL_CAP) -> None:
     """Rung 2 (§C2), cross-sectional so it can be capped: among rows still
     silent, label the `cap` most-extreme levels (top/bottom LEVEL_BAND%) with
-    their percentile. Mutates `oneLiner` in place. A quiet peer group produces
-    nothing; a synchronised-regime one produces at most `cap`."""
+    their percentile — the 52-week percentile (annual-stats session), which
+    actually discriminates; the 10y one printed 백분위 9X down whole columns.
+    Mutates `oneLiner` in place. A quiet peer group produces nothing; a
+    synchronised-regime one produces at most `cap`."""
     cands: list[tuple[float, dict, float]] = []
     for r in rows:
         if r["oneLiner"]["kind"] != "none":
             continue
-        pct = r["range10y"]["pct"]
+        pct = r["range1y"]["pct"]
         if pct is None:
             continue
         if pct >= 100 - LEVEL_BAND or pct <= LEVEL_BAND:
@@ -208,9 +236,10 @@ CURVE_REGIME_FRAC = 0.6
 
 
 def curve_banner(outrights: list[dict]) -> dict:
-    """Classify whether the outright curve as a whole sits at a 10y extreme (§I).
-    Backend decides WHAT is true; the browser renders the Korean."""
-    pcts = [o["range10y"]["pct"] for o in outrights if o["range10y"]["pct"] is not None]
+    """Classify whether the outright curve as a whole sits at a 52-week
+    extreme (§I; annual window per the annual-stats session). Backend decides
+    WHAT is true; the browser renders the Korean."""
+    pcts = [o["range1y"]["pct"] for o in outrights if o["range1y"]["pct"] is not None]
     if not pcts:
         return {"kind": None}
     hi = sum(1 for p in pcts if p >= 90) / len(pcts)
@@ -276,10 +305,14 @@ def series_history(pairs: list[tuple[str, float]], unit: str,
     values = [x["v"] for x in triples]
     stats = None
     if values:
+        # 52-week stats (annual-stats session): the tooltip's range statistics
+        # narrow to the trailing year even though the chart still shows the
+        # full history — the 10y min/max straddle the regime break.
+        year = values[-ANNUAL_OBS:]
         stats = {
-            "min": min(values),
-            "max": max(values),
-            "avg": round(sum(values) / len(values), 4),
+            "min": min(year),
+            "max": max(year),
+            "avg": round(sum(year) / len(year), 4),
         }
 
     points = (
@@ -398,11 +431,6 @@ def summarize(dataset: Dataset, series_id: str, label: str, kind: str,
         deltas[key] = round((now - bv) * scale, 4) \
             if now is not None and bv is not None else None
 
-    clean = sorted(v for v in values if v is not None)
-    pct = None
-    if clean and now is not None:
-        pct = round(bisect_left(clean, now) / len(clean) * 100, 1)
-
     # Sort key + quoted flag + 한 줄 classification are computed HERE, not in the
     # browser (§16). Legs map to years; an outright is a single-leg key.
     sort_key = [tenor_years(leg) for leg in series_id.split("-")]
@@ -417,15 +445,16 @@ def summarize(dataset: Dataset, series_id: str, label: str, kind: str,
         "now": now,
         "deltas": deltas,
         "basisValues": basis_values,
-        "range10y": {
-            "min": clean[0] if clean else None,
-            "max": clean[-1] if clean else None,
-            "pct": pct,
-        },
+        # 52-week LEVEL stats (annual-stats session) — never widen back to the
+        # full history: the 10y window straddles the 2020-21 regime break and
+        # pinned every level at the 99th-100th percentile.
+        "range1y": annual_stats(values),
         "sortKey": sort_key,
         "quoted": quoted,
         # own-history move percentile — powers the "오늘 많이 움직인 것" screener
         # (§D) and rung 1 of the 한 줄; the browser never recomputes it (§16).
+        # CHANGE-based, so it deliberately stays on the FULL history (see
+        # ANNUAL_OBS note) — do not "fix" it to the annual window.
         "movePct": move_pct,
         "oneLiner": classify_one_liner(move_pct, now is not None),
         "spark": [

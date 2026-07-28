@@ -32,9 +32,18 @@ export function PreviewChart({
 
   const plotW = width - PAD.left - PAD.right;
   const plotH = height - PAD.top - PAD.bottom;
-  const pad = (stats.max - stats.min) * 0.06 || 0.01;
-  const yMin = stats.min - pad;
-  const yMax = stats.max + pad;
+  // y-domain from the PLOTTED points, not from stats: the stats are 52-week
+  // (annual-stats session) while the line still shows the full history — a
+  // domain from annual stats would clip the 2020-21 trough.
+  let lo = Infinity;
+  let hi2 = -Infinity;
+  for (const p of points) {
+    if (p.v < lo) lo = p.v;
+    if (p.v > hi2) hi2 = p.v;
+  }
+  const pad = (hi2 - lo) * 0.06 || 0.01;
+  const yMin = lo - pad;
+  const yMax = hi2 + pad;
   const x = (i: number) => PAD.left + (i / (points.length - 1)) * plotW;
   const y = (v: number) => PAD.top + (1 - (v - yMin) / (yMax - yMin)) * plotH;
   const path = points.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
@@ -97,11 +106,12 @@ export function PreviewChart({
         >
           <div className="mb-1 font-semibold">{hp.t}</div>
           <Line k="레벨" v={lvl(hp.v)} />
-          {/* the preview has no zoom, so its stats ARE the full 10y — the label
-              says so (§F); the popup, which zooms, uses "구간". */}
-          <Line k="10년 최고" v={lvl(stats.max)} />
-          <Line k="10년 최저" v={lvl(stats.min)} />
-          <Line k="10년 평균" v={lvl(stats.avg)} />
+          {/* 52-week stats (annual-stats session) — the chart still shows the
+              full history, only the statistics narrow; the popup, which
+              zooms, uses visible-range "구간" stats (§F). */}
+          <Line k="52주 최고" v={lvl(stats.max)} />
+          <Line k="52주 최저" v={lvl(stats.min)} />
+          <Line k="52주 평균" v={lvl(stats.avg)} />
           <div className="mt-1 flex justify-between">
             <span className="opacity-50">당일 변화</span>
             <span className={`tabular-nums ${dirClass(dailyChange)}`}>

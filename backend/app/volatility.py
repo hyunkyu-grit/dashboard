@@ -27,11 +27,11 @@ never calendar days — so a holiday cannot silently shorten a window.
 from __future__ import annotations
 
 import datetime as dt
-from bisect import bisect_left
 
 from .dataset import DISPLAY_TENORS, Dataset, tenor_years
 from .derive import (
     BASIS_KEYS,
+    annual_stats,
     apply_level_extreme,
     classify_one_liner,
     day_move_pct,
@@ -145,13 +145,9 @@ def _volatility_row(dataset: Dataset, tenor: str,
             round(now - bv, 4) if now is not None and bv is not None else None
         )
 
-    clean = sorted(v for v in aligned if v is not None)
-    pct = None
-    if clean and now is not None:
-        pct = round(bisect_left(clean, now) / len(clean) * 100, 1)
-
     # Same 한 줄 ladder as the other tabs (§C2): an extreme daily move in the
-    # ratio, else an extreme level percentile. The ratio's change is a plain
+    # ratio, else an extreme level percentile (52-week window, like every
+    # level statistic — annual-stats session). The ratio's change is a plain
     # difference (scale 1); no solo/neighbour rung for volatility.
     move_pct = day_move_pct(aligned, 1.0, deltas["d1"])
     one_liner = classify_one_liner(move_pct, now is not None)  # rung 2 capped below
@@ -164,11 +160,7 @@ def _volatility_row(dataset: Dataset, tenor: str,
         "now": round(now, 4) if now is not None else None,
         "deltas": deltas,
         "basisValues": basis_values,
-        "range10y": {
-            "min": clean[0] if clean else None,
-            "max": clean[-1] if clean else None,
-            "pct": pct,
-        },
+        "range1y": annual_stats(aligned),
         "sortKey": [tenor_years(tenor)],
         "quoted": None,
         "movePct": move_pct,

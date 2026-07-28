@@ -102,10 +102,14 @@ Columns, left to right:
      elsewhere: `+5bp` is ordinary for `10Y` and an event for `3M`. Threshold
      from the Session-15 replay (own-history move percentile ≥ 97).
   2. **the level sits in an extreme band** → the percentile as a number,
-     "백분위 99" (`pct ≥ 95` or `≤ 5`). **Capped** to the few most-extreme rows
-     per peer group (`LEVEL_CAP`): on a day when the whole curve sits at decade
-     highs an uncapped rung printed the same label on ~20 rows — that regime
-     fact belongs to the "10년 고점권" screener chip, not the column.
+     "백분위 99" (`pct ≥ 95` or `≤ 5`), computed on the **52-week window**
+     (annual-stats session — see the LEVEL-window ruling below). **Capped** to
+     the few most-extreme rows per peer group (`LEVEL_CAP`): on a day when the
+     whole curve sits at highs an uncapped rung printed the same label on ~20
+     rows — that regime fact belongs to the "52주 고점권" screener chip, not
+     the column. **The move-extreme rung (rung 1) stays on the FULL 10y change
+     history on purpose** — it is a percentile of a CHANGE, which the regime
+     break does not distort; do not "fix" it to the annual window.
   3. **stands out against its neighbours today** → "단독 상승" / "단독 하락"
      (moved opposite the day's majority among outrights).
   4. **nothing.** Most rows are quiet so the few that speak are visible; the
@@ -114,14 +118,35 @@ Columns, left to right:
   The retracement rung (Session 13's "주간/월중 되돌림") is retired — it needed a
   sign flip, which almost never fires in a trending tape. Diagnosis + thresholds
   in `docs/diagnostics/color-density.md`.
+- **LEVEL statistics are 52-week; CHANGE statistics are 10-year [annual-stats
+  session — THE ruling of that session].** Every statistic about a level's
+  RANGE (gauge, tooltip stats, 고점권/저점권 screeners, curve banner, 한 줄
+  level rung, event range-transitions) uses the **trailing one year, 252
+  observations** (`derive.py::ANNUAL_OBS`), labelled **52주**. Why: the
+  ten-year window straddles the 2020-21 near-zero regime and today's 4%
+  handle, so every tenor sat at the 99th-100th percentile of it permanently —
+  the statistic had no discriminating power left ("백분위 9X" down nine
+  consecutive rows). Trailing, not calendar-YTD: a January YTD range is a
+  handful of days; trailing is always full and matches the reference's
+  52-week convention. The **average** ships alongside high/low — high and low
+  alone say how wide the range is, not where the level sits inside it.
+  **Percentiles of a CHANGE (movePct, the tint scale, the move-extreme rung,
+  the event 'move' reason) deliberately keep the FULL history**: daily changes
+  are far more stationary than levels, the regime break does not distort
+  them, and the longer window estimates the distribution better. This split
+  is intentional asymmetry, not an inconsistency to fix. The history charts
+  still show ten years — only the statistics narrow. (Marking the trailing
+  window on the chart was considered and left out: a wash over ~10% of a 10y
+  chart plus the new date labels read as clutter; revisit only if readers
+  misattribute the stats' scope.)
 - **Curve-level extreme is a banner, not a column [Session 16 §I].** When most
   of the outright curve (≥ `CURVE_REGIME_FRAC`) sits in one extreme band, "this
-  tenor is at a decade high" is a fact about the *curve*, not any row. It is
-  stated once in a line under the tabs — "커브 전 구간이 10년 고점권입니다" — and
+  tenor is at 52-week highs" is a fact about the *curve*, not any row. It is
+  stated once in a line under the tabs — "커브 전 구간이 52주 고점권입니다" — and
   the per-row level rung (rung 2) is **suppressed on outrights**. Spreads/flies
-  keep the per-row rung (a spread at a 10y extreme is genuinely distinctive, not
-  restated by the banner). Backend classifies (`curve_banner`), the browser
-  renders the Korean (§16).
+  keep the per-row rung (a spread at a 52-week extreme is genuinely
+  distinctive, not restated by the banner). Backend classifies
+  (`curve_banner`), the browser renders the Korean (§16).
 
 Behaviour:
 
@@ -132,7 +157,8 @@ Behaviour:
 - **Screener presets [§D, Session 15]** — a *second* row of chips beneath the
   tabs (never a left sidebar; one surface). A named view in plain language that
   **filters on top of the active tab**: 오늘 많이 움직인 것 (own-history move
-  pct ≥ 90) / 10년 고점권 (pct ≥ 90) / 10년 저점권 (pct ≤ 10) / 되돌림 (sign
+  pct ≥ 90, FULL-history change distribution) / 52주 고점권 (level pct ≥ 90,
+  52-week window) / 52주 저점권 (pct ≤ 10) / 되돌림 (sign
   flip between adjacent bases) / 호가만 (live-quoted only) / 주요 포워드. One at
   a time, clicking again clears; a one-line 합니다체 description shows beneath
   the row when active. Data-driven (`ui/screener.ts` — a predicate per view), so
@@ -1066,22 +1092,26 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
   ambiguous, low-value part (the main table owns the change story; the popup
   owns the full path). The block now shows only 현재 (the quoted level) + the
   gauge, so no header is shared with a different quantity. (2) **The gauge.**
-  Each row gets a thin track spanning that forward's **10y level min→max**
-  (`backend/app/forwards.py::_level_range`, a LEVEL distribution — distinct from
-  the |Δ| move percentile that drives the tint), a fill + marker at the current
-  level's POSITION in that range, and the **percentile** as a number at the
-  right. At the tails (≥90th or ≤10th) the marker goes **full ink** and the
-  percentile **full-strength ink**, so a 99th-percentile row is distinct from a
-  72nd at a glance; away from the tails the marker is a lighter grey and the
-  percentile dimmed. Distinction is by **lightness, not hue** (palette cut — the
-  old accent was `--bw-interactive`). Track ends are labelled 10년 최저 / 10년
-  최고 **once** above the block. This is the only place in the product that shows
-  a level's position within its own range.
+  Each row gets a thin track spanning that forward's **52-week level min→max**
+  (annual-stats session; `backend/app/forwards.py::_level_range`, a LEVEL
+  distribution — distinct from the |Δ| move percentile that drives the tint,
+  which stays FULL-history), a fill + marker at the current level's POSITION
+  in that range, a **hairline tick at the 52-week average**, and the
+  **percentile** as a number at the right. At the tails (≥90th or ≤10th) the
+  marker goes **full ink** and the percentile **full-strength ink**, so a
+  99th-percentile row is distinct from a 72nd at a glance; away from the tails
+  the marker is a lighter grey and the percentile dimmed. Distinction is by
+  **lightness, not hue** (palette cut — the old accent was
+  `--bw-interactive`). Track ends are labelled 52주 최저 / 52주 최고 **once**
+  above the block. This is the only place in the product that shows a level's
+  position within its own range.
 - **RESOLVED [closing session, part 2, Pass E2] — the matrix tint has a
   legend.** 168 tinted cells (plus the popup heatmap on the same scale) with
   nothing saying what the intensity meant. `ui/TintLegend.tsx` is a compact
   diverging swatch strip 하락 → untinted middle → 상승 with one line: intensity =
-  today's move vs that series' own 10y daily-change history. Swatch alphas are
+  today's move vs that series' own 10y daily-change history. (The tint scale
+  is a CHANGE percentile and stays on the FULL history on purpose — see the
+  LEVEL-window ruling; do not narrow it to 52 weeks.) Swatch alphas are
   the real scale endpoints (`MATRIX_FLOOR..MATRIX_FULL` from `tint.ts`) so the
   key can't drift from the cells; hue flips with the theme via the tokens. The
   SAME component renders under the forward matrix (표로 보기) and under the popup
@@ -1144,10 +1174,13 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
   pins this regardless of the downsample ratio). The `+0.0` is honest 1-decimal
   display of a genuinely flat day for that specific forward, not the multi-day-
   as-daily error Session 14 might have introduced. Left the 1dp bp grammar as-is.
-- **`구간` vs `10년` statistics scope [Session 16 §F].** The preview has no
-  zoom, so its min/max/avg ARE the full history and are labelled **`10년`**. The
-  popup zooms, so its stats follow the **visible range** (recompute on zoom) and
-  are labelled **`구간`** — genuinely selectable there.
+- **`구간` vs `52주` statistics scope [Session 16 §F; window narrowed by the
+  annual-stats session].** The preview has no zoom, so its min/max/avg are the
+  backend's **52-week** stats and are labelled **`52주`** (the chart still
+  draws the full history — its y-domain comes from the plotted points, never
+  from the stats, or the 2020-21 trough would clip). The popup zooms, so its
+  stats follow the **visible range** (recompute on zoom) and are labelled
+  **`구간`** — genuinely selectable there.
 - **RESOLVED [final §B] — change-column outlier cue is a leading-edge rule, not
   a fill.** Session 16 §J tried a same-hue background wash and had to cap it at
   0.04 to keep the coloured number ≥4.5:1 — but 0.04 (≈#fef8f8) is invisible, so

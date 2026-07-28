@@ -5,11 +5,14 @@ import pytest
 
 from app.dataset import DISPLAY_TENORS, QUOTED_NODES, load_dataset, tenor_years
 from app.derive import (
+    ANNUAL_OBS,
+    annual_stats,
     apply_level_extreme,
     apply_solo_direction,
     basis_dates,
     classify_one_liner,
     curve_banner,
+    day_move_pct,
     derived_ids,
     downsample,
     ohlc_buckets,
@@ -73,7 +76,44 @@ def test_summary_shape(ds):
     assert all(v is not None for v in s["deltas"].values())
     assert len(s["spark"]) <= 150
     assert s["spark"][-1]["v"] == s["now"]
-    assert 0 <= s["range10y"]["pct"] <= 100
+    assert 0 <= s["range1y"]["pct"] <= 100
+
+
+def test_annual_stats_use_only_the_trailing_year():
+    """Level statistics are 52-week (annual-stats session): a decade of history
+    with a regime break must not leak into min/max/avg/pct. Values ramp
+    0..599; only the last ANNUAL_OBS observations count."""
+    values = [float(i) for i in range(600)]
+    s = annual_stats(values)
+    lo = 600 - ANNUAL_OBS
+    assert s["min"] == float(lo)
+    assert s["max"] == 599.0
+    assert s["avg"] == round(sum(range(lo, 600)) / ANNUAL_OBS, 4)
+    # today's level is the max of its trailing year → top percentile
+    assert s["pct"] == round((ANNUAL_OBS - 1) / ANNUAL_OBS * 100, 1)
+    # None-tolerant and None-filled when empty
+    assert annual_stats([None, None]) == {
+        "min": None, "max": None, "avg": None, "pct": None,
+    }
+
+
+def test_move_pct_stays_on_the_full_history():
+    """THE distinction of the annual-stats session: CHANGE percentiles keep the
+    FULL history (changes are stationary; the longer window estimates better).
+    Construct a series whose early changes are large and recent ones tiny —
+    a full-history percentile of a tiny move is LOW, a trailing-year one would
+    be ~median. Guard the full-history behaviour."""
+    early = [0.0]
+    for i in range(300):  # 300 big early changes (±10bp)
+        early.append(early[-1] + (0.10 if i % 2 == 0 else -0.10))
+    late = [early[-1]]
+    for i in range(ANNUAL_OBS):  # a trailing year of tiny changes (±0.1bp)
+        late.append(late[-1] + (0.001 if i % 2 == 0 else -0.001))
+    values = early + late[1:]
+    pct = day_move_pct(values, 100.0, 0.1)  # today's move: tiny (0.1bp)
+    assert pct is not None
+    # against the FULL history most changes (the 300 big ones) exceed it
+    assert pct < 60.0, "day_move_pct must not narrow to the annual window"
 
 
 def test_downsample_keeps_last():
@@ -119,7 +159,7 @@ def test_classify_one_liner_rung1_move():
 
 def test_apply_level_extreme_caps_and_picks_the_most_extreme():
     def row(pct, kind="none"):
-        return {"range10y": {"pct": pct}, "oneLiner": {"kind": kind, "value": None}}
+        return {"range1y": {"pct": pct}, "oneLiner": {"kind": kind, "value": None}}
 
     rows = [row(100), row(99), row(98), row(97), row(96), row(50)]
     apply_level_extreme(rows, cap=3)
@@ -131,7 +171,7 @@ def test_apply_level_extreme_caps_and_picks_the_most_extreme():
 
 def test_apply_level_extreme_leaves_higher_rungs_and_uses_both_bands():
     def row(pct, kind="none"):
-        return {"range10y": {"pct": pct}, "oneLiner": {"kind": kind, "value": None}}
+        return {"range1y": {"pct": pct}, "oneLiner": {"kind": kind, "value": None}}
 
     rows = [row(100, kind="move_extreme"), row(99), row(2)]
     apply_level_extreme(rows, cap=3)
@@ -142,7 +182,7 @@ def test_apply_level_extreme_leaves_higher_rungs_and_uses_both_bands():
 
 def test_curve_banner_fires_only_on_a_whole_curve_extreme():
     def outs(pcts):
-        return [{"range10y": {"pct": p}} for p in pcts]
+        return [{"range1y": {"pct": p}} for p in pcts]
 
     # most of the curve at highs → curve_high
     assert curve_banner(outs([99, 98, 97, 96, 95, 50]))["kind"] == "curve_high"

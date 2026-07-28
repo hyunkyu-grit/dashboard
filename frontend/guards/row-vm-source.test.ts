@@ -29,7 +29,7 @@ const src: SeriesSummary = {
   now: 3.1234,
   deltas: { ...deltas },
   basisValues: { d1: 3, wtd: 3, mtd: 3, qtd: 3, ytd: 3 },
-  range10y: { min: 1, max: 5, pct: 99 },
+  range1y: { min: 1, max: 5, avg: 3, pct: 99 },
   sortKey: [10],
   quoted: true,
   movePct: 42,
@@ -101,7 +101,7 @@ describe("row view-model source boundary (§16)", () => {
     const row = rows.find((r) => r.id === src.id)!;
     expect(row.now).toBe(src.now);
     expect(row.unit).toBe(src.unit);
-    expect(row.pct).toBe(src.range10y.pct);
+    expect(row.pct).toBe(src.range1y.pct);
     expect(row.changes).toEqual(src.deltas);
     expect(row.sortKey).toEqual(src.sortKey);
     expect(row.quoted).toBe(src.quoted);
