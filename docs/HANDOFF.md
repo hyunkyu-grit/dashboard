@@ -167,7 +167,28 @@ rule:
 
 ---
 
-## 6. Current state (as of the carry session — Passes A–E, 2026-07-28)
+## 6. Current state (as of the columns session — Passes A–C, 2026-07-28)
+
+- **HEAD** = the columns-session Pass C commit on `master`, mirrored to D:.
+  Gates: FE **141 vitest / 20 files**, lint 0, build 0 (BE untouched).
+- **The column priority ladder** (`ui/columns.ts::visibleColumns`): when the
+  measured container cannot hold every fixed-width column, columns DROP in
+  priority order instead of shrinking — 종목 · 현재 · [sorted, never
+  dropped] · 어제 · YTD · WTD · MTD · QTD · 한 줄 (first out, last back).
+  Arithmetic against the fixed widths + a runtime-measured ch (probe span +
+  fonts.ready re-measure); container via ResizeObserver on the table
+  element; displayed columns keep canonical order; header/body share one
+  `gridTemplate(visible)`; drops never animate; header states "N열 숨김"
+  (names on hover, no picker); overflow-x-auto backstop only below
+  종목+현재. Verified live by pane-width sweep — thresholds and ladder
+  order recorded in DESIGN §2; sorted-QTD-at-460px keeps QTD ↓ on screen.
+- **Environment gotcha (recurring)**: the occluded/emulated renderer
+  delivers ResizeObserver callbacks (and rAF) only on FORCED frames — take
+  a screenshot between mutating and reading when driving the app remotely.
+- Owner-open: single-column narrow eyeball on a real screen (same code
+  path), carried over from the carry session.
+
+### Earlier — carry session (Passes A–E, 2026-07-28)
 
 - **HEAD** = the carry-session Pass E commit on `master`, mirrored to D:.
   Gates: BE **79 pass / 1 skip / 1 xfail**, FE **135 vitest / 20 files**,

@@ -209,6 +209,21 @@ Behaviour:
   final backstop below even 종목+현재, unreachable in practice. Pinned by
   `guards/table-grid.test.ts` (prefix property, forced sort column,
   canonical order, fit arithmetic, shared template).
+  **Verified live (columns session, Pass C)** with a container-width sweep
+  (the session's viewport is emulated, so the PANE was resized — same
+  measurement path). At the runtime ch = 7.74px the drop thresholds in
+  TABLE-content px are: 한 줄 606 · QTD 486 · MTD 422 · WTD 358 · YTD 293 ·
+  어제 229 (pane ≈ content + ~58: px-5 padding 40 + stable scrollbar gutter
+  ~17 + 1px divider). Observed pane sweep 700→640→520→460→400→330→260→150:
+  columns left in exact ladder order (한 줄, QTD, MTD, WTD, YTD, 어제), the
+  header note counted 1열…6열 숨김, the header never drifted, and no
+  horizontal scrollbar appeared until the sub-현재 backstop at 150px.
+  Sorted-by-QTD then narrowed to 460px: QTD ↓ stayed on screen (WTD/MTD
+  dropped instead) with rows visibly ordered by it. Light and dark both.
+  Environment note: the occluded renderer delivers ResizeObserver callbacks
+  only on forced frames (same class as the motion session's rAF throttle) —
+  irrelevant on a live screen; the single-column layout itself remains
+  owner-eyeball (same component and measurement path).
   **Padding at the card edges [carry session, Pass D]:** the card keeps its
   ~20px inner horizontal gutter (px-5) in every layout; 한 줄 has a track
   FLOOR (`ONE_LINER_MIN_PX` = 120) and the scroll container is
