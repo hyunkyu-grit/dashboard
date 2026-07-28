@@ -23,8 +23,9 @@ import { getTile } from "@/wall/tileRegistry";
 import { ChangeLog } from "./ChangeLog";
 
 import { ERROR_SENTENCE, LOADING_SENTENCE } from "./copy";
-import { CurveGesture, CurveView } from "./CurveView";
-import { hasCurveStatement } from "./gesture";
+import { CurveView } from "./CurveView";
+import { classify } from "./gloss";
+import { diagramSpec } from "./payReceiveModel";
 import { EnlargedView } from "./EnlargedView";
 import type { ChartType } from "@/wall/DetailChart";
 import { InstrumentTable } from "./InstrumentTable";
@@ -187,14 +188,6 @@ export function App() {
   const [pinned, setPinned] = useState<Row | null>(null);
   const [tab, setTab] = useState<Group | "all">("all");
   const [matrixOpenRaw, setMatrixOpenRaw] = useState(false);
-  // Curve gesture (§14 Pass E): on pin the right pane briefly shows the par
-  // curve with a ghost deforming to what the pinned trade wants. Keyed by a
-  // sequence so RE-PINNING THE SAME ROW REPLAYS it — the recorded choice: the
-  // Pay/Receive toggle lives inside the enlarged sheet (which covers this
-  // pane), so re-pin is the only replay affordance, and a deliberate click
-  // deserves a response over double-click irritation.
-  const [gesture, setGesture] = useState<{ row: Row; seq: number } | null>(null);
-  const gestureSeq = useRef(0);
   const active = hovered ?? pinned;
   // the 표로 보기 matrix is a full-width MODE, only on the forward tab (§F)
   const matrixOpen = matrixOpenRaw && tab === "forward";
@@ -219,23 +212,9 @@ export function App() {
     setTab(t);
     setPinned(null);
     setHovered(null);
-    setGesture(null);
   }, []);
 
-  // Pin + gesture trigger (§14 Pass E). Only rows with a curve statement play
-  // (volatility does not); only in the two-pane layout where the curve pane
-  // exists. Never on hover — hovering already swaps the pane to history.
   const wide = useIsWide();
-  const handlePin = useCallback(
-    (row: Row) => {
-      setPinned(row);
-      if (wide && hasCurveStatement(row)) {
-        gestureSeq.current += 1;
-        setGesture({ row, seq: gestureSeq.current });
-      }
-    },
-    [wide],
-  );
 
   useEffect(() => {
     syncUiFromDom();
@@ -244,10 +223,7 @@ export function App() {
   // Esc unpins (and the enlarged view closes itself on Esc).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !tileParam) {
-        setPinned(null);
-        setGesture(null);
-      }
+      if (e.key === "Escape" && !tileParam) setPinned(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -317,6 +293,12 @@ export function App() {
   // (pin) opens the bottom sheet — there is no pane for a hover preview.
   const previewRow = wide ? active : null;
 
+  // the pinned instrument's curve MODE for the pane's corner label (Pass A);
+  // null for volatility, which makes no curve statement.
+  const pinnedMode = pinned
+    ? (diagramSpec(classify(pinned), "pay")?.term ?? null)
+    : null;
+
   return (
     <MotionConfig reducedMotion="user">
     {/* Full-bleed (§H, Session 16): the surface fills the window edge to edge —
@@ -356,7 +338,7 @@ export function App() {
                 activeId={(wide ? active : pinned)?.id ?? null}
                 pinnedId={pinned?.id ?? null}
                 onHover={handleHover}
-                onPin={handlePin}
+                onPin={setPinned}
                 matrixOpen={matrixOpen}
                 onToggleMatrix={() => setMatrixOpenRaw((v) => !v)}
               />
@@ -386,28 +368,20 @@ export function App() {
                       height={Math.max(300, paneH - PANE_PAD)}
                     />
                   ))}
-                {/* the pin gesture (§14 Pass E): a transient overlay — the
-                    par curve demonstrates what the pinned trade wants, then
-                    the pane returns to the preview. The overlay covers the
-                    pane so the gesture never competes with the hover swap. */}
-                <AnimatePresence>
-                  {gesture && paneW > 0 && (
-                    <motion.div
-                      key={gesture.seq}
-                      className="absolute inset-0 z-10 overflow-hidden bg-tile p-5"
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <CurveGesture
-                        row={gesture.row}
-                        summary={summary}
-                        width={paneW - PANE_PAD}
-                        height={Math.max(300, paneH - PANE_PAD)}
-                        onDone={() => setGesture(null)}
-                      />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {/* what is selected, stated in the pane's corner (strip
+                    session, Pass A — all that survives of the removed pin
+                    gesture): the pinned instrument and its curve MODE, e.g.
+                    `3Mx2Y · 스티프닝`. Sticky so it stays in the corner while
+                    the pane scrolls; nothing animates. */}
+                {pinned && (
+                  // §G: a sticky element carries an opaque bg and mutes via a
+                  // TEXT alpha (text-ink/45), never element opacity — opacity
+                  // would sink the bg and let the chart bleed through it.
+                  <div className="pointer-events-none sticky bottom-0 -mb-2 bg-tile pt-1 text-[11px] text-ink/45">
+                    {pinned.label}
+                    {pinnedMode ? ` · ${pinnedMode}` : ""}
+                  </div>
+                )}
               </div>
             )}
           </div>

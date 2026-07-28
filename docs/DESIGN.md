@@ -915,8 +915,9 @@ built — relative ATR, §4/§16 and `## Provisional`.)
 ## 14. Motion [Session 12, list-first; inventory + reorder/morph/gesture — motion session]
 
 Motion is a channel meaning "state change" (§5), chrome only — never animate
-chart path geometry. (The Pass-E curve gesture animates a GHOST copy, never
-the data line — the rule stands.)
+chart path geometry. (The Pass-E curve gesture, which animated a GHOST copy,
+was REMOVED by the strip session — see below. The rule stands with nothing
+left to except.)
 
 ### Inventory [motion session, Pass B — what exists in the CURRENT structure]
 
@@ -947,7 +948,10 @@ hover pulse (the calendar heatmap has no pulse) and "rows scale to 0.98"
   position continuity is what keeps "which row is which" across a re-sort).
 - Pay/Receive toggle hard-cuts between two static drawings → **Pass D** morph.
 - Preview pane hard-swaps series on hover → **Pass D** cross-fade.
-- Pin has no curve-side acknowledgment → **Pass E** ghost gesture.
+- Pin has no curve-side acknowledgment → **Pass E** ghost gesture, since
+  REMOVED (strip session, Pass A — see the entry below). Pinning is
+  acknowledged by the row's pin rule, the preview swap, and the pane's corner
+  label; it needs no motion.
 
 ### Row reorder [motion session, Pass C]
 
@@ -981,33 +985,28 @@ Rules, pinned by `guards/reorder.test.ts`:
   the outgoing pane leaves the flow immediately) — moving between rows is the
   most frequent action in the product and it hard-swapped before.
 
-### The curve gesture [motion session, Pass E]
+### REMOVED — the curve gesture [motion session Pass E; deleted, strip session Pass A]
 
-The popup diagram teaches the mode in the abstract; **the curve view shows
-what that mode looks like on today's shape — as a gesture, not a picture.**
-Motion is perceptible far below the threshold where static shape difference
-is: a few bp of curvature is invisible as a drawing but obvious as movement.
+The right pane's ghost-curve animation on pin is **gone**: component,
+trigger, and `ui/gesture.ts`. **Why, so it does not come back:** at a 10px
+peak against a curve spanning ~136bp the deformation was too small to read as
+an intent and large enough to draw the eye — illegible and distracting at
+once. The popup's mode diagram already makes the same statement on a
+SCHEMATIC curve, where the exaggeration can be large enough to work, so the
+gesture was the worse of two attempts at one job. The premise that motion is
+perceptible below the static-shape threshold was right in the abstract and
+wrong here: perceptible is not the same as legible.
 
-- **The data line never appears to move** — an animating curve on a rates
-  monitor reads as a live update, and that misreading is worse than the
-  feature. A GHOST copy (dashed ink — cannot be confused with the blue data
-  line or the D-1 comparison) starts coincident, springs out to the wanted
-  shape (~400ms), holds (~600ms), fades (~300ms) — slower than the
-  interface's other motion because it is meant to be watched.
-- **Trigger: pin.** The gesture is a transient overlay on the right pane (the
-  par curve regardless of tab — mode semantics live on the par curve), then
-  the pane returns to the pinned preview. Never on hover. **Replay = re-pin
-  the same row** [recorded choice]: the spec's "replay on Pay/Receive toggle"
-  is unreachable in this structure — the toggle lives inside the enlarged
-  sheet, which covers the pane — so re-pin is the replay affordance, and a
-  deliberate click deserves a response.
-- Geometry is REUSED from the diagram (`diagramSpec`/`toBand`/`modeShape` via
-  `ui/gesture.ts`) — one geometry, two renderings. **Exaggeration is a fixed
-  visible amount** (`GESTURE_AMP_PX` = 10px at the deformation peak), never
-  the true bp — magnitude is stated in numbers a few centimetres away.
-- Volatility makes no curve statement → nothing plays. Reduced motion shows
-  the deformed ghost statically for the hold, then removes it.
-- Pinned by `guards/curve-gesture.test.ts`.
+What survives: **the pane's corner label** — the pinned instrument and its
+mode (`3Mx2Y · 스티프닝`), sticky at the pane's bottom-left, no motion. It
+costs nothing visually and says what is selected. It follows §G (opaque bg,
+muted by a text alpha, never element opacity — the sticky-opaque guard caught
+that on the first attempt).
+
+The diagram's geometry (`diagramSpec` / `toBand` / `modeShape`) STAYS — the
+popup still renders it; only the curve-view rendering is gone. Pinned by
+`guards/pane-still.test.ts` (no motion import in CurveView, no gesture module,
+plain `onPin={setPinned}`, corner label present).
 
 ### Verified [motion session, Pass F]
 
@@ -1028,9 +1027,10 @@ is: a few bp of curvature is invisible as a drawing but obvious as movement.
   transformation); outright and fly settle to exact mirrors with labels and
   fill colour flipped (light theme); forward shares the spread path.
 - **Reduced motion**: MotionConfig `reducedMotion="user"` +
-  `guards/reduced-motion.test.ts` (instant()), static-ghost path pinned by
-  `guards/curve-gesture.test.ts`. OS-level emulation was not run (needs an
-  OS toggle or a Chrome relaunch flag, neither available mid-session).
+  `guards/reduced-motion.test.ts` (instant()). (The static-ghost path this
+  line also cited went out with the gesture — strip session, Pass A.)
+  OS-level emulation was not run (needs an OS toggle or a Chrome relaunch
+  flag, neither available mid-session).
 - **Themes**: passes A–E exercised in dark; grid + morphs re-checked in
   light.
 
