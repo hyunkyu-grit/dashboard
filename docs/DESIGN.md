@@ -1481,7 +1481,20 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
   block to deltas, the per-basis level columns were **dropped**: they were the
   ambiguous, low-value part (the main table owns the change story; the popup
   owns the full path). The block now shows only 현재 (the quoted level) + the
-  gauge, so no header is shared with a different quantity. (2) **The gauge.**
+  gauge, so no header is shared with a different quantity.
+
+  **RE-VERIFIED against the code [stability session, Pass F]** — carried into
+  that session's brief as still open, and it is not. `KeyForwardBlock`
+  (`wall/ForwardMatrix.tsx`) renders exactly four headers — 주요 포워드 / 현재 /
+  the 52주 최저–최고 track / 백분위 — and reads only `kf.values.now`; no basis
+  key is rendered anywhere in the block, so nothing shares a header with the
+  main table's change columns. The neighbouring matrix is headed by *tenors*,
+  not bases, and its cells are levels. **Recorded resolution: relabelling and
+  flipping to deltas were both rejected in favour of removal**, because the
+  main table already owns the change story at those exact bases and the popup
+  owns the full path — a per-basis level strip here was restating one and
+  duplicating the header of the other. Nothing to do; do not reintroduce
+  per-basis columns in this block. (2) **The gauge.**
   Each row gets a thin track spanning that forward's **52-week level min→max**
   (annual-stats session; `backend/app/forwards.py::_level_range`, a LEVEL
   distribution — distinct from the |Δ| move percentile that drives the tint,
@@ -1649,10 +1662,37 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
   both themes: a blue preview/chart line does **not** read as "down" because the
   line and the change-column numbers live in **separate panes** with unambiguous
   context — a large titled price chart on the right, small signed figures in the
-  table on the left. So strokes stay blue. **Revisit only if** a future layout
-  ever places a blue stroke *inside the same visual group* as a column of blue
-  down-numbers; the fix then is to move strokes to ink (the chart is signless,
-  so ink loses nothing) — do not reach for a third hue.
+  table on the left. So strokes stay blue.
+
+  **RE-CHECKED and CONFIRMED [stability session, Pass F], this time against the
+  trigger rather than around it.** The old revisit condition — "a blue stroke
+  inside the same visual group as a column of blue down-numbers" — was already
+  satisfied and nobody had noticed: `PreviewPane`'s header prints the signed D-1
+  delta ~30px **directly above** the blue stroke, same pane, same group, and
+  `--bw-down` and `--bw-line` are not merely similar but the **identical token
+  value** (`#0064FF` light / `#4C93FF` dark). So the case was constructed and
+  looked at rather than reasoned about: every instrument was up on D-1 in the
+  live snapshot, so the rendered deltas were flipped to `text-down` **in the DOM
+  only** (no code changed; page reloaded after) to produce the exact scenario —
+  a full table of blue negatives beside a blue chart, with a blue `−5.0` sitting
+  above the stroke. Checked in both themes.
+
+  The verdict is unchanged and the reason is better than the old one. The line
+  does **not** read as "down", because in that constructed frame it visibly
+  *rises* across a screen where every number is negative — if hue were carrying
+  direction that would look like a contradiction, and it does not; the eye takes
+  slope from the line and sign from the glyph. Sign on a number is already
+  carried three ways (the U+2212 prefix, the column header, the grayscale
+  mini-bar), so hue there is the redundant third channel; on the stroke hue
+  carries nothing at all. The everyday state is the proof: on a normal up day a
+  **red** `+5.0` sits above the same **blue** line and reads as no contradiction
+  either — which is what it means for two encodings not to share a scale.
+
+  **The trigger is therefore retired, not re-armed.** It has now been exercised
+  at its worst case and survived, so reopening on proximity alone would be
+  re-litigation. Reopen only on evidence of a reader *misreading* a stroke as a
+  direction. The fix, if that ever comes, is unchanged: move strokes to ink (the
+  chart is signless, so ink loses nothing) — never a third hue.
 - **REVERSED [palette cut] — "orange = action/selection" is withdrawn.** The
   Session 16 §E decision (line → blue, freeing orange for primary action /
   selection / focus / hover pulse) was CONFIRMED and is now **reversed**: the

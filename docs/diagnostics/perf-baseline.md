@@ -239,6 +239,16 @@ fetches 56 KB it used to have but which everyone else no longer downloads.
 Forward-tab settle and peak heap moved inside their noise bands, which is the
 expected result: nothing in this pass touched rendering or retention.
 
+### Run the gates with the dev servers stopped
+
+Worth knowing before anyone reports a regression that is not one. With
+`uvicorn` and `next start` running, the backend suite took **201s**; with both
+stopped, the identical suite took **70s** — the four slow tests
+(`test_engine_port`, `test_forward_history`, which bootstrap every historical
+curve) are CPU-bound and lose to any competing process. The gate did not get
+slower this pass; the machine was busier. Measure gate time on an idle machine
+or not at all.
+
 ### A measurement that lied, recorded so it is not repeated
 
 Timing the first popup by polling `document.querySelectorAll('canvas')` in a
