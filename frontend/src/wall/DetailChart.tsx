@@ -23,6 +23,7 @@ import {
   LineSeries,
   type IChartApi,
   type ISeriesApi,
+  type Logical,
   type LogicalRange,
 } from "lightweight-charts";
 import { useQuery } from "@tanstack/react-query";
@@ -46,6 +47,7 @@ import {
   resolveTheme,
 } from "@/theme/bridge";
 import { assertDomainRendered } from "@/theme/domainGuard";
+import { dateLabels } from "@/ui/timeAxis";
 
 export type ChartType = "line" | Interval;
 
@@ -59,6 +61,9 @@ async function fetchLine(id: string): Promise<LineDetail> {
   return res.json();
 }
 
+// height of the date-label strip under the chart (dates session, Pass B)
+const AXIS_H = 18;
+
 function buildOptions(width: number, height: number) {
   const t = resolveTheme();
   const options = {
@@ -67,7 +72,9 @@ function buildOptions(width: number, height: number) {
     layout: { background: { color: t.tile }, textColor: t.ink, attributionLogo: false },
     grid: { vertLines: { visible: false }, horzLines: { color: t.border } },
     rightPriceScale: { borderColor: t.border },
-    timeScale: { borderColor: t.border, minBarSpacing: 0.05 },
+    // LWC's own time axis is hidden: the date strip below renders our sparse
+    // orientation labels instead (round boundaries, no ticks — Pass B).
+    timeScale: { visible: false, borderColor: t.border, minBarSpacing: 0.05 },
     crosshair: { mode: 0 },
   };
   assertNoCssVars(options);
@@ -114,6 +121,9 @@ export function DetailChart({
   const [themeTick, setThemeTick] = useState(0);
   const [hover, setHover] = useState<Hover | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
+  // sparse date labels for the strip under the chart, recomputed on every
+  // visible-range change (zoom / pan / candle interval — Pass B)
+  const [axisLabels, setAxisLabels] = useState<{ x: number; text: string }[]>([]);
 
   // callbacks read via ref so the once-created subscriptions never go stale;
   // synced in an effect (refs must not be written during render)
@@ -180,7 +190,7 @@ export function DetailChart({
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const chart = createChart(el, buildOptions(width, height));
+    const chart = createChart(el, buildOptions(width, height - AXIS_H));
 
     let series: ISeriesApi<"Line" | "Candlestick">;
     if (isCandle) {
@@ -223,10 +233,28 @@ export function DetailChart({
       }
     });
 
-    // visible range → stats (line) and the heatmap x-domain (§C), both modes
+    // visible range → stats (line), the heatmap x-domain (§C), and the date
+    // strip (Pass B) — all modes; candle intervals follow automatically since
+    // the buckets set the span.
     chart.timeScale().subscribeVisibleLogicalRangeChange((r) => {
       if (!isCandle) setStats(statsForRange(linePointsRef.current, r));
       emitRange(r);
+      const times = timesRef.current;
+      if (times.length === 0) {
+        setAxisLabels([]);
+        return;
+      }
+      const clamp = (v: number) => Math.max(0, Math.min(times.length - 1, v));
+      const lo = r ? clamp(Math.round(r.from)) : 0;
+      const hi = r ? clamp(Math.round(r.to)) : times.length - 1;
+      const out: { x: number; text: string }[] = [];
+      for (const l of dateLabels(times[lo], times[hi])) {
+        let i = lo;
+        while (i < hi && times[i] < l.iso) i++;
+        const x = chart.timeScale().logicalToCoordinate(i as Logical);
+        if (x != null && x >= 0 && x <= width) out.push({ x, text: l.text });
+      }
+      setAxisLabels(out);
     });
 
     return () => {
@@ -281,7 +309,20 @@ export function DetailChart({
   const tip = renderTip(hover, stats, unit, isCandle);
   return (
     <div className="relative" style={{ width, height }}>
-      <div ref={containerRef} style={{ width, height }} />
+      <div ref={containerRef} style={{ width, height: height - AXIS_H }} />
+      {/* date strip (Pass B): sparse orientation labels at round boundaries —
+          no ticks, no rule; they update with zoom / pan / candle interval. */}
+      <div className="relative" style={{ width, height: AXIS_H }}>
+        {axisLabels.map((l) => (
+          <span
+            key={`${l.text}@${Math.round(l.x)}`}
+            className="absolute top-0.5 -translate-x-1/2 whitespace-nowrap text-[11px] text-ink opacity-45"
+            style={{ left: l.x }}
+          >
+            {l.text}
+          </span>
+        ))}
+      </div>
       {tip && (
         <div
           className="pointer-events-none absolute z-10 rounded-[8px] bg-popover p-2 text-[12px] shadow-lg"

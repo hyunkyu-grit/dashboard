@@ -11,7 +11,9 @@ import { useState } from "react";
 import type { HistoryPoint, SeriesStats, Unit } from "@/lib/api";
 import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 
-const PAD = { top: 10, right: 10, bottom: 16, left: 6 };
+import { dateLabels } from "./timeAxis";
+
+const PAD = { top: 10, right: 10, bottom: 18, left: 6 };
 
 export function PreviewChart({
   points,
@@ -66,6 +68,17 @@ export function PreviewChart({
   const dailyChange = hp ? hp.d : null;
   const tipLeft = hi != null ? Math.min(width - 150, Math.max(0, x(hi) + 10)) : 0;
 
+  // date labels (dates session, Pass B): sparse orientation marks in the
+  // bottom pad — no ticks, no rule. The preview has no zoom, so the span is
+  // the full fetched history; x = the first point on/after the boundary.
+  const labels = dateLabels(points[0].t, points[points.length - 1].t)
+    .map((l) => {
+      let i = points.findIndex((p) => p.t >= l.iso);
+      if (i < 0) i = points.length - 1;
+      return { text: l.text, px: x(i) };
+    })
+    .filter((l) => l.px >= PAD.left && l.px <= width - PAD.right);
+
   return (
     <div className="relative" style={{ width, height }}>
       <svg
@@ -84,6 +97,18 @@ export function PreviewChart({
           strokeWidth={1.6}
           strokeLinejoin="round"
         />
+        {labels.map((l) => (
+          <text
+            key={l.text}
+            x={l.px}
+            y={height - 4}
+            textAnchor="middle"
+            className="fill-ink"
+            style={{ fontSize: 10, opacity: 0.45 }}
+          >
+            {l.text}
+          </text>
+        ))}
         {hi != null && hp && (
           <>
             <line
