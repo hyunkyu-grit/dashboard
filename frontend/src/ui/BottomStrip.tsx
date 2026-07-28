@@ -8,10 +8,14 @@
  * against. Three ANCHORS carry that: a level (10Y), a slope (3s10s) and a
  * forward (1Yx1Y), so all three curve modes are represented. Every figure
  * already exists in the summary payload — nothing was added to the backend.
+ * The anchors ARE the reason the strip exists.
  *
- * Right: the next policy meeting and its countdown (ui/calendar.ts). When the
- * calendar file has run out the strip SAYS SO rather than showing nothing or a
- * stale date — a file that stops leaves the screen looking correct.
+ * The right side used to hold the next policy meeting and its countdown. The
+ * calendar was disconnected from the UI (removal session, Pass B) — the data
+ * and its logic remain in ui/calendar.ts, unreferenced by design. Re-wiring
+ * it means restoring this slot, the chart rules, AND the staleness guard
+ * together; see DESIGN. The right end now carries only the collapse control,
+ * which keeps the bar anchored at both ends rather than trailing off.
  *
  * Same register as everywhere else: terse labels, tabular numerals, no prose.
  * Collapsible, remembered; collapsed leaves a thin handle. */
@@ -20,16 +24,7 @@ import { useSyncExternalStore } from "react";
 
 import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 
-import { countdown, nextMeeting, shortDate, todayISO } from "./calendar";
 import type { Row } from "./rows";
-
-/* Both client-only reads below go through useSyncExternalStore rather than
- * an effect: the wall clock and localStorage are external systems with a
- * server snapshot (null / false) and a client snapshot, which is exactly
- * what it is for. Setting state in an effect instead is what the compiler
- * lint rejects, and it would cascade a render on every mount. */
-
-const noopSubscribe = () => () => {};
 
 /** A level, a slope, a forward — one of each mode. Ids as the row builder
  * makes them (spreads keep their leg id; the label is trader shorthand). */
@@ -71,18 +66,9 @@ export function BottomStrip({
   collapsed: boolean;
   onCollapsed: (v: boolean) => void;
 }) {
-  // the wall clock is client-only: the server snapshot is null, so the strip
-  // renders its event side after hydration and never mismatches
-  const today = useSyncExternalStore(
-    noopSubscribe,
-    () => todayISO(),
-    () => null,
-  );
-
   const anchors = ANCHOR_IDS.map((id) => rows.find((r) => r.id === id)).filter(
     (r): r is Row => !!r,
   );
-  const next = today ? nextMeeting(today) : null;
 
   if (collapsed) {
     return (
@@ -110,22 +96,9 @@ export function BottomStrip({
       {anchors.map((r) => (
         <Anchor key={r.id} row={r} onPin={onPin} />
       ))}
+      {/* the right end carries only the collapse control now, which keeps the
+          bar anchored at both ends instead of trailing off into empty space */}
       <span className="flex-1" />
-      {today && (
-        <span className="whitespace-nowrap opacity-55">
-          {next ? (
-            <>
-              {next.label} {shortDate(next.date)}
-              <span className="opacity-45"> · </span>
-              {countdown(today, next.date)}
-            </>
-          ) : (
-            // the file has run out: say so plainly (Pass D) — never a stale
-            // date, never a blank where a countdown belongs
-            "일정 파일 갱신 필요"
-          )}
-        </span>
-      )}
       <button
         type="button"
         onClick={() => onCollapsed(true)}

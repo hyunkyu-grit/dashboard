@@ -35,8 +35,55 @@ import {
 const MIN_HORIZON_DAYS = 60;
 const SOURCES = ["bok.or.kr", "federalreserve.gov", "boj.or.jp", "ecb.europa.eu"];
 
+/* PARKED while the calendar has no UI consumer (removal session, Pass B).
+ *
+ * The horizon gate fires on 2026-10-19 by design. With nothing rendering the
+ * calendar, that would break the build for a feature nobody can see — so it
+ * SKIPS while `ui/calendar.ts` is unreferenced, and the skip is computed, not
+ * hard-coded: re-wire any consumer and the gate comes back on its own. It
+ * must not be possible to restore the strip's next-event slot or the chart
+ * rules and leave this silently off. */
+const consumers = (() => {
+  const dir = join(__dirname, "..", "src");
+  const found: string[] = [];
+  const walk = (d: string) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      const p = join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.tsx?$/.test(e.name)) {
+        const rel = relative(dir, p).replace(/\\/g, "/");
+        if (rel === "ui/calendar.ts") continue;
+        if (/from "(@\/ui\/calendar|\.\/calendar)"/.test(readFileSync(p, "utf8"))) {
+          found.push(rel);
+        }
+      }
+    }
+  };
+  walk(dir);
+  return found;
+})();
+
+const WIRED = consumers.length > 0;
+
+/** The skip has to SAY why, or a later session sees a silently-off gate. The
+ * reason rides in the test's own title so it prints beside the ↓. */
+const HORIZON_TITLE = WIRED
+  ? `still reaches at least ${MIN_HORIZON_DAYS} days out`
+  : `still reaches at least ${MIN_HORIZON_DAYS} days out — SKIPPED: the ` +
+    "calendar has no UI consumer (removal session, Pass B). Re-wire the " +
+    "strip's next-event slot or the chart rules and this gate returns by " +
+    "itself; it must never be left off by hand.";
+
+describe("the calendar module's wiring", () => {
+  it(WIRED ? "has consumers, so the horizon gate is live" : "is disconnected on purpose — module kept, gate parked", () => {
+    // documents the state rather than demanding it: the moment a consumer
+    // appears, the horizon gate below stops skipping
+    expect(consumers).toEqual(WIRED ? consumers : []);
+  });
+});
+
 describe("the file does not go stale silently", () => {
-  it(`still reaches at least ${MIN_HORIZON_DAYS} days out`, () => {
+  it.skipIf(!WIRED)(HORIZON_TITLE, () => {
     const left = horizonDays(todayISO());
     const listed = MEETINGS.filter((e) => e.kind !== "lpr");
     expect(

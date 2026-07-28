@@ -371,6 +371,10 @@ drag dismiss; `?tile=series:<id>` keeps working).
   **Right: the next policy meeting** and its countdown (`금통위 8월 27일 ·
   D-30`), from the calendar below; when the file has run out it says
   `일정 파일 갱신 필요` rather than showing nothing or a stale date.
+  *(The next-event slot was removed with the calendar — removal session,
+  Pass B. The right end now carries only the collapse control, which keeps
+  the bar anchored at both ends instead of trailing off; the anchors are and
+  always were the reason the strip exists.)*
   Clicking an anchor **pins** that instrument, exactly as clicking its row
   does (`setPinned`, no tab switch). Collapsible, remembered in
   `localStorage` (`bw-strip`); collapsed leaves a thin handle. It is chrome:
@@ -381,42 +385,12 @@ drag dismiss; `?tile=series:<id>` keeps working).
   through `useSyncExternalStore`, not an effect — the compiler lint rejects
   setState-in-effect and it would cascade a render on every mount. Pinned by
   `guards/bottom-strip.test.ts`.
-- **Meeting rules on the enlarged chart [strip session, Pass E].** A faint
-  vertical rule at each policy meeting inside the visible range — where the
-  calendar earns most of its keep. **A backdrop, not data:** neutral ink at
-  15% alpha, one pixel wide, `pointer-events-none`, and genuinely BEHIND the
-  series — the chart's own background is set transparent so a DOM underlay
-  can sit under the canvas while the wrapper carries the tile colour. (An
-  overlay above the canvas would paint a backdrop on top of data, and this
-  project has enough LWC z-order history.) **Enlarged chart only**; the
-  preview stays clean. **The kinds are told apart by dash and weight, never
-  by hue** [calendar session, Pass E]: 금통위 solid and strongest (the KRW
-  curve's own bank), FOMC solid, BOJ dashed, ECB dashed and fainter, LPR
-  dotted and faintest — all neutral ink through `currentColor`, so each
-  pattern inherits the theme and its alpha.
-  **Density: dropped, never hatched** — above
-  `MEETING_RULE_MAX` = **32 in view** [recorded threshold], OR when the
-  average gap between adjacent rules falls under `MEETING_RULE_MIN_GAP_PX` =
-  **6px** [added calendar session, Pass G], the rules are removed entirely.
-  The spacing test had to be added: the count alone assumed the events were
-  SPREAD across the view, and a 2026-only calendar bunches all 25 of them into
-  ~35px at the right edge of a ten-year chart — 25 ≤ 32, so the count passed
-  while the screen showed exactly the hatch the threshold exists to prevent.
-  Count and spacing together now say what the count alone used to. It averages
-  rather than taking the minimum because same-day meetings are legitimate (BOJ
-  and ECB both sit on 2026-03-19) and give a gap of zero. At ~16 meetings a year that is about two years of them,
-  the point where they still read as separate marks; a decade in one view is
-  ~180 rules and reads as a hatch.
-  **Verified [calendar session, Pass G]:** the 10y view draws 0 (the 2026
-  cluster is caught by the spacing test), a 2025-26 window draws 13 across
-  four distinct tones, and a 2017-19 window draws 0 — nothing before 2026
-  anywhere. The strip's next event on 2026-07-28 read `FOMC 7월 29일 · D-1`,
-  hand-checked against the verified lists (it correctly skips the past
-  2026-07-23 ECB, which is not a countdown kind either). Staging an
-  unverified 2027-03-17 FOMC left the strip unchanged and the horizon at 143
-  days rather than 232. LPR hand-checked against the 20th-and-roll rule:
-  01-20 Tue, 03-20 Fri and 05-20 Wed stay put; 06-20 Sat → 06-22 Mon, 09-20
-  Sun → 09-21 Mon, 12-20 Sun → 12-21 Mon. Both themes. Pinned by `guards/meeting-rules.test.ts`.
+- **REMOVED — meeting rules on the enlarged chart [built strip session Pass E;
+  removed removal session, Pass B].** They went with the calendar's other UI
+  consumers (below). The density threshold and the average-gap test existed
+  only to serve them and went too, as did the transparent-canvas + DOM-underlay
+  arrangement that let them paint behind the series — the chart's background is
+  an opaque tile colour again.
 - **Verified [strip session, Pass F].** Strip present on all five tabs
   (전체/아웃라이트/스프레드/포워드/변동성) and in the narrow single-column
   layout, light and dark. The scroll container's bottom edge lands exactly on
@@ -435,6 +409,24 @@ drag dismiss; `?tile=series:<id>` keeps working).
   animates in the pane on pin. *(Dated record: the carry block and the
   calendar's UI consumers named here were both removed in the removal
   session — see the REMOVED entries above.)*
+- **DISCONNECTED FROM THE UI [removal session, Pass B] — but built, verified
+  and KEPT.** The economic calendar is its own concern, not part of this
+  monitor, so it was unwired here rather than tuned further. **The module,
+  its data and its tests stay** (`ui/calendar.ts`, `data/calendar.json`,
+  `guards/calendar.test.ts`): the verified 2026 dates, their sources, the
+  `verified` filtering and the LPR generation rule were the hard part and
+  none of it is wrong — it simply has no consumer in this product for now.
+  **A later session reading only the code would see an unused module and
+  delete it. Do not.**
+  What was removed: the strip's next-event slot and countdown, the chart's
+  meeting rules, and the `일정 파일 갱신 필요` state (nothing displays the
+  calendar, so there is nothing for it to warn about).
+  **Re-wiring means restoring all three together** — the strip slot, the
+  chart rules, and the staleness guard. The guard is PARKED, not disabled: it
+  skips while `ui/calendar.ts` has no importer, the skip is computed from a
+  source scan rather than hard-coded, and the skip message says so, so adding
+  any consumer brings the gate back by itself. It must never be switched off
+  by hand. (Verified: a throwaway importer flipped it from skipped to live.)
 - **Policy-meeting calendar [strip session Pass D; REBUILT ON VERIFIED DATA,
   calendar session].** A hand-maintained JSON file in the repo
   (`frontend/src/data/calendar.json`) — no feed, no API. **Every entry was

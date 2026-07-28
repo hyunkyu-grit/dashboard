@@ -61,12 +61,22 @@ describe("it is chrome, not content", () => {
   });
 });
 
-describe("the calendar side never shows a stale or blank countdown", () => {
-  it("says so plainly when the file has run out", () => {
-    expect(strip).toContain("일정 파일 갱신 필요");
+describe("the calendar is disconnected (removal session, Pass B)", () => {
+  it("the strip reads no calendar and shows no event", () => {
+    // CODE only: the header comment explains what the right side USED to
+    // hold and why it went, and that explanation must not trip its own guard
+    const code = strip
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    expect(code).not.toMatch(/from "\.\/calendar"/);
+    expect(code).not.toMatch(/nextMeeting|countdown|shortDate|todayISO/);
+    // and no leftover of the run-out state, which had nothing left to guard
+    expect(code).not.toContain("일정 파일 갱신 필요");
   });
-  it("renders the event only once the client date is known", () => {
-    expect(strip).toMatch(/today && \(/);
+
+  it("the anchors — the reason the strip exists — are untouched", () => {
+    expect(ANCHOR_IDS).toEqual(["10Y", "3Y-10Y", "1Yx1Y"]);
+    expect(strip).toContain("rows.find");
   });
 });
 
