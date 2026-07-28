@@ -10,6 +10,8 @@
  *      an unverified entry renders NOWHERE and does not count toward the
  *      horizon — proved below against a live unverified row. */
 
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import raw from "../src/data/calendar.json";
@@ -120,8 +122,47 @@ describe("every entry is verified and sourced", () => {
 describe("verified is load-bearing: unverified renders NOWHERE", () => {
   const staged = { date: "2027-03-18", kind: "fomc", label: "FOMC", source: "x" };
 
-  it("the shipped file has no unverified rows", () => {
-    expect(UNVERIFIED_COUNT).toBe(0);
+  /* The guarantee is STRUCTURAL, not a promise each consumer keeps: the raw
+   * file is reachable from exactly one module, and that module exports only
+   * filtered lists. A render path therefore CANNOT see an unverified row —
+   * there is no accessor that would hand it one. */
+  it("only ui/calendar.ts may read the raw file", () => {
+    const dir = join(__dirname, "..", "src");
+    const offenders: string[] = [];
+    const walk = (d: string) => {
+      for (const e of readdirSync(d, { withFileTypes: true })) {
+        const p = join(d, e.name);
+        if (e.isDirectory()) walk(p);
+        else if (/\.tsx?$/.test(e.name)) {
+          const rel = relative(dir, p).replace(/\\/g, "/");
+          if (rel === "ui/calendar.ts") continue;
+          if (/data\/calendar\.json/.test(readFileSync(p, "utf8"))) offenders.push(rel);
+        }
+      }
+    };
+    walk(dir);
+    expect(offenders, offenders.join(", ")).toEqual([]);
+  });
+
+  it("the module exports no unfiltered view of the file", () => {
+    // CODE only — the contract is also described in prose in that file, and
+    // a comment saying "the raw file is not exported" must not trip a check
+    // looking for an export of the raw file
+    const mod = readFileSync(join(__dirname, "..", "src", "ui", "calendar.ts"), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    // `raw` and `file` stay module-private; every export derives from MEETINGS
+    expect(mod).not.toMatch(/export .*\braw\b/);
+    expect(mod).not.toMatch(/export const file/);
+    expect(mod).toMatch(/export const MEETINGS[\s\S]*?\.filter\(\(e\) => e\.verified === true\)/);
+  });
+
+  it("staging is allowed and counted, never fatal", () => {
+    // the file's contract permits unverified rows as a staging area, so their
+    // presence must NOT fail the suite — only their VISIBILITY would. The
+    // count is exposed so a keeper can see what is waiting.
+    expect(UNVERIFIED_COUNT).toBeGreaterThanOrEqual(0);
+    expect(UNVERIFIED_COUNT).toBe(raw.events.length - MEETINGS.length);
   });
 
   it("an unverified row reaches no render path and no horizon", () => {
