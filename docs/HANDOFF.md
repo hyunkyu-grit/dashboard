@@ -167,7 +167,40 @@ rule:
 
 ---
 
-## 6. Current state (as of the annual-stats session — Passes A–C, 2026-07-28)
+## 6. Current state (as of the carry session — Passes A–E, 2026-07-28)
+
+- **HEAD** = the carry-session Pass E commit on `master`, mirrored to D:.
+  Gates: BE **79 pass / 1 skip / 1 xfail**, FE **135 vitest / 20 files**,
+  lint 0, build 0 — every gate its own command, exit code read directly.
+- Passes:
+  1. **A — ONx\* dropped from the forward list** (spot curve in a forward's
+     name; matrix keeps the ON row as the spot anchor labelled 현물).
+     Forward list = 20 starts × 7 tenors = 140 rows. `guards/sort-key`.
+  2. **B — no separator rules inside grids**: the matrix's year-boundary
+     border-t rules removed; the live-quoted CELL border stays (a cell cue,
+     not a rule). Pinned in `guards/scroll-affordance.test.ts`.
+  3. **C — carry & roll replaced the curve heatmap** (endpoint + cache +
+     component deleted). `app/carry.py`: carry_pay = S(T)−F(h,T−h), roll_pay
+     = S(T−h)−S(T); quote-weight leg combination (dv01 ratios deliberately
+     NOT re-applied — embedded in bp-of-quote); forwards pure roll; off-grid
+     tenors priced on an end-anchored stub schedule (naive interpolation
+     EXTRAPOLATED past the 10y node — caught by test; raw engine quantized
+     1M roll to 0). FE: CarryPanel sentence (three shapes + 셈할 수 없습니다
+     + vol one-liner), NEAR_ZERO_BP=0.5, horizons 1M/3M/6M/1Y default 3M,
+     side LIFTED so one toggle signs diagram + sentence.
+     `tests/test_carry.py` + `guards/carry-copy.test.ts`.
+  4. **D — padding**: 한 줄 track floor (ONE_LINER_MIN_PX=120) +
+     overflow-x-auto (narrow scrolls instead of clipping flush), pb-8 bottom,
+     `devIndicators: false`. The owner's narrow screenshot state did NOT
+     reproduce remotely (extension emulates a wide viewport) — fixes are
+     by-construction; owner eyeball on a real narrow window open.
+  5. **E — verified** (DESIGN §2 carry block "Verified"): signs hand-checked
+     on the live curve (payer negative, roll exact to 0.01bp), Receive
+     negation live, legs test-pinned, horizons monotone, light+dark, grids
+     continuous. Open: narrow-window eyeball + vol one-liner glance.
+- Backend :8100 restarted on this code; FE dev :3100; theme left dark.
+
+### Earlier — annual-stats session (Passes A–C, 2026-07-28)
 
 - **HEAD** = the annual-stats Pass C commit on `master`, mirrored to D:.
   Gates: BE **70 pass / 1 skip / 1 xfail**, FE **126 vitest / 19 files**,

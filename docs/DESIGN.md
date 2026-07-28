@@ -328,6 +328,18 @@ drag dismiss; `?tile=series:<id>` keeps working).
   (recorded; same "too small to mean" line as SOLO_MIN_BP). Volatility gets
   one line — a ratio has no carry statement — never zeros. An instrument
   maturing inside the horizon gets "셈할 수 없습니다", not a null figure.
+  **Verified (carry session, Pass E):** hand-checked on the live curve —
+  10Y payer 3M roll −0.34bp = S(9.75Y) 426.46 − S(10Y) 426.80 exactly, and
+  carry −4.27bp matches the accrual identity −(S − 3M money 291.15)·h/A;
+  payer NEGATIVE on the upward curve, not inverted. Receive negation seen
+  live (물고 −4.3/−0.3 blue ↔ 벌고 +4.3/+0.3 red, one toggle also morphing
+  the diagram). Spread/fly = leg combinations (test-pinned; 1s10s +16.0
+  carry = −4.27 − (−20.2) by identity). Horizons coherent and monotone
+  (10Y pay: −1.5 / −4.6 / −7.7 / −11.9). Light + dark; the grids read as
+  continuous fields with the rules gone; two-pane edge gaps measured
+  20px/37px. Open for the owner: the narrow single-column eyeball (this
+  session's viewport is emulated wide) and a glance at the vol one-liner
+  (its branch is unconditional; the API nulls are verified).
 - **Chart type: 선 · 주봉 · 월봉 [Session 16 §G].** A selector in the popup
   (line only in the preview — candles need width it lacks). Closes-only data
   means a true daily candle is impossible (open would equal close), so no 일봉;
