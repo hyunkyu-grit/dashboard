@@ -23,6 +23,7 @@ import { getTile } from "@/wall/tileRegistry";
 import { ChangeLog } from "./ChangeLog";
 
 import { ERROR_SENTENCE, LOADING_SENTENCE } from "./copy";
+import { BottomStrip, STRIP_H, useStripCollapsed } from "./BottomStrip";
 import { CurveView } from "./CurveView";
 import { classify } from "./gloss";
 import { diagramSpec } from "./payReceiveModel";
@@ -186,6 +187,7 @@ export function App() {
 
   const [hovered, setHovered] = useState<Row | null>(null);
   const [pinned, setPinned] = useState<Row | null>(null);
+  const [stripCollapsed, setStripCollapsed] = useStripCollapsed();
   const [tab, setTab] = useState<Group | "all">("all");
   const [matrixOpenRaw, setMatrixOpenRaw] = useState(false);
   const active = hovered ?? pinned;
@@ -306,7 +308,14 @@ export function App() {
         boundary; structure comes from the header hairline, the pane divider, and
         the row hairlines. Card radius survives only where something floats (the
         popup + the chart tooltip). */}
-    <div className="flex h-screen flex-col overflow-hidden bg-tile">
+    {/* the app root pads by the strip's height (strip session, Pass C): the
+        strip is fixed chrome, so padding the border-box root shortens every
+        pane and scroll container inside it at once — the last row is never
+        underneath the strip, collapsed or expanded. */}
+    <div
+      className="flex h-screen flex-col overflow-hidden bg-tile"
+      style={{ paddingBottom: stripCollapsed ? STRIP_H.collapsed : STRIP_H.open }}
+    >
         <Header events={summary?.events ?? []} onFocus={focusFromChangeLog} />
 
         {isError && (
@@ -411,6 +420,18 @@ export function App() {
       </AnimatePresence>
 
       <CommandBar onJump={scrollTo} />
+
+      {/* anchors + the next policy meeting, on every tab and in both layouts
+          (strip session, Pass C). Chrome: fixed above the card, never
+          scrolling with content. */}
+      {summary && (
+        <BottomStrip
+          rows={rows}
+          onPin={setPinned}
+          collapsed={stripCollapsed}
+          onCollapsed={setStripCollapsed}
+        />
+      )}
     </div>
     </MotionConfig>
   );

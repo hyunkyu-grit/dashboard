@@ -392,6 +392,30 @@ drag dismiss; `?tile=series:<id>` keeps working).
   20px/37px. Open for the owner: the narrow single-column eyeball (this
   session's viewport is emulated wide) and a glance at the vol one-liner
   (its branch is unconditional; the API nulls are verified).
+- **Bottom strip [strip session, Pass C].** A slim bar pinned to the bottom
+  of the viewport, above everything, on every tab and in both layouts. **Why:**
+  five tabs and two hundred rows — deep in the forward tab a reader has no idea
+  where 10Y is, and 10Y is the reference every other number is judged against.
+  **Left: three anchors** — `10Y`, `3s10s`, `1Yx1Y`: a level, a slope and a
+  forward, so all three curve modes are represented. Each shows its current
+  value and its change, in the direction colour. Every figure comes from the
+  summary payload the table already holds — **nothing was added to the
+  backend**, and the strip issues no fetch of its own. The change is shown
+  against **D-1 (어제)**: the global basis selector was deleted in Session 16,
+  so D-1 is the product's only remaining "active basis" [recorded].
+  **Right: the next policy meeting** and its countdown (`금통위 8월 27일 ·
+  D-30`), from the calendar below; when the file has run out it says
+  `일정 파일 갱신 필요` rather than showing nothing or a stale date.
+  Clicking an anchor **pins** that instrument, exactly as clicking its row
+  does (`setPinned`, no tab switch). Collapsible, remembered in
+  `localStorage` (`bw-strip`); collapsed leaves a thin handle. It is chrome:
+  `fixed` above the card, never scrolling with content, and **the app root
+  pads by the strip's height** in either state — one border-box padding
+  shortens every pane and scroll container at once, so the last row is never
+  underneath it. Client-only reads (the wall clock, the collapsed flag) go
+  through `useSyncExternalStore`, not an effect — the compiler lint rejects
+  setState-in-effect and it would cascade a render on every mount. Pinned by
+  `guards/bottom-strip.test.ts`.
 - **Policy-meeting calendar [strip session, Pass D].** A hand-maintained
   JSON file in the repo (`frontend/src/data/calendar.json`) — no feed, no
   API, ~16 entries a year. **Two kinds only: 금통위 and FOMC.** Each is about
