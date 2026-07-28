@@ -16,7 +16,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .cache import cached, data_hash
-from .carry import carry_payload
 from .curves import build_basis_curves
 from .dataset import DISPLAY_TENORS, SPEC_NODE_ORDER, load_dataset
 from .derive import (
@@ -61,9 +60,11 @@ _dv01_table = build_dv01_table(_curves["now"], derived_ids)
 # when the data changes (loudly logged).
 _data_hash = data_hash(DATA_PATH)
 _forwards = cached("forwards", _data_hash, lambda: forwards_payload(_dataset, _curves))
-# the curve heatmap (and its cached payload) was removed in the carry session
-# (Pass C): the 어제 column answers "parallel or led?" faster, and daily
-# resolution over ten years was noise. Carry/roll took its place.
+# Two things that used to sit here are gone, both from this region of the
+# popup: the curve heatmap (its 어제-column question was answered faster by
+# the table, and daily resolution over ten years was noise) and carry & roll
+# after it (see DESIGN — removed for a repeated figure and components that
+# did not sum). `forwards` is the only cached payload now.
 
 
 def _outright_label(tenor: str) -> str:
@@ -173,13 +174,6 @@ def series_detail(series_id: str, res: str = "full", interval: str | None = None
 @app.get("/api/forwards")
 def forwards() -> dict:
     return _forwards
-
-
-@app.get("/api/carry/{series_id}")
-def carry(series_id: str) -> dict:
-    # Carry & roll over 1M/3M/6M/1Y from TODAY's curve (§16) — mechanics,
-    # not prediction. PAY side; the browser negates for Receive.
-    return carry_payload(series_id, _curves["now"])
 
 
 @app.get("/api/dv01/{series_id}")

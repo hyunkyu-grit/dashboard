@@ -17,7 +17,6 @@ import { BASIS_LABELS, TIME_BASES, type TimeBasis } from "@/theme/ramp";
 import { DetailChart, type ChartType } from "@/wall/DetailChart";
 
 import { ERROR_SENTENCE } from "./copy";
-import { CarryPanel } from "./CarryPanel";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { instrumentGloss, instrumentSubtitle } from "./gloss";
 import { PayReceive } from "./PayReceive";
@@ -168,8 +167,10 @@ function Body({
   chartType: ChartType;
   onChartType: (t: ChartType) => void;
 }) {
-  // Pay/Receive side is shared by the diagram AND the carry panel (carry
-  // session, Pass C) — one toggle, one sign convention, they cannot disagree.
+  // Pay/Receive side. It was lifted here so the diagram and the carry panel
+  // could share one sign convention; carry is gone, so the diagram is the
+  // only consumer left. Kept lifted — the popup is the natural owner, and a
+  // second consumer (a Pay/Receive-signed readout) would need it again.
   const [side, setSide] = useState<Side>("pay");
   if (!row.seriesId) {
     // every group now derives a history (outrights, spreads, forwards, vol);
@@ -198,11 +199,9 @@ function Body({
         width={900}
         height={420}
       />
-      {/* what HOLDING it earns (carry session, Pass C) — replaced the curve
-          heatmap: the 어제 column answers "parallel or led?" faster, and
-          daily resolution over ten years was noise. Sign follows the
-          Pay/Receive toggle below. */}
-      <CarryPanel row={row} side={side} />
+      {/* This space is deliberately EMPTY. The curve heatmap sat here, then
+          carry & roll; both were removed (see DESIGN §2) and nothing has
+          replaced them. Do not fill it to balance the layout. */}
       {/* what this instrument IS — static, keyed to kind (§ Pass C1) */}
       <p className="mt-3 max-w-[720px] text-[13px] leading-relaxed opacity-70">
         {instrumentGloss(row)}

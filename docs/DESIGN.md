@@ -327,71 +327,36 @@ drag dismiss; `?tile=series:<id>` keeps working).
 
 - Large chart, full history, plus a **segmented control exposing all six time
   bases** — the full opacity ramp lives here now.
-- **REMOVED [carry session, Pass C] — the tenor × date curve heatmap.** Its
+- **REMOVED — the tenor × date curve heatmap [carry session, Pass C].** Its
   intent (was a move parallel or led by one part of the curve?) is answered
   faster by reading the 어제 column down the outright tab, and at daily
-  resolution over ten years the picture was noise. The endpoint, cached
-  payload, and component are gone. **Carry & roll took its place** — the
-  thing the popup lacked: the product said what an instrument IS, where it
-  SITS, and what shape it WANTS, but not what HOLDING it earns, and that is
-  half of any entry decision.
-- **Carry & roll [carry session, Pass C]. Mechanics, not prediction.** The
-  figures follow deterministically from today's curve — no forecast, and
-  deliberately NO scores, ratings, or "good entry" badges (those compress a
-  judgement into a word and hide the reasoning; `guards/carry-copy.test.ts`
-  bans the vocabulary). Backend computes (`app/carry.py`, §16), PAY side on
-  the wire; the browser negates for Receive in the copy layer, driven by the
-  SAME lifted Pay/Receive toggle that signs the diagram, so the two can
-  never disagree. Formulas (bp of the quoted value, horizon h, tenor T):
-  carry_pay = S(T) − F(h, T−h); roll_pay = S(T−h) − S(T); total = their sum
-  = S(T−h) − F(h, T−h) — on an upward curve every term is negative for the
-  payer (the Pass E sign check, pinned in `tests/test_carry.py` along with
-  the first-order accrual identity). Spreads/flies combine legs by QUOTE
-  weights (+1/−1; +2/−1/−1): the DV01-neutral notionals from dv01.py are
-  already embedded in "bp of the quoted value", so re-applying the ratios
-  would double-count. A forward a×b is pure roll (F(a−h,b) − F(a,b), carry
-  0; a−h floored at 0 — recorded approximation). Off-grid tenors (the 1M
-  horizon) price on an end-anchored quarterly schedule with a front stub —
-  par interpolation would extrapolate past the curve's 10y edge, and the
-  raw engine would quantize 1M roll to exactly 0.
-  **Presentation: a label and a number [REWRITTEN, strip session Pass B].**
-  The first draft spoke in full sentences and was the only place in the
-  product that did — prose reads as chatty beside a table of bp figures. It
-  also stated the same number twice ("8.7bp 물고 갑니다" / "8.7bp 움직여야
-  본전"), omitted the direction of the breakeven, and signed a zero
-  (`캐리 +0.0`). The form is now:
-
-  ```
-  3개월 캐리·롤              −8.7bp
-  캐리 0.0 · 롤 −8.7 · 8.7bp 올라야 본전
-  ```
-
-  Headline = the horizon label + the total, the total at hero weight and the
-  ONLY thing carrying direction colour. Caption = breakdown + breakeven, all
-  secondary ink. **The breakeven states its direction**, following the
-  Pay/Receive toggle: a payer profits when the quoted value rises, a receiver
-  when it falls, so bleeding carry needs a favourable move (올라야/내려야) and
-  earning carry can absorb that much of an adverse one (내려도/올라도 —
-  recorded choice: the same mechanical fact stated for the profitable case,
-  not a new claim). A component that ROUNDS to zero prints `0.0` unsigned.
-  An instrument maturing inside the horizon reads `—` / `만기 도래`, not a
-  zero. Horizon control 1개월·3개월·6개월·1년, default 3개월. **NEAR_ZERO_BP = 0.5**: below it the sentence says 캐리는 거의
-  없습니다 rather than printing a figure that invites over-reading
-  (recorded; same "too small to mean" line as SOLO_MIN_BP). Volatility gets
-  one line — a ratio has no carry statement — never zeros. An instrument
-  maturing inside the horizon gets "셈할 수 없습니다", not a null figure.
-  **Verified (carry session, Pass E):** hand-checked on the live curve —
-  10Y payer 3M roll −0.34bp = S(9.75Y) 426.46 − S(10Y) 426.80 exactly, and
-  carry −4.27bp matches the accrual identity −(S − 3M money 291.15)·h/A;
-  payer NEGATIVE on the upward curve, not inverted. Receive negation seen
-  live (물고 −4.3/−0.3 blue ↔ 벌고 +4.3/+0.3 red, one toggle also morphing
-  the diagram). Spread/fly = leg combinations (test-pinned; 1s10s +16.0
-  carry = −4.27 − (−20.2) by identity). Horizons coherent and monotone
-  (10Y pay: −1.5 / −4.6 / −7.7 / −11.9). Light + dark; the grids read as
-  continuous fields with the rules gone; two-pane edge gaps measured
-  20px/37px. Open for the owner: the narrow single-column eyeball (this
-  session's viewport is emulated wide) and a glance at the vol one-liner
-  (its branch is unconditional; the API nulls are verified).
+  resolution over ten years the picture was noise. Endpoint, cached payload
+  and component are gone.
+- **REMOVED — carry & roll [built carry session; deleted removal session,
+  Pass A].** It replaced the heatmap in the same region of the popup, was
+  presented two ways, and neither worked. The popup block, `app/carry.py`,
+  its endpoint and its tests are all gone. **Two faults, recorded so the
+  removal is not mistaken for taste:**
+  1. **The headline and the breakeven printed the same number** — `−3.1bp`
+     over `3.1bp 올라야 본전`. The breakeven clause was supposed to earn its
+     place by naming a DIRECTION; in practice it read as repetition. (The
+     first presentation, a full sentence, had already failed for saying the
+     figure twice in words — so the fault survived the rewrite that was meant
+     to fix it.)
+  2. **The components did not sum to the total at the displayed precision** —
+     `캐리 −0.9 · 롤 −2.3` beside a headline of `−3.1`. Whatever the rounding
+     rule, a reader who adds the parts and gets a different total stops
+     trusting the panel, and that distrust is not confined to the panel.
+  **If carry returns, it is a sortable table COLUMN, not a popup block.**
+  Sorting is the point: "which of these pays me to hold it" is a SCREENING
+  question, and percentile plus carry together is how the choice actually
+  gets made — neither is answerable one instrument at a time in a popup. Note
+  that the column ladder is already tight (§2 "Columns give way"), so a carry
+  column would be **first to drop** in a narrow window, below 한 줄; it must
+  earn its slot against that.
+  **The freed popup space is deliberately left EMPTY.** Two features have now
+  been removed from it; the next one that fills it should be there because it
+  belongs, not because there is a hole.
 - **Bottom strip [strip session, Pass C].** A slim bar pinned to the bottom
   of the viewport, above everything, on every tab and in both layouts. **Why:**
   five tabs and two hundred rows — deep in the forward tab a reader has no idea
@@ -467,7 +432,9 @@ drag dismiss; `?tile=series:<id>` keeps working).
   Meeting rules: 0 at the 10y view, 25 at ~1.6y. Pay/Receive flips the carry
   block: `−4.6bp · 4.6bp 올라야 본전` ↔ `+4.6bp · 4.6bp 올라도 본전` — the
   same physical move, the modality flipping with who you are. Nothing
-  animates in the pane on pin.
+  animates in the pane on pin. *(Dated record: the carry block and the
+  calendar's UI consumers named here were both removed in the removal
+  session — see the REMOVED entries above.)*
 - **Policy-meeting calendar [strip session Pass D; REBUILT ON VERIFIED DATA,
   calendar session].** A hand-maintained JSON file in the repo
   (`frontend/src/data/calendar.json`) — no feed, no API. **Every entry was

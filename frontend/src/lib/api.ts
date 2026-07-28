@@ -183,29 +183,10 @@ export async function fetchVolatility(): Promise<VolatilityPayload> {
   return res.json();
 }
 
-/** Carry & roll over a horizon (carry session, Pass C) — mechanics from
- * today's curve, no prediction. Figures are the PAY side in bp of the quoted
- * value; Receive is the exact negation (applied in the browser, like the
- * Pay/Receive diagram). A null horizon = no statement (volatility, the 1D
- * call, or the instrument matures inside the horizon). */
-export type CarryHorizon = "1M" | "3M" | "6M" | "1Y";
-export interface CarryFigures {
-  carry: number;
-  roll: number;
-  total: number;
-}
-export interface CarryPayload {
-  id: string;
-  unit: "bp";
-  side: "pay";
-  horizons: Record<CarryHorizon, CarryFigures | null>;
-}
-
-export async function fetchCarry(id: string): Promise<CarryPayload> {
-  const res = await fetch(`${API_BASE}/api/carry/${encodeURIComponent(id)}`);
-  if (!res.ok) throw new Error(`carry ${id}: HTTP ${res.status}`);
-  return res.json();
-}
+/* Carry & roll lived here and is gone (see DESIGN): the headline repeated the
+ * breakeven's figure, and the components did not sum to the total at the
+ * displayed precision. If it returns it is a sortable table COLUMN, not a
+ * popup block. */
 
 /** Per-leg DV01 + the DV01-neutral notional ratio (§B). */
 export interface Dv01Leg {
