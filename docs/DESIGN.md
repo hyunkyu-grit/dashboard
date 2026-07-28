@@ -392,6 +392,34 @@ drag dismiss; `?tile=series:<id>` keeps working).
   20px/37px. Open for the owner: the narrow single-column eyeball (this
   session's viewport is emulated wide) and a glance at the vol one-liner
   (its branch is unconditional; the API nulls are verified).
+- **Policy-meeting calendar [strip session, Pass D].** A hand-maintained
+  JSON file in the repo (`frontend/src/data/calendar.json`) — no feed, no
+  API, ~16 entries a year. **Two kinds only: 금통위 and FOMC.** Each is about
+  eight meetings a year, published a year ahead, and between them they are
+  what actually moves the KRW curve; CPI prints and bond auctions would push
+  the file past fifty entries a year and turn it into a maintenance job for a
+  fraction of the value — they stay out until they earn a place. Fields are
+  **date, kind, label and nothing else**; provenance and the `verified` flag
+  live at the file level, not per entry. Coverage runs back through the data
+  range (2016→), which means Korea's twelve-meetings-a-year MPC era through
+  2016 and eight from 2017, plus the unscheduled meetings that matter — the
+  **2020-03-16 emergency cut** above all.
+  **Staleness is the failure it is built against:** a file that stops at last
+  December leaves the screen looking correct while the countdown is wrong.
+  `guards/calendar.test.ts` FAILS when the last entry is less than **60 days**
+  out, and the strip says so plainly rather than showing a stale date or
+  nothing. That guard catches a file that STOPS, never one that is WRONG —
+  hence `verified`, which the shipped seed sets to **false**: the dates were
+  reconstructed from the published-schedule pattern, a weekday cross-check
+  flagged ~23 as landing off the usual MPC-Thursday / FOMC-Wednesday, and
+  they must be checked against bok.or.kr and federalreserve.gov before the
+  flag is flipped.
+  **D-0 [recorded choice]:** the countdown shows `D-0` on the meeting day
+  itself and the event stays on screen through that whole day, rather than
+  vanishing at midnight and jumping to the next meeting. Dates are compared as
+  ISO strings in the LOCAL calendar (`todayISO`), so a countdown never shifts
+  with the browser's side of UTC midnight; `daysBetween` parses at UTC noon so
+  a DST shift cannot round it to the wrong integer.
 - **Chart type: 선 · 주봉 · 월봉 [Session 16 §G].** A selector in the popup
   (line only in the preview — candles need width it lacks). Closes-only data
   means a true daily candle is impossible (open would equal close), so no 일봉;

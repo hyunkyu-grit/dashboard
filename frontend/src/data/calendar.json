@@ -1,0 +1,916 @@
+{
+  "verified": false,
+  "note": "HAND-MAINTAINED. Two kinds only: mpc (금통위) and fomc — about eight meetings a year each, published a year ahead, and between them what actually moves the KRW curve. CPI prints and bond auctions are deliberately excluded: they would push this past fifty entries a year and turn it into a maintenance job for a fraction of the value. Korea's MPC held twelve rate meetings a year through 2016 and eight from 2017; unscheduled meetings are included where they matter — the 2020-03-16 emergency cut above all. \"verified\": false means THESE DATES ARE A SEED, reconstructed by the assistant from the published-schedule pattern rather than copied from an authoritative source. A weekday cross-check flagged ~23 of them as landing off the usual Thursday (MPC) / Wednesday (FOMC), so a real share of them are simply wrong. Check against bok.or.kr and federalreserve.gov, correct what is wrong, then set verified to true. guards/calendar.test.ts fails when the last entry is under 60 days away — that failure is the reminder to top the file up.",
+  "events": [
+    {
+      "date": "2016-01-14",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2016-01-27",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2016-02-16",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2016-03-10",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2016-03-16",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2016-04-19",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2016-04-27",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2016-05-13",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2016-06-09",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2016-06-15",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2016-07-14",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2016-07-27",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2016-08-11",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2016-09-09",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2016-09-21",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2016-10-13",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2016-11-02",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2016-11-11",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2016-12-14",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2016-12-15",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2017-01-13",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2017-02-01",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2017-02-23",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2017-03-15",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2017-04-13",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2017-05-03",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2017-05-25",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2017-06-14",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2017-07-13",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2017-07-26",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2017-08-31",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2017-09-20",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2017-10-19",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2017-11-01",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2017-11-30",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2017-12-13",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2018-01-18",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2018-01-31",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2018-02-27",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2018-03-21",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2018-04-12",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2018-05-02",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2018-05-24",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2018-06-13",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2018-07-12",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2018-08-01",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2018-08-31",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2018-09-26",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2018-10-18",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2018-11-08",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2018-11-30",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2018-12-19",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2019-01-24",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2019-01-30",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2019-02-28",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2019-03-20",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2019-04-18",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2019-05-01",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2019-05-31",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2019-06-19",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2019-07-18",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2019-07-31",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2019-08-30",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2019-09-18",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2019-10-16",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2019-10-30",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2019-11-29",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2019-12-11",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2020-01-17",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2020-01-29",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2020-02-27",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2020-03-03",
+      "kind": "fomc",
+      "label": "FOMC 임시회의"
+    },
+    {
+      "date": "2020-03-15",
+      "kind": "fomc",
+      "label": "FOMC 임시회의"
+    },
+    {
+      "date": "2020-03-16",
+      "kind": "mpc",
+      "label": "금통위 임시회의"
+    },
+    {
+      "date": "2020-04-09",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2020-04-29",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2020-05-28",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2020-06-10",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2020-07-16",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2020-07-29",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2020-08-27",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2020-09-16",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2020-10-14",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2020-11-05",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2020-11-26",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2020-12-16",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2021-01-15",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2021-01-27",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2021-02-25",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2021-03-17",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2021-04-15",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2021-04-28",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2021-05-27",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2021-06-16",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2021-07-15",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2021-07-28",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2021-08-26",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2021-09-22",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2021-10-12",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2021-11-03",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2021-11-25",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2021-12-15",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2022-01-14",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2022-01-26",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2022-02-24",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2022-03-16",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2022-04-14",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2022-05-04",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2022-05-26",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2022-06-15",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2022-07-13",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2022-07-27",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2022-08-25",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2022-09-21",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2022-10-12",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2022-11-02",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2022-11-24",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2022-12-14",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2023-01-13",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2023-02-01",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2023-02-23",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2023-03-22",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2023-04-11",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2023-05-03",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2023-05-25",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2023-06-14",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2023-07-13",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2023-07-26",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2023-08-24",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2023-09-20",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2023-10-19",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2023-11-01",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2023-11-30",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2023-12-13",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2024-01-11",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2024-01-31",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2024-02-22",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2024-03-20",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2024-04-12",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2024-05-01",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2024-05-23",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2024-06-12",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2024-07-11",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2024-07-31",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2024-08-22",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2024-09-18",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2024-10-11",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2024-11-07",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2024-11-28",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2024-12-18",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2025-01-16",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2025-01-29",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2025-02-25",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2025-03-19",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2025-04-17",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2025-05-07",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2025-05-29",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2025-06-18",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2025-07-10",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2025-07-30",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2025-08-28",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2025-09-17",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2025-10-23",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2025-10-29",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2025-11-27",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2025-12-10",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2026-01-15",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2026-01-28",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2026-02-26",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2026-03-18",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2026-04-09",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2026-04-29",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2026-05-28",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2026-06-17",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2026-07-09",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2026-07-29",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2026-08-27",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2026-09-16",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2026-10-15",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2026-10-28",
+      "kind": "fomc",
+      "label": "FOMC"
+    },
+    {
+      "date": "2026-11-26",
+      "kind": "mpc",
+      "label": "금통위"
+    },
+    {
+      "date": "2026-12-09",
+      "kind": "fomc",
+      "label": "FOMC"
+    }
+  ]
+}
