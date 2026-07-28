@@ -1398,6 +1398,44 @@ their declarations and their line count — an over-eager stripper fails
 silently, forever), and fails any guard that reads a file without importing
 the shared stripper.
 
+## 20. Payload and bundle discipline [stability session, Pass E]
+
+Measured before changed. The full baseline, method and all, is
+`docs/diagnostics/perf-baseline.md`; three rules come out of it.
+
+**Stage 1 carries no series.** A summary row is one screen of numbers about an
+instrument — levels, deltas, a percentile, a classification. It carries no
+history, ever. The rule exists because it was broken invisibly: a 150-point
+`spark` line rode on all 50 rows, **92.3% of a 235 KB payload**, read by no
+component, left behind when the band-card layout that drew sparklines was
+retired. A line comes from `/api/series` at stage 2. Enforced by
+`test_wire_format.py` (a size ceiling plus a per-field shape check over the
+whole table, so the next such field fails even under a different name).
+
+**Responses are compressed.** Every endpoint answered with no
+`Content-Encoding`; these payloads are long lists of short numeric records and
+compress ~6×. `GZipMiddleware(minimum_size=1024)` — negotiated, never assumed,
+so a caller that sends `Accept-Encoding: identity` still gets plain JSON.
+Compression is middleware, so it is tested through the ASGI stack; a
+handler-level test cannot see it, which is how its absence survived.
+
+**"Used only in the popup" is not "loaded only with the popup."** §11 confines
+lightweight-charts to the enlarged view and was obeyed — and all 196 KB of it
+still landed in the initial chunk, because `EnlargedView` imported it plainly
+and `App` imports `EnlargedView` at module scope. Confinement is about *where a
+thing renders*; cost is about *which import edges are static*. It is now behind
+`next/dynamic` with the shared `LoadingState`, fetched on first popup (56 KB,
+10 ms). `guards/lazy-chart.test.ts` pins the import edge. Any future dependency
+that is large and reachable from one surface gets the same treatment — and a
+type-only import is fine, it is erased.
+
+**And the discipline that produced all three: measure first.** Tab render times
+(~120 ms for the 143-row forward table), peak heap (17.8 MB, no growth, charts
+disposed), and the four parallel stage-1 requests were all checked and all came
+back healthy; they were left alone, and that is recorded so a later session does
+not "optimise" them on a hunch. The warm load did not get faster and was never
+going to — it is backend latency plus committing 197 rows, not bytes.
+
 ## Settled decisions & open items [closed out, final session Pass E]
 
 These accumulated as "Provisional" across sessions. As of the final session

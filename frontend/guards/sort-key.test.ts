@@ -39,7 +39,6 @@ function outright(id: string): SeriesSummary {
     quoted: true,
     movePct: 50,
     oneLiner: NONE,
-    spark: [],
   };
 }
 

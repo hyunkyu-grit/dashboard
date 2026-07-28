@@ -10,10 +10,11 @@ export type BasisKey = "d1" | "wtd" | "mtd" | "qtd" | "ytd";
  * shown to two decimals, its change is a ratio difference, never bp. */
 export type Unit = "%" | "bp" | "ratio";
 
-export interface SparkPoint {
-  t: string;
-  v: number;
-}
+/* A `SparkPoint`/`spark` field used to ride along on every summary row — 150
+ * points per row, 92.3% of the stage-1 payload — and no component read it. It
+ * was left from the retired band-card layout, whose tiles drew a sparkline.
+ * Removed in the stability session (docs/diagnostics/perf-baseline.md). A line
+ * comes from `fetchSeries` at stage 2; do not put history back on the row. */
 
 /** The `한 줄` classification (§16 exception): the backend decides WHAT is true,
  * the frontend renders the Korean sentence. Levels/deltas stay in their
@@ -52,7 +53,6 @@ export interface SeriesSummary {
   quoted: boolean | null;
   movePct: number | null; // own-history percentile of today's |D-1| move
   oneLiner: OneLiner;
-  spark: SparkPoint[];
 }
 
 export interface ChangeEvent {

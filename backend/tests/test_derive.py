@@ -14,7 +14,7 @@ from app.derive import (
     curve_banner,
     day_move_pct,
     derived_ids,
-    downsample,
+    downsample_triples,
     ohlc_buckets,
     series_history,
     series_values,
@@ -74,9 +74,26 @@ def test_summary_shape(ds):
     assert s["now"] is not None
     assert set(s["deltas"]) == {"d1", "wtd", "mtd", "qtd", "ytd"}
     assert all(v is not None for v in s["deltas"].values())
-    assert len(s["spark"]) <= 150
-    assert s["spark"][-1]["v"] == s["now"]
     assert 0 <= s["range1y"]["pct"] <= 100
+
+
+def test_summary_row_carries_no_history(ds):
+    """Stage 1 is one screen of numbers per row, nothing per-row that is a
+    SERIES. A 150-point `spark` line used to ride along on all 50 rows and no
+    component read it — 92.3% of the payload, discarded on arrival (Pass E,
+    docs/diagnostics/perf-baseline.md). History belongs to /api/series.
+
+    Written as a shape assertion rather than `"spark" not in s` so that
+    reintroducing the same mistake under a different name also fails."""
+    b = basis_dates(ds)
+    s = summarize(ds, "10Y", "IRS 10Y", "outright", b)
+    for key, value in s.items():
+        if key == "sortKey":  # a couple of leg-year floats, not a series
+            continue
+        assert not (isinstance(value, list) and len(value) > 8), (
+            f"stage-1 row field {key!r} carries {len(value)} points — "
+            "per-row history belongs to /api/series, not the summary"
+        )
 
 
 def test_annual_stats_use_only_the_trailing_year():
@@ -117,11 +134,12 @@ def test_move_pct_stays_on_the_full_history():
 
 
 def test_downsample_keeps_last():
-    dates = [dt.date(2020, 1, 1) + dt.timedelta(days=i) for i in range(1000)]
-    vals = [float(i) for i in range(1000)]
-    out = downsample(dates, vals, target=150)
+    # `downsample()` over (date, value) pairs went with the spark field; this
+    # is the surviving decimator, the one that thins the preview line.
+    points = [{"t": f"d{i}", "v": float(i), "d": 1.0} for i in range(1000)]
+    out = downsample_triples(points, target=150)
     assert len(out) == 150
-    assert out[-1] == (dates[-1], vals[-1])
+    assert out[-1] is points[-1]
 
 
 # ── §16 computation boundary: the numbers the browser used to compute ──────────

@@ -14,6 +14,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from .cache import cached, data_hash
 from .curves import build_basis_curves
@@ -38,6 +39,13 @@ from .volatility import relative_atr_for, volatility_payload
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "irsdata.xlsx"
 
 app = FastAPI(title="braveworld", version="0.1.0")
+
+# Every response left here uncompressed (measured, Pass E: no Content-Encoding
+# on any endpoint). These payloads are long lists of short numeric records and
+# compress ~6x; the stage-2 series fetch, the one the reader actually waits on
+# when opening a popup, goes 103 KB -> 17 KB. minimum_size skips the small
+# ones, where the header costs more than it saves (/api/health is 156 bytes).
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 app.add_middleware(
     CORSMiddleware,

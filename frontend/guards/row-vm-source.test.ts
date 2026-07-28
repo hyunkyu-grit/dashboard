@@ -34,7 +34,6 @@ const src: SeriesSummary = {
   quoted: true,
   movePct: 42,
   oneLiner: EXTREME,
-  spark: [],
 };
 
 const summary: WallSummary = {

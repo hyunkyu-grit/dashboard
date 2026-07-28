@@ -9,20 +9,34 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { motion, type PanInfo } from "motion/react";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 
 import { fetchDv01, type WallSummary } from "@/lib/api";
 import { dirClass, fmtBp, fmtRate } from "@/lib/format";
 import { BASIS_LABELS, TIME_BASES, type TimeBasis } from "@/theme/ramp";
-import { DetailChart, type ChartType } from "@/wall/DetailChart";
+import type { ChartType } from "@/wall/DetailChart";
 
 import { ERROR_SENTENCE } from "./copy";
+import { LoadingState } from "./DataState";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { instrumentGloss, instrumentSubtitle } from "./gloss";
 import { PayReceive } from "./PayReceive";
 import type { Side } from "./payReceiveModel";
 import { SHEET_SPRING } from "./motion";
 import type { Row } from "./rows";
+
+/* lightweight-charts is the largest dependency in the build (196 KB raw) and
+ * §11 already confines it to this popup — but a static import put it on the
+ * first-load path anyway, so every reader downloaded and parsed it whether or
+ * not they ever opened a popup (measured: docs/diagnostics/perf-baseline.md).
+ * Behind `dynamic` it arrives with the popup instead. `ssr: false` because the
+ * library needs a real canvas; the type import above is erased at compile time
+ * and does NOT pull the module back into the initial chunk. */
+const DetailChart = dynamic(
+  () => import("@/wall/DetailChart").then((m) => m.DetailChart),
+  { ssr: false, loading: () => <LoadingState what="차트" className="h-[420px]" /> },
+);
 
 function SixBasisReadout({
   summary,

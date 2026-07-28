@@ -20,7 +20,7 @@ from .dataset import (
 
 BASIS_KEYS = ["d1", "wtd", "mtd", "qtd", "ytd"]
 
-SPARK_POINTS = 150  # ~150-pt downsampled sparkline / preview series (§4/§16)
+PREVIEW_POINTS = 150  # ~150-pt downsampled preview series (§4/§16)
 CALENDAR_DAYS = 130  # ~26 trading weeks of daily changes for the heatmap (§2)
 
 # LEVEL statistics window (annual-stats session): trailing one year of
@@ -138,21 +138,11 @@ def series_values(dataset: Dataset, series_id: str) -> list[float | None]:
     raise KeyError(series_id)
 
 
-def downsample(dates: list[dt.date], values: list[float | None],
-               target: int = SPARK_POINTS) -> list[tuple[dt.date, float]]:
-    """Stride decimation to ≤ target points, always keeping the last point.
-
-    Good enough for 300px sparklines; swap for LTTB if shape fidelity ever
-    matters at this size.
-    """
-    pts = [(d, v) for d, v in zip(dates, values) if v is not None]
-    if len(pts) <= target:
-        return pts
-    stride = len(pts) / target
-    picked = [pts[int(i * stride)] for i in range(target)]
-    if picked[-1][0] != pts[-1][0]:
-        picked[-1] = pts[-1]
-    return picked
+# A second decimator, `downsample()` over (date, value) pairs, lived here to
+# build the per-row spark line. That field is gone (see summarize), and it was
+# its only caller, so the function went with it. `downsample_triples` below is
+# the live one: it thins the preview line and is not interchangeable — it
+# carries the precomputed daily change `d` through the thinning.
 
 
 # 한 줄 ladder thresholds (§C2), chosen from the Session-15 replay
@@ -274,7 +264,7 @@ def apply_solo_direction(rows: list[dict]) -> None:
             r["oneLiner"] = {"kind": "solo_up" if d > 0 else "solo_down", "value": None}
 
 
-def downsample_triples(points: list[dict], target: int = SPARK_POINTS) -> list[dict]:
+def downsample_triples(points: list[dict], target: int = PREVIEW_POINTS) -> list[dict]:
     """Stride decimation of {t,v,d} points to ≤ target, always keeping the last.
     Each surviving point keeps its own true daily change `d` (computed on the
     full series before thinning), so a preview point's tooltip stays honest."""
@@ -413,8 +403,10 @@ def summarize(dataset: Dataset, series_id: str, label: str, kind: str,
         # ANNUAL_OBS note) — do not "fix" it to the annual window.
         "movePct": move_pct,
         "oneLiner": classify_one_liner(move_pct, now is not None),
-        "spark": [
-            {"t": d.isoformat(), "v": v}
-            for d, v in downsample(dataset.dates, values)
-        ],
     }
+    # No per-row history here. A 150-point `spark` line used to ride along on
+    # every row, left over from the retired band-card layout whose tiles drew a
+    # sparkline. The list-first table draws no per-row line and no component
+    # ever read the field — it was 92.3% of the stage-1 payload (215 KB of
+    # 235 KB) purely to be discarded. See docs/diagnostics/perf-baseline.md.
+    # Stage 2 (/api/series) is where a line comes from; keep it that way.
