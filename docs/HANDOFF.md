@@ -167,7 +167,35 @@ rule:
 
 ---
 
-## 6. Current state (as of the motion session — Passes A–F, 2026-07-28)
+## 6. Current state (as of the annual-stats session — Passes A–C, 2026-07-28)
+
+- **HEAD** = the annual-stats Pass C commit on `master`, mirrored to D:.
+  Gates: BE **70 pass / 1 skip / 1 xfail**, FE **126 vitest / 19 files**,
+  lint 0, build 0 — each gate run as its own command, exit code read (the
+  piped-gate trap fired twice before; never gate through `tail`).
+- Passes:
+  1. **A — LEVEL stats are 52-week** (`range1y` {min,max,avg,pct}, trailing
+     `ANNUAL_OBS`=252): gauge (+average hairline tick, ends 52주 최저/최고),
+     preview tooltip 52주 최고/최저/평균, screener chips 52주 고점권/저점권,
+     banner, 한 줄 level rung, event range-transitions. **CHANGE stats stay
+     FULL-history on purpose** (movePct, tint, move rung, event 'move') —
+     pinned by `test_move_pct_stays_on_the_full_history`. PreviewChart's
+     y-domain now derives from plotted points (stats would clip the line).
+  2. **B — dates under the charts**: `ui/timeAxis.ts` ladder (year→month→day
+     round boundaries, 3–4 labels), PreviewChart bottom pad + DetailChart
+     18px strip replacing LWC's hidden time axis; labels track zoom and
+     candle buckets. `guards/date-labels.test.ts`.
+  3. **C — verified**: change-based counts byte-identical (1 / 2 / 165 / 1);
+     level percentiles un-saturated structurally (22→27 unique; the day's
+     genuine 52w-high regime keeps outrights ~90-99 honestly); all label
+     rungs seen live at five zoom depths, light + dark.
+- **Gotcha (new, in cache.py):** the disk cache is keyed by data hash +
+  `SCHEMA_VERSION` — the range1y rename silently served the old cached shape
+  until the version was added. Bump SCHEMA_VERSION on ANY cached-payload
+  shape change.
+- Backend :8100 restarted on this code (uvicorn, background); FE dev :3100.
+
+### Earlier — motion session (Passes A–F, 2026-07-28)
 
 - **HEAD** = the motion-session Pass F commit on `master`, mirrored to D:.
   Gates: FE **119 vitest / 18 files**, lint exit 0, build clean.

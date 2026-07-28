@@ -139,6 +139,20 @@ Columns, left to right:
   window on the chart was considered and left out: a wash over ~10% of a 10y
   chart plus the new date labels read as clutter; revisit only if readers
   misattribute the stats' scope.)
+  **Verified (annual-stats session, Pass C):** change-based firing counts are
+  byte-identical before/after (move_extreme 1, movePct≥90 rows 2, matrix tint
+  cells ≥70th 165 and ≥97th 1; per-row movePct equal), so the right window
+  was narrowed. Discrimination: unique level-percentile values rose 22 → 27
+  over 50 rows and permanent saturation is structurally gone; note honestly
+  that on the verification day the curve genuinely sat at 52-week highs (the
+  year's rally), so outright percentiles legitimately read 90-99 — the
+  difference is they can now decay as the regime persists, which the 10y
+  window could not do for a decade. One extra change-log event appeared
+  (2 → 3): the range-transition reason is level-based and now uses the annual
+  window — expected. **Gotcha that fired:** the forwards disk cache is keyed
+  by data hash, so the range10y→range1y rename silently served the OLD shape
+  until `cache.py SCHEMA_VERSION` was added to the key — bump it on any
+  cached-payload shape change.
 - **Curve-level extreme is a banner, not a column [Session 16 §I].** When most
   of the outright curve (≥ `CURVE_REGIME_FRAC`) sits in one extreme band, "this
   tenor is at 52-week highs" is a fact about the *curve*, not any row. It is
