@@ -37,16 +37,39 @@ export interface Freshness {
   level: FreshnessLevel;
 }
 
-/** Local calendar date as ISO — NOT `toISOString()`, which converts to UTC and
- * would report yesterday for anyone east of Greenwich after 09:00 local. Seoul
- * is UTC+9, so that mistake would be visible here every single morning. */
-export function localIsoDate(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+/** The market's timezone. The data is KRW IRS closes and the ladder counts KR
+ * business days, so "which day is it" is a question about Seoul, not about the
+ * reader. */
+export const MARKET_TZ = "Asia/Seoul";
+
+/* Built once: constructing an Intl.DateTimeFormat per call is the expensive
+ * part, and this runs on every render of the header. `en-CA` yields
+ * YYYY-MM-DD, which is what the ladder is compared against. */
+const seoulParts = new Intl.DateTimeFormat("en-CA", {
+  timeZone: MARKET_TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** The calendar date in Seoul at the reader's instant (Pass I).
+ *
+ * The reader's *instant* is the right input; the reader's *local date* is not.
+ * A reader in London at 22:00 on the 29th is already on the 30th in Seoul, and
+ * one in New York at 21:00 is on the 30th too — both would previously have
+ * counted a business day late, every evening. Conversely `toISOString()` would
+ * report yesterday all morning for a reader actually in Seoul.
+ *
+ * Via `Intl`, not a fixed +9: KST has no DST today, but "Korea is UTC+9" is a
+ * fact about the world, and facts about the world belong in the platform's
+ * timezone database rather than in this file, where nobody would think to
+ * revisit it. */
+export function marketIsoDate(d: Date = new Date()): string {
+  return seoulParts.format(d);
 }
 
 export function freshnessFrom(m: Manifest, now: Date = new Date()): Freshness {
-  const today = localIsoDate(now);
+  const today = marketIsoDate(now);
   const days = m.businessDaysAfter ?? [];
   // string compare is safe and total on zero-padded ISO dates
   let age = 0;
