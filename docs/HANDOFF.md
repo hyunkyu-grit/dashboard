@@ -82,8 +82,13 @@ cd frontend; pnpm vitest run; pnpm lint; pnpm build
   `filter`/`onFilter`, sortable columns, forward start-filter + matrix toggle,
   group headings, the quoted/interpolated dot marker.
 - `ui/rows.ts` — **the data model.** `buildRows(summary, forwards)` produces the
-  unified `Row[]`; `oneLiner()` (the 한 줄), `tenorYears()`, `traderName()`,
-  `QUOTED` set, `sortKey`. Start here for any list/label/sort change.
+  unified `Row[]`; `orderRows()` (THE ordering, lifted out of the component so
+  it is testable without a DOM), `traderName()`, `cmpKey()`. Start here for any
+  list/label/sort change.
+- `ui/RangeCells.tsx` — the table's last column: 52주 고점/저점/평균. Ink, and
+  not sortable; both pinned by `guards/range-column.test.ts`.
+- `ui/cells.ts` — the table's two LEVEL call sites (`levelText`, `rangeText`),
+  side by side so they cannot drift. Both are `fmtLevel`.
 - `ui/CurveView.tsx` — idle right-pane curve, dispatched by tab.
 - `ui/PreviewPane.tsx` / `PreviewChart.tsx` / `CalendarHeatmap.tsx` — hover
   state: series history (blue SVG) + tooltip + calendar heatmap.
@@ -169,7 +174,72 @@ rule:
 
 ---
 
-## 6. Current state (as of the static conversion, 2026-07-29)
+## 6. Current state (as of pass L, 2026-07-29)
+
+### Latest — pass L: 52-week high/low/mean replaced the 한 줄 column
+
+One pass, one commit. The last table column kept its slot, its width behaviour
+and its role as the elastic column; only its contents changed, from a dynamic
+Korean sentence to three numbers.
+
+- **Deleted**: the `한 줄` column, its four-rung ladder
+  (`classify_one_liner` / `apply_level_extreme` / `apply_solo_direction` and
+  the `MOVE_PCT_CUT` / `LEVEL_BAND` / `LEVEL_CAP` / `SOLO_MIN_BP` thresholds),
+  the `oneLiner` field on every payload row, `OneLiner`/`OneLinerKind`,
+  `renderOneLiner`, and the one-liner fragment in the preview pane's header.
+  The `일간 변동 상위 N%` outlier signal went with it — it was the column's
+  only frequent occupant.
+- **Deliberately kept, because the one-liner was only one consumer**: `movePct`
+  / `day_move_pct` (the tint DENSITY scale + the 오늘 많이 움직인 것 chip),
+  `range1y` (고점권/저점권 chips, tooltip stats, key-forward gauge, curve
+  banner, and now the column), and the backend `kind`/legs classification
+  (`ui/gloss.ts` → popup description + Pay/Receive mode diagram). **Deleting a
+  consumer and leaving its feed behind** is what left a 150-point sparkline at
+  92% of the payload; the reverse mistake was the one to avoid here.
+- **New**: forward GRID cells gained `range1y` (`{min, max, avg}` — no `pct`,
+  see Provisional). `_cell_move_pct` + `_level_range` became one repricing pass
+  (`_cell_history`), so this is strictly LESS backend work than before and the
+  outputs are byte-identical (verified: 0 differences across 168 cells'
+  `movePct`/`values`/`deltas`, and the 6 keyForward `range1y` records).
+- **Payload, measured before and after** (committed static tree, raw bytes):
+  summary 19,756 → **17,747**; forwards 50,209 → **51,745**; volatility
+  2,654 → **2,414**. Stage-1 total 72,619 → **71,906** — it went DOWN by 713
+  bytes, not up. The ~3× growth the pass anticipated did not happen because the
+  52-week stats were already in stage-1 for 56 of the 196 listed rows, and the
+  `oneLiner` object cost about what `range1y` costs. gzip: summary
+  3,506 → 3,430, forwards 7,121 → 8,368.
+- **Ladder thresholds recomputed** (the 606 figure was stale the moment the
+  cell's contents changed): at the live-measured ch = 7.7431 the fixed-width
+  sum is now **698px** (was 607) — the last column's floor went from a flat
+  120px sentence floor to three sub-columns (211px), so the table needs ~92px
+  MORE room, not less. Every narrower threshold is unchanged: QTD 487 ·
+  MTD 422 · WTD 358 · YTD 293 · 어제 229 · 종목+현재 165. **Verified live**:
+  present at 702px of content, dropped at 698px with "1열 숨김" in its slot.
+- **A defect the live check caught, which no test would have.** The header's
+  `text-[11px]` sat on the GRID CONTAINER. `RANGE_TEMPLATE` is written in
+  `ch`, which resolves against the element's OWN font size — so the header
+  grid's tracks came out 63.3px against the body's 70.4px and every sub-label
+  sat left of the numbers it named (7px, 14px, 21px). Fixed by sizing the
+  spans; `guards/range-column.test.ts` now fails if a sub-grid container
+  carries a text size. Also live-verified after the fix: identical 70.45px
+  tracks in both grids, 0.00px label-to-number offset, 25 rows sharing one
+  right edge per sub-column, one ink colour throughout, and the 52주 header
+  with zero interactive descendants leaving all 196 rows in order when
+  clicked.
+- **`SCHEMA_VERSION` 2 → 3** and the static tree rebuilt. The bump fired
+  correctly: `test_static_agreement` went red on the stale tree before the
+  rebuild, which is the annual-stats session's gotcha working as designed.
+- **§16 re-examined, not left standing.** The exception's most visible subject
+  was the 한 줄. DESIGN §16 now names the two that remain (the instrument
+  gloss, the curve banner) and says to retire the exception if both ever go.
+- **New guard** `guards/range-column.test.ts` (no colour token, no sort
+  affordance, a click leaves order unchanged — with a non-vacuous counter-check
+  that change columns DO reorder). `readout-parity` extended to byte-identity
+  between the 현재 and 52주 render paths across every kind. `wire-format`
+  rewritten to the new shape: it fails on `oneLiner` anywhere, and still fails
+  on a per-row series under ANY name (keyed on value shape, not field name).
+
+## 6b. Before that — the static conversion (2026-07-29)
 
 - **HEAD** = the static-conversion commit `550349a` on `master`, mirrored to
   D:. Gates: FE **295 passed / 1 skipped**, lint 0, build 0; BE **131 passed /
@@ -656,10 +726,13 @@ rule:
 
 - **Forward curve x-axis = start point** (1YF ladder across starts), not
   x = tenor. Chosen; recorded in DESIGN's idle-curve note.
-- **한 줄 thresholds:** extreme-band percentile at `pct ≥ 90` / `≤ 10`, and
-  "shape" = a sign flip between adjacent bases (→ `주간/월중 되돌림`). The
-  principle is owner-set (never restate a visible column); the exact cutoffs
-  were the implementer's call.
+- **CLOSED by deletion (pass L) — 한 줄 thresholds.** The ladder's cutoffs were
+  an open implementer's call for several sessions; the column is gone, so the
+  question is moot rather than answered. The last column now shows the 52-week
+  high/low/mean, which has no threshold to tune. What replaced the open item:
+  three choices recorded under DESIGN `## Provisional` → "Pass L" (the
+  sub-label wording, the unshipped forward percentile, and the un-eyeballed
+  drop threshold).
 - **Volatility = relative ATR [Session 14, built; constants SETTLED final
   session].** `mean(ATR 5)/mean(ATR 60)`, close-only form `TR=|Δr|` bp (the
   export has no intraday high/low). Generic over any series id. Constants are no

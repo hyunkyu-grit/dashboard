@@ -11,14 +11,11 @@ import { describe, expect, it } from "vitest";
 
 import type {
   ForwardsPayload,
-  OneLiner,
   SeriesSummary,
   WallSummary,
 } from "../src/lib/api";
 import { buildRows, ROW_FIELD_SOURCE } from "../src/ui/rows";
 
-const EXTREME: OneLiner = { kind: "extreme", value: 99 };
-const NONE: OneLiner = { kind: "none", value: null };
 const deltas = { d1: 2, wtd: -3, mtd: 4, qtd: -5, ytd: 6 };
 
 const src: SeriesSummary = {
@@ -33,7 +30,6 @@ const src: SeriesSummary = {
   sortKey: [10],
   quoted: true,
   movePct: 42,
-  oneLiner: EXTREME,
 };
 
 const summary: WallSummary = {
@@ -61,9 +57,9 @@ const forwards: ForwardsPayload = {
         values: { now: 3 },
         deltas: { ...deltas },
         sortKey: [1, 1],
-        oneLiner: NONE,
         keyForward: true,
         movePct: null,
+        range1y: { min: 2, max: 4, avg: 3 },
       },
     ],
   } as ForwardsPayload["grid"],
@@ -106,9 +102,18 @@ describe("row view-model source boundary (§16)", () => {
     expect(row.quoted).toBe(src.quoted);
   });
 
-  it("the 한 줄 is rendered from the classification, never recomputed", () => {
-    // backend said {kind:"extreme", value:99}; the browser only phrases it.
+  it("the 52-week stats are read through, never derived here (pass L)", () => {
+    // high/low/mean arrive as range1y.max/min/avg; the builder only renames.
+    // If a mean were ever averaged in the browser this would be the field to
+    // catch it — arithmetic on market data has no honest provenance (§16).
     const row = rows.find((r) => r.id === src.id)!;
-    expect(row.oneLiner).toBe("백분위 99");
+    expect(row.rangeHigh).toBe(src.range1y.max);
+    expect(row.rangeLow).toBe(src.range1y.min);
+    expect(row.rangeAvg).toBe(src.range1y.avg);
+    // and on a forward, whose cell carries min/max/avg with no percentile
+    const fwd = rows.find((r) => r.group === "forward")!;
+    expect(fwd.rangeHigh).toBe(4);
+    expect(fwd.rangeLow).toBe(2);
+    expect(fwd.rangeAvg).toBe(3);
   });
 });

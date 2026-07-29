@@ -170,48 +170,12 @@ for frac in (0.03, 0.10, 0.25, 0.50):
 print(f"  grid max |d1| = {gmax:.2f}bp, median |d1| = {np.median(cells):.2f}bp")
 print()
 
-# ── 한 줄 ladder: speaking rows per day ──────────────────────────────────────
-print("== 한 줄 ladder: speaking rows/day (rung1 move-pct, rung2 level-band swept) ==")
-bases = basis_dates(ds)
-
-
-def ladder_counts(r1: int, band: int) -> list[int]:
-    """speaking rows/day: rung1 move-pct>=r1, rung2 level pct>=100-band or <=band,
-    rung3 solo direction among outrights; first that applies wins."""
-    counts = []
-    for i in idx:
-        signs = [np.sign(DCH[s][i]) for s in outright_ids
-                 if not np.isnan(DCH[s][i]) and abs(DCH[s][i]) >= 0.5]
-        maj = np.sign(sum(signs)) if signs else 0
-        speak = 0
-        for sid in sids:
-            x = DCH[sid][i]
-            lv = LVL[sid]
-            fired = False
-            if not np.isnan(x) and pct_rank(DCH[sid][: i + 1], x) >= r1:
-                fired = True
-            if not fired and not np.isnan(lv[i]):
-                lp = level_pct(lv[: i + 1], lv[i])
-                if not np.isnan(lp) and (lp >= 100 - band or lp <= band):
-                    fired = True
-            if not fired and sid in outright_ids and maj != 0 and not np.isnan(x):
-                if abs(x) >= 0.5 and np.sign(x) == -maj:
-                    fired = True
-            speak += fired
-        counts.append(speak)
-    return counts
-
-
-for r1, band in [(98, 10), (98, 5), (98, 3), (97, 5), (99, 3)]:
-    print(summarize(ladder_counts(r1, band), f"rung1>={r1}, level-band {band}%"))
-print()
-print("(each rung in isolation, at the recommended cut:)")
-for name, cnt in [
-    ("rung1 move-pct>=98",
-     [sum(1 for sid in sids if not np.isnan(DCH[sid][i])
-          and pct_rank(DCH[sid][: i + 1], DCH[sid][i]) >= 98) for i in idx]),
-    ("rung2 level-band 3%",
-     [sum(1 for sid in sids if not np.isnan(LVL[sid][i])
-          and (lambda lp: not np.isnan(lp) and (lp >= 97 or lp <= 3))(level_pct(LVL[sid][: i + 1], LVL[sid][i]))) for i in idx]),
-]:
-    print(summarize(cnt, name))
+# The second half of this script swept thresholds for the 한 줄 priority
+# ladder (rung 1 move-percentile x rung 2 level-band x rung 3 solo direction,
+# scored as "speaking rows per day"). The ladder and its column are gone
+# (pass L), so the sweep tuned nothing and would have read as live guidance to
+# the next person who ran it. The FINDINGS it produced are still on the record
+# in docs/diagnostics/color-density.md — that report is a dated diagnosis and
+# stays. The colour-intensity half above is unaffected: the tint density scale
+# has other consumers (the 어제 column's outlier rule, the forward matrix wash)
+# and is still the thing this script exists to characterise.

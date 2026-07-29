@@ -31,7 +31,7 @@ log = logging.getLogger("sauron.cache")
 DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache"
 
 # Bump on ANY change to a cached payload's shape (field renames included).
-SCHEMA_VERSION = 2  # 2 = range1y (annual-stats session)
+SCHEMA_VERSION = 3  # 3 = oneLiner dropped, grid cells gained range1y (pass L)
 
 
 def data_hash(path: Path) -> str:

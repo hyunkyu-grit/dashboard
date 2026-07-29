@@ -33,9 +33,10 @@ const UNIT_SUFFIX: Record<Row["unit"], string> = { "%": "%", bp: "bp", ratio: ""
 function Header({ row }: { row: Row }) {
   return (
     <div className="mb-3">
-      <div className="flex items-baseline justify-between">
+      {/* the 한 줄 fragment that sat opposite the name is gone with the column
+          (pass L); the pane's own readouts already carry the 52-week range */}
+      <div className="flex items-baseline">
         <span className="text-[17px] font-semibold">{row.label}</span>
-        <span className="text-[13px] opacity-45">{row.oneLiner}</span>
       </div>
       <div className="mt-0.5 flex items-baseline gap-2">
         <AnimatedNumber

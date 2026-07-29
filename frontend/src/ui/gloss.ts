@@ -1,12 +1,16 @@
 /* Instrument explanation for the enlarged view (DESIGN §2 popup, Session 15
- * Pass C). What a thing *is* — static, keyed to instrument kind — as opposed to
- * `한 줄`, which is what is happening right now.
+ * Pass C). What a thing *is* — static, keyed to instrument kind.
  *
  * §16: the API sends the classification (kind + legs, already present as
  * `kind`/`id`); the frontend renders the Korean here. No finished Korean string
  * ever ships from the backend, so wording changes never need a deploy. This is
  * purely presentation and lives only in the popup — it is not a table column
  * and not a row view-model field, so the row-vm-source guard is untouched.
+ *
+ * Since pass L deleted the 한 줄, THIS is one of the §16 exception's two
+ * remaining subjects (the other is the curve banner) — see DESIGN §16. The
+ * same classification also drives the Pay/Receive mode diagram, so `classify`
+ * has two consumers, not one.
  *
  * Register: 합니다체, standard market terminology (§15, Pass H). Do not
  * paraphrase into everyday words. */

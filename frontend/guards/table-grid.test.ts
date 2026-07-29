@@ -14,28 +14,68 @@ import {
   colPx,
   GRID_TEMPLATE,
   gridTemplate,
-  ONE_LINER_MIN_PX,
+  RANGE_PAD,
+  RANGE_SUBS,
+  RANGE_TEMPLATE,
   visibleColumns,
   WIDEST,
 } from "../src/ui/columns";
 import { traderName } from "../src/ui/rows";
 
 describe("column widths derive from the format, not the data", () => {
+  const level = `calc(${WIDEST.level.length}ch + 18px)`;
+  const sub = `calc(${WIDEST.level.length}ch + ${RANGE_PAD}px)`;
+  const range = `calc(${RANGE_SUBS * WIDEST.level.length}ch + ${
+    RANGE_SUBS * RANGE_PAD
+  }px)`;
+
   it("the template is a constant built only from the WIDEST renderings", () => {
     const label = `calc(${WIDEST.label.length}ch + 30px)`;
-    const level = `calc(${WIDEST.level.length}ch + 18px)`;
     const delta = `calc(${WIDEST.delta.length}ch + 18px)`;
     expect(GRID_TEMPLATE).toBe(
-      `${label} ${level} repeat(5, ${delta}) minmax(${ONE_LINER_MIN_PX}px, 1fr)`,
+      `${label} ${level} repeat(5, ${delta}) minmax(${range}, 1fr)`,
     );
   });
 
-  it("한 줄 is the only flexible track, floored so it never clips to zero", () => {
+  it("52주 is the only flexible track, floored so it never clips to zero", () => {
     expect(GRID_TEMPLATE.match(/1fr/g)).toHaveLength(1);
-    // the floor (carry session, Pass D): a narrow viewport scrolls instead
-    // of crushing the sentence flush against the card edge
-    expect(ONE_LINER_MIN_PX).toBeGreaterThanOrEqual(80);
-    expect(GRID_TEMPLATE.endsWith(`minmax(${ONE_LINER_MIN_PX}px, 1fr)`)).toBe(true);
+    expect(GRID_TEMPLATE.endsWith(`minmax(${range}, 1fr)`)).toBe(true);
+  });
+
+  it("the 52주 floor is THREE sub-columns — derived, not a magic number", () => {
+    // pass L: the floor used to be a flat 120px sized for a sentence. It is
+    // now the level glyph count times three, so it tracks any change to the
+    // level grammar automatically. A hardcoded px floor here fails this.
+    expect(range).not.toMatch(/\b120px\b/);
+    for (const ch of [6.5, 7.74, 9]) {
+      expect(colPx(ch).range).toBeCloseTo(RANGE_SUBS * colPx(ch).rangeSub, 10);
+      // same GLYPH count as 현재; only the cushion differs, and only because
+      // a Korean header label does not scale with `ch` (see RANGE_PAD)
+      expect(colPx(ch).rangeSub - colPx(ch).level).toBeCloseTo(RANGE_PAD - 18, 10);
+    }
+  });
+
+  it("the label cushion leaves real margin at every ch we render at", () => {
+    // Measured live at 11px: the longest sub-label (52주 고점) is ~45px of
+    // ink, and being Korean it does NOT shrink with ch. The content box is
+    // 6ch + RANGE_PAD − pr-3(12). This is the assertion that stops the cushion
+    // being "simplified" back to 현재's 18px, which leaves 7.7px at the runtime
+    // ch and less than that on any narrower face — a clipped header label is
+    // not something the rest of this file could catch.
+    const LONGEST_LABEL_PX = 45;
+    const PR3 = 12;
+    for (const ch of [6.5, 7.74, 9]) {
+      const room = colPx(ch).rangeSub - PR3;
+      expect(room - LONGEST_LABEL_PX, `at ch ${ch}`).toBeGreaterThan(5);
+    }
+  });
+
+  it("the sub-grid inside the cell is three fixed tracks then the slack", () => {
+    // slack at the TRAILING edge: the column keeps absorbing leftover table
+    // width while the three numbers stay put and stay aligned down the table
+    expect(RANGE_TEMPLATE).toBe(`repeat(${RANGE_SUBS}, ${sub}) minmax(0, 1fr)`);
+    expect(RANGE_TEMPLATE.match(/1fr/g)).toHaveLength(1);
+    expect(RANGE_TEMPLATE.endsWith("minmax(0, 1fr)")).toBe(true);
   });
 });
 
@@ -89,10 +129,8 @@ describe("the column priority ladder (columns session)", () => {
   const w = colPx(CH);
   const LADDER_IDS = ["d1", "ytd", "wtd", "mtd", "qtd"] as const;
 
-  function widthFor(nBases: number, oneLiner: boolean): number {
-    return (
-      w.label + w.level + nBases * w.delta + (oneLiner ? ONE_LINER_MIN_PX : 0)
-    );
+  function widthFor(nBases: number, range52: boolean): number {
+    return w.label + w.level + nBases * w.delta + (range52 ? w.range : 0);
   }
 
   it("the visible set is always a prefix of the ladder", () => {
@@ -100,13 +138,35 @@ describe("the column priority ladder (columns session)", () => {
       const v = visibleColumns(widthFor(n, false) + 1, CH, null);
       // exactly the first n ladder entries are visible, regardless of order
       expect(new Set(v.bases)).toEqual(new Set(LADDER_IDS.slice(0, n)));
-      expect(v.oneLiner).toBe(false);
+      expect(v.range52).toBe(false);
       expect(v.hidden).toBe(5 - n + 1);
     }
     const all = visibleColumns(widthFor(5, true) + 1, CH, null);
     expect(all.bases).toEqual(["d1", "wtd", "mtd", "qtd", "ytd"]);
-    expect(all.oneLiner).toBe(true);
+    expect(all.range52).toBe(true);
     expect(all.hidden).toBe(0);
+  });
+
+  it("the drop thresholds, recomputed for the 52주 cell (pass L)", () => {
+    // The 606px 한 줄 threshold recorded in DESIGN was a stale constant the
+    // moment the cell's content width changed. These are the live figures at
+    // the MEASURED runtime ch (7.74px at 13px Pretendard — the columns
+    // session's figure, not the 7.8 the arithmetic tests above use), in
+    // TABLE-CONTENT px: the smallest container at which each column appears.
+    const RUNTIME_CH = 7.74;
+    const rw = colPx(RUNTIME_CH);
+    const at = (n: number, r: boolean) =>
+      Math.ceil(rw.label + rw.level + n * rw.delta + (r ? rw.range : 0));
+    expect(at(0, false)).toBe(165); // 종목 + 현재 — the backstop pair
+    expect(at(1, false)).toBe(229); // 어제
+    expect(at(2, false)).toBe(293); // YTD
+    expect(at(3, false)).toBe(358); // WTD
+    expect(at(4, false)).toBe(422); // MTD
+    expect(at(5, false)).toBe(487); // QTD
+    expect(at(5, true)).toBe(698); // 52주 — was 606 with the sentence
+    // and the whole set genuinely needs MORE room than the sentence did, so
+    // this is stated rather than assumed: 3 sub-columns > a 120px floor
+    expect(at(5, true)).toBeGreaterThan(606);
   });
 
   it("the sorted column is NEVER dropped — it takes slot 3", () => {
@@ -128,19 +188,16 @@ describe("the column priority ladder (columns session)", () => {
     for (let px = 60; px <= 900; px += 7) {
       const v = visibleColumns(px, CH, "mtd");
       const sum =
-        w.label +
-        w.level +
-        v.bases.length * w.delta +
-        (v.oneLiner ? ONE_LINER_MIN_PX : 0);
+        w.label + w.level + v.bases.length * w.delta + (v.range52 ? w.range : 0);
       expect(sum, `at ${px}px`).toBeLessThanOrEqual(Math.max(px, w.label + w.level));
     }
   });
 
-  it("한 줄 is first to go and last to return", () => {
-    // one px short of fitting 한 줄: all five bases visible, 한 줄 hidden
+  it("52주 is first to go and last to return", () => {
+    // one px short of fitting 52주: all five bases visible, 52주 hidden
     const v = visibleColumns(widthFor(5, true) - 1, CH, null);
     expect(v.bases.length).toBe(5);
-    expect(v.oneLiner).toBe(false);
+    expect(v.range52).toBe(false);
     expect(v.hidden).toBe(1);
   });
 

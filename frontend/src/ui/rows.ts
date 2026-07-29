@@ -2,19 +2,17 @@
  * instrument across all groups.
  *
  * §16 computation boundary: this builder turns the API's numbers into a row
- * shape — it does NOT compute any of them. Levels, deltas, percentiles, sort
- * keys, the quoted flag, and the 한 줄 classification all arrive precomputed
- * from the backend. The only work here is presentation: choosing a display
- * label, routing a series into its group, and rendering the classification into
- * a Korean sentence. `ROW_FIELD_SOURCE` records every field's provenance and
- * `guards/row-vm-source.test.ts` fails the build if a new field appears that
- * isn't declared — a field that needs arithmetic has no honest declaration and
- * belongs in the backend. */
+ * shape — it does NOT compute any of them. Levels, deltas, the 52-week
+ * high/low/mean, percentiles, sort keys and the quoted flag all arrive
+ * precomputed from the backend. The only work here is presentation: choosing a
+ * display label and routing a series into its group. `ROW_FIELD_SOURCE` records
+ * every field's provenance and `guards/row-vm-source.test.ts` fails the build
+ * if a new field appears that isn't declared — a field that needs arithmetic
+ * has no honest declaration and belongs in the backend. */
 
 import type {
   BasisKey,
   ForwardsPayload,
-  OneLiner,
   SeriesSummary,
   Unit,
   VolatilityPayload,
@@ -41,7 +39,12 @@ export interface Row {
   changes: Record<BasisKey, number | null>; // bp vs each basis
   pct: number | null; // 52-week LEVEL percentile, null if none
   seriesId: string | null; // stage-2 history id, null = no history
-  oneLiner: string; // rendered from the backend classification (§16)
+  /** 52-week LEVEL high / low / mean, in the row's own unit — the last column
+   * (pass L). Straight from `range1y`; rendered with the SAME formatter the
+   * 현재 column uses, never a second rounding. */
+  rangeHigh: number | null;
+  rangeLow: number | null;
+  rangeAvg: number | null;
   /** explicit ascending sort key, supplied by the backend (§6/§16). */
   sortKey: number[];
   /** own-history move percentile (§D screener); null where unavailable. */
@@ -68,7 +71,9 @@ export const ROW_FIELD_SOURCE: Record<keyof Row, "dto" | "format"> = {
   changes: "dto",
   pct: "dto",
   seriesId: "format",
-  oneLiner: "format", // rendered string built from the dto classification
+  rangeHigh: "dto",
+  rangeLow: "dto",
+  rangeAvg: "dto",
   sortKey: "dto",
   movePct: "dto",
   keyForward: "dto",
@@ -87,28 +92,55 @@ export function cmpKey(a: number[], b: number[]): number {
   return 0;
 }
 
+/** THE row ordering. Two states and no others, because `sortCol` is a
+ * `BasisKey | null`:
+ *
+ *   a change column is sorted → by |change| in that column, nulls last;
+ *   nothing is sorted        → the backend's explicit sort key, ascending
+ *                              (§6), key forwards pinned to the top.
+ *
+ * Only a CHANGE column can occupy the first state. The 52주 column carries no
+ * sort key of its own — three statistics do not rank rows — so clicking its
+ * header cannot reach here and the order does not move (pass L). That is a
+ * property of the COLUMN and is silent by design; a ROW with no sort key is a
+ * different and LOUD condition, non-finite so it lands at the end where it can
+ * be seen (guards/sort-key.test.ts).
+ *
+ * Lifted out of the component so it is testable without a DOM. */
+export function orderRows(
+  rows: Row[],
+  sortCol: BasisKey | null,
+  sortAsc: boolean,
+  keyForwardFirst: boolean,
+): Row[] {
+  if (sortCol) {
+    const withVal = rows.filter((r) => r.changes[sortCol] != null);
+    const without = rows.filter((r) => r.changes[sortCol] == null);
+    withVal.sort((a, b) => {
+      const d = Math.abs(b.changes[sortCol]!) - Math.abs(a.changes[sortCol]!);
+      return sortAsc ? -d : d;
+    });
+    return [...withVal, ...without];
+  }
+  return [...rows].sort((a, b) => {
+    if (keyForwardFirst) {
+      const ak = a.keyForward ? 0 : 1;
+      const bk = b.keyForward ? 0 : 1;
+      if (ak !== bk) return ak - bk;
+    }
+    return cmpKey(a.sortKey, b.sortKey);
+  });
+}
+
 /** "1Y-10Y" → "1s10s", "2Y-5Y-10Y" → "2s5s10s" (trader shorthand). */
 export function traderName(id: string): string {
   return id.split("-").map((t) => t.replace("Y", "")).join("s") + "s";
 }
 
-/** Render the backend's 한 줄 classification into a Korean fragment (§16). The
- * backend decided WHAT is true; this only decides HOW to say it, so wording can
- * change without a backend deploy. Never restates a visible column (§6). */
-export function renderOneLiner(o: OneLiner): string {
-  switch (o.kind) {
-    case "move_extreme":
-      return `일간 변동 상위 ${o.value}%`;
-    case "extreme":
-      return `백분위 ${o.value}`;
-    case "solo_up":
-      return "단독 상승";
-    case "solo_down":
-      return "단독 하락";
-    default:
-      return "";
-  }
-}
+/* `renderOneLiner` phrased the backend 한 줄 classification into Korean and is
+ * gone with the column (pass L). It was the §16 exception's most visible
+ * subject; the exception itself still has two (`ui/gloss.ts` and the curve
+ * banner) — see DESIGN §16. */
 
 function fromSummary(s: SeriesSummary, group: Group, label: string): Row {
   return {
@@ -120,7 +152,9 @@ function fromSummary(s: SeriesSummary, group: Group, label: string): Row {
     changes: { ...s.deltas },
     pct: s.range1y.pct,
     seriesId: s.id,
-    oneLiner: renderOneLiner(s.oneLiner),
+    rangeHigh: s.range1y.max,
+    rangeLow: s.range1y.min,
+    rangeAvg: s.range1y.avg,
     sortKey: s.sortKey,
     movePct: s.movePct,
     quoted: s.quoted ?? undefined,
@@ -168,7 +202,9 @@ export function buildRows(
           changes: { ...cell.deltas },
           pct: null,
           seriesId: name, // stage-2 forward history (Session 13)
-          oneLiner: renderOneLiner(cell.oneLiner),
+          rangeHigh: cell.range1y.max,
+          rangeLow: cell.range1y.min,
+          rangeAvg: cell.range1y.avg,
           sortKey: cell.sortKey,
           movePct: null, // forwards have no cheap daily-move history
           keyForward: cell.keyForward,

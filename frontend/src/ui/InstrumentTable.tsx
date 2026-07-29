@@ -1,27 +1,30 @@
 "use client";
 
 /* Left pane — the instrument table (DESIGN §2). Instrument · 현재 · five change
- * columns (red up / blue down + mini-bar) · 한 줄. Filter chips, sortable by
- * any change column, hover → preview, click → pin, Esc unpins (in App). Rows
- * self-register in the tile registry so the command bar can scroll to them. */
+ * columns (red up / blue down) · 52주 고점/저점/평균. Filter chips, sortable by
+ * any CHANGE column (the 52주 column is not sortable — see RangeCells), hover →
+ * preview, click → pin, Esc unpins (in App). Rows self-register in the tile
+ * registry so the command bar can scroll to them. */
 
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { BasisKey, CurveBanner, ForwardsPayload } from "@/lib/api";
-import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
+import { dirClass, fmtDelta } from "@/lib/format";
 import { ForwardMatrix, KeyForwardBlock } from "@/wall/ForwardMatrix";
 import { getTile } from "@/wall/tileRegistry";
 import { useRegisterTile } from "@/wall/useRegisterTile";
 
+import { levelText } from "./cells";
 import { gridTemplate, visibleColumns, type VisibleColumns } from "./columns";
 import { reorderAnimates, rowShouldFlip, SPRING } from "./motion";
+import { RangeCells, RangeHeader } from "./RangeCells";
 import { TintLegend } from "./TintLegend";
 import {
   BASIS_ORDER,
-  cmpKey,
   GROUP_LABEL,
   type Group,
+  orderRows,
   type Row,
 } from "./rows";
 import { SCREENERS } from "./screener";
@@ -35,6 +38,10 @@ const BASIS_HEAD: Record<BasisKey, string> = {
   ytd: "YTD",
 };
 
+/** The 52주 column's name in noun form — what the hidden-column note calls it
+ * when the ladder drops it. The header itself renders the three sub-labels. */
+const RANGE_COL_NAME = "52주 레인지";
+
 const FILTERS: { id: Group | "all"; label: string }[] = [
   { id: "all", label: "전체" },
   { id: "outright", label: GROUP_LABEL.outright },
@@ -42,10 +49,6 @@ const FILTERS: { id: Group | "all"; label: string }[] = [
   { id: "forward", label: GROUP_LABEL.forward },
   { id: "vol", label: GROUP_LABEL.vol },
 ];
-
-function levelText(row: Row): string {
-  return fmtLevel(row.now, row.unit);
-}
 
 function TableRow({
   row,
@@ -149,11 +152,8 @@ function TableRow({
           {fmtDelta(row.changes[b], row.unit)}
         </div>
       ))}
-      {visible.oneLiner && (
-        <div role="cell" className="truncate pr-3 text-[13px] opacity-55">
-          {row.oneLiner}
-        </div>
-      )}
+      {/* 52주 고점/저점/평균 — levels, so ink, and not sortable (RangeCells) */}
+      {visible.range52 && <RangeCells row={row} />}
     </motion.div>
   );
 }
@@ -250,25 +250,9 @@ export function InstrumentTable({
     }
     // a screener preset is a filter on top of the active tab (§D)
     if (activeScreener) base = base.filter(activeScreener.test);
-    if (sortCol) {
-      const withVal = base.filter((r) => r.changes[sortCol] != null);
-      const without = base.filter((r) => r.changes[sortCol] == null);
-      withVal.sort((a, b) => {
-        const d = Math.abs(b.changes[sortCol]!) - Math.abs(a.changes[sortCol]!);
-        return sortAsc ? -d : d;
-      });
-      return [...withVal, ...without];
-    }
-    // default: explicit numeric sort key ascending (§6); forwards pin the six
-    // quoted key forwards to the top.
-    return [...base].sort((a, b) => {
-      if (isForward) {
-        const ak = a.keyForward ? 0 : 1;
-        const bk = b.keyForward ? 0 : 1;
-        if (ak !== bk) return ak - bk;
-      }
-      return cmpKey(a.sortKey, b.sortKey);
-    });
+    // ordering lives in rows.ts so it can be tested without a DOM; only a
+    // CHANGE column can ever be the sort column (pass L)
+    return orderRows(base, sortCol, sortAsc, isForward);
   }, [rows, filter, startFilter, sortCol, sortAsc, isForward, activeScreener]);
 
   // interleave group headings for the forward tab in default order (§3)
@@ -340,7 +324,7 @@ export function InstrumentTable({
     ...BASIS_ORDER.filter((b) => !visible.bases.includes(b)).map(
       (b) => BASIS_HEAD[b],
     ),
-    ...(visible.oneLiner ? [] : ["한 줄"]),
+    ...(visible.range52 ? [] : [RANGE_COL_NAME]),
   ];
 
   return (
@@ -450,10 +434,11 @@ export function InstrumentTable({
           scrollbar-gutter keeps the usable width constant whether or not the
           scrollbar is present (§ Pass A) — without it the grid would shift on
           every filter that crosses the overflow boundary. overflow-x-auto +
-          the 한 줄 track floor (carry session, Pass D): a viewport narrower
-          than the columns scrolls horizontally instead of clipping content
-          flush against the card edge; pb-8 keeps the last row off the card's
-          bottom edge and clear of anything floating there. */}
+          the last column's track floor (carry session, Pass D; three 현재
+          widths since pass L): a viewport narrower than the columns scrolls
+          horizontally instead of clipping content flush against the card
+          edge; pb-8 keeps the last row off the card's bottom edge and clear
+          of anything floating there. */}
       <div
         ref={scrollRef}
         className="min-h-0 flex-1 overflow-y-auto overflow-x-auto px-5 pb-8 pt-3 [scrollbar-gutter:stable]"
@@ -508,10 +493,8 @@ export function InstrumentTable({
                   </button>
                 </div>
               ))}
-              {visible.oneLiner ? (
-                <div role="columnheader" className="pr-3">
-                  한 줄
-                </div>
+              {visible.range52 ? (
+                <RangeHeader />
               ) : (
                 // what is hidden, stated (Pass B) — a statement, not a
                 // control: the reader must not wonder whether a column is

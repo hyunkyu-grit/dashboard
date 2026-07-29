@@ -17,7 +17,9 @@ function row(id: string, group: Group): Row {
     changes: { d1: 0, wtd: 0, mtd: 0, qtd: 0, ytd: 0 },
     pct: null,
     seriesId: id,
-    oneLiner: "",
+    rangeHigh: 4,
+    rangeLow: 2,
+    rangeAvg: 3,
     sortKey: [1],
     movePct: null,
   };

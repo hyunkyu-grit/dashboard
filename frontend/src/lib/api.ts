@@ -40,19 +40,12 @@ export type Unit = "%" | "bp" | "ratio";
  * Removed in the stability session (docs/diagnostics/perf-baseline.md). A line
  * comes from `fetchSeries` at stage 2; do not put history back on the row. */
 
-/** The `한 줄` classification (§16 exception): the backend decides WHAT is true,
- * the frontend renders the Korean sentence. Levels/deltas stay in their
- * columns — this only carries what no column shows. */
-export type OneLinerKind =
-  | "move_extreme" // today's move in the top N% of the series' own daily moves
-  | "extreme" // level percentile in an extreme band
-  | "solo_up" // moved up against a falling peer group
-  | "solo_down" // moved down against a rising peer group
-  | "none";
-export interface OneLiner {
-  kind: OneLinerKind;
-  value: number | null;
-}
+/* A `한 줄` classification (`{kind, value}`) used to ride on every summary row
+ * and every forward cell, and the frontend phrased it into Korean. The last
+ * column now shows the 52-week high/low/mean instead (pass L), so the field and
+ * its three backend rungs are gone. `range1y` below is what that column reads.
+ * The §16 phrase-in-the-frontend exception still stands — its subjects are the
+ * instrument gloss (`ui/gloss.ts`, from kind + legs) and `CurveBanner`. */
 
 export interface SeriesSummary {
   id: string;
@@ -65,7 +58,8 @@ export interface SeriesSummary {
   // 52-week LEVEL stats (annual-stats session): trailing 252 observations.
   // The 10y window straddled the 2020-21 regime break and pinned every level
   // at the 99th-100th percentile — do not widen it back. CHANGE statistics
-  // (movePct, tint) stay full-history on purpose.
+  // (movePct, tint) stay full-history on purpose. min/max/avg are the table's
+  // last column (pass L); pct drives the 고점권/저점권 chips.
   range1y: {
     min: number | null;
     max: number | null;
@@ -76,7 +70,6 @@ export interface SeriesSummary {
   sortKey: number[];
   quoted: boolean | null;
   movePct: number | null; // own-history percentile of today's |D-1| move
-  oneLiner: OneLiner;
 }
 
 export interface ChangeEvent {
@@ -168,9 +161,17 @@ export interface ForwardCell {
   deltas: Record<BasisKey, number>;
   // §16: computed server-side, read straight through by the row builder.
   sortKey: number[];
-  oneLiner: OneLiner;
   keyForward: boolean;
   movePct: number | null; // own-history percentile of |D-1| — drives the matrix tint (§J)
+  /** 52-week LEVEL high/low/mean in percent — the table's last column (pass L).
+   * NO `pct` here, unlike every other `range1y`: nothing reads a forward's
+   * level percentile, and the type is where that stays enforced. `KeyForward`
+   * below does read it, so it carries the full record. */
+  range1y: {
+    min: number | null;
+    max: number | null;
+    avg: number | null;
+  };
 }
 
 export interface KeyForward {

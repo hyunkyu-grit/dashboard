@@ -77,7 +77,7 @@ height of the right pane.
 
 Columns, left to right:
 
-| Instrument | 현재 | Yesterday | WTD | MTD | QTD | YTD | 한 줄 |
+| Instrument | 현재 | Yesterday | WTD | MTD | QTD | YTD | 52주 고점·저점·평균 |
 
 - **Instrument** — `10Y`, `3s10s`, `2s5s10s`, `2Yx1Y`, `SPOT`. Never
   translated (§15). Notation is defined once in **§ Instrument notation**
@@ -94,30 +94,52 @@ Columns, left to right:
   so the bar triple-encoded. **There is no "Now" column** — Now minus Now is
   zero, which is why the old six-basis selector was wrong; all five bases are
   columns now.
-- **한 줄 [ladder, rewritten Session 15]** — must **never restate a value
-  already visible in the same row** ("연초 26bp 상승" only re-prints the YTD
-  cell). A **priority ladder**, the first rung that applies, one item per row:
-  1. **today's move is extreme against the series' OWN history** →
-     "일간 변동 상위 3%". The most valuable rung and the only signal invisible
-     elsewhere: `+5bp` is ordinary for `10Y` and an event for `3M`. Threshold
-     from the Session-15 replay (own-history move percentile ≥ 97).
-  2. **the level sits in an extreme band** → the percentile as a number,
-     "백분위 99" (`pct ≥ 95` or `≤ 5`), computed on the **52-week window**
-     (annual-stats session — see the LEVEL-window ruling below). **Capped** to
-     the few most-extreme rows per peer group (`LEVEL_CAP`): on a day when the
-     whole curve sits at highs an uncapped rung printed the same label on ~20
-     rows — that regime fact belongs to the "52주 고점권" screener chip, not
-     the column. **The move-extreme rung (rung 1) stays on the FULL 10y change
-     history on purpose** — it is a percentile of a CHANGE, which the regime
-     break does not distort; do not "fix" it to the annual window.
-  3. **stands out against its neighbours today** → "단독 상승" / "단독 하락"
-     (moved opposite the day's majority among outrights).
-  4. **nothing.** Most rows are quiet so the few that speak are visible; the
-     replay targets 3–6 speaking rows of ~44.
+- **52주 고점 · 저점 · 평균 [pass L]** — the last column, three numbers, in
+  that order. The trailing 52-week high, low and mean of the row's own level
+  (`range1y.max/min/avg`, `ANNUAL_OBS` = 252 observations — the LEVEL-window
+  ruling below).
+  - **Rendered by the 현재 formatter, verbatim** (`lib/format.ts::fmtLevel`,
+    reached through `ui/cells.ts`). One quantity, one grammar: outrights and
+    forwards in percent at 4dp, spreads and flies in bp at 1dp, volatility as
+    a 2dp ratio, `null` → em dash. Two displays of one quantity at different
+    precision has already shipped here once — the carry & roll block's
+    components summed to −3.2 against a −3.1 headline purely from display
+    digits. `guards/readout-parity.test.ts` now asserts the two paths produce
+    byte-identical strings for every instrument kind.
+  - **Three fixed sub-columns**, each the width of 현재 (the same format
+    maximum), `tabular-nums`, so the numbers line up vertically down the whole
+    table. Slack stays at the **trailing** edge, so the column keeps its role
+    as the elastic one. Labels are required and live in the header — the order
+    high/low/mean does not read as a number line — and the window is named
+    once, on the first: **52주 고점 · 저점 · 평균**.
+  - **These are LEVELS, so they are ink.** No hue, no tint, no emphasis
+    weight; colour stays reserved for signed change values (§5, §9), which is
+    why 현재 is ink too.
+  - **Not sortable.** Three statistics do not rank rows, so the header carries
+    no button, no hover state promising one, and clicking it changes nothing.
+    That silence is a property of the COLUMN and is deliberate; it is not the
+    same condition as a ROW with no sort key, which must still fail loudly to
+    `Infinity` (§6). Pinned by `guards/range-column.test.ts`.
 
-  The retracement rung (Session 13's "주간/월중 되돌림") is retired — it needed a
-  sign flip, which almost never fires in a trending tape. Diagnosis + thresholds
-  in `docs/diagnostics/color-density.md`.
+  **What this replaced, and why [pass L].** The 한 줄 column shipped a
+  *classification* (`{kind, value}`) that the frontend phrased into Korean — a
+  four-rung ladder: an own-history move extreme, a capped level extreme, a solo
+  direction, or silence. It is **deleted**, ladder and all, including the
+  `일간 변동 상위 N%` outlier signal that was its only frequent occupant. The
+  column's slot now says something on every row instead of on three or six of
+  them. Deleted with it: `classify_one_liner`, `apply_level_extreme`,
+  `apply_solo_direction`, `MOVE_PCT_CUT` / `LEVEL_BAND` / `LEVEL_CAP` /
+  `SOLO_MIN_BP`, and the `oneLiner` field on every payload row.
+  **What deliberately survived, because the one-liner was only one of its
+  consumers:** `movePct` and `day_move_pct` (the tint DENSITY scale — the 어제
+  column's outlier rule and the forward matrix wash — plus the
+  "오늘 많이 움직인 것" chip); `range1y` in full (the 고점권/저점권 chips, the
+  tooltip stats, the key-forward gauge, the curve banner, and now this column);
+  and the backend `kind`/legs classification (`ui/gloss.ts`, the popup
+  description and the Pay/Receive mode diagram). Deleting a consumer and
+  leaving its feed behind is what once left a 150-point sparkline at 92% of the
+  stage-1 payload; deleting a feed that had other consumers would have been the
+  same mistake pointing the other way.
 - **LEVEL statistics are 52-week; CHANGE statistics are 10-year [annual-stats
   session — THE ruling of that session].** Every statistic about a level's
   RANGE (gauge, tooltip stats, 고점권/저점권 screeners, curve banner, 한 줄
@@ -182,19 +204,20 @@ Behaviour:
   for 종목, six tabular glyphs for 현재 (`−100.5` / `4.2446` / `12.00`) and for
   each change column (`−999.9`) — never from today's data, so the grid is
   byte-identical across tabs, sorts, and filters and the header never moves.
-  한 줄 is the only flexible column: all horizontal slack lives in the
-  sentence, never in the numbers. One template string (`ui/columns.ts
+  52주 is the only flexible column: its three sub-columns are fixed at the
+  현재 width and all horizontal slack sits at the cell's trailing edge, never
+  between the numbers. One template string (`ui/columns.ts
   GRID_TEMPLATE`) is shared by the header row and every body row (a CSS-grid
   row list, not `<table>` — §14's press-feedback note already recorded that
   transforms don't reach `table-row`, and the reorder motion needs
   transformable rows). `scrollbar-gutter: stable` keeps the usable width
   constant when the scrollbar appears. Pinned by `guards/table-grid.test.ts`.
   **Columns give way, not shrink [columns session].** Fixed widths stopped
-  the header from jumping, but eight fixed columns sum to ~600px; below that
+  the header from jumping, but the full column set sums to ~680px; below that
   neither squeezing nor scrolling reads well. `ui/columns.ts::visibleColumns`
   renders the longest PREFIX of a priority ladder that fits the measured
   container — 종목 · 현재 · [the sorted column] · 어제 · YTD · WTD · MTD ·
-  QTD · 한 줄 (first to go, last to return) — pure arithmetic against the
+  QTD · 52주 (first to go, last to return) — pure arithmetic against the
   fixed widths and a runtime-measured `ch` (no magic breakpoints; the maths
   stays correct if a width changes). **The sorted column is never dropped**:
   a list ordered by a column the reader cannot see is unreadable, so it takes
@@ -209,11 +232,44 @@ Behaviour:
   final backstop below even 종목+현재, unreachable in practice. Pinned by
   `guards/table-grid.test.ts` (prefix property, forced sort column,
   canonical order, fit arithmetic, shared template).
+  **Drop thresholds [recomputed and re-verified live, pass L].** The 52주
+  cell's content width is not the sentence's, so the old 606 figure was a
+  stale constant the moment the contents changed. The floor is now
+  format-derived — three sub-columns, `RANGE_SUBS × colPx().rangeSub`,
+  replacing a flat `ONE_LINER_MIN_PX = 120` sized for a sentence — so it
+  tracks the level grammar automatically. At the runtime ch (measured live:
+  **7.7431px**) the thresholds in TABLE-content px are: **52주 698** · QTD 487
+  · MTD 422 · WTD 358 · YTD 293 · 어제 229 · (종목+현재 165). Only the last
+  column moved: **606 → 698**, so the full table needs ~92px MORE width than
+  it did, not less — three fixed sub-columns (211px at this ch) cost more than
+  the 120px sentence floor they replaced. Every narrower threshold is
+  unchanged. Pinned numerically by `guards/table-grid.test.ts`.
+  **Verified live (pass L)** by driving the pane width directly (the same
+  measurement path, and the same forced-frame caveat as below — the occluded
+  renderer delivers ResizeObserver callbacks one frame late, so every read has
+  to be separated from its mutation by a forced frame): the column is present
+  at 702px of content and dropped at 698px, with the header's "1열 숨김" note
+  taking its slot — the computed 697.8 sits inside that pixel. Also verified
+  at full width: header and body sub-grids resolve to identical 70.45px
+  tracks, all three sub-labels sit exactly on their numbers' right edges (0.00
+  offset), 25 sampled rows share one right edge per sub-column, and every
+  glyph in the cell is the same ink as 현재 (`rgb(26,26,26)`), with the longest
+  sub-label clearing its track by 13.7px. **The defect this found:** the
+  header's `text-[11px]` was on the GRID CONTAINER, and `ch` resolves against
+  the element's own font size — so the header's tracks came out 63.3px against
+  the body's 70.4px and every label sat left of the numbers it named, by 7px,
+  then 14px, then 21px. Sizing the spans instead is what makes the two grids
+  agree; `guards/range-column.test.ts` now fails if a sub-grid container
+  carries a text size.
+  **Not sortable, verified live:** the 52주 header has zero interactive
+  descendants and `cursor: auto`, and clicking the container and all three
+  sub-labels left all 196 rows in identical order — while a change-column
+  header is a real `<button>`.
   **Verified live (columns session, Pass C)** with a container-width sweep
   (the session's viewport is emulated, so the PANE was resized — same
-  measurement path). At the runtime ch = 7.74px the drop thresholds in
-  TABLE-content px are: 한 줄 606 · QTD 486 · MTD 422 · WTD 358 · YTD 293 ·
-  어제 229 (pane ≈ content + ~58: px-5 padding 40 + stable scrollbar gutter
+  measurement path); the figures quoted below are that session's, taken with
+  한 줄 in the last slot (pane ≈ content + ~58: px-5 padding 40 +
+  stable scrollbar gutter
   ~17 + 1px divider). Observed pane sweep 700→640→520→460→400→330→260→150:
   columns left in exact ladder order (한 줄, QTD, MTD, WTD, YTD, 어제), the
   header note counted 1열…6열 숨김, the header never drifted, and no
@@ -224,11 +280,12 @@ Behaviour:
   only on forced frames (same class as the motion session's rAF throttle) —
   irrelevant on a live screen; the single-column layout itself remains
   owner-eyeball (same component and measurement path).
-  **Padding at the card edges [carry session, Pass D]:** the card keeps its
-  ~20px inner horizontal gutter (px-5) in every layout; 한 줄 has a track
-  FLOOR (`ONE_LINER_MIN_PX` = 120) and the scroll container is
-  `overflow-x-auto`, so a viewport narrower than the columns scrolls
-  horizontally instead of crushing the sentence flush against the card edge;
+  **Padding at the card edges [carry session, Pass D; floor revised pass L]:**
+  the card keeps its ~20px inner horizontal gutter (px-5) in every layout; the
+  last column has a track FLOOR (now three 현재 widths, `RANGE_SUBS`) and the
+  scroll container is `overflow-x-auto`, so a viewport narrower than the
+  columns scrolls horizontally instead of crushing the numbers flush against
+  the card edge;
   the scroll container's bottom padding (pb-8) keeps the last row off the
   card's edge. The dark circle bottom-left in dev screenshots is the Next.js
   dev indicator, NOT the product — now disabled via `devIndicators: false`
@@ -239,7 +296,10 @@ Behaviour:
   on a real narrow window remains with the owner.)
 - **Sortable by any change column, both directions.** Default order is
   instrument order (not a ranking). Sorting by |change| is one click = "what
-  moved today".
+  moved today". **Only change columns sort** — 종목, 현재 and 52주 carry no
+  sort control, and the 52주 column's silence is pinned by a test (pass L).
+  The ordering itself lives in `ui/rows.ts::orderRows`, lifted out of the
+  component so it is testable without a DOM.
 - **Every series carries an explicit numeric sort key [Session 13, §6].**
   Default order is that key ascending: tenor-in-years for outrights, the leg
   tuple (compared lexicographically) for spreads/flies/forwards. *Diagnosis of
@@ -1256,11 +1316,28 @@ The line, stated so it can be applied without a judgement call:
   conversion, no delta, no percentile.
 
 **The one deliberate exception — classify in the backend, phrase in the
-frontend.** The `한 줄` column ships as a *classification*, e.g.
-`{ kind: "extreme", value: 99 }`, never the finished Korean string. Copy is
-presentation: if changing wording required a backend deploy, the wording would
-never improve. So the backend decides *what is true* (an extreme percentile, a
-retracement, or nothing); the frontend decides *how to say it*.
+frontend.** A *classification* may travel the wire; a finished Korean string
+may not. Copy is presentation: if changing wording required a backend deploy,
+the wording would never improve. So the backend decides *what is true*; the
+frontend decides *how to say it*.
+
+**Its subjects, named [re-examined pass L].** The `한 줄` column was this
+exception's most visible subject and is gone, so the exception was re-checked
+rather than left standing over nothing. Two subjects remain, and they are the
+whole list:
+
+1. **The instrument gloss** (`ui/gloss.ts`) — the backend ships `kind` and the
+   legs (already present as `kind`/`id`); the frontend renders the subtitle and
+   the two-or-three-sentence description in the popup, and the same
+   classification drives the Pay/Receive **mode** diagram
+   (`ui/payReceiveModel.ts`).
+2. **The curve banner** (`CurveBanner`) — the backend ships
+   `{ kind: "curve_high" | "curve_low" | null }`; the frontend writes
+   "커브 전 구간이 52주 고점권입니다".
+
+Neither is a table column, and neither is a row view-model field, so the
+`ROW_FIELD_SOURCE` guard is untouched by both. If both ever go, the exception
+goes with them — do not leave it standing over an empty set.
 
 **Enforced by** `guards/row-vm-source.test.ts`: every field the row view-model
 builder (`buildRows`) emits must be declared in `ROW_FIELD_SOURCE` as either
@@ -1966,6 +2043,45 @@ evidence that forced it. Referenced from several places above; it did not exist
 as a heading until the hardening session, which is itself worth noting: the
 references pointed at a section that had been absorbed into "Settled decisions"
 and stopped being a live record.
+
+### Pass L — the three arbitrary choices in the 52주 column
+
+**1. Sub-labels are `52주 고점 · 저점 · 평균`, and the window is named once.**
+The brief required labels (high/low/mean does not read as a number line) and a
+header in noun form, but not their wording. `고점`/`저점` are the words the
+screener chips and the curve banner already use, so the column reuses them
+rather than inventing `최고`/`최저`. The `52주` qualifier sits only on the first
+label and scopes the other two by adjacency — repeating it three times would
+cost width the numbers need. The column's full noun, `52주 레인지`, is what the
+hidden-column note calls it when the ladder drops it. Sub-labels render at 11px
+(the same size as that note), which is what lets the longest fit a sub-column;
+the body numbers are the table's normal 13px, and the size is set on the SPANS
+— see the `ch`-resolution note in the drop-threshold entry above. **To
+reverse:** `RANGE_LABELS` and `RANGE_COL_NAME` are the only two places, but
+re-measure item 3's cushion against any longer label.
+
+**2. A forward's level PERCENTILE is computed but not shipped.** Adding the
+52-week range to the 168 forward grid cells makes `pct` available for the first
+time — the same repricing pass produces it. It is dropped from the grid cell
+(`{min, max, avg}` only; `KeyForward` keeps the full record because its gauge
+reads it) and `Row.pct` stays `null` for forwards. Two reasons: §20 says a
+payload carries what a consumer reads, one pass after a field nobody read was
+cut for being 92% of the payload; and wiring it would silently change which
+rows the `52주 고점권`/`저점권` chips return, which is a product decision, not a
+side effect of a column change. The `ForwardCell.range1y` type has no `pct`, so
+the compiler enforces this rather than a comment. **To reverse:** emit the full
+record from `forwards.py::cell` and read it in `rows.ts` — one line each, plus
+a line in the chip descriptions if forwards should be named there.
+
+**3. The sub-column cushion is 24px, not 현재's 18px.** Every other width here
+is the format maximum; this one is not, because a sub-column has to fit its
+header LABEL too and `52주 고점` is Korean — its advance scales with font size,
+not with `ch`, so it does not shrink as the column does. Measured live at 11px:
+44.76px of ink. 현재's 18px cushion leaves that 7.7px at the runtime ch of
+7.7431; 24px leaves 13.7px, for 18px of table width. Verified live and pinned by
+a margin assertion in `guards/table-grid.test.ts`, so the cushion cannot be
+"simplified" back without the test naming why. **To reverse:** measure the
+longest label first — the arithmetic alone will not tell you it clips.
 
 ### Pass G — `slug()` maps `vol:1Y`; it does not reject it
 

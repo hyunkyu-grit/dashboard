@@ -32,8 +32,6 @@ from .dataset import DISPLAY_TENORS, Dataset, tenor_years
 from .derive import (
     BASIS_KEYS,
     annual_stats,
-    apply_level_extreme,
-    classify_one_liner,
     day_move_pct,
     series_values,
     value_at,
@@ -123,8 +121,8 @@ def relative_atr_aligned(dataset: Dataset, series_id: str) -> list[float | None]
 # ── Volatility tab payload (Session 14 Pass 3) ──────────────────────────────
 # Same DTO shape as the other tabs (SeriesSummary-like) so the table component
 # never branches. Everything is precomputed here (§16): the current ratio, the
-# five basis deltas as RATIO DIFFERENCES (not bp), the 10y percentile, the sort
-# key, and the summary classification.
+# five basis deltas as RATIO DIFFERENCES (not bp), the 52-week level stats, and
+# the sort key.
 
 def _volatility_row(dataset: Dataset, tenor: str,
                     bases: dict[str, dt.date | None],
@@ -145,12 +143,11 @@ def _volatility_row(dataset: Dataset, tenor: str,
             round(now - bv, 4) if now is not None and bv is not None else None
         )
 
-    # Same 한 줄 ladder as the other tabs (§C2): an extreme daily move in the
-    # ratio, else an extreme level percentile (52-week window, like every
-    # level statistic — annual-stats session). The ratio's change is a plain
-    # difference (scale 1); no solo/neighbour rung for volatility.
+    # The ratio's change is a plain difference (scale 1), so the own-history
+    # move percentile is taken at that scale. It feeds the tint density scale
+    # and the "오늘 많이 움직인 것" chip — the 한 줄 ladder that also read it is
+    # gone (pass L).
     move_pct = day_move_pct(aligned, 1.0, deltas["d1"])
-    one_liner = classify_one_liner(move_pct, now is not None)  # rung 2 capped below
 
     return {
         "id": f"vol:{tenor}",
@@ -164,7 +161,6 @@ def _volatility_row(dataset: Dataset, tenor: str,
         "sortKey": [tenor_years(tenor)],
         "quoted": None,
         "movePct": move_pct,
-        "oneLiner": one_liner,
     }
 
 
@@ -183,6 +179,4 @@ def volatility_payload(dataset: Dataset, bases: dict[str, dt.date | None]) -> di
             "now": row["now"],
             "prev": round(prev, 4) if prev is not None else None,
         })
-    # rung 2 (§C2), capped, over the volatility peer group.
-    apply_level_extreme(rows, cap=2)
     return {"rows": rows, "curve": curve}

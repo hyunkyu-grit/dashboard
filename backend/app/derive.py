@@ -145,19 +145,18 @@ def series_values(dataset: Dataset, series_id: str) -> list[float | None]:
 # carries the precomputed daily change `d` through the thinning.
 
 
-# 한 줄 ladder thresholds (§C2), chosen from the Session-15 replay
-# (docs/diagnostics/color-density.md): a top-3% own-history daily move, or a
-# level in the top/bottom 5%. The level rung is CAPPED to the few most-extreme
-# rows (LEVEL_CAP): on a synchronised-regime day the whole curve sits at decade
-# highs and an uncapped rung printed "백분위 9X" on ~20 rows — the "nine rows
-# said the same thing" failure. A cap only limits when there are many; it never
-# forces winners (unlike the cross-sectional rule the report disqualified), so
-# a quiet day still shows nothing. Which instruments are at highs is the
-# "10년 고점권" screener chip's job, not a label repeated down the column.
-MOVE_PCT_CUT = 97.0   # today's move in the top (100 − this)% of own daily moves
-LEVEL_BAND = 5.0      # level percentile in the top/bottom this-many %
-LEVEL_CAP = 3         # at most this many level-extreme labels per peer group
-SOLO_MIN_BP = 0.5     # a move below this is not a "solo" mover
+# The 한 줄 ladder and its three rungs lived here and are gone (pass L). The
+# last column now carries the 52-week high / low / mean instead — three numbers
+# in the 현재 grammar, not a sentence. Deleted with it: `classify_one_liner`
+# (rung 1, own-history move extreme) and its MOVE_PCT_CUT, `apply_level_extreme`
+# (rung 2) and its LEVEL_BAND/LEVEL_CAP, `apply_solo_direction` (rung 3) and its
+# SOLO_MIN_BP, and the `oneLiner` key on every row of every payload.
+#
+# What did NOT go with it, because the one-liner was only one of its consumers:
+# `day_move_pct` below. Its percentile is the tint DENSITY scale (the 어제
+# column's outlier rule, the forward matrix wash) and the "오늘 많이 움직인 것"
+# screener chip. Likewise `annual_stats` — the 고점권/저점권 chips, the curve
+# banner, the key-forward gauge and now the range column all read it.
 
 
 def day_move_pct(values: list[float | None], scale: float,
@@ -178,44 +177,6 @@ def day_move_pct(values: list[float | None], scale: float,
         return None
     x = abs(today_change_bp)
     return round(100.0 * sum(1 for d in diffs if d <= x) / len(diffs), 1)
-
-
-def classify_one_liner(move_pct: float | None, has_data: bool) -> dict:
-    """Rung 1 of the `한 줄` ladder (§16 exception; §C2): today's move is extreme
-    against the series' OWN history → move_extreme (value = the top-N%, a number
-    shown in no column). The backend decides WHAT is true; the browser renders
-    the Korean. Rungs 2 (level extreme, capped) and 3 (solo direction) are
-    cross-sectional and applied by the caller over a peer group.
-
-    Never restates a visible column: a move percentile appears in no cell, and a
-    bp magnitude is never emitted here.
-    """
-    if not has_data:
-        return {"kind": "none", "value": None}
-    if move_pct is not None and move_pct >= MOVE_PCT_CUT:
-        return {"kind": "move_extreme", "value": max(1, round(100 - move_pct))}
-    return {"kind": "none", "value": None}
-
-
-def apply_level_extreme(rows: list[dict], cap: int = LEVEL_CAP) -> None:
-    """Rung 2 (§C2), cross-sectional so it can be capped: among rows still
-    silent, label the `cap` most-extreme levels (top/bottom LEVEL_BAND%) with
-    their percentile — the 52-week percentile (annual-stats session), which
-    actually discriminates; the 10y one printed 백분위 9X down whole columns.
-    Mutates `oneLiner` in place. A quiet peer group produces nothing; a
-    synchronised-regime one produces at most `cap`."""
-    cands: list[tuple[float, dict, float]] = []
-    for r in rows:
-        if r["oneLiner"]["kind"] != "none":
-            continue
-        pct = r["range1y"]["pct"]
-        if pct is None:
-            continue
-        if pct >= 100 - LEVEL_BAND or pct <= LEVEL_BAND:
-            cands.append((abs(pct - 50.0), r, pct))
-    cands.sort(key=lambda t: t[0], reverse=True)
-    for _extremity, r, pct in cands[:cap]:
-        r["oneLiner"] = {"kind": "extreme", "value": round(pct)}
 
 
 # When most of the curve sits in one extreme band, "this tenor is at a decade
@@ -239,29 +200,6 @@ def curve_banner(outrights: list[dict]) -> dict:
     if lo >= CURVE_REGIME_FRAC:
         return {"kind": "curve_low"}
     return {"kind": None}
-
-
-def apply_solo_direction(rows: list[dict]) -> None:
-    """Rung 3 (§C2), cross-sectional over a peer group (outrights): a row that
-    is still silent and moved OPPOSITE the day's majority stands out. Mutates
-    each row's `oneLiner` in place; only touches rows still classified "none"."""
-    d1s = [r["deltas"]["d1"] for r in rows
-           if r["deltas"]["d1"] is not None and abs(r["deltas"]["d1"]) >= SOLO_MIN_BP]
-    if not d1s:
-        return
-    ups = sum(1 for d in d1s if d > 0)
-    downs = sum(1 for d in d1s if d < 0)
-    if ups == downs:
-        return
-    maj = 1 if ups > downs else -1
-    for r in rows:
-        if r["oneLiner"]["kind"] != "none":
-            continue
-        d = r["deltas"]["d1"]
-        if d is None or abs(d) < SOLO_MIN_BP:
-            continue
-        if (1 if d > 0 else -1) == -maj:
-            r["oneLiner"] = {"kind": "solo_up" if d > 0 else "solo_down", "value": None}
 
 
 def downsample_triples(points: list[dict], target: int = PREVIEW_POINTS) -> list[dict]:
@@ -377,8 +315,8 @@ def summarize(dataset: Dataset, series_id: str, label: str, kind: str,
         deltas[key] = round((now - bv) * scale, 4) \
             if now is not None and bv is not None else None
 
-    # Sort key + quoted flag + 한 줄 classification are computed HERE, not in the
-    # browser (§16). Legs map to years; an outright is a single-leg key.
+    # Sort key + quoted flag are computed HERE, not in the browser (§16).
+    # Legs map to years; an outright is a single-leg key.
     sort_key = [tenor_years(leg) for leg in series_id.split("-")]
     quoted = (series_id in QUOTED_NODES) if kind == "outright" else None
     move_pct = day_move_pct(values, scale, deltas["d1"])
@@ -393,16 +331,16 @@ def summarize(dataset: Dataset, series_id: str, label: str, kind: str,
         "basisValues": basis_values,
         # 52-week LEVEL stats (annual-stats session) — never widen back to the
         # full history: the 10y window straddles the 2020-21 regime break and
-        # pinned every level at the 99th-100th percentile.
+        # pinned every level at the 99th-100th percentile. min/max/avg are the
+        # table's last column (pass L); pct drives the 고점권/저점권 chips.
         "range1y": annual_stats(values),
         "sortKey": sort_key,
         "quoted": quoted,
         # own-history move percentile — powers the "오늘 많이 움직인 것" screener
-        # (§D) and rung 1 of the 한 줄; the browser never recomputes it (§16).
-        # CHANGE-based, so it deliberately stays on the FULL history (see
-        # ANNUAL_OBS note) — do not "fix" it to the annual window.
+        # (§D) and the tint density scale; the browser never recomputes it
+        # (§16). CHANGE-based, so it deliberately stays on the FULL history
+        # (see ANNUAL_OBS note) — do not "fix" it to the annual window.
         "movePct": move_pct,
-        "oneLiner": classify_one_liner(move_pct, now is not None),
     }
     # No per-row history here. A 150-point `spark` line used to ride along on
     # every row, left over from the retired band-card layout whose tiles drew a

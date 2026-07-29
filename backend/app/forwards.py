@@ -24,7 +24,7 @@ import numpy as np
 
 from .curves import par_rates_at_index
 from .dataset import Dataset
-from .derive import ANNUAL_OBS, BASIS_KEYS, basis_dates, classify_one_liner
+from .derive import ANNUAL_OBS, BASIS_KEYS, basis_dates
 from .engine_port import _modfol_bd, bootstrap_zero_curve, df
 
 # 21 forward start points: ON, then 3M steps out to 5Y (§7).
@@ -185,11 +185,23 @@ def _historical_curves(dataset: Dataset) -> list[np.ndarray | None]:
     return _hist_zc
 
 
-def _cell_move_pct(dataset: Dataset, start: float, tenor: float | None) -> float | None:
-    """Percentile of today's |Δ| within this forward's own daily-change history
-    (§J). None if too little history."""
+def _cell_history(dataset: Dataset, start: float,
+                  tenor: float | None) -> list[float]:
+    """This forward's whole daily history in DECIMAL, off the shared curve
+    cache. Both statistics below read this ONE list: the move percentile used
+    to be built here per cell and the level range separately per key forward,
+    which repriced the same series twice. Every cell now needs both (pass L
+    puts the 52-week range in the table's last column), so the two pass over
+    one list — strictly less work than before, and identical arithmetic."""
     zcs = _historical_curves(dataset)
-    vals = [forward_par_rate(z, start, tenor) for z in zcs if z is not None]
+    return [forward_par_rate(z, start, tenor) for z in zcs if z is not None]
+
+
+def _move_pct(vals: list[float]) -> float | None:
+    """Percentile of today's |Δ| within this forward's own daily-change history
+    (§J). None if too little history. Scale-free — `vals` stay in decimal so the
+    comparisons are bit-for-bit what they were before the shared-history
+    refactor."""
     diffs = [abs(vals[i] - vals[i - 1]) for i in range(1, len(vals))]
     if len(diffs) < 30:
         return None
@@ -197,25 +209,22 @@ def _cell_move_pct(dataset: Dataset, start: float, tenor: float | None) -> float
     return round(100.0 * sum(1 for d in diffs if d <= x) / len(diffs), 1)
 
 
-def _level_range(dataset: Dataset, start: float, tenor: float | None) -> dict:
+def _level_range(vals: list[float]) -> dict:
     """52-week LEVEL range + average + percentile for a forward (§8 gauge,
     Pass E; annual window per the annual-stats session — the 10y window
     straddled the regime break and pinned every gauge at the top). In percent
     to match `values` (×100). This is a LEVEL distribution — distinct from
     the |Δ| move percentile above that drives the matrix tint, which stays on
-    the FULL history on purpose. None-filled if too little history. Reuses
-    the shared historical-curve cache (cheap for 6 forwards)."""
-    zcs = _historical_curves(dataset)
-    vals = [forward_par_rate(z, start, tenor) * 100.0 for z in zcs if z is not None]
-    vals = vals[-ANNUAL_OBS:]
-    if len(vals) < 30:
+    the FULL history on purpose. None-filled if too little history."""
+    window = [v * 100.0 for v in vals][-ANNUAL_OBS:]
+    if len(window) < 30:
         return {"min": None, "max": None, "avg": None, "pct": None}
-    now = vals[-1]
+    now = window[-1]
     return {
-        "min": round(min(vals), 4),
-        "max": round(max(vals), 4),
-        "avg": round(sum(vals) / len(vals), 4),
-        "pct": round(100.0 * sum(1 for v in vals if v <= now) / len(vals), 1),
+        "min": round(min(window), 4),
+        "max": round(max(window), 4),
+        "avg": round(sum(window) / len(window), 4),
+        "pct": round(100.0 * sum(1 for v in window if v <= now) / len(window), 1),
     }
 
 
@@ -232,17 +241,23 @@ def forwards_payload(dataset: Dataset, curves: dict[str, np.ndarray]) -> dict:
         deltas = {
             k: round((values["now"] - values[k]) * 100, 2) for k in BASIS_KEYS
         }
-        # Sort key, keyForward flag, and 한 줄 classification are computed HERE,
-        # not in the browser (§16). Forwards have no 10y percentile → the
-        # classification is shape-only (a retracement or nothing).
+        # Sort key and keyForward flag are computed HERE, not in the browser
+        # (§16), as are both history statistics — one repricing pass, two uses.
+        hist = _cell_history(dataset, start, tenor)
+        level = _level_range(hist)
         out = {
             "values": values,
             "deltas": deltas,
             "sortKey": [start, tenor if tenor is not None else 0.0],
-            # forwards have no 10y percentile, so the 한 줄 ladder is silent, but
-            # the own-history move percentile (§J) drives the matrix tint.
-            "oneLiner": classify_one_liner(None, values["now"] is not None),
-            "movePct": _cell_move_pct(dataset, start, tenor),
+            # 52-week LEVEL high/low/mean — the table's last column (pass L).
+            # `pct` is dropped for a GRID cell on purpose: nothing reads a
+            # forward's level percentile (the 고점권/저점권 chips are wired to
+            # the summary rows only), and shipping a field no consumer reads is
+            # what §20 exists to prevent. The key-forward gauge does read it, so
+            # the keyForwards block below keeps the full record.
+            "range1y": {k: level[k] for k in ("min", "max", "avg")},
+            # own-history move percentile (§J) — drives the matrix tint.
+            "movePct": _move_pct(hist),
         }
         if name is not None:
             out["keyForward"] = name in key_labels
@@ -273,8 +288,14 @@ def forwards_payload(dataset: Dataset, curves: dict[str, np.ndarray]) -> dict:
         ],
         "tenors": [label for label, _t in FWD_TENORS],
         "grid": grid,
+        # the gauge needs the percentile too, so a key forward overrides the
+        # grid cell's min/max/avg-only record with the full one
         "keyForwards": [
-            {"label": label, **cell(s, t), "range1y": _level_range(dataset, s, t)}
+            {
+                "label": label,
+                **cell(s, t),
+                "range1y": _level_range(_cell_history(dataset, s, t)),
+            }
             for label, s, t in KEY_FORWARDS
         ],
     }

@@ -126,13 +126,14 @@ def test_volatility_payload_shape_matches_the_other_tabs():
         # SeriesSummary-like so the FE table component never branches
         assert set(row) >= {
             "id", "label", "unit", "now", "deltas", "range1y",
-            "sortKey", "quoted", "oneLiner",
+            "sortKey", "quoted", "movePct",
         }
         assert row["unit"] == "ratio"
         assert row["quoted"] is None
         assert row["id"].startswith("vol:")
         assert set(row["deltas"]) == {"d1", "wtd", "mtd", "qtd", "ytd"}
-        assert row["oneLiner"]["kind"] in {"move_extreme", "extreme", "none"}
+        # the 한 줄 classification is gone from every row shape (pass L)
+        assert "oneLiner" not in row
         assert len(row["sortKey"]) == 1
         pct = row["range1y"]["pct"]
         assert pct is None or 0 <= pct <= 100

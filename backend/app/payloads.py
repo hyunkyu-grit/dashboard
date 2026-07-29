@@ -21,8 +21,6 @@ import numpy as np
 
 from .dataset import DISPLAY_TENORS, SPEC_NODE_ORDER, Dataset
 from .derive import (
-    apply_level_extreme,
-    apply_solo_direction,
     curve_banner,
     derived_ids,
     ohlc_buckets,
@@ -50,13 +48,11 @@ def wall_summary(dataset: Dataset, bases: dict, events: list) -> dict:
         summarize(dataset, sid, sid.replace("-", "/"), kind, bases)
         for sid, kind, _legs in derived_ids()
     ]
-    # 한 줄 rungs 2 & 3 (§C2/§I) are cross-sectional, so they run after the whole
-    # table is built. When the whole curve sits at an extreme (§I) that is a
-    # curve fact stated once in the banner, so the per-row level rung is
-    # SUPPRESSED on outrights; spreads/flies keep it. Rung 3 over outrights only.
+    # The whole-curve extreme (§I) is the one cross-sectional statement left
+    # here: it is a fact about the CURVE, stated once above the table. The 한 줄
+    # ladder's two cross-sectional rungs used to run at this point and are gone
+    # with the column (pass L) — nothing else needed the whole table built.
     banner = curve_banner(outrights)
-    apply_level_extreme(derived if banner["kind"] else outrights + derived)
-    apply_solo_direction(outrights)
     return {
         "asof": dataset.asof.isoformat(),
         "basisDates": _iso_bases(bases),

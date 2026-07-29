@@ -8,17 +8,15 @@ import { describe, expect, it } from "vitest";
 
 import type {
   ForwardsPayload,
-  OneLiner,
   SeriesSummary,
   WallSummary,
 } from "../src/lib/api";
 import { buildRows } from "../src/ui/rows";
 
 const nullDeltas = { d1: 1, wtd: 1, mtd: 1, qtd: 1, ytd: 1 };
-const NONE: OneLiner = { kind: "none", value: null };
 
-// The sort key + quoted flag + classification now arrive from the backend (§16);
-// these fixtures stand in for that DTO. `yr` mirrors the server tenor→years map.
+// The sort key + quoted flag now arrive from the backend (§16); these fixtures
+// stand in for that DTO. `yr` mirrors the server tenor→years map.
 const yr: Record<string, number> = {
   "1D": 1 / 365, "3M": 0.25, "6M": 0.5, "9M": 0.75, "1Y": 1, "1.5Y": 1.5,
   "2Y": 2, "3Y": 3, "4Y": 4, "5Y": 5, "6Y": 6, "7Y": 7, "8Y": 8, "9Y": 9,
@@ -38,7 +36,6 @@ function outright(id: string): SeriesSummary {
     sortKey: id.split("-").map((t) => yr[t]),
     quoted: true,
     movePct: 50,
-    oneLiner: NONE,
   };
 }
 
@@ -53,9 +50,9 @@ function fwdCell(start: string, sortKey: number[]) {
     values: { now: 3 },
     deltas: { ...nullDeltas },
     sortKey,
-    oneLiner: NONE,
     keyForward: false,
     movePct: null,
+    range1y: { min: 2, max: 4, avg: 3 },
   };
 }
 

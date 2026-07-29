@@ -5,21 +5,23 @@
  * display grammar (lib/format.ts) can produce — never from today's data. With
  * `tabular-nums` every digit has the same advance, so the widest rendering is
  * a fixed template string and the grid never moves: not on tab switch, not on
- * sort, not on filter. The one flexible column is 한 줄, which absorbs all
- * remaining width — horizontal slack lives in the sentence, never in the
- * numbers.
+ * sort, not on filter. The last column (52주, pass L) is the elastic one: it
+ * holds three FIXED sub-columns and absorbs all remaining width as TRAILING
+ * slack, so the numbers inside it line up down the table like every other
+ * numeric column.
  *
  * WHEN SPACE RUNS OUT, COLUMNS DROP RATHER THAN SHRINK (columns session):
- * eight fixed columns sum to ~600px, and below that squeezing or scrolling
+ * the full column set sums to ~680px, and below that squeezing or scrolling
  * both read badly. `visibleColumns` renders the longest PREFIX of a priority
  * ladder that fits the measured container — pure arithmetic against the
  * fixed widths (no magic breakpoints, so it stays correct if a width
  * changes). THE SORTED COLUMN IS NEVER DROPPED: a list ordered by a column
  * the reader cannot see is unreadable, so the sort column is promoted to
  * slot 3 and whatever it displaced falls off the end. Ladder:
- *   1 종목 · 2 현재 · [3 sorted] · 어제 · YTD · WTD · MTD · QTD · 한 줄
- * (한 줄 first to go, last to return). Dropping/restoring never animates —
- * it is a layout change, not a state change. Pinned by
+ *   1 종목 · 2 현재 · [3 sorted] · 어제 · YTD · WTD · MTD · QTD · 52주
+ * (52주 first to go, last to return). 52주 is NOT sortable: it never enters
+ * the sort slot and its header carries no control. Dropping/restoring never
+ * animates — it is a layout change, not a state change. Pinned by
  * guards/table-grid.test.ts.
  */
 
@@ -46,9 +48,33 @@ const LABEL_W = `calc(${WIDEST.label.length}ch + ${COL_PAD.label}px)`;
 const LEVEL_W = `calc(${WIDEST.level.length}ch + ${COL_PAD.level}px)`;
 const DELTA_W = `calc(${WIDEST.delta.length}ch + ${COL_PAD.delta}px)`;
 
-/** 한 줄 keeps a small FLOOR (carry session, Pass D): with the ladder it is
- * the first column dropped, but while visible it never crushes below this. */
-export const ONE_LINER_MIN_PX = 120;
+/** The 52주 column holds three sub-columns — high, low, mean — each carrying
+ * ONE number in the 현재 grammar, so the glyph count is 현재's. That makes the
+ * column's FLOOR format-derived like every other width; it replaced a flat
+ * 120px floor that had been sized for a sentence. Any width beyond the floor
+ * becomes trailing slack inside the cell, never extra space between the
+ * numbers, so the three stay aligned all the way down the table.
+ *
+ * The CUSHION is larger than 현재's, and it is the one width here not set by
+ * the number: a sub-column has to fit its header LABEL too, and the longest
+ * (`52주 고점`) is Korean, whose advance scales with the font size and NOT with
+ * `ch`. Measured live at 11px it is ~45px of ink; 현재's 18px cushion leaves
+ * that 7.7px of room at the runtime ch of 7.74, which holds today but is thin
+ * enough that a fallback face could close it — and a clipped or wrapped header
+ * label is not a failure any test would catch. 24px puts ~13.7px under it for
+ * 18px of table width. Shrink it only against a fresh measurement of the
+ * longest label, not from the arithmetic alone. */
+export const RANGE_SUBS = 3;
+export const RANGE_PAD = 24;
+const RANGE_SUB_W = `calc(${WIDEST.level.length}ch + ${RANGE_PAD}px)`;
+const RANGE_W = `calc(${RANGE_SUBS * WIDEST.level.length}ch + ${
+  RANGE_SUBS * RANGE_PAD
+}px)`;
+
+/** The sub-grid INSIDE the 52주 cell — three fixed tracks, then a filler that
+ * takes the slack. Shared by the header's sub-labels and every body cell,
+ * exactly as `gridTemplate` is shared by the header row and every body row. */
+export const RANGE_TEMPLATE = `repeat(${RANGE_SUBS}, ${RANGE_SUB_W}) minmax(0, 1fr)`;
 
 /** Change-column priority (slots 4–8): 어제 first, then YTD, then the rest.
  * The sorted column, if any, jumps this queue (slot 3). */
@@ -60,17 +86,28 @@ const BASIS_CANON: BasisKey[] = ["d1", "wtd", "mtd", "qtd", "ytd"];
 
 export interface VisibleColumns {
   bases: BasisKey[]; // in canonical display order
-  oneLiner: boolean;
-  hidden: number; // how many columns are dropped (bases + 한 줄)
+  range52: boolean;
+  hidden: number; // how many columns are dropped (bases + 52주)
 }
 
 /** Fixed column widths in px for a measured `ch` (the '0' advance in the
- * table's font) — the same arithmetic the CSS calc() resolves to. */
-export function colPx(chPx: number): { label: number; level: number; delta: number } {
+ * table's font) — the same arithmetic the CSS calc() resolves to. `range` is
+ * the 52주 column's floor: three sub-columns at the level glyph count and the
+ * label-driven cushion (see RANGE_PAD). */
+export function colPx(chPx: number): {
+  label: number;
+  level: number;
+  delta: number;
+  rangeSub: number;
+  range: number;
+} {
+  const rangeSub = WIDEST.level.length * chPx + RANGE_PAD;
   return {
     label: WIDEST.label.length * chPx + COL_PAD.label,
     level: WIDEST.level.length * chPx + COL_PAD.level,
     delta: WIDEST.delta.length * chPx + COL_PAD.delta,
+    rangeSub,
+    range: RANGE_SUBS * rangeSub,
   };
 }
 
@@ -93,29 +130,29 @@ export function visibleColumns(
     included.push(b);
     used += w.delta;
   }
-  const oneLiner =
-    included.length === ladder.length && used + ONE_LINER_MIN_PX <= containerPx;
+  const range52 =
+    included.length === ladder.length && used + w.range <= containerPx;
   return {
     bases: BASIS_CANON.filter((b) => included.includes(b)),
-    oneLiner,
-    hidden: BASIS_LADDER.length - included.length + (oneLiner ? 0 : 1),
+    range52,
+    hidden: BASIS_LADDER.length - included.length + (range52 ? 0 : 1),
   };
 }
 
 /** Every column visible — the initial state before the first measurement. */
 export const ALL_COLUMNS: VisibleColumns = {
   bases: BASIS_CANON,
-  oneLiner: true,
+  range52: true,
   hidden: 0,
 };
 
 /** THE one grid definition, shared by the header row and every body row —
- * a single source so the two can never drift apart. When 한 줄 is dropped
+ * a single source so the two can never drift apart. When 52주 is dropped
  * the flexible tail becomes an EMPTY filler track so rows still span the
  * card (hairlines/hover) and the header's hidden-column note has a slot. */
 export function gridTemplate(v: VisibleColumns): string {
   const deltas = v.bases.length ? ` repeat(${v.bases.length}, ${DELTA_W})` : "";
-  const tail = v.oneLiner ? `minmax(${ONE_LINER_MIN_PX}px, 1fr)` : "minmax(0, 1fr)";
+  const tail = v.range52 ? `minmax(${RANGE_W}, 1fr)` : "minmax(0, 1fr)";
   return `${LABEL_W} ${LEVEL_W}${deltas} ${tail}`;
 }
 

@@ -7,10 +7,7 @@ from app.dataset import DISPLAY_TENORS, QUOTED_NODES, load_dataset, tenor_years
 from app.derive import (
     ANNUAL_OBS,
     annual_stats,
-    apply_level_extreme,
-    apply_solo_direction,
     basis_dates,
-    classify_one_liner,
     curve_banner,
     day_move_pct,
     derived_ids,
@@ -144,14 +141,17 @@ def test_downsample_keeps_last():
 
 # ── §16 computation boundary: the numbers the browser used to compute ──────────
 
-def test_summarize_carries_sort_key_quoted_and_classification(ds):
+def test_summarize_carries_sort_key_quoted_and_range(ds):
     b = basis_dates(ds)
     o = summarize(ds, "10Y", "IRS 10Y", "outright", b)
     assert o["sortKey"] == [10.0]
     assert o["quoted"] is True
-    assert o["oneLiner"]["kind"] in {
-        "move_extreme", "extreme", "solo_up", "solo_down", "none"
-    }
+    # the 한 줄 classification used to ride here; the row now carries the
+    # 52-week level statistics the last column renders (pass L)
+    assert "oneLiner" not in o
+    r = o["range1y"]
+    assert r["min"] <= r["avg"] <= r["max"]
+    assert 0 <= r["pct"] <= 100
     sp = summarize(ds, "1Y-10Y", "1Y/10Y", "spread", b)
     assert sp["sortKey"] == [1.0, 10.0]
     assert sp["quoted"] is None  # quoted/interpolated only applies to outrights
@@ -165,37 +165,12 @@ def test_sort_key_orders_3m_second_not_last():
     assert "10Y" in QUOTED_NODES and "4Y" not in QUOTED_NODES
 
 
-def test_classify_one_liner_rung1_move():
-    assert classify_one_liner(50, has_data=False) == {"kind": "none", "value": None}
-    # rung 1: today's move in the top 3% of the series' own daily moves
-    assert classify_one_liner(98, True) == {"kind": "move_extreme", "value": 2}
-    assert classify_one_liner(97, True) == {"kind": "move_extreme", "value": 3}
-    # an ordinary move → nothing (level/solo rungs are the caller's job)
-    assert classify_one_liner(90, True) == {"kind": "none", "value": None}
-    assert classify_one_liner(None, True) == {"kind": "none", "value": None}
-
-
-def test_apply_level_extreme_caps_and_picks_the_most_extreme():
-    def row(pct, kind="none"):
-        return {"range1y": {"pct": pct}, "oneLiner": {"kind": kind, "value": None}}
-
-    rows = [row(100), row(99), row(98), row(97), row(96), row(50)]
-    apply_level_extreme(rows, cap=3)
-    spoke = [r for r in rows if r["oneLiner"]["kind"] == "extreme"]
-    assert len(spoke) == 3  # capped on a synchronised-regime peer group
-    assert {r["oneLiner"]["value"] for r in spoke} == {100, 99, 98}
-    assert rows[5]["oneLiner"]["kind"] == "none"  # a mid-range level stays quiet
-
-
-def test_apply_level_extreme_leaves_higher_rungs_and_uses_both_bands():
-    def row(pct, kind="none"):
-        return {"range1y": {"pct": pct}, "oneLiner": {"kind": kind, "value": None}}
-
-    rows = [row(100, kind="move_extreme"), row(99), row(2)]
-    apply_level_extreme(rows, cap=3)
-    assert rows[0]["oneLiner"]["kind"] == "move_extreme"  # rung 1 kept
-    assert rows[1]["oneLiner"]["kind"] == "extreme"  # top band
-    assert rows[2]["oneLiner"]["kind"] == "extreme"  # bottom band
+# The three 한 줄 rungs had a test each here — classify_one_liner (own-history
+# move extreme), apply_level_extreme (capped level extreme) and
+# apply_solo_direction (moved against the day's majority). All three functions
+# are gone with the column (pass L). The curve banner below is NOT one of them:
+# it reads the same range1y.pct but says something about the whole curve, is
+# rendered above the table, and stays.
 
 
 def test_curve_banner_fires_only_on_a_whole_curve_extreme():
@@ -209,21 +184,6 @@ def test_curve_banner_fires_only_on_a_whole_curve_extreme():
     # only a couple extreme (distinctive, not a regime) → no banner
     assert curve_banner(outs([99, 98, 50, 40, 30, 20]))["kind"] is None
     assert curve_banner([])["kind"] is None
-
-
-def test_apply_solo_direction_marks_the_lone_mover():
-    def row(d1, kind="none"):
-        return {"deltas": {"d1": d1}, "oneLiner": {"kind": kind, "value": None}}
-
-    # majority up; the one that fell (and is still silent) is a solo down
-    rows = [row(5.0), row(4.0), row(3.0), row(-2.0)]
-    apply_solo_direction(rows)
-    assert rows[3]["oneLiner"]["kind"] == "solo_down"
-    assert all(r["oneLiner"]["kind"] == "none" for r in rows[:3])
-    # a row that already fired a higher rung is left alone
-    rows2 = [row(5.0), row(5.0), row(-3.0, kind="extreme")]
-    apply_solo_direction(rows2)
-    assert rows2[2]["oneLiner"]["kind"] == "extreme"
 
 
 def test_series_history_precomputes_deltas_stats_calendar():
