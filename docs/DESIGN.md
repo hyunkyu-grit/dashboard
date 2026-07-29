@@ -1507,6 +1507,44 @@ rename would desynchronise the file from the id in the manifest, and the build
 would succeed while the client 404s on exactly one instrument. See
 `## Provisional` for why `vol:1Y` maps rather than raises.
 
+**Request paths are reconciled against artifact paths, both ways [Pass H].**
+Three independent descriptions of one set must agree exactly: what the client
+can **request** (the real URL builders in `lib/` run over the real row model),
+what is **on disk**, and what the build **declared**. Compared as strings,
+byte-for-byte including case — `existsSync` answers case-insensitively on NTFS
+and would pass while production 404s, so it is never used. Live: 984 / 984 /
+984, all six differences empty.
+
+That is the static half. The **empirical** half serves the export behind a
+logging proxy and walks the built site — five tabs, sorting on every change
+column, all six screener chips, pinning across every group, the popup with all
+three chart modes plus DV01 and Pay/Receive, matrix mode, cold `?tile=` links,
+both themes. Result: **23 distinct API paths requested, 0 that would 404, 0
+non-2xx, 0 outside the declared set**, and status codes `{200, 304}` — the 304s
+being independent confirmation that the Pass F revalidation policy works
+through a real browser. The 961 unrequested files are the untouched rows; the
+walk samples, it does not enumerate.
+
+The empirical half earned its place by finding two things the static half
+could not:
+
+- **`.env.local` leaked into the production build.** Next loads it for
+  `next build`, not just `next dev`, so `pnpm build` compiled
+  `http://localhost:8100` into the bundle and every gate went green on it —
+  the artifact the gates certified was **not** the artifact that would deploy.
+  Deployed it would have sent every request to the reader's own machine and
+  failed as mixed content, the exact failure the static conversion removed. The
+  fix is structural: the override lives in `.env.development.local`, which
+  `next build` cannot see, and `guards/production-env.test.ts` checks both the
+  config and the emitted chunks.
+- **A cold shared link to a forward or volatility series cleared itself.** The
+  unknown-`?tile=` guard waited on `rows.length === 0`, but the summary lands
+  first and contributes only outrights and spreads, so during the window before
+  the other two payloads arrive `rows` is non-empty while every forward and vol
+  id in it is still unknown. `?tile=series:vol:10Y` opened cold landed on
+  `?missing=` every time. It now waits for the row set to be **complete** —
+  every contributing payload settled, not merely the first rows present.
+
 **One observation per line** in `points`, `bars` and `calendar`. A storage
 decision, not formatting: a daily refresh appends a line to each of ~196
 histories and git deltas the commit down to a few KB, where single-line blobs

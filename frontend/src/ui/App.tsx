@@ -178,18 +178,26 @@ export function App() {
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
-  const { data: forwards } = useQuery({
+  const { data: forwards, isPending: forwardsPending } = useQuery({
     queryKey: ["forwards"],
     queryFn: fetchForwards,
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
-  const { data: volatility } = useQuery({
+  const { data: volatility, isPending: volatilityPending } = useQuery({
     queryKey: ["volatility"],
     queryFn: fetchVolatility,
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
+
+  /* The row set is only COMPLETE once all three payloads have settled — the
+   * summary alone contributes outrights and spreads, forwards and volatility
+   * contribute the rest. Anything that asks "is this id unknown?" has to wait
+   * for this, not merely for the first rows to appear. Settled, not
+   * successful: if one payload fails outright, its rows are never coming and
+   * waiting forever would be worse than answering with what arrived. */
+  const rowsComplete = !forwardsPending && !volatilityPending && !!summary;
 
   const [hovered, setHovered] = useState<Row | null>(null);
   const [pinned, setPinned] = useState<Row | null>(null);
@@ -265,15 +273,22 @@ export function App() {
     return rows.find((r) => r.id === tileParam) ?? null;
   }, [tileParam, rows]);
 
-  /* Clear a `?tile=` that names nothing. Guarded on rows being loaded: before
-   * the summary arrives EVERY id is unknown, and clearing then would break the
-   * ordinary case of opening a shared link cold. */
+  /* Clear a `?tile=` that names nothing — but only once the row set is
+   * COMPLETE.
+   *
+   * This was guarded on `rows.length === 0`, which is not the same thing and
+   * the difference shipped a bug: the summary lands first and contributes only
+   * outrights and spreads, so for the window between it and the forwards /
+   * volatility payloads, `rows` is non-empty while every forward and vol id in
+   * it is still "unknown". A cold shared link to one of those cleared itself.
+   * Found by walking the built site (Pass H): `?tile=series:vol:10Y` opened
+   * cold landed on `?missing=` every time. */
   useEffect(() => {
-    if (!tileParam || rows.length === 0 || enlargedRow) return;
+    if (!tileParam || !rowsComplete || enlargedRow) return;
     router.replace(`/?missing=${encodeURIComponent(tileParam)}`, {
       scroll: false,
     });
-  }, [tileParam, rows.length, enlargedRow, router]);
+  }, [tileParam, rowsComplete, enlargedRow, router]);
 
   // chart type lives in the URL alongside ?tile (§G) so a view can be linked.
   const typeParam = params.get("type");

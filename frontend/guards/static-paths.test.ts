@@ -76,6 +76,89 @@ const rows = buildRows(summary, forwards, volatility);
 /** `/api/x.json` → `api/x.json`, so a URL can be compared to a listing. */
 const asKey = (url: string) => decodeURI(url).replace(/^\//, "");
 
+/* ── Pass H: the full three-way reconciliation ─────────────────────────────
+ *
+ * Three independent descriptions of the same set, which must agree exactly:
+ *
+ *   REQUESTABLE  every path the client can construct, built by running the
+ *                real URL builders in lib/ over the real row model
+ *   ON DISK      what `readdirSync` actually finds in the export
+ *   DECLARED     what the build says it wrote (manifest.artifacts, Pass G)
+ *
+ * Compared as STRINGS, byte-for-byte including case. That is the whole point:
+ * this machine is Windows and case-insensitive, Vercel is Linux and is not, so
+ * `10y.full.json` against a request for `10Y.full.json` resolves locally and
+ * 404s in production — for one instrument out of 196, which is the kind of
+ * defect that ships. `existsSync` would answer "yes" to the wrong case and is
+ * never used here.
+ *
+ * Differences are reported in BOTH directions with counts, empty or not: a
+ * missing file is a 404 and an orphan is a stale artifact still resolving
+ * after its id has gone.
+ */
+const requestable = new Set<string>([
+  "api/wall/summary.json",
+  "api/forwards.json",
+  "api/volatility.json",
+  "api/manifest.json",
+]);
+for (const r of rows) {
+  if (!r.seriesId) continue;
+  for (const res of RESOLUTIONS) requestable.add(asKey(seriesUrl(r.seriesId, res)));
+  requestable.add(asKey(dv01Url(r.seriesId)));
+}
+
+const declared = new Set<string>([
+  ...read<{ artifacts: string[] }>("api/manifest.json").artifacts,
+  "api/manifest.json",
+]);
+
+const diff = (a: Set<string>, b: Set<string>) =>
+  [...a].filter((x) => !b.has(x)).sort();
+
+describe("requestable / on-disk / declared reconcile exactly (Pass H)", () => {
+  it("reports both differences between requestable and on disk", () => {
+    const missing = diff(requestable, emitted); // would 404 in production
+    const orphan = diff(emitted, requestable); // stale, still resolving
+    // counts are reported whether or not they are zero, per the brief
+    expect({
+      requestable: requestable.size,
+      onDisk: emitted.size,
+      missing: missing.length,
+      orphan: orphan.length,
+    }).toEqual({
+      requestable: requestable.size,
+      onDisk: emitted.size,
+      missing: 0,
+      orphan: 0,
+    });
+    expect(missing).toEqual([]);
+    expect(orphan).toEqual([]);
+  });
+
+  it("what the build DECLARED matches what is on disk", () => {
+    expect(diff(declared, emitted)).toEqual([]);
+    expect(diff(emitted, declared)).toEqual([]);
+  });
+
+  it("what the build declared matches what the client can request", () => {
+    // the third edge of the triangle: catches a build that writes a coherent
+    // tree of files the client has no way to ask for
+    expect(diff(declared, requestable)).toEqual([]);
+    expect(diff(requestable, declared)).toEqual([]);
+  });
+
+  it("the comparison is genuinely case-sensitive", () => {
+    // the guard's own premise. If this set were case-insensitive — as the
+    // filesystem is on NTFS — every assertion above would pass vacuously.
+    const withCaps = [...emitted].find((f) => /[A-Z]/.test(f))!;
+    expect(withCaps).toBeDefined();
+    expect(emitted.has(withCaps.toLowerCase())).toBe(false);
+    expect(requestable.has(withCaps.toLowerCase())).toBe(false);
+    expect(requestable.has(withCaps)).toBe(true);
+  });
+});
+
 describe("the static build covers every id the app can request", () => {
   it("produced rows to check (the payloads are real)", () => {
     expect(rows.length).toBeGreaterThan(150);

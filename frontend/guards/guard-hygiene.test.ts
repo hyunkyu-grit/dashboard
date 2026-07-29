@@ -125,29 +125,41 @@ describe("every guard reads source through the shared reader", () => {
     // unstripped, so any guard that reads from src/ must ALSO pull the
     // stripper from here.
     if (!text.includes("readFileSync")) return;
-    // Reading DATA is a different act and the rule does not apply to it (the
-    // static conversion added guards that read the committed JSON tree under
-    // public/). JSON has no comments to strip, and these guards `JSON.parse`
-    // the bytes rather than pattern-matching them — the trap the stripper
-    // exists for cannot occur. The exemption is narrow on purpose: it holds
-    // only while the guard reads no source and matches no raw text.
-    // What matters is what the guard READS, not what it imports: a data guard
-    // legitimately imports types and helpers from ../src while reading only
-    // JSON, so import lines are removed before looking for a src/ path.
+
+    /* The rule is scoped by WHAT IS READ, because that is what it protects.
+     * The trap the stripper exists for is a comment or a string literal in
+     * TypeScript SOURCE tripping a token match. Guards that read other things
+     * are outside it, and the static conversion added several:
+     *
+     *   public/api/**      committed JSON — no comments exist to strip
+     *   .env*              `#` comments, which a TS stripper cannot parse and
+     *                      which those guards strip themselves
+     *   .next/static/**    minified build output, matched to prove a value did
+     *                      NOT get compiled in
+     *
+     * Blanket-requiring the stripper for all of them would be cargo cult: it
+     * cannot parse an env file, and there is no comment in minified JS for it
+     * to remove. So the requirement attaches to reading `src/` — and only to
+     * that. What the guard IMPORTS is irrelevant (a data guard legitimately
+     * imports types from ../src), so import lines come out first. */
     const body = text.replace(/^\s*import[\s\S]*?from\s*"[^"]*";\s*$/gm, "");
     const readsSource = /"src"|\/src\//.test(body);
-    const readsDataOnly = !readsSource && text.includes("JSON.parse");
-    if (readsDataOnly) {
-      expect(
-        /\.(test|match)\(\s*\/[^/]/.test(text.replace(/expect\([^)]*\)/g, "")),
-        `${f} reads data but also regex-matches raw text — strip it or read source properly`,
-      ).toBe(false);
-      return;
-    }
+    if (!readsSource) return;
+
     expect(
       text.includes('from "./_source"'),
-      `${f} reads files without importing the shared stripper from ./_source`,
+      `${f} reads app source without importing the shared stripper from ./_source`,
     ).toBe(true);
+  });
+
+  it("the scoping rule is itself checked, not assumed", () => {
+    // the classification above is load-bearing; pin both directions
+    const reads = (t: string) =>
+      /"src"|\/src\//.test(t.replace(/^\s*import[\s\S]*?from\s*"[^"]*";\s*$/gm, ""));
+    expect(reads('readFileSync(join(__dirname, "..", "src", f))')).toBe(true);
+    expect(reads('import { x } from "../src/lib/api";\nreadFileSync(p)')).toBe(false);
+    expect(reads('readFileSync(join(FRONTEND, ".env.local"))')).toBe(false);
+    expect(reads('readFileSync(join(F, "public", "api", "manifest.json"))')).toBe(false);
   });
 });
 

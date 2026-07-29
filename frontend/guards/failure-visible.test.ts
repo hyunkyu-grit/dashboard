@@ -90,8 +90,24 @@ describe("an unknown ?tile= is cleared and said", () => {
     expect(app).toMatch(/missingTile &&/);
   });
 
-  it("clearing waits for rows — a cold shared link must still open", () => {
-    expect(app).toMatch(/if \(!tileParam \|\| rows\.length === 0 \|\| enlargedRow\) return;/);
+  it("clearing waits for the COMPLETE row set, not merely for rows", () => {
+    /* `rows.length === 0` was the old condition and it shipped a bug. The
+     * summary lands first and contributes only outrights and spreads, so in
+     * the window before the forwards and volatility payloads arrive, `rows` is
+     * non-empty while every forward and vol id in it is still unknown — and a
+     * cold `?tile=series:vol:10Y` cleared itself every time. Pinned as the
+     * completeness flag rather than the row count so the distinction cannot
+     * quietly revert. */
+    expect(app).toMatch(/if \(!tileParam \|\| !rowsComplete \|\| enlargedRow\) return;/);
+    expect(app).not.toMatch(/rows\.length === 0 \|\| enlargedRow/);
+  });
+
+  it("completeness means every row-contributing payload has settled", () => {
+    // settled, not merely successful: a payload that fails is never arriving,
+    // and waiting forever would be worse than answering with what came back
+    expect(app).toMatch(
+      /rowsComplete = !forwardsPending && !volatilityPending && !!summary/,
+    );
   });
 
   it("the notice is derived from the URL, not held in state", () => {
