@@ -1490,6 +1490,18 @@ horizon is auditable from the artifact. A separate test fails when fewer than
 **60 business days** of ladder remain ahead of today — the same shape as the
 calendar horizon guard, firing as a prompt to rebuild rather than as a break.
 
+**The gate runs in two modes [Pass K].** `scripts/gate.ps1` runs everything
+with the backend **stopped** (mode 1 — the static paths, as deployed) and then
+starts uvicorn to run the static-vs-live agreement suite (mode 2), printing
+pass/skip/fail per mode and exiting non-zero if either fails. It exists because
+a suite that skips by default never goes red: mode 1 reports 19 skips, and mode
+2 turns 18 of them into results. The structural argument still does the real
+work — `payloads.py` is the single source of every body — but "runnable and
+recorded" beats "quietly absent". It refuses to start if anything holds :8100,
+since mode 1 must not have a backend available; nothing is piped, because a
+pipe hides the exit code; and `pnpm lint`/`pnpm build` write to stderr on
+success, so stderr is never read as failure.
+
 **Anchored to `Asia/Seoul`, at the reader's instant [Pass I].** The reader's
 *instant* is the right input; the reader's *local date* is not. The data is
 KRW IRS closes and the ladder counts KR business days, so "which day is it" is

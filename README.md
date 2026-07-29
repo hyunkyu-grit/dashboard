@@ -108,21 +108,34 @@ static files production serves.
 
 ## Gates
 
-Run each as its own command and read its exit code — never pipe one.
+One command, both modes, exits non-zero if either fails:
+
+```powershell
+powershell -File scripts/gate.ps1
+```
+
+Mode 1 runs everything with the backend **stopped** (the static paths, as
+deployed); mode 2 starts uvicorn and runs the static-vs-live agreement suite,
+which skips in mode 1 by design. It refuses to start if anything is listening
+on :8100, since mode 1 must not have a backend available.
+
+Or individually — each as its own command, reading its exit code, **never
+piped**:
 
 ```powershell
 cd backend;  python -m pytest tests -q
 cd frontend; pnpm vitest run; pnpm lint; pnpm build
 ```
 
-Two traps. `pnpm lint` writes a banner to stderr, which PowerShell surfaces as
-a `NativeCommandError` even on success — judge by exit code alone. And a dev
-server left running takes the backend suite from ~70 s to ~200 s; stop it
-before timing anything.
+Two traps, both handled by `scripts/gate.ps1` and both worth knowing when
+running by hand. `pnpm lint` and `pnpm build` write to stderr, which PowerShell
+surfaces as a `NativeCommandError` **even on success** — judge by exit code
+alone. And a dev server left running takes the backend suite from ~70 s to
+~200 s; stop it before timing anything.
 
 `tests/test_static_agreement.py` **skips** unless a backend is listening on
-:8100. That is deliberate — it compares the committed static tree against the
-live API and so cannot gate. Run it after changing either side:
+:8100 — it compares the committed static tree against the live API and so
+cannot gate. That is what mode 2 exists for. To run it alone:
 
 ```powershell
 cd backend; python -m uvicorn app.main:app --port 8100   # separate shell

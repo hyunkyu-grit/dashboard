@@ -12,6 +12,29 @@ production and nowhere else, which is the entire reason this file exists.
 
 ---
 
+## Step 0 — run the two-mode gate
+
+```powershell
+powershell -File scripts/gate.ps1
+```
+
+One command, both modes, exits non-zero if either fails. It refuses to start if
+anything is listening on :8100, because mode 1 has to run with the backend
+stopped or the agreement suite silently participates instead of skipping.
+
+- [ ] `all gates green in both modes`, exit 0. Expect roughly:
+  - mode 1 — backend **166 passed / 19 skipped**, frontend **332 passed / 1
+    skipped**, lint 0, build 0
+  - mode 2 — agreement **18 passed** (those are 18 of mode 1's 19 skips; the
+    19th is the deliberately parked calendar guard)
+
+Two things it handles that a hand-run sequence gets wrong. `pnpm lint` and
+`pnpm build` write to stderr, which PowerShell surfaces as a
+`NativeCommandError` **even on success** — the script judges by exit code
+alone, and nothing is piped, because a pipe hides the exit code and has shipped
+a red lint twice. And if a dev server is competing for CPU the backend suite
+goes from ~70 s to ~200 s, so any timing taken then is meaningless.
+
 ## Before the first deploy — owner actions
 
 - [ ] **Create the git remote.** No credentials exist in the working copy, so
@@ -31,20 +54,39 @@ production and nowhere else, which is the entire reason this file exists.
       is the deployed behaviour; setting it points the browser at a backend
       that will not exist, and because `NEXT_PUBLIC_*` is inlined at build time
       the mistake needs a rebuild to undo.
+
+      Pass H found this had already happened locally: `.env.local` held the
+      development override, Next loads that file for `next build` as well as
+      `next dev`, and the gated bundle had `http://localhost:8100` compiled
+      into it. The override now lives in `.env.development.local`, which
+      `next build` cannot see, and `guards/production-env.test.ts` checks both
+      the config files and the emitted chunks. If you ever add a Vercel
+      environment variable, that guard will not save you — it cannot see the
+      dashboard.
 - [ ] Confirm the build command is the framework default (`next build`). No
       Python step. Verified locally: the build succeeds with Python removed
       from `PATH` and no `.env.local` present.
 
 ## Immediately after the first deploy
 
-### 1. Every series and forward path resolves — **case sensitivity fails here and nowhere else**
+### 1. Every series and forward path resolves — now a **confirmation**, not first detection
 
-The build host is Windows (case-insensitive); Vercel is Linux (case-sensitive).
-A filename whose case differs from the string the app builds resolves locally
-and 404s in production, for perhaps one instrument out of 196.
-`guards/static-paths.test.ts` compares as strings rather than asking the
-filesystem, which is the best that can be done locally — but only the deployed
-site proves it.
+**This changed in Pass H.** The case-sensitivity class is caught locally now,
+so reaching this step and finding a 404 would mean the local checks are wrong,
+not merely that a file was missed. Two local checks stand behind it:
+
+- **Static.** `guards/static-paths.test.ts` reconciles three descriptions of
+  one set — what the client can request (real URL builders over the real row
+  model), what is on disk, and what the build declared — as **strings**,
+  byte-for-byte including case, in both directions. `existsSync` is never used:
+  it answers case-insensitively on NTFS and would pass while production 404s.
+  Live: 984 / 984 / 984, all six differences empty.
+- **Empirical.** The export was served behind a logging proxy and the built
+  site walked: 23 distinct API paths requested, 0 that would 404, 0 non-2xx, 0
+  outside the declared set.
+
+Run the walk below anyway. It is cheap, it is the only thing that exercises a
+real case-sensitive filesystem, and confirmation is worth having.
 
 - [ ] Open the site and paste this into the browser console. It walks every id
       the app can build and reports anything that is not 200:
@@ -84,20 +126,31 @@ console.table(bad);
 
 ### 2. Cache headers arrive as configured, and the manifest is not among the cached
 
-- [ ] `curl -sI https://<site>/api/series/10Y.full.json | grep -i cache-control`
-      → `public, max-age=0, s-maxage=31536000, must-revalidate`
+**Revised in Pass F — the policy is now `no-cache` on everything.**
+
 - [ ] `curl -sI https://<site>/api/manifest.json | grep -i cache-control`
-      → `public, max-age=0, must-revalidate` (**no `s-maxage`**)
-- [ ] Confirm `immutable` appears on **neither**. This is deliberate and worth
-      not "fixing": `immutable` is only safe for content-addressed URLs.
-      `/api/series/10Y.full.json` is a *stable* URL whose content changes with
-      every data refresh, so `immutable` would leave a returning reader on last
-      week's history indefinitely — silent staleness, the exact failure the
-      product is built to avoid.
-- [ ] After the **second** deploy with new data, hard-check the fix works:
-      load the site, then reload without clearing cache, and confirm the
-      as-of date in the header advanced. If it did not, the browser is caching
-      a data file it should be revalidating.
+      → `no-cache`
+- [ ] `curl -sI https://<site>/api/series/10Y.full.json | grep -i cache-control`
+      → `no-cache`
+- [ ] `curl -sI https://<site>/api/series/vol/10Y.full.json` → `no-cache`
+      (the colon-mapped path, served from a subdirectory)
+- [ ] Confirm **neither** `immutable` nor `stale-while-revalidate` nor any
+      positive `max-age`/`s-maxage` appears anywhere. All three admit a window
+      in which the reader holds a fresh manifest and a stale series — the
+      header prints today's as-of date over last week's line, and nothing
+      errors. `swr` is not a compromise: it serves the stale copy on first
+      paint, the one paint that matters.
+- [ ] Send a conditional request and confirm the cost of this is small:
+      `curl -sI -H 'If-None-Match: <etag>' https://<site>/api/series/10Y.full.json`
+      → **304**, empty body. Measured locally at 0 bytes.
+- [ ] After the **second** deploy with new data: load the site, then reload
+      **without** clearing cache, and confirm the as-of date advanced. If it
+      did not, something upstream is caching past the header.
+
+The headers come from `frontend/next.config.ts`, not `vercel.json` — Next
+applies them to `public/` under both `next start` and Vercel, so the local and
+deployed policies cannot diverge. `vercel.json` deliberately carries no
+`headers` block; `guards/cache-policy.test.ts` fails if one reappears.
 
 ### 3. The deployment sits inside Vercel's limits
 
