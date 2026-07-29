@@ -169,11 +169,46 @@ rule:
 
 ---
 
-## 6. Current state (as of the stability session — Passes A–F, 2026-07-29)
+## 6. Current state (as of the static conversion, 2026-07-29)
 
-- **HEAD** = the stability-session Pass F commit `92badff` on `master`,
-  mirrored to D:. Gates: FE **265 passed / 1 skipped**, lint 0, build 0; BE
-  **104 pass / 1 skip / 1 xfail**.
+- **HEAD** = the static-conversion commit `550349a` on `master`, mirrored to
+  D:. Gates: FE **295 passed / 1 skipped**, lint 0, build 0; BE **131 passed /
+  19 skipped / 1 xfailed** (the 19 skips are 18 agreement tests that need a
+  running backend, plus the parked calendar guard).
+
+### The data ships as static JSON — read this before touching the backend
+
+- **The deployed site has no backend.** `backend/scripts/build_static.py`
+  precomputes every response into `frontend/public/api/**` (984 files, ~31 MB,
+  ~20 s) and **that tree is committed**. Vercel runs `next build` only.
+  DESIGN §21 and `docs/diagnostics/static-feasibility.md` have the reasoning.
+- **Refreshing data is now three steps, not one**: replace
+  `data/irsdata.xlsx`, run the pipeline, commit **both**. Committing the xlsx
+  without rebuilding ships a site that disagrees with its own data file;
+  `test_static_agreement.py::test_the_static_tree_is_current_for_this_data_file`
+  catches it, but only with a backend running.
+- **`backend/app/payloads.py` is the single source of every response body.**
+  Both the FastAPI handlers and the pipeline call it. If you add or change an
+  endpoint's content, change it there — anywhere else creates two answers.
+- **Ids map to filenames through one rule, `:` → `/`** — stated in
+  `app/static_paths.py`, mirrored in `lib/staticPaths.ts`, and it **raises**
+  rather than guessing. Do not interpolate an id into a path by hand: on NTFS a
+  colon silently redirects the write into an alternate data stream (Pass A lost
+  24 files that way with a clean exit code).
+- **`.gitattributes` pins `frontend/public/api/**` to LF.** This machine has
+  `core.autocrlf=true`, which would otherwise rewrite every line on checkout,
+  making a rebuild on unchanged data look like ~980 modified files. Verified:
+  after a rebuild, `git status` reports exactly one changed file
+  (`manifest.json`, whose `builtAt` is meant to change).
+- **The FastAPI app is still the reference implementation** for local
+  development. Set `NEXT_PUBLIC_API_BASE` in `frontend/.env.local` to use it;
+  unset means "read the static files", which is what production does.
+- **Deploying is the owner's step**: no git remote exists, and the Vercel
+  project needs Root Directory = `frontend`. `docs/DEPLOY_CHECKLIST.md` covers
+  what only a deployed site can show — the case-sensitivity sweep especially,
+  which fails in production and nowhere else.
+
+### Before that — the stability session (Passes A–F)
 - **The stability session ran A–F.** A diagnosed the failure paths
   (`docs/diagnostics/failure-modes.md`); B gave the client visible failure
   (independent error boundaries, `ui/DataState.tsx`, a persistent retryable
@@ -649,9 +684,14 @@ rule:
   `prefers-reduced-motion`. Pass E could not measure true first paint or
   frames-to-pixels for the same reason (occluded renderer); it measured
   time-to-DOM-committed instead and says so.
-- **Deliberately out of scope of the stability session:** deployment, hosting,
-  and any build-time data pipeline. Nothing in Passes A–F presupposes a
-  deployment decision.
+- **No longer out of scope, and now decided:** the stability session left
+  deployment open on purpose. The static conversion settled it — Vercel, no
+  runtime backend, data committed as JSON. See DESIGN §21.
+- **Open for the owner, in order:** create the git remote; set the Vercel
+  project's Root Directory to `frontend`; work `docs/DEPLOY_CHECKLIST.md`. The
+  case-sensitivity sweep in §1 of that file is the one that matters — Windows
+  builds it, Linux serves it, and a case mismatch resolves locally while 404ing
+  in production for perhaps one instrument out of 196.
 
 ---
 
