@@ -1,0 +1,27 @@
+# This machine has core.autocrlf=true, which rewrites LF to CRLF on checkout.
+# For the committed static API that is not cosmetic — it breaks two things.
+#
+#  1. The pipeline writes LF (`Path.write_bytes`). With autocrlf the checked-out
+#     file has CRLF, so a rebuild on UNCHANGED data would report all ~980 files
+#     as modified. The determinism the build works so hard for would be invisible
+#     and every diff would be noise.
+#  2. Time series are stored one observation per line so a daily refresh is a
+#     few KB of git delta. Line-ending churn would rewrite every line of every
+#     file, which is the exact cost the line structure exists to avoid.
+#
+# So the data tree is pinned to LF. Nothing reads these files as text on
+# Windows; they are served over HTTP and parsed as JSON.
+frontend/public/api/** text eol=lf
+
+# Source too, for the same "the file on disk is what got committed" reason.
+*.py   text eol=lf
+*.ts   text eol=lf
+*.tsx  text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.css  text eol=lf
+
+# Binary — never touch these.
+*.xlsx binary
+*.ico  binary
+*.png  binary

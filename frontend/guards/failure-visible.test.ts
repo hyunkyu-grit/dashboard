@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { code, stripComments } from "./_source";
+import { code, stripComments, walk } from "./_source";
 
 const app = code("ui/App.tsx");
 const preview = code("ui/PreviewPane.tsx");
@@ -101,18 +101,53 @@ describe("an unknown ?tile= is cleared and said", () => {
 });
 
 describe("the API base is configurable", () => {
-  const api = code("lib/api.ts");
+  /* Still the stability session's rule — the origin is an env var, never a
+   * literal in a component — but the DEFAULT moved in the static conversion.
+   * It is now the empty string, meaning "read the committed JSON tree at the
+   * same origin"; setting NEXT_PUBLIC_API_BASE still points the app at a live
+   * FastAPI backend for local development. URL construction moved with it,
+   * into staticPaths.ts, because a static host cannot select a file by `?res=`
+   * and the two URL shapes have to live somewhere. */
+  const paths = code("lib/staticPaths.ts");
 
-  it("reads an env var and defaults to the current value", () => {
-    expect(api).toMatch(
-      /process\.env\.NEXT_PUBLIC_API_BASE \?\? "http:\/\/localhost:8100"/,
-    );
+  it("reads the env var, defaulting to the static tree", () => {
+    expect(paths).toMatch(/process\.env\.NEXT_PUBLIC_API_BASE \?\? ""/);
   });
 
-  it("no other module hardcodes the port", () => {
-    for (const f of ["ui/App.tsx", "ui/PreviewPane.tsx", "ui/EnlargedView.tsx"]) {
-      expect(code(f)).not.toContain("localhost:8100");
-    }
+  it("a configured base still produces live-backend URLs", () => {
+    // the development path must not rot: if IS_STATIC ever became a constant
+    // true, pointing at :8100 would silently keep reading files instead
+    expect(paths).toMatch(/IS_STATIC = API_BASE === ""/);
+    expect(paths).toMatch(/\$\{API_BASE\}\/api\//);
+  });
+
+  it("NO module outside lib/ builds an API path by hand", () => {
+    /* This listed three components and missed the one that mattered.
+     * `DetailChart.tsx` had its own `fetch(`${API_BASE}/api/series/${id}?res=full`)`
+     * for the line mode; the static conversion turned that into a 404 while the
+     * candle modes kept working, because those already went through
+     * `fetchCandles`. A partial list of files is not a guard — it is a guess. */
+    const hasApiPath = (text: string) =>
+      text.includes("/api/") || text.includes("localhost:8100");
+    const offenders = walk(".", "code")
+      .filter(([p]) => !p.startsWith("lib/"))
+      .filter(([, text]) => hasApiPath(text))
+      .map(([p]) => p);
+    expect(offenders).toEqual([]);
+
+    // and the check bites: the exact line that shipped the bug must trip it
+    expect(
+      hasApiPath('fetch(`${API_BASE}/api/series/${encodeURIComponent(id)}?res=full`)'),
+    ).toBe(true);
+  });
+
+  it("lib/api.ts itself goes through the URL builders", () => {
+    // an inlined `${API_BASE}/api/…` would work against a live backend and
+    // 404 against the static tree — a failure that only appears in production,
+    // the one place it is expensive to find.
+    const api = code("lib/api.ts");
+    expect(api).not.toMatch(/fetch\(`\$\{API_BASE\}/);
+    expect(api).not.toMatch(/fetch\("\/api\//);
   });
 });
 

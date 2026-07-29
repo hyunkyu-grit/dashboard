@@ -1,8 +1,32 @@
 /* Server-state types + fetchers. All derived series come from the backend;
- * the browser never computes a series (design spec §4). */
+ * the browser never computes a series (design spec §4).
+ *
+ * "The backend" is now either a static tree of JSON under `/api/…` (the
+ * deployed case) or the live FastAPI app (local development, set
+ * `NEXT_PUBLIC_API_BASE`). Only the URLs differ — every body is byte-identical,
+ * because both come from `backend/app/payloads.py`. URL construction lives in
+ * `staticPaths.ts`; nothing below knows which mode it is in, and no component
+ * changed for this. */
 
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8100";
+import {
+  dv01Url,
+  forwardsUrl,
+  healthUrl,
+  IS_STATIC,
+  manifestUrl,
+  seriesUrl,
+  summaryUrl,
+  volatilityUrl,
+} from "./staticPaths";
+import {
+  type Freshness,
+  freshnessFrom,
+  type FreshnessLevel,
+  type Manifest,
+} from "./freshness";
+
+export { API_BASE } from "./staticPaths";
+export type { Freshness, FreshnessLevel, Manifest };
 
 export type BasisKey = "d1" | "wtd" | "mtd" | "qtd" | "ytd";
 
@@ -91,21 +115,20 @@ export interface WallSummary {
 }
 
 export async function fetchWallSummary(): Promise<WallSummary> {
-  const res = await fetch(`${API_BASE}/api/wall/summary`);
+  const res = await fetch(summaryUrl());
   if (!res.ok) throw new Error(`wall summary: HTTP ${res.status}`);
   return res.json();
 }
 
 /** Dataset freshness (§ Pass C). `level` drives how loud the header says it:
  * current = quiet, behind = visible, stale = unmissable in words. Age is in KR
- * business days and recomputed server-side per request. */
-export type FreshnessLevel = "current" | "behind" | "stale";
-export interface Freshness {
-  asOf: string;
-  today: string;
-  ageBusinessDays: number;
-  level: FreshnessLevel;
-}
+ * business days.
+ *
+ * Static conversion: this is the ONE value that cannot be precomputed — it is a
+ * question about now, not about the data — so against a static tree it is
+ * derived from the manifest against the browser's clock. Against a live backend
+ * the server still answers it. The shape is identical either way, which is why
+ * `DataFreshness` in App.tsx did not change. */
 export interface Health {
   status: string;
   asof: string;
@@ -114,8 +137,24 @@ export interface Health {
   freshness: Freshness;
 }
 
+export async function fetchManifest(): Promise<Manifest> {
+  const res = await fetch(manifestUrl());
+  if (!res.ok) throw new Error(`manifest: HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function fetchHealth(): Promise<Health> {
-  const res = await fetch(`${API_BASE}/api/health`);
+  if (IS_STATIC) {
+    const m = await fetchManifest();
+    return {
+      status: "ok",
+      asof: m.asof,
+      rows: m.rows,
+      missingNodes: m.missingNodes,
+      freshness: freshnessFrom(m),
+    };
+  }
+  const res = await fetch(healthUrl());
   if (!res.ok) throw new Error(`health: HTTP ${res.status}`);
   return res.json();
 }
@@ -158,7 +197,7 @@ export interface ForwardsPayload {
 }
 
 export async function fetchForwards(): Promise<ForwardsPayload> {
-  const res = await fetch(`${API_BASE}/api/forwards`);
+  const res = await fetch(forwardsUrl());
   if (!res.ok) throw new Error(`forwards: HTTP ${res.status}`);
   return res.json();
 }
@@ -178,7 +217,7 @@ export interface VolatilityPayload {
 }
 
 export async function fetchVolatility(): Promise<VolatilityPayload> {
-  const res = await fetch(`${API_BASE}/api/volatility`);
+  const res = await fetch(volatilityUrl());
   if (!res.ok) throw new Error(`volatility: HTTP ${res.status}`);
   return res.json();
 }
@@ -202,7 +241,7 @@ export interface Dv01Payload {
 }
 
 export async function fetchDv01(id: string): Promise<Dv01Payload> {
-  const res = await fetch(`${API_BASE}/api/dv01/${encodeURIComponent(id)}`);
+  const res = await fetch(dv01Url(id));
   if (!res.ok) throw new Error(`dv01 ${id}: HTTP ${res.status}`);
   return res.json();
 }
@@ -242,8 +281,7 @@ export async function fetchSeries(
   id: string,
   res: SeriesResolution = "full",
 ): Promise<SeriesDetail> {
-  const url = `${API_BASE}/api/series/${encodeURIComponent(id)}?res=${res}`;
-  const r = await fetch(url);
+  const r = await fetch(seriesUrl(id, res));
   if (!r.ok) throw new Error(`series ${id}: HTTP ${r.status}`);
   return r.json();
 }
@@ -266,8 +304,7 @@ export interface CandlesPayload {
 }
 
 export async function fetchCandles(id: string, interval: Interval): Promise<CandlesPayload> {
-  const url = `${API_BASE}/api/series/${encodeURIComponent(id)}?res=full&interval=${interval}`;
-  const r = await fetch(url);
+  const r = await fetch(seriesUrl(id, interval));
   if (!r.ok) throw new Error(`candles ${id}: HTTP ${r.status}`);
   return r.json();
 }

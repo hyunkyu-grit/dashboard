@@ -16,25 +16,16 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
+from . import payloads
 from .cache import cached, data_hash
 from .curves import build_basis_curves
-from .dataset import DISPLAY_TENORS, SPEC_NODE_ORDER, load_dataset
-from .derive import (
-    apply_level_extreme,
-    apply_solo_direction,
-    basis_dates,
-    curve_banner,
-    derived_ids,
-    ohlc_buckets,
-    series_history,
-    series_values,
-    summarize,
-)
+from .dataset import load_dataset
+from .derive import basis_dates, derived_ids
 from .dv01 import build_dv01_table
 from .events import detect_event_clusters
-from .forwards import forward_history, forwards_payload
+from .forwards import forwards_payload
 from .staleness import dataset_freshness
-from .volatility import relative_atr_for, volatility_payload
+from .volatility import volatility_payload
 
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "irsdata.xlsx"
 
@@ -75,10 +66,6 @@ _forwards = cached("forwards", _data_hash, lambda: forwards_payload(_dataset, _c
 # did not sum). `forwards` is the only cached payload now.
 
 
-def _outright_label(tenor: str) -> str:
-    return "Call (1D)" if tenor == "1D" else f"IRS {tenor}"
-
-
 @app.get("/api/health")
 def health() -> dict:
     # freshness recomputed per request (its age advances with the wall clock
@@ -94,89 +81,17 @@ def health() -> dict:
 
 @app.get("/api/wall/summary")
 def wall_summary() -> dict:
-    outrights = [
-        summarize(_dataset, t, _outright_label(t), "outright", _bases)
-        for t in _dataset.tenor_order
-    ]
-    derived = [
-        summarize(_dataset, sid, sid.replace("-", "/"), kind, _bases)
-        for sid, kind, _legs in derived_ids()
-    ]
-    # 한 줄 rungs 2 & 3 (§C2/§I) are cross-sectional, so they run after the whole
-    # table is built. When the whole curve sits at a 10y extreme (§I), that is a
-    # curve fact stated once in the banner, so the per-row level rung is
-    # SUPPRESSED on outrights; spreads/flies keep it (a spread at a 10y extreme
-    # is genuinely distinctive, not restated by the banner). Rung 3 (solo
-    # direction) over outrights only. Both fill only silent rows, so rung 1
-    # (set in summarize) keeps priority.
-    banner = curve_banner(outrights)
-    apply_level_extreme(derived if banner["kind"] else outrights + derived)
-    apply_solo_direction(outrights)
-    return {
-        "asof": _dataset.asof.isoformat(),
-        "basisDates": {
-            k: (d.isoformat() if d else None) for k, d in _bases.items()
-        },
-        "specNodeOrder": SPEC_NODE_ORDER,
-        "displayTenors": DISPLAY_TENORS,
-        "missingNodes": _dataset.missing_nodes,
-        "curveBanner": banner,  # §I: whole-curve extreme stated once, not per row
-        "outrights": outrights,
-        "derived": derived,
-        # Change-log EVENTS (D-1 fixed, collapsed) — DESIGN §12 rule (c).
-        "events": _events,
-    }
+    return payloads.wall_summary(_dataset, _bases, _events)
 
 
 @app.get("/api/series/{series_id}")
 def series_detail(series_id: str, res: str = "full", interval: str | None = None) -> dict:
-    # `res=preview` → ~150 downsampled line points; `res=full` → every day (the
-    # enlarged view). `interval=w|m` → weekly/monthly OHLC candles instead (§G).
-    # Stats + per-point daily change + the calendar are always precomputed here —
-    # the browser never differences or aggregates a series (§16).
-    if series_id.startswith("vol:"):
-        # Volatility history: the relative-ATR ratio series for a tenor. Ratio
-        # levels are dimensionless; warm-up / floor nulls are simply absent.
-        try:
-            ratios = relative_atr_for(_dataset, series_id[len("vol:"):])
-        except KeyError:
-            raise HTTPException(status_code=404, detail=f"unknown series {series_id}")
-        pairs = [(t, r) for t, r in ratios if r is not None]
-        unit = "ratio"
-    elif "x" in series_id:
-        # Forward ids carry an 'x' (e.g. 2Yx1Y); their history is derived from
-        # each date's curve, lazily and cached (§2 stage-2). Levels are %.
-        try:
-            hist = forward_history(_dataset, series_id)
-        except KeyError:
-            raise HTTPException(status_code=404, detail=f"unknown forward {series_id}")
-        pairs = [(p["t"], p["v"]) for p in hist]
-        unit = "%"
-    else:
-        try:
-            values = series_values(_dataset, series_id)
-        except KeyError:
-            raise HTTPException(status_code=404, detail=f"unknown series {series_id}")
-        # outright levels are %, derived spreads/flies are already bp.
-        unit = "%" if series_id in _dataset.series else "bp"
-        pairs = [
-            (d.isoformat(), round(v, 4))
-            for d, v in zip(_dataset.dates, values)
-            if v is not None
-        ]
-    if interval in ("w", "m"):
-        return {
-            "id": series_id,
-            "asof": _dataset.asof.isoformat(),
-            "unit": unit,
-            "interval": interval,
-            "bars": ohlc_buckets(pairs, interval),
-        }
-    return {
-        "id": series_id,
-        "asof": _dataset.asof.isoformat(),
-        **series_history(pairs, unit, res),
-    }
+    # Content comes from payloads.py so the static build cannot drift from this
+    # (Pass B). All that is left here is turning an unknown id into a 404.
+    try:
+        return payloads.series_detail(_dataset, series_id, res, interval)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"unknown series {series_id}")
 
 
 @app.get("/api/forwards")
@@ -188,19 +103,10 @@ def forwards() -> dict:
 def dv01(series_id: str) -> dict:
     # Per-leg DV01 + DV01-neutral notional ratio at the current curve (§B).
     # Forwards/vol/unknown ids get an empty block (kind null).
-    return _dv01_table.get(
-        series_id,
-        {"id": series_id, "kind": None, "legs": [], "residual": None},
-    )
+    return _dv01_table.get(series_id, payloads.empty_dv01(series_id))
 
 
 @app.get("/api/volatility")
 def volatility() -> dict:
     # Relative-ATR list rows + across-tenor curve, all precomputed (§16).
-    return {
-        "asof": _dataset.asof.isoformat(),
-        "basisDates": {
-            k: (d.isoformat() if d else None) for k, d in _bases.items()
-        },
-        **_volatility,
-    }
+    return payloads.volatility(_dataset, _bases, _volatility)

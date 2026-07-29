@@ -1,0 +1,66 @@
+/* Where the data lives — the frontend half of the id→path rule.
+ *
+ * Static conversion, Pass C. `backend/app/static_paths.py` is the other half
+ * and the two MUST agree; `guards/static-paths.test.ts` enumerates every id the
+ * app can request and checks a byte-identical file was actually emitted, so a
+ * divergence fails at gate time rather than as a production 404.
+ *
+ * Two shapes, because a static host cannot select a file by query string:
+ *
+ *   static (default)  /api/series/10Y.full.json
+ *   live backend      http://localhost:8100/api/series/10Y?res=full
+ *
+ * The live shape is kept for local development against the FastAPI app, which
+ * stays the reference implementation. Set `NEXT_PUBLIC_API_BASE` to use it.
+ */
+
+/** Set → talk to a live backend at that origin. Unset → read static files. */
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
+
+/** True when no live backend is configured, i.e. the deployed case. */
+export const IS_STATIC = API_BASE === "";
+
+export type Resolution = "full" | "preview" | "w" | "m";
+
+/** Id → path stem. The colon in `vol:1Y` is already a namespace separator, so
+ * a directory is what it always meant: `vol/1Y`. It also has to go: on NTFS a
+ * colon redirects the write into an alternate data stream (silently), and
+ * `encodeURIComponent` turns it into `%3A`, so a literally-named file and the
+ * request path would disagree even on Linux. Mirrors `static_paths.py::slug`. */
+export function slug(seriesId: string): string {
+  return seriesId.replace(/:/g, "/");
+}
+
+/** Path segments are already safe by construction (see slug + the backend's
+ * refusal to emit anything else), so they are encoded per-segment — a whole-id
+ * `encodeURIComponent` would escape the separators we just created. */
+function encodePath(stem: string): string {
+  return stem.split("/").map(encodeURIComponent).join("/");
+}
+
+export function seriesUrl(seriesId: string, res: Resolution): string {
+  if (IS_STATIC) return `/api/series/${encodePath(slug(seriesId))}.${res}.json`;
+  const id = encodeURIComponent(seriesId);
+  return res === "w" || res === "m"
+    ? `${API_BASE}/api/series/${id}?res=full&interval=${res}`
+    : `${API_BASE}/api/series/${id}?res=${res}`;
+}
+
+export function dv01Url(seriesId: string): string {
+  return IS_STATIC
+    ? `/api/dv01/${encodePath(slug(seriesId))}.json`
+    : `${API_BASE}/api/dv01/${encodeURIComponent(seriesId)}`;
+}
+
+export const summaryUrl = () =>
+  IS_STATIC ? "/api/wall/summary.json" : `${API_BASE}/api/wall/summary`;
+export const forwardsUrl = () =>
+  IS_STATIC ? "/api/forwards.json" : `${API_BASE}/api/forwards`;
+export const volatilityUrl = () =>
+  IS_STATIC ? "/api/volatility.json" : `${API_BASE}/api/volatility`;
+
+/** The manifest replaces `/api/health` when static: freshness is a "now"
+ * question and the client owns the clock (§21). Against a live backend the
+ * server still answers it, so the caller branches on IS_STATIC. */
+export const manifestUrl = () => "/api/manifest.json";
+export const healthUrl = () => `${API_BASE}/api/health`;

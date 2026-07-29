@@ -30,9 +30,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import {
-  API_BASE,
   type CandlesPayload,
   fetchCandles,
+  fetchSeries,
   type HistoryPoint,
   type Interval,
   type OhlcBar,
@@ -55,11 +55,13 @@ interface LineDetail {
   points: HistoryPoint[];
 }
 
-async function fetchLine(id: string): Promise<LineDetail> {
-  const res = await fetch(`${API_BASE}/api/series/${encodeURIComponent(id)}?res=full`);
-  if (!res.ok) throw new Error(`series ${id}: HTTP ${res.status}`);
-  return res.json();
-}
+/* This hand-rolled its own URL until the static conversion, and that is exactly
+ * how it broke: `?res=full` selects nothing on a static host, so the line chart
+ * 404'd while the candle modes — which already went through fetchCandles —
+ * worked. Every request goes through lib/api.ts now, and the guard in
+ * failure-visible.test.ts checks EVERY component for a hand-built `/api/` path
+ * rather than the three it happened to list before. */
+const fetchLine = (id: string): Promise<LineDetail> => fetchSeries(id, "full");
 
 // height of the date-label strip under the chart (dates session, Pass B)
 const AXIS_H = 18;

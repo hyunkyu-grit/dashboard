@@ -16,18 +16,44 @@ stay untouched.
 schedules a new close; getting tomorrow's data in is a manual step, and no
 automated feed exists yet (that is an owner decision, out of scope here).
 
-To refresh: replace `data/irsdata.xlsx` with a newer export in the same layout
-(same sheet/columns; the loader keys off the SHA-256 of the file, so any change
-is picked up) and **restart the backend** — the dataset, curves, and the
-own-history caches are all built once at startup, so a running server will not
-notice a new file until it restarts.
+To refresh:
+
+```powershell
+# 1. replace data/irsdata.xlsx with a newer export in the same layout
+# 2. rebuild the static API that the deployed site reads
+python backend/scripts/build_static.py
+# 3. commit BOTH the xlsx and frontend/public/api/**, then push to deploy
+```
+
+For local development against the live backend, **restart it** as well — the
+dataset, curves and own-history caches are all built once at startup, so a
+running server will not notice a new file until it restarts.
 
 Because the file is static, the app measures its own staleness so it never shows
-an old curve as if it were today's: `/api/health` reports `freshness` (the
-dataset's latest date and its age in KR business days), and the header states it
-— quiet when same-day, a visible chip one business day behind, and a red
-"최신 커브가 아닐 수 있습니다" chip beyond that. If you see that chip, the file needs
-refreshing.
+an old curve as if it were today's. The header stays quiet when same-day, shows
+a visible chip one business day behind, and a red "최신 커브가 아닐 수 있습니다"
+chip beyond that. If you see that chip, the file needs refreshing. The deployed
+site derives this from `api/manifest.json` against **your** clock; the live
+backend answers it from `/api/health` with the same shape.
+
+### The data ships as static JSON
+
+The deployed site has **no backend**. A local FastAPI process behind an HTTPS
+page is blocked by the browser (mixed content, plus Private Network Access), so
+`backend/scripts/build_static.py` precomputes every response into
+`frontend/public/api/**` and that tree is **committed**. Vercel runs
+`next build` and nothing else — no Python, no QuantLib in the build image.
+
+The FastAPI app is not going away: it stays the reference implementation for
+local development, and `backend/app/payloads.py` is the single source of every
+body, so the two cannot answer differently.
+
+**Why the pipeline output is committed, and what it costs.** Roughly 984 files,
+~31 MB. Time series are written **one observation per line** on purpose: a
+daily refresh then appends a line to each of ~196 histories and git's delta
+compression makes the commit a few KB. Written as single-line blobs the same
+update would rewrite every file whole — about 31 MB per refresh, some 7.5 GB a
+year. If you ever reformat these files, keep the line structure.
 
 ## Policy calendar — also manual, and it will tell you when
 
@@ -76,17 +102,50 @@ cd backend; python -m uvicorn app.main:app --port 8100
 cd frontend; pnpm install; pnpm next dev --port 3100
 ```
 
+Set `NEXT_PUBLIC_API_BASE` in `frontend/.env.local` to use the live backend
+(see `frontend/.env.example`); leave it unset to develop against the same
+static files production serves.
+
 ## Gates
+
+Run each as its own command and read its exit code — never pipe one.
 
 ```powershell
 cd backend;  python -m pytest tests -q
 cd frontend; pnpm vitest run; pnpm lint; pnpm build
 ```
 
+Two traps. `pnpm lint` writes a banner to stderr, which PowerShell surfaces as
+a `NativeCommandError` even on success — judge by exit code alone. And a dev
+server left running takes the backend suite from ~70 s to ~200 s; stop it
+before timing anything.
+
+`tests/test_static_agreement.py` **skips** unless a backend is listening on
+:8100. That is deliberate — it compares the committed static tree against the
+live API and so cannot gate. Run it after changing either side:
+
+```powershell
+cd backend; python -m uvicorn app.main:app --port 8100   # separate shell
+cd backend; python -m pytest tests/test_static_agreement.py -q
+```
+
+## Deploying
+
+`docs/DEPLOY_CHECKLIST.md` covers what only the deployed site can show. In
+short: Vercel project **Root Directory = `frontend`**, no environment
+variables, `frontend/vercel.json` carries the cache headers.
+
 ## Backup / mirror
 
-No private git remote is configured yet (no `gh` CLI, no credentials). Until
-one exists, the repo is mirrored to the second drive. Re-run after committing:
+**There is still no git remote, and creating it is the owner's step** — no
+credentials exist in this working copy. Deploying from Vercel needs one, and it
+must contain the whole repo: `frontend/` (including the committed
+`frontend/public/api/**`), `backend/`, `data/irsdata.xlsx`, and `docs/`. The
+backend and the xlsx are not used by the build, but they are what makes the
+next refresh possible.
+
+The mirror stays regardless — a remote is not a backup. Re-run after
+committing:
 
 ```powershell
 powershell -File scripts/mirror-to-d.ps1

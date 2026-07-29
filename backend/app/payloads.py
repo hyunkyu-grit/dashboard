@@ -1,0 +1,149 @@
+"""Payload builders — the single source of every response body.
+
+Static conversion, Pass B. These used to live inline in `main.py`'s handlers.
+They were lifted out for one reason: the static pipeline has to produce byte-
+identical bodies, and the only way to guarantee that is for both to call the
+same function. Two implementations of "what the summary looks like" would drift
+silently, and the drift would look like data.
+
+So `main.py` is now transport (routing, status codes, errors) and this module
+is content. Nothing here knows about HTTP, and nothing here reads the clock —
+see `docs/diagnostics/static-feasibility.md` for why that second property is
+load-bearing: every number below is a pure function of the xlsx, so freezing
+them at build time cannot make the page answer yesterday's question.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+
+import numpy as np
+
+from .dataset import DISPLAY_TENORS, SPEC_NODE_ORDER, Dataset
+from .derive import (
+    apply_level_extreme,
+    apply_solo_direction,
+    curve_banner,
+    derived_ids,
+    ohlc_buckets,
+    series_history,
+    series_values,
+    summarize,
+)
+from .volatility import relative_atr_for
+
+
+def outright_label(tenor: str) -> str:
+    return "Call (1D)" if tenor == "1D" else f"IRS {tenor}"
+
+
+def _iso_bases(bases: dict[str, dt.date | None]) -> dict[str, str | None]:
+    return {k: (d.isoformat() if d else None) for k, d in bases.items()}
+
+
+def wall_summary(dataset: Dataset, bases: dict, events: list) -> dict:
+    outrights = [
+        summarize(dataset, t, outright_label(t), "outright", bases)
+        for t in dataset.tenor_order
+    ]
+    derived = [
+        summarize(dataset, sid, sid.replace("-", "/"), kind, bases)
+        for sid, kind, _legs in derived_ids()
+    ]
+    # 한 줄 rungs 2 & 3 (§C2/§I) are cross-sectional, so they run after the whole
+    # table is built. When the whole curve sits at an extreme (§I) that is a
+    # curve fact stated once in the banner, so the per-row level rung is
+    # SUPPRESSED on outrights; spreads/flies keep it. Rung 3 over outrights only.
+    banner = curve_banner(outrights)
+    apply_level_extreme(derived if banner["kind"] else outrights + derived)
+    apply_solo_direction(outrights)
+    return {
+        "asof": dataset.asof.isoformat(),
+        "basisDates": _iso_bases(bases),
+        "specNodeOrder": SPEC_NODE_ORDER,
+        "displayTenors": DISPLAY_TENORS,
+        "missingNodes": dataset.missing_nodes,
+        "curveBanner": banner,  # §I: whole-curve extreme stated once, not per row
+        "outrights": outrights,
+        "derived": derived,
+        # Change-log EVENTS (D-1 fixed, collapsed) — DESIGN §12 rule (c).
+        "events": events,
+    }
+
+
+def volatility(dataset: Dataset, bases: dict, vol: dict) -> dict:
+    return {"asof": dataset.asof.isoformat(), "basisDates": _iso_bases(bases), **vol}
+
+
+def series_pairs(
+    dataset: Dataset,
+    series_id: str,
+    zcs: list[np.ndarray | None] | None = None,
+) -> tuple[list[tuple[str, float]], str]:
+    """(iso-date, value) pairs for a series id, plus its unit. Raises KeyError
+    on an unknown id.
+
+    `zcs` is the optional shared bootstrap — the whole history's zero curves,
+    built ONCE. Forward histories are derived from it when supplied; without it
+    each forward bootstraps its own copy, which is the live server's lazy
+    behaviour and is 1.58s per series. Pass A verified the two paths agree to
+    the last digit across six sampled forwards (max|diff| = 0.0), so this is a
+    speed switch, not a fidelity one.
+    """
+    # imported here: forwards imports derive, and a module-level import would
+    # close the cycle
+    from .forwards import forward_history, forward_par_rate, parse_forward_id
+
+    if series_id.startswith("vol:"):
+        # Volatility history: the relative-ATR ratio for a tenor. Ratio levels
+        # are dimensionless; warm-up / floor nulls are simply absent.
+        ratios = relative_atr_for(dataset, series_id[len("vol:"):])
+        return [(t, r) for t, r in ratios if r is not None], "ratio"
+
+    if "x" in series_id:
+        # Forward ids carry an 'x' (2Yx1Y); history comes from each date's curve.
+        start_y, tenor_y = parse_forward_id(series_id)
+        if zcs is None:
+            hist = forward_history(dataset, series_id)
+            return [(p["t"], p["v"]) for p in hist], "%"
+        return [
+            (d.isoformat(), round(forward_par_rate(z, start_y, tenor_y) * 100, 4))
+            for d, z in zip(dataset.dates, zcs)
+            if z is not None
+        ], "%"
+
+    values = series_values(dataset, series_id)
+    # outright levels are %, derived spreads/flies are already bp.
+    unit = "%" if series_id in dataset.series else "bp"
+    # A missing observation produces NO POINT — it is not carried through as a
+    # null. That is the live behaviour and the static build must keep it; see
+    # the gap note in docs/diagnostics/static-feasibility.md.
+    return [
+        (d.isoformat(), round(v, 4))
+        for d, v in zip(dataset.dates, values)
+        if v is not None
+    ], unit
+
+
+def series_detail(
+    dataset: Dataset,
+    series_id: str,
+    res: str = "full",
+    interval: str | None = None,
+    zcs: list[np.ndarray | None] | None = None,
+) -> dict:
+    """One `/api/series/{id}` body. `res=preview` → ~150 downsampled points;
+    `res=full` → every day. `interval=w|m` → weekly/monthly OHLC instead (§G).
+    Stats, per-point daily change and the calendar are always precomputed here —
+    the browser never differences or aggregates a series (§16)."""
+    pairs, unit = series_pairs(dataset, series_id, zcs)
+    head = {"id": series_id, "asof": dataset.asof.isoformat()}
+    if interval in ("w", "m"):
+        return {**head, "unit": unit, "interval": interval,
+                "bars": ohlc_buckets(pairs, interval)}
+    return {**head, **series_history(pairs, unit, res)}
+
+
+def empty_dv01(series_id: str) -> dict:
+    """Forwards / volatility / unknown ids get an empty block (kind null)."""
+    return {"id": series_id, "kind": None, "legs": [], "residual": None}

@@ -121,10 +121,29 @@ describe("every guard reads source through the shared reader", () => {
     const text = readFileSync(join(dir, f), "utf8");
     if (f === "guard-hygiene.test.ts") return;
     // A guard may still reach for readFileSync — calendar.test.ts walks the
-    // tree itself to find importers. What it must not do is scan that text
-    // unstripped, so any guard that reads files at all must ALSO be pulling
-    // the stripper from here.
+    // tree itself to find importers. What it must not do is scan SOURCE TEXT
+    // unstripped, so any guard that reads from src/ must ALSO pull the
+    // stripper from here.
     if (!text.includes("readFileSync")) return;
+    // Reading DATA is a different act and the rule does not apply to it (the
+    // static conversion added guards that read the committed JSON tree under
+    // public/). JSON has no comments to strip, and these guards `JSON.parse`
+    // the bytes rather than pattern-matching them — the trap the stripper
+    // exists for cannot occur. The exemption is narrow on purpose: it holds
+    // only while the guard reads no source and matches no raw text.
+    // What matters is what the guard READS, not what it imports: a data guard
+    // legitimately imports types and helpers from ../src while reading only
+    // JSON, so import lines are removed before looking for a src/ path.
+    const body = text.replace(/^\s*import[\s\S]*?from\s*"[^"]*";\s*$/gm, "");
+    const readsSource = /"src"|\/src\//.test(body);
+    const readsDataOnly = !readsSource && text.includes("JSON.parse");
+    if (readsDataOnly) {
+      expect(
+        /\.(test|match)\(\s*\/[^/]/.test(text.replace(/expect\([^)]*\)/g, "")),
+        `${f} reads data but also regex-matches raw text — strip it or read source properly`,
+      ).toBe(false);
+      return;
+    }
     expect(
       text.includes('from "./_source"'),
       `${f} reads files without importing the shared stripper from ./_source`,
