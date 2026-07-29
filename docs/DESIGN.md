@@ -1496,16 +1496,44 @@ byte-identical or every commit shows the whole tree as modified and diffs stop
 meaning anything. `api/manifest.json` is the single exception (it carries
 `builtAt`) and the determinism test compares it with that field removed.
 
-**Cache headers are not `immutable`.** The obvious policy — these files only
-change on deploy, so cache them for a year — is wrong here, and the reason is
-worth keeping. `immutable` is safe only for **content-addressed** URLs;
-`/api/series/10Y.full.json` is a *stable* URL whose content changes every
-refresh, so a returning browser would serve last week's history out of disk
-cache indefinitely. The policy is therefore `max-age=0, s-maxage=31536000,
-must-revalidate`: the CDN edge caches hard (Vercel scopes it per deployment,
-so a deploy invalidates it), while browsers revalidate and get a cheap 304.
-`api/manifest.json` is excluded from even the edge cache — it is the file that
-says how fresh everything else is.
+**Cache policy: `no-cache` on everything [revised, Pass F].** Both the manifest
+and every artifact revalidate on use. No `immutable`, no
+`stale-while-revalidate`, no positive `max-age`, no content-hashed filenames.
+
+The failure is **tearing**. These URLs are stable while their contents change
+on every refresh, so any positive age admits a window in which the reader holds
+a *fresh manifest* and a *stale series* — the header prints today's as-of date
+over last week's line, and nothing errors. `stale-while-revalidate` has the
+same defect and serves the stale copy on first paint, the one paint that
+matters. Content-hashed names would remove the tearing but add a full artifact
+set (~31 MB) to the repo per refresh and open a 404 race for a reader still
+holding the previous manifest.
+
+`no-cache` does not mean "do not store"; it means "revalidate before use".
+Measured: a conditional GET returns **304 with a 0-byte body**, so correctness
+costs one conditional request per artifact, not a re-download.
+
+**Two things the earlier policy got wrong**, both found by measuring rather
+than reading:
+
+- It lived in `vercel.json`, which **`next start` ignores entirely**. Local
+  served `public, max-age=0` (Next's default for `public/`) while the deployed
+  config said `s-maxage=31536000`. The two could not be compared, which is how
+  the mismatch survived a whole pass. The policy now lives in
+  `next.config.ts::headers()`, which Next applies to `public/` **both** under
+  `next start` and on Vercel; `vercel.json` carries no headers at all.
+- The artifact rule's `s-maxage=31536000` was the tearing window in numbers:
+  **31,536,000 s (365 days)** during which a shared cache could serve an old
+  artifact beside a revalidated manifest. Nominally bounded by Vercel's
+  per-deployment invalidation, but that is a property of the host, unverifiable
+  from here, and it was the only thing standing between the config and a year
+  of silent tearing.
+
+`guards/cache-policy.test.ts` derives its scope from the config — it expands
+each rule's `source` against the real files in `public/api` and fails on any
+uncovered artifact, so a rule that is correct but does not *reach* the file
+nobody remembered is caught. It also refuses to interpret a `source` pattern it
+does not understand rather than silently matching nothing.
 
 ## Settled decisions & open items [closed out, final session Pass E]
 
