@@ -64,6 +64,7 @@ from app.static_paths import (  # noqa: E402
     RESOLUTIONS,
     SUMMARY_PATH,
     VOLATILITY_PATH,
+    assert_writable_path,
     dv01_path,
     series_path,
 )
@@ -165,14 +166,76 @@ class Writer:
         self.root = root
         self.count = 0
         self.bytes = 0
+        self.written: list[str] = []
 
     def write(self, rel: str, payload) -> None:
+        # Validate the FINAL path before touching the filesystem (Pass G). The
+        # fixed paths never go through series_path()/dv01_path(), so without
+        # this they would be the one unchecked route to the writer.
+        assert_writable_path(rel)
         p = self.root / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         body = (dumps(payload) + "\n").encode("utf-8")
         p.write_bytes(body)
         self.count += 1
         self.bytes += len(body)
+        self.written.append(rel)
+
+
+class IntegrityError(RuntimeError):
+    """The build produced something it cannot vouch for."""
+
+
+def verify_tree(root: Path, declared: list[str], manifest_rel: str) -> dict:
+    """Every declared artifact exists, is non-empty and parses; and the tree
+    holds nothing else (Pass G).
+
+    Both directions matter. A MISSING file is the NTFS alternate-data-stream
+    bug: `series/vol:1Y.json` wrote a zero-byte `vol` with the content in a
+    stream, and an existence check on the wrong name passes. An ORPHAN file is
+    the rename bug: an id changes, the new artifact is written, the old one
+    stays, and the client keeps resolving a series that no longer exists —
+    served happily, quietly wrong.
+
+    Size and parse are checked because existence is not enough: the ADS failure
+    leaves a real file of zero bytes, and a truncated write leaves a real file
+    that is not JSON.
+    """
+    problems: list[str] = []
+
+    for rel in declared:
+        p = root / rel
+        if not p.is_file():
+            problems.append(f"MISSING  {rel}")
+            continue
+        size = p.stat().st_size
+        if size == 0:
+            problems.append(f"EMPTY    {rel} (0 bytes — an ADS write looks like this)")
+            continue
+        try:
+            json.loads(p.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as e:
+            problems.append(f"UNPARSED {rel}: {e}")
+
+    on_disk = {
+        p.relative_to(root).as_posix()
+        for p in (root / "api").rglob("*")
+        if p.is_file()
+    }
+    expected = set(declared) | {manifest_rel}
+    for orphan in sorted(on_disk - expected):
+        problems.append(f"ORPHAN   {orphan} (on disk, not declared)")
+    for absent in sorted(expected - on_disk):
+        if f"MISSING  {absent}" not in problems:
+            problems.append(f"UNWRITTEN {absent} (declared, not on disk)")
+
+    if problems:
+        raise IntegrityError(
+            f"{len(problems)} artifact integrity problem(s):\n  "
+            + "\n  ".join(problems[:40])
+            + ("\n  …" if len(problems) > 40 else "")
+        )
+    return {"declared": len(declared), "onDisk": len(on_disk)}
 
 
 # ── the id space, enumerated exactly as ui/rows.ts does ─────────────────────
@@ -264,9 +327,23 @@ def build(out_root: Path, quiet: bool = False) -> dict:
         "seriesCount": len(ids),
         "businessDaysAfter": _business_days_after(dataset.asof, FRESHNESS_HORIZON),
         "freshnessThresholds": {"behind": BEHIND_AT, "stale": STALE_AT},
+        # Every artifact this build claims to have written, so integrity is
+        # checkable against a declaration rather than against the tree's own
+        # opinion of itself (Pass G). The manifest is not in its own list — it
+        # is the thing doing the declaring — and verify_tree accounts for that
+        # explicitly rather than fudging the count by one.
+        "artifacts": sorted(w.written),
+        "artifactCount": len(w.written),
         "builtAt": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
     }
+    declared = list(w.written)
     w.write(MANIFEST_PATH, manifest)
+
+    # Verify AFTER writing, against what the manifest declares. Existence alone
+    # is not enough: the NTFS alternate-data-stream failure leaves a real file
+    # of zero bytes, so size and parse are both checked, in both directions.
+    counts = verify_tree(out_root, declared, MANIFEST_PATH)
+    say(f"  integrity: {counts['declared']} declared, {counts['onDisk']} on disk, 0 problems")
 
     secs = time.perf_counter() - t0
     say(f"\n  {w.count} files, {w.bytes / 1e6:.2f} MB raw, {secs:.1f}s")

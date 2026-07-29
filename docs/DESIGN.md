@@ -1484,6 +1484,29 @@ on any id it cannot round-trip, and `guards/static-paths.test.ts` checks every
 id the app can build against a directory listing **compared as strings** —
 `existsSync` is case-insensitive on NTFS and would pass while production 404s.
 
+**The build vouches for what it wrote [Pass G].** Writing is not evidence of
+having written. After emitting, the pipeline verifies every artifact the
+manifest declares: it **exists**, is **non-empty**, and **parses as JSON** —
+three checks because the failure this guards leaves a real file with the right
+name and zero bytes, so existence alone passes on it. Then the tree is
+reconciled against the declaration **in both directions**: a missing file and
+an orphan are equally defects, the orphan being the rename failure (an id
+changes, the new artifact is written, the old one survives, and the client goes
+on resolving a series that no longer exists). `manifest.json` carries
+`artifacts` and `artifactCount`; it is not in its own list, and `verify_tree`
+accounts for that rather than fudging the count.
+
+Separately, `assert_writable_path()` runs on the **finished path** immediately
+before every write — including the fixed paths, which never pass through
+`slug()` and would otherwise be the one unchecked route to the writer. It
+rejects `: ? * | < > "`, backslashes, control characters, any segment ending in
+a space or a dot (Windows strips those on create, so the file written is not
+the file requested), and the reserved device names (`CON`, `NUL`, `COM1`…),
+which are not files on NTFS in any directory. **It never sanitises**: a silent
+rename would desynchronise the file from the id in the manifest, and the build
+would succeed while the client 404s on exactly one instrument. See
+`## Provisional` for why `vol:1Y` maps rather than raises.
+
 **One observation per line** in `points`, `bars` and `calendar`. A storage
 decision, not formatting: a daily refresh appends a line to each of ~196
 histories and git deltas the commit down to a few KB, where single-line blobs
@@ -1838,3 +1861,47 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
 - **Row press feedback**: CSS transforms do not apply to `display: table-row`,
   so table rows use a surface (bg) change on hover/press instead of the 0.98
   scale; scale press is on the controls (filter chips, preview, sheet).
+---
+
+## Provisional
+
+Live section. Entries here are decisions taken *without* the owner because a
+pass could not complete otherwise — the smallest reversible choice, with the
+evidence that forced it. Referenced from several places above; it did not exist
+as a heading until the hardening session, which is itself worth noting: the
+references pointed at a section that had been absorbed into "Settled decisions"
+and stopped being a live record.
+
+### Pass G — `slug()` maps `vol:1Y`; it does not reject it
+
+**The instruction** was: a test that constructs an id containing a colon, runs
+the path derivation, and asserts it **raises**, on the exact shape that shipped
+the bug (`vol:1Y`).
+
+**Why it was not implemented literally.** `vol:1Y` is not a malformed id — it
+is the real, current id of a volatility series, one of six that the 변동성 tab
+and its stage-2 history depend on. `slug()` has mapped `:` → `/` since the
+static conversion (§21), so `vol:1Y` becomes `series/vol/1Y` and no colon ever
+reaches the filesystem. Making `slug()` raise on it would not harden anything;
+it would delete the volatility tab, and it would do so as a side effect of a
+guard, which is the worst way to remove a feature.
+
+**What was implemented instead**, which satisfies what the instruction is
+protecting against:
+
+- `assert_writable_path()` — a **second, separate** check on the finished path,
+  run immediately before every write, including for the fixed paths that never
+  go through `slug()`. It raises on `api/series/vol:1Y.full.json`, the literal
+  string that shipped the bug, with the alternate-data-stream explanation in
+  the message.
+- A test asserting that `series_path("vol:1Y", …)` produces **no colon at any
+  resolution** and lands under `series/vol/`.
+
+So the colon raises where it is dangerous (a path about to be written) and maps
+where it is meaningful (an id naming a namespace). The two checks live at
+different layers because the failure lived at the write, not at the id.
+
+**To reverse**: if the owner wants `vol:` ids gone from the wire entirely,
+rename the series ids themselves in `volatility.py` (e.g. `vol-1Y`) and drop
+the mapping from both `static_paths.py` and `staticPaths.ts`. That is a data
+change with a guard update, not a guard change.

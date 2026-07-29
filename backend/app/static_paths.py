@@ -39,9 +39,74 @@ _HOSTILE = set('<>:"\\|?*%#&+ ')
 
 RESOLUTIONS = ("full", "preview", "w", "m")
 
+# Characters that must never appear in a path handed to the writer. This is the
+# LAST line, checked on the finished relative path rather than on the id, so it
+# catches a path assembled by some future caller that skipped `slug()`.
+_PATH_FORBIDDEN = set(':?*|<>"\\') | {chr(c) for c in range(32)}
+
+# Windows reserves these as device names in EVERY directory, with or without an
+# extension: `series/CON.json` is not a file. ext4 does not care, so this is
+# another Windows-only trap of the same family as the colon — it would pass
+# review, pass on Linux CI, and fail on the machine that builds the data.
+_RESERVED_STEMS = {
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+}
+
 
 class UnsafeId(ValueError):
     """An id that cannot round-trip to a filename. Raised loudly on purpose."""
+
+
+class UnsafePath(ValueError):
+    """A derived path that is not legal on both NTFS and ext4."""
+
+
+def assert_writable_path(rel: str) -> str:
+    """Refuse any path that is not legal on BOTH NTFS and ext4 (Pass G).
+
+    Checked on the finished path, immediately before writing, because that is
+    the only place that sees what actually reaches the filesystem. `slug()`
+    guards the id; this guards the path, and the two are not the same check —
+    the NTFS alternate-data-stream bug happened at the WRITE, where a colon
+    turned `series/vol:1Y.json` into a zero-byte file named `vol` with the
+    content hidden in a stream, no error, exit 0.
+
+    It never sanitises. A silent rename would desynchronise the file from the
+    id in the manifest, which is a worse bug than the one being prevented: the
+    build would succeed and the client would 404 on exactly one instrument.
+    """
+    if not rel or rel.startswith("/") or rel.endswith("/"):
+        raise UnsafePath(f"malformed path {rel!r}")
+    if "\\" in rel:
+        raise UnsafePath(f"{rel!r} uses a backslash; paths are posix-style")
+    for segment in rel.split("/"):
+        if not segment:
+            raise UnsafePath(f"{rel!r} has an empty path segment")
+        if segment in (".", ".."):
+            raise UnsafePath(f"{rel!r} traverses")
+        bad = sorted(set(segment) & _PATH_FORBIDDEN)
+        if bad:
+            shown = [repr(c) for c in bad]
+            raise UnsafePath(
+                f"segment {segment!r} of {rel!r} contains {', '.join(shown)} — "
+                "illegal on NTFS (a colon opens an alternate data stream, "
+                "which fails SILENTLY) and unsafe in a URL path"
+            )
+        if segment[-1] in " .":
+            raise UnsafePath(
+                f"segment {segment!r} of {rel!r} ends in a space or dot; "
+                "Windows strips those on create, so the file written would not "
+                "be the file requested"
+            )
+        stem = segment.split(".", 1)[0].upper()
+        if stem in _RESERVED_STEMS:
+            raise UnsafePath(
+                f"segment {segment!r} of {rel!r} uses the reserved Windows "
+                f"device name {stem}; it is not a file on NTFS"
+            )
+    return rel
 
 
 def slug(series_id: str) -> str:
@@ -78,11 +143,11 @@ def series_path(series_id: str, res: str) -> str:
     """
     if res not in RESOLUTIONS:
         raise UnsafeId(f"unknown resolution {res!r}; expected one of {RESOLUTIONS}")
-    return f"api/series/{slug(series_id)}.{res}.json"
+    return assert_writable_path(f"api/series/{slug(series_id)}.{res}.json")
 
 
 def dv01_path(series_id: str) -> str:
-    return f"api/dv01/{slug(series_id)}.json"
+    return assert_writable_path(f"api/dv01/{slug(series_id)}.json")
 
 
 # Fixed paths, mirroring the live endpoints with a `.json` suffix.

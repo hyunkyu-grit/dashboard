@@ -29,7 +29,14 @@ sys.path.insert(0, str(REPO / "backend" / "scripts"))
 import build_static as B  # noqa: E402
 
 from app.dataset import load_dataset  # noqa: E402
-from app.static_paths import UnsafeId, dv01_path, series_path, slug  # noqa: E402
+from app.static_paths import (  # noqa: E402
+    UnsafeId,
+    UnsafePath,
+    assert_writable_path,
+    dv01_path,
+    series_path,
+    slug,
+)
 
 DATA = REPO / "data" / "irsdata.xlsx"
 
@@ -78,6 +85,90 @@ def test_an_id_that_cannot_round_trip_raises(bad):
 def test_an_unknown_resolution_raises():
     with pytest.raises(UnsafeId):
         series_path("10Y", "daily")
+
+
+# ── the path written to disk (Pass G) ───────────────────────────────────────
+# `slug()` guards the ID; `assert_writable_path()` guards the PATH. They are
+# different checks at different layers, and the bug happened at the second one:
+# the write is where a colon becomes an alternate data stream.
+
+def test_the_exact_path_that_shipped_the_bug_raises():
+    """`series/vol:1Y.json` — the literal shape that cost 24 artifacts. On NTFS
+    this does not create that file and does not error: it creates a zero-byte
+    file named `vol` and hides the content in a stream, exit 0."""
+    with pytest.raises(UnsafePath, match="alternate data stream"):
+        assert_writable_path("api/series/vol:1Y.full.json")
+
+
+def test_vol_ids_reach_disk_with_no_colon_anywhere():
+    """The other half of the same guarantee, and the reason `slug()` maps
+    rather than rejects: `vol:1Y` is a REAL id the volatility tab needs. It is
+    safe because the colon becomes a directory before the path is built, so
+    nothing colon-shaped ever reaches the writer."""
+    for res in ("full", "preview", "w", "m"):
+        p = series_path("vol:1Y", res)
+        assert ":" not in p
+        assert p.startswith("api/series/vol/1Y.")
+    assert ":" not in dv01_path("vol:1.5Y")
+
+
+@pytest.mark.parametrize("bad, why", [
+    ("api/series/vol:1Y.json", "colon — NTFS alternate data stream"),
+    ("api/series/a?b.json", "URL query character"),
+    ("api/series/a*b.json", "glob"),
+    ("api/series/a|b.json", "pipe"),
+    ("api/series/a<b.json", "redirect"),
+    ("api/series/a>b.json", "redirect"),
+    ('api/series/a"b.json', "quote"),
+    ("api/series/a\\b.json", "backslash separator"),
+    # Windows strips trailing spaces and dots from a name on create, so the
+    # file written is not the file requested. Only a genuinely TRAILING one is
+    # a hazard: `name .json` is legal and is deliberately not rejected.
+    ("api/series/trailing /x.json", "directory segment ending in a space"),
+    ("api/series/x./y.json", "directory segment ending in a dot"),
+    ("api/series/10Y.full.json ", "filename ending in a space"),
+    ("api/series/10Y.full.json.", "filename ending in a dot"),
+    ("api/series/CON.json", "reserved Windows device name"),
+    ("api/series/com1.full.json", "reserved device name, lowercased"),
+    ("api/series/../escape.json", "traversal"),
+    ("/api/series/x.json", "absolute"),
+    ("api//series/x.json", "empty segment"),
+    ("", "empty"),
+])
+def test_paths_illegal_on_either_filesystem_are_refused(bad, why):
+    with pytest.raises(UnsafePath):
+        assert_writable_path(bad)
+
+
+def test_it_refuses_rather_than_sanitising():
+    """A silent rename is worse than the bug it prevents: the build would
+    succeed and the manifest would point at a name that is not on disk, so the
+    client 404s on exactly one instrument and nothing upstream notices."""
+    with pytest.raises(UnsafePath):
+        assert_writable_path("api/series/vol:1Y.full.json")
+    # and it does not return a cleaned-up string on the way out
+    assert assert_writable_path("api/series/1.5Y.full.json") == (
+        "api/series/1.5Y.full.json"
+    )
+
+
+def test_a_space_that_is_not_trailing_is_allowed():
+    """Deliberately not rejected: `a b.json` is legal on both filesystems, and
+    over-rejecting would push a future caller toward silent sanitising."""
+    assert assert_writable_path("api/series/a b.json") == "api/series/a b.json"
+
+
+def test_ordinary_paths_pass_through_untouched():
+    for good in [
+        "api/manifest.json",
+        "api/wall/summary.json",
+        "api/series/10Y.full.json",
+        "api/series/1.5Y.preview.json",
+        "api/series/2Y-5Y-10Y.w.json",
+        "api/series/vol/1.5Y.m.json",
+        "api/dv01/4Y6Mx2Y.json",
+    ]:
+        assert assert_writable_path(good) == good
 
 
 # ── serialisation ───────────────────────────────────────────────────────────
@@ -194,6 +285,85 @@ def test_the_manifest_reuses_the_existing_hash_scheme(two_builds):
     assert m["dataHash"].endswith(f":v{SCHEMA_VERSION}")
     assert m["schemaVersion"] == SCHEMA_VERSION
     assert m["asof"] == load_dataset(DATA).asof.isoformat()
+
+
+# ── the integrity check itself (Pass G) ─────────────────────────────────────
+# A verifier that cannot fail is decoration. Each corruption class the check
+# claims to catch is produced here and shown to raise.
+
+def _tiny_tree(root):
+    """Two declared artifacts plus a manifest, all valid."""
+    (root / "api" / "series").mkdir(parents=True)
+    for rel in ["api/series/10Y.full.json", "api/series/1Y.full.json"]:
+        (root / rel).write_text('{"id":"x"}', encoding="utf-8")
+    (root / "api" / "manifest.json").write_text('{"a":1}', encoding="utf-8")
+    return ["api/series/10Y.full.json", "api/series/1Y.full.json"]
+
+
+def test_verify_passes_on_a_sound_tree(tmp_path):
+    declared = _tiny_tree(tmp_path)
+    out = B.verify_tree(tmp_path, declared, "api/manifest.json")
+    assert out == {"declared": 2, "onDisk": 3}  # 2 artifacts + the manifest
+
+
+def test_verify_catches_a_missing_file(tmp_path):
+    declared = _tiny_tree(tmp_path)
+    (tmp_path / declared[0]).unlink()
+    with pytest.raises(B.IntegrityError, match="MISSING"):
+        B.verify_tree(tmp_path, declared, "api/manifest.json")
+
+
+def test_verify_catches_a_zero_byte_file(tmp_path):
+    """This is what the alternate-data-stream write actually leaves behind: a
+    real file, correct name in the listing, no content. An existence check
+    passes on it — which is why size is checked separately."""
+    declared = _tiny_tree(tmp_path)
+    (tmp_path / declared[0]).write_bytes(b"")
+    with pytest.raises(B.IntegrityError, match="EMPTY"):
+        B.verify_tree(tmp_path, declared, "api/manifest.json")
+
+
+def test_verify_catches_a_truncated_write(tmp_path):
+    declared = _tiny_tree(tmp_path)
+    (tmp_path / declared[0]).write_text('{"id":"10Y","points":[{"t"', encoding="utf-8")
+    with pytest.raises(B.IntegrityError, match="UNPARSED"):
+        B.verify_tree(tmp_path, declared, "api/manifest.json")
+
+
+def test_verify_catches_an_orphan(tmp_path):
+    """The rename failure: an id changes, the new file is written, the old one
+    survives, and the client happily resolves a series that no longer exists.
+    An orphan is as much a defect as a missing file, so the check runs both
+    ways."""
+    declared = _tiny_tree(tmp_path)
+    (tmp_path / "api" / "series" / "GHOST.full.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(B.IntegrityError, match="ORPHAN"):
+        B.verify_tree(tmp_path, declared, "api/manifest.json")
+
+
+def test_verify_reports_every_problem_not_just_the_first(tmp_path):
+    declared = _tiny_tree(tmp_path)
+    (tmp_path / declared[0]).unlink()
+    (tmp_path / declared[1]).write_bytes(b"")
+    (tmp_path / "api" / "series" / "GHOST.full.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(B.IntegrityError) as e:
+        B.verify_tree(tmp_path, declared, "api/manifest.json")
+    msg = str(e.value)
+    assert "MISSING" in msg and "EMPTY" in msg and "ORPHAN" in msg
+    assert "3 artifact integrity problem" in msg
+
+
+def test_the_real_build_declares_exactly_what_it_wrote(two_builds):
+    """End to end: the manifest's own list must account for every file in the
+    tree, with the manifest itself as the only unlisted one."""
+    a, _ = two_builds
+    m = json.loads((a / "api" / "manifest.json").read_text("utf-8"))
+    on_disk = {
+        p.relative_to(a).as_posix() for p in (a / "api").rglob("*") if p.is_file()
+    }
+    assert set(m["artifacts"]) | {"api/manifest.json"} == on_disk
+    assert m["artifactCount"] == len(m["artifacts"]) == len(on_disk) - 1
+    assert "api/manifest.json" not in m["artifacts"]
 
 
 def test_a_removed_id_does_not_leave_a_stale_file(tmp_path):
