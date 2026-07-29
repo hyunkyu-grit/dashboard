@@ -17,6 +17,7 @@ Four things are pinned here, each because getting it wrong fails quietly:
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import sys
 from pathlib import Path
@@ -364,6 +365,70 @@ def test_the_real_build_declares_exactly_what_it_wrote(two_builds):
     assert set(m["artifacts"]) | {"api/manifest.json"} == on_disk
     assert m["artifactCount"] == len(m["artifacts"]) == len(on_disk) - 1
     assert "api/manifest.json" not in m["artifacts"]
+
+
+# ── holiday coverage behind the ladder (Pass J) ─────────────────────────────
+
+def test_the_ladder_only_uses_populated_calendar_years():
+    """Diagnosed, not assumed. If the holiday table ever stops covering a year,
+    `_is_kr_business_day` quietly degrades to a weekend-only test and the
+    ladder fills with plausible wrong dates — Chuseok and Seollal move with the
+    lunar calendar and cannot be guessed. Same class as the fabricated calendar
+    this project deleted once, landing at the tail where nobody looks."""
+    ladder = B._business_days_after(dt.date(2026, 7, 24), 400)
+    assert len(ladder) == 400
+    covered = B._covered_years()
+    assert {dt.date.fromisoformat(x).year for x in ladder} <= covered
+
+
+def test_the_coverage_assertion_actually_bites(monkeypatch):
+    """A check that cannot fail is decoration. Shrink the apparent coverage and
+    the same call must refuse rather than emit dates it cannot vouch for."""
+    monkeypatch.setattr(B, "_covered_years", lambda: {2026})
+    with pytest.raises(B.HolidayCoverageError, match="only holds entries"):
+        B._business_days_after(dt.date(2026, 7, 24), 400)
+
+
+def test_the_holiday_table_extends_on_demand():
+    """Why there is no cliff today, pinned so a future swap to a static table
+    is caught. `holidays.KR` is constructed for 2016–2035 but populates further
+    years when asked — probed at 2050, where the lunar dates are computed, not
+    extrapolated. If this ever stops being true, the ladder needs truncating
+    and this test says so first."""
+    from app.engine_port import _is_kr_business_day
+
+    assert not _is_kr_business_day(dt.date(2050, 1, 1))   # 신정
+    assert not _is_kr_business_day(dt.date(2050, 3, 1))   # 삼일절
+    assert not _is_kr_business_day(dt.date(2050, 9, 30))  # 추석, lunar
+    assert 2050 in B._covered_years()
+
+
+def test_the_horizon_stays_well_ahead_of_the_ladder_being_needed():
+    """The refresh signal, same shape as the calendar horizon guard: it fires
+    as a prompt to rebuild, not as a break. The ladder is generated from the
+    dataset's asof, so it shortens as the data file ages without a rebuild.
+    Below 60 remaining business days the freshness badge is working off a
+    nearly exhausted ladder and would soon clamp."""
+    m = json.loads(
+        (REPO / "frontend" / "public" / "api" / "manifest.json").read_text("utf-8")
+    )
+    today = dt.date.today().isoformat()
+    remaining = sum(1 for d in m["businessDaysAfter"] if d > today)
+    assert remaining >= 60, (
+        f"only {remaining} business days left in the manifest ladder "
+        f"(through {m['businessDaysAfter'][-1]}). Re-run "
+        "backend/scripts/build_static.py against fresher data."
+    )
+
+
+def test_the_manifest_publishes_its_coverage():
+    m = json.loads(
+        (REPO / "frontend" / "public" / "api" / "manifest.json").read_text("utf-8")
+    )
+    cov = m["holidayCoverage"]
+    assert cov["ladderThrough"] == m["businessDaysAfter"][-1]
+    assert cov["ladderDays"] == len(m["businessDaysAfter"])
+    assert cov["constructedThrough"] >= dt.date.today().year
 
 
 def test_a_removed_id_does_not_leave_a_stale_file(tmp_path):

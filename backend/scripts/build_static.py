@@ -55,7 +55,11 @@ from app.derive import (  # noqa: E402
     series_history,
 )
 from app.dv01 import build_dv01_table  # noqa: E402
-from app.engine_port import _is_kr_business_day, bootstrap_zero_curve  # noqa: E402
+from app.engine_port import (  # noqa: E402
+    _KR_HOLIDAYS,
+    _is_kr_business_day,
+    bootstrap_zero_curve,
+)
 from app.events import detect_event_clusters  # noqa: E402
 from app.forwards import FWD_TENORS, START_POINTS, forwards_payload  # noqa: E402
 from app.static_paths import (  # noqa: E402
@@ -86,15 +90,51 @@ LINE_KEYS = {"points", "bars", "calendar"}
 FRESHNESS_HORIZON = 400
 
 
+class HolidayCoverageError(RuntimeError):
+    """The ladder ran past the calendar that is supposed to define it."""
+
+
+def _covered_years() -> set[int]:
+    """Years for which the KR holiday table actually holds entries."""
+    return {d.year for d in _KR_HOLIDAYS}
+
+
 def _business_days_after(asof: dt.date, n: int) -> list[str]:
     """The next `n` KR business days strictly after `asof`, using the frozen
-    engine's own calendar so freshness and the curve can never disagree."""
+    engine's own calendar so freshness and the curve can never disagree.
+
+    **Every emitted date is verified to come from a POPULATED calendar year**
+    (Pass J). The failure being guarded is specific: if the holiday table ever
+    stops covering a year, `_is_kr_business_day` degrades to a weekend-only
+    test and the ladder fills with plausible, wrong dates — Chuseok and Seollal
+    move with the lunar calendar and cannot be guessed, so the error is
+    invisible and lands at the tail where nobody looks. It is the same class as
+    the fabricated calendar this project already deleted once.
+
+    Measured (Pass J): today the table is constructed for 2016–2035 and the
+    400th business day lands in 2028, ~7.7 years inside it — and `holidays.KR`
+    populates further years on demand anyway (probed to 2050: 22 entries,
+    lunar dates and substitute holidays correct). So there is no cliff today.
+    This asserts that rather than trusting it, because both facts are
+    properties of a dependency, not of this code.
+    """
     out: list[str] = []
     d = asof
     while len(out) < n:
         d += dt.timedelta(days=1)
         if _is_kr_business_day(d):
             out.append(d.isoformat())
+
+    covered = _covered_years()
+    ladder_years = {dt.date.fromisoformat(x).year for x in out}
+    uncovered = sorted(ladder_years - covered)
+    if uncovered:
+        raise HolidayCoverageError(
+            f"the business-day ladder reaches {uncovered} but the KR holiday "
+            f"table only holds entries for {min(covered)}–{max(covered)}. Those "
+            "dates would be weekend-rolls, not business days — silently wrong. "
+            "Extend the holiday table or shorten FRESHNESS_HORIZON."
+        )
     return out
 
 
@@ -318,6 +358,7 @@ def build(out_root: Path, quiet: bool = False) -> dict:
     # next N business days after `asof`, straight from the frozen engine's own
     # `_is_kr_business_day`. The client counts how many are <= today. Exact,
     # no duplicated logic, ~4 KB.
+    ladder = _business_days_after(dataset.asof, FRESHNESS_HORIZON)
     manifest = {
         "asof": dataset.asof.isoformat(),
         "dataHash": hash_,
@@ -325,8 +366,18 @@ def build(out_root: Path, quiet: bool = False) -> dict:
         "rows": len(dataset.dates),
         "missingNodes": dataset.missing_nodes,
         "seriesCount": len(ids),
-        "businessDaysAfter": _business_days_after(dataset.asof, FRESHNESS_HORIZON),
+        "businessDaysAfter": ladder,
         "freshnessThresholds": {"behind": BEHIND_AT, "stale": STALE_AT},
+        # What calendar produced the ladder, published so the horizon is
+        # auditable from the artifact rather than only from the build log
+        # (Pass J). `constructedThrough` is the last year the table is built
+        # for at import; `holidays.KR` populates beyond it on demand, which is
+        # why `ladderThrough` can legitimately exceed it.
+        "holidayCoverage": {
+            "constructedThrough": max(_covered_years()),
+            "ladderThrough": ladder[-1],
+            "ladderDays": len(ladder),
+        },
         # Every artifact this build claims to have written, so integrity is
         # checkable against a declaration rather than against the tree's own
         # opinion of itself (Pass G). The manifest is not in its own list — it
