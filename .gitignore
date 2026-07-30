@@ -4,3 +4,7 @@ __pycache__/
 .venv/
 # own-history distribution cache (§D) — derived from data/, keyed by its hash
 backend/.cache/
+# Excel's lock file, present while the workbook is OPEN (`~$irsdata.xlsx`).
+# It appeared as an untracked file during a data refresh and a `git add -A`
+# would have committed it. It is not data and it disappears when Excel closes.
+~$*.xls*
