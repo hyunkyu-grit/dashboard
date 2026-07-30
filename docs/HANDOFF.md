@@ -179,9 +179,40 @@ rule:
 
 ---
 
-## 6. Current state (as of pass N, 2026-07-30)
+## 6. Current state (as of the 2026-07-30 data refresh)
 
-### Latest — pass N: the curve got the history line's readout
+### Latest — data refresh to 2026-07-30, and the gate's one data-dependent test
+
+- **The dataset now runs to 2026-07-30** (2612 observations, +4 business days:
+  07-27/28/29/30). Static tree rebuilt: 984 files, 31.52 MB raw, 28.7 s,
+  integrity 983 declared / 984 on disk / 0 problems. `SCHEMA_VERSION` stayed 3 —
+  no payload shape changed, so no bump.
+- **Freshness is `current` again**, so the red 지연 chip is gone and the level
+  header reads today's date. Screenshots in this file from earlier passes show
+  the stale chip; that was the 07-24 file, not a defect.
+- **A backend test failed on the new data, and it was the TEST that was wrong.**
+  `test_dv01.py::test_fly_weights_are_dv01_neutral` divided the shipped residual
+  by the BELLY's gross DV01 and demanded <1%. But the residual is exactly the
+  wings' integer rounding priced at their own DV01s, and `1Y-2Y-10Y`'s long wing
+  needs ~11.7 units at a 10Y DV01 four times the belly's — half a unit of
+  rounding there is 2.1% of the belly gross on its own. It passed at 0.880% on
+  the 07-24 curve and failed at 1.111% on 07-30 with nothing but the data
+  moving, while the same trade passed the table-wide test at 0.261% because that
+  one divides by the largest leg. Two tests, one trade, two denominators.
+  - **Now asserted structurally**: `|residual| ≤ ½ · Σ d` over the rounded legs,
+    which holds at every curve, plus a line asserting the notionals are integers
+    (the assumption that makes the bound half a unit). Verified across all 50
+    derived payloads on BOTH datasets — the worst case sits at 97.9% (old) and
+    99.2% (new) of the bound, i.e. the bound is tight, which is why any
+    percentage picked by hand was going to expire.
+  - **If you ever ship non-integer notionals**, the integer assertion is the
+    line that will tell you the bound must become `½ · 10⁻ᵈ · Σ d`.
+- **`~$*.xls*` is now gitignored.** Excel's lock file was sitting untracked in
+  `data/` during the refresh and `git add -A` would have committed it.
+- **Gates after the refresh**: see the numbers in the commit for the refresh
+  itself; the two-mode gate was run to green before it landed.
+
+### Before that — pass N: the curve got the history line's readout
 
 One owner ask: hovering the IRS curve should say what hovering an outright's
 time series says. Frontend only, no payload change — every number it shows was
