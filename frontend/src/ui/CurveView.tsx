@@ -1,10 +1,20 @@
 "use client";
 
 /* Idle right-pane curve (DESIGN §2/§4, restored Session 13). No row hovered →
- * the pane shows the curve for the active tab. Equal-spaced nodes, blue
- * line (--bw-line, §9 palette cut), two lines only (Now + D-1 comparison — the full six-basis ramp lives
- * in the enlarged view). Hand-rolled SVG (lightweight-charts stays enlarged-
- * only, §11).
+ * the pane shows THE IRS PAR CURVE, on every tab. Equal-spaced nodes, blue
+ * line (--bw-line, §9 palette cut), two lines only (the dataset's date + D-1
+ * comparison — the full six-basis ramp lives in the enlarged view).
+ * Hand-rolled SVG (lightweight-charts stays enlarged-only, §11).
+ *
+ * ONE CURVE, NOT ONE PER TAB [OWNER, pass M]. The idle pane used to switch with
+ * the tab: the 1YF ladder on forwards, the two-point-spread curve on spreads,
+ * the relative-ATR curve on volatility. Curve viewing is priority 1 (§1) and
+ * "the curve" is the IRS par curve — that is what the idle state is FOR. The
+ * other three restated, in a shape that takes a moment to identify, columns the
+ * table beside it already prints; and a pane whose subject changes under a
+ * filter chip is a second thing to keep track of. So the tab now moves the list
+ * only, and the curve stays put. `VolatilityPayload.curve` is still served and
+ * no longer rendered (see HANDOFF "Open").
  *
  * NOTHING in this pane animates on pin (strip session, Pass A). The ghost
  * curve gesture was removed: at a 10px peak against a curve spanning 136bp it
@@ -16,10 +26,9 @@
 
 import { useMemo } from "react";
 
-import type { ForwardsPayload, Unit, VolatilityPayload, WallSummary } from "@/lib/api";
+import type { Unit, WallSummary } from "@/lib/api";
+import { levelHeadText, levelHeadTitle } from "@/lib/format";
 import { BASIS_SECONDARY_OPACITY } from "@/theme/ramp";
-
-import { cmpKey, type Group } from "./rows";
 
 interface Node {
   label: string;
@@ -110,66 +119,30 @@ function parNodes(summary: WallSummary): Node[] {
 }
 
 export function CurveView({
-  tab,
   summary,
-  forwards,
-  volatility,
   width,
   height,
 }: {
-  tab: Group | "all";
   summary: WallSummary;
-  forwards?: ForwardsPayload;
-  volatility?: VolatilityPayload;
   width: number;
   height: number;
 }) {
-  let title = "IRS 커브";
-  let unit: Unit = "%";
-  let nodes: Node[] = [];
-
-  if (tab === "vol") {
-    // relative-ATR across tenors (now + D-1), matching the other tabs' idle pane
-    title = "변동성 커브";
-    unit = "ratio";
-    nodes = (volatility?.curve ?? []).map((c) => ({
-      label: c.label,
-      now: c.now,
-      prev: c.prev,
-    }));
-  } else if (tab === "spread") {
-    title = "스프레드 커브";
-    unit = "bp";
-    nodes = [...summary.derived]
-      .filter((d) => d.id.split("-").length === 2) // 2-point spreads only
-      // order by the backend-supplied sort key (§16), not a client tenor map
-      .sort((a, b) => cmpKey(a.sortKey, b.sortKey))
-      .map((d) => ({
-        label: d.id.split("-").map((t) => t.replace("Y", "")).join("s"),
-        now: d.now,
-        prev: d.basisValues.d1,
-      }));
-  } else if (tab === "forward" && forwards) {
-    // 1YF forward ladder: the 1y-forward rate at each start point (§2 choice).
-    title = "포워드 래더 (1YF)";
-    const col = forwards.grid["1YF"] ?? [];
-    nodes = col.map((c) => ({
-      label: c.start,
-      now: c.values.now,
-      prev: c.values.d1,
-    }));
-  } else {
-    // outrights / all → the IRS par curve
-    nodes = parNodes(summary);
-  }
+  const nodes = parNodes(summary);
 
   return (
     <div>
       <div className="mb-1 flex items-baseline justify-between">
-        <span className="text-[15px] font-semibold">{title}</span>
-        <span className="text-[12px] opacity-40">지금 · 어제</span>
+        <span className="text-[15px] font-semibold">IRS 커브</span>
+        {/* the solid line's DAY and the dashed one's, in the level header's
+            grammar (pass M) — the pane no longer claims "지금" either. */}
+        <span
+          className="text-[12px] tabular-nums opacity-40"
+          title={levelHeadTitle(summary.asof)}
+        >
+          {levelHeadText(summary.asof)} · 어제
+        </span>
       </div>
-      <NodeLine nodes={nodes} unit={unit} width={width} height={height - 24} />
+      <NodeLine nodes={nodes} unit="%" width={width} height={height - 24} />
     </div>
   );
 }

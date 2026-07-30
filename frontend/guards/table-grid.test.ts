@@ -14,16 +14,18 @@ import {
   colPx,
   GRID_TEMPLATE,
   gridTemplate,
+  LEVEL_GLYPHS,
   RANGE_PAD,
   RANGE_SUBS,
   RANGE_TEMPLATE,
   visibleColumns,
   WIDEST,
 } from "../src/ui/columns";
+import { levelHeadText } from "../src/lib/format";
 import { traderName } from "../src/ui/rows";
 
 describe("column widths derive from the format, not the data", () => {
-  const level = `calc(${WIDEST.level.length}ch + 18px)`;
+  const level = `calc(${LEVEL_GLYPHS}ch + 18px)`;
   const sub = `calc(${WIDEST.level.length}ch + ${RANGE_PAD}px)`;
   const range = `calc(${RANGE_SUBS * WIDEST.level.length}ch + ${
     RANGE_SUBS * RANGE_PAD
@@ -49,9 +51,16 @@ describe("column widths derive from the format, not the data", () => {
     expect(range).not.toMatch(/\b120px\b/);
     for (const ch of [6.5, 7.74, 9]) {
       expect(colPx(ch).range).toBeCloseTo(RANGE_SUBS * colPx(ch).rangeSub, 10);
-      // same GLYPH count as 현재; only the cushion differs, and only because
-      // a Korean header label does not scale with `ch` (see RANGE_PAD)
-      expect(colPx(ch).rangeSub - colPx(ch).level).toBeCloseTo(RANGE_PAD - 18, 10);
+      // Same GLYPH count as a LEVEL VALUE; only the cushion differs, and only
+      // because a Korean header label does not scale with `ch` (RANGE_PAD).
+      //
+      // Against WIDEST.level, NOT against the level COLUMN (pass M): that
+      // column is now sized by its date header, and if this tracked the column
+      // the three sub-columns would each grow by four glyphs to fit a header
+      // they do not carry — ~90px of table width bought for nothing.
+      const levelValue = WIDEST.level.length * ch + 18;
+      expect(colPx(ch).rangeSub - levelValue).toBeCloseTo(RANGE_PAD - 18, 10);
+      expect(colPx(ch).rangeSub).toBeLessThan(colPx(ch).level);
     }
   });
 
@@ -85,6 +94,18 @@ describe("the WIDEST templates actually cover the display grammar", () => {
     for (const s of [fmtLevel(4.2446, "%"), fmtLevel(-100.5, "bp"), fmtLevel(12.0, "ratio")]) {
       expect(s.length).toBeLessThanOrEqual(WIDEST.level.length);
     }
+  });
+
+  it("the level track fits its HEADER too, which is the wider of the two", () => {
+    // pass M: the header is the dataset's as-of date (10 glyphs), the values
+    // are 6. A track sized to the values alone would clip the header, and
+    // nothing else in this file would notice — the grid would still be
+    // frozen and shared, just too narrow.
+    expect(levelHeadText("2026-07-24")).toHaveLength(WIDEST.levelHead.length);
+    expect(LEVEL_GLYPHS).toBeGreaterThanOrEqual(WIDEST.levelHead.length);
+    expect(LEVEL_GLYPHS).toBeGreaterThanOrEqual(WIDEST.level.length);
+    // and the fallback (a payload with no asof) is narrower than the date
+    expect(levelHeadText(null).length).toBeLessThanOrEqual(LEVEL_GLYPHS);
   });
 
   it("change columns: bp and ratio deltas fit the delta template", () => {
@@ -157,13 +178,17 @@ describe("the column priority ladder (columns session)", () => {
     const rw = colPx(RUNTIME_CH);
     const at = (n: number, r: boolean) =>
       Math.ceil(rw.label + rw.level + n * rw.delta + (r ? rw.range : 0));
-    expect(at(0, false)).toBe(165); // 종목 + 현재 — the backstop pair
-    expect(at(1, false)).toBe(229); // 어제
-    expect(at(2, false)).toBe(293); // YTD
-    expect(at(3, false)).toBe(358); // WTD
-    expect(at(4, false)).toBe(422); // MTD
-    expect(at(5, false)).toBe(487); // QTD
-    expect(at(5, true)).toBe(698); // 52주 — was 606 with the sentence
+    // Every figure moved +31px in pass M — the level column went from six
+    // glyphs to ten so its header can be the data's date. Nothing else about
+    // the ladder changed, which is why the whole set shifts by one column's
+    // growth and the ORDER is untouched.
+    expect(at(0, false)).toBe(196); // 종목 + 레벨 — the backstop pair
+    expect(at(1, false)).toBe(260); // 어제
+    expect(at(2, false)).toBe(324); // YTD
+    expect(at(3, false)).toBe(389); // WTD
+    expect(at(4, false)).toBe(453); // MTD
+    expect(at(5, false)).toBe(518); // QTD
+    expect(at(5, true)).toBe(729); // 52주 — was 698 before the date header
     // and the whole set genuinely needs MORE room than the sentence did, so
     // this is stated rather than assumed: 3 sub-columns > a 120px floor
     expect(at(5, true)).toBeGreaterThan(606);

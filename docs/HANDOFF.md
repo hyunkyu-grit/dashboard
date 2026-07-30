@@ -89,7 +89,8 @@ cd frontend; pnpm vitest run; pnpm lint; pnpm build
   not sortable; both pinned by `guards/range-column.test.ts`.
 - `ui/cells.ts` — the table's two LEVEL call sites (`levelText`, `rangeText`),
   side by side so they cannot drift. Both are `fmtLevel`.
-- `ui/CurveView.tsx` — idle right-pane curve, dispatched by tab.
+- `ui/CurveView.tsx` — idle right-pane curve: the IRS par curve, on every tab
+  (pass M — it no longer dispatches on the tab).
 - `ui/PreviewPane.tsx` / `PreviewChart.tsx` / `CalendarHeatmap.tsx` — hover
   state: series history (blue SVG) + tooltip + calendar heatmap.
 - `ui/EnlargedView.tsx` — the `?tile=…` sheet; **the only place
@@ -174,9 +175,51 @@ rule:
 
 ---
 
-## 6. Current state (as of pass L, 2026-07-29)
+## 6. Current state (as of pass M, 2026-07-30)
 
-### Latest — pass L: 52-week high/low/mean replaced the 한 줄 column
+### Latest — pass M: one idle curve, and the level header is a date
+
+Two owner asks, both about what a surface CLAIMS. No new data, no backend
+change; the whole pass is in five frontend files, two guards and DESIGN.
+
+- **The idle right pane is the IRS par curve on every tab** [OWNER]. It used to
+  dispatch on the tab — the 1YF ladder on forwards, the two-point-spread curve
+  on spreads, the relative-ATR curve on volatility. Those three restated
+  columns the table already prints, in a shape that takes longer to read, and
+  they kept the IRS curve — the product's whole subject — off three of five
+  tabs. `CurveView` no longer takes `tab` / `forwards` / `volatility`; it takes
+  the summary, and draws `parNodes`.
+- **`VolatilityPayload.curve` is now served and rendered by nothing.** Left in
+  place on purpose (it is a backend payload field with static-tree tests
+  behind it), and listed under "Open" so it is a decision rather than a
+  leftover. **Do not delete it without also rebuilding the static tree** — that
+  is a `SCHEMA_VERSION` bump, not a component edit.
+- **The level column's header is the data's date, not the word 현재** [OWNER].
+  `2026-07-24`, from the payload's `asof`, via `lib/format.ts::levelHeadText`
+  — shared by the table header, the 주요 포워드 block, and the idle curve's
+  legend (`2026-07-24 · 어제`). The word named the quantity and not the day, and
+  these are closes: on any day the xlsx has not been rebuilt, 현재 asserted a
+  currency the numbers did not have. **The date is the DATASET's, never
+  `new Date()`** — a header off the reader's clock would print today over last
+  Friday's closes and contradict the freshness chip sitting inches away. Pinned:
+  `guards/label-quantity.test.ts` fails on a rendered 현재 or a clock call in
+  any of the three surfaces.
+- **The level column is now sized by its HEADER** — ten glyphs of ISO date
+  (`WIDEST.levelHead`), not the six a value needs — the one column whose width
+  comes from its label. `LEVEL_GLYPHS` is that max; the 52주 sub-columns
+  deliberately still derive from `WIDEST.level`, since letting the date's width
+  leak into them would widen three columns to fit a header they do not carry.
+  **Every drop threshold moved +31px** at the measured ch: 52주 729 · QTD 518 ·
+  MTD 453 · WTD 389 · YTD 324 · 어제 260 · 종목+레벨 196. Ladder order
+  untouched, and 729 still fits the 840px table pane.
+- **Gates**: FE 357 passed / 1 skipped, lint 0, build 0 (TypeScript clean).
+  Backend untouched, so its suite was not re-run in this pass.
+- **Verified live** (dev server + live backend on :8100): the header reads
+  `2026-07-24` above the levels with no clipping, the 주요 포워드 block carries
+  the same header (its cell widened 74 → 104px), and the 포워드 tab's idle pane
+  now draws the IRS curve where the 1YF ladder used to be.
+
+### Before that — pass L: 52-week high/low/mean replaced the 한 줄 column
 
 One pass, one commit. The last table column kept its slot, its width behaviour
 and its role as the elastic column; only its contents changed, from a dynamic
@@ -724,8 +767,18 @@ Korean sentence to three numbers.
 
 ## 7. Open / provisional (confirm or override with the owner)
 
-- **Forward curve x-axis = start point** (1YF ladder across starts), not
-  x = tenor. Chosen; recorded in DESIGN's idle-curve note.
+- **MOOT since pass M — forward curve x-axis = start point** (1YF ladder across
+  starts), not x = tenor. There is no per-tab idle curve any more, so the choice
+  has no live subject; the reasoning stays in DESIGN only because it still rules
+  out "one line per tenor" if a forward curve returns elsewhere.
+- **OPEN (pass M) — `VolatilityPayload.curve` is served and rendered by
+  nothing.** The vol tab's idle curve was its only consumer. Two options: keep
+  it (a small dormant field, ~240 bytes, and the vol curve is the obvious first
+  thing to want back) or remove it with `_vol_curve` in the backend, which is a
+  `SCHEMA_VERSION` bump + a static-tree rebuild + golden updates. Kept for now
+  — deliberately, not by oversight. **The precedent cuts both ways**: leaving a
+  feed behind after deleting its consumer is what left a 150-point sparkline at
+  92% of the payload (see pass L), so this should not sit open indefinitely.
 - **CLOSED by deletion (pass L) — 한 줄 thresholds.** The ladder's cutoffs were
   an open implementer's call for several sessions; the column is gone, so the
   question is moot rather than answered. The last column now shows the 52-week

@@ -44,11 +44,43 @@ describe("the key-forward block states one quantity", () => {
   });
 
   it("still shows the level and its 52-week position", () => {
-    // the positive half of the rule: removal must not have hollowed the block
-    expect(block).toMatch(/현재/);
+    // The positive half of the rule: removal must not have hollowed the block.
+    // The level's header is the shared one (`levelHeadText`) rather than the
+    // literal word it used to be — pass M replaced the word with the data's
+    // date, and what this line is for is that the LEVEL is still here.
+    expect(block).toMatch(/levelHeadText\(/);
     expect(block).toMatch(/백분위/);
     expect(block).toMatch(/kf\.values\.now/);
   });
+});
+
+/* pass M: the level header names the DAY the numbers belong to. Two rules —
+ * the word must be gone from both level surfaces (it asserted a currency a
+ * static file cannot have), and the date must come from the PAYLOAD's asof, not
+ * from the reader's clock. A `new Date()` here would print today over last
+ * Friday's closes: the freshness chip would say 2026-07-24 while the column it
+ * sits above said 2026-07-30, and the louder surface would be the wrong one. */
+describe("the level header is the dataset's date, not the reader's", () => {
+  const surfaces = {
+    "ui/InstrumentTable.tsx": code("ui/InstrumentTable.tsx"),
+    "wall/ForwardMatrix.tsx": code("wall/ForwardMatrix.tsx"),
+    "ui/CurveView.tsx": code("ui/CurveView.tsx"),
+  };
+
+  for (const [name, src] of Object.entries(surfaces)) {
+    it(`${name} heads its level with the shared date label`, () => {
+      expect(src).toMatch(/levelHeadText\(/);
+      // no rendered 현재: `>현재<` in JSX, or the bare word as a header string
+      expect(src).not.toMatch(/>\s*현재\s*</);
+      expect(src).not.toMatch(/["'`]현재["'`]/);
+    });
+
+    it(`${name} takes the date from a payload, never from a clock`, () => {
+      expect(src).not.toMatch(/new Date\(/);
+      expect(src).not.toMatch(/marketIsoDate/);
+      expect(src).not.toMatch(/Date\.now/);
+    });
+  }
 });
 
 describe("the chart stroke keeps its own colour token", () => {

@@ -1,6 +1,7 @@
 "use client";
 
-/* Left pane — the instrument table (DESIGN §2). Instrument · 현재 · five change
+/* Left pane — the instrument table (DESIGN §2). Instrument · the level (headed
+ * by the DATA'S DATE since pass M, `levelHeadText`) · five change
  * columns (red up / blue down) · 52주 고점/저점/평균. Filter chips, sortable by
  * any CHANGE column (the 52주 column is not sortable — see RangeCells), hover →
  * preview, click → pin, Esc unpins (in App). Rows self-register in the tile
@@ -10,7 +11,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { BasisKey, CurveBanner, ForwardsPayload } from "@/lib/api";
-import { dirClass, fmtDelta } from "@/lib/format";
+import { dirClass, fmtDelta, levelHeadText, levelHeadTitle } from "@/lib/format";
 import { ForwardMatrix, KeyForwardBlock } from "@/wall/ForwardMatrix";
 import { getTile } from "@/wall/tileRegistry";
 import { useRegisterTile } from "@/wall/useRegisterTile";
@@ -160,6 +161,7 @@ function TableRow({
 
 export function InstrumentTable({
   rows,
+  asOf,
   forwards,
   curveBanner,
   filter,
@@ -172,6 +174,9 @@ export function InstrumentTable({
   onToggleMatrix,
 }: {
   rows: Row[];
+  /** The dataset's as-of date — the level column's HEADER (pass M). Comes from
+   * the summary payload, never from the reader's clock (see `levelHeadText`). */
+  asOf?: string;
   forwards?: ForwardsPayload;
   curveBanner?: CurveBanner;
   filter: Group | "all";
@@ -478,8 +483,17 @@ export function InstrumentTable({
               <div role="columnheader" className="pl-3">
                 종목
               </div>
-              <div role="columnheader" className="pr-3 text-right">
-                현재
+              {/* The level column's header is the DATA'S DATE, not the word
+                  현재 (pass M): these are closes, and on a day the file has
+                  not been rebuilt "현재" would assert a currency the numbers do
+                  not have. `tabular-nums` so the ten digits sit on the same
+                  advance the column is sized for (WIDEST.levelHead). */}
+              <div
+                role="columnheader"
+                className="whitespace-nowrap pr-3 text-right tabular-nums"
+                title={levelHeadTitle(asOf)}
+              >
+                {levelHeadText(asOf)}
               </div>
               {visible.bases.map((b) => (
                 <div key={b} role="columnheader" className="pr-3 text-right">

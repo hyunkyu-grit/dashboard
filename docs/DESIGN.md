@@ -77,7 +77,7 @@ height of the right pane.
 
 Columns, left to right:
 
-| Instrument | 현재 | Yesterday | WTD | MTD | QTD | YTD | 52주 고점·저점·평균 |
+| Instrument | *the level* (header = the data's date) | Yesterday | WTD | MTD | QTD | YTD | 52주 고점·저점·평균 |
 
 - **Instrument** — `10Y`, `3s10s`, `2s5s10s`, `2Yx1Y`, `SPOT`. Never
   translated (§15). Notation is defined once in **§ Instrument notation**
@@ -87,8 +87,35 @@ Columns, left to right:
     (`4Y/6Y/7Y/8Y/9Y`). A dot, not a badge (§5 channel discipline); it marks
     provenance without adding a column. Spreads/flies/forwards get no dot (the
     distinction does not apply).
-- **현재** — the current level, in ink, no hue (a level has no direction).
-  Existing precision (4 decimals for forwards).
+- **The level column** — the current level, in ink, no hue (a level has no
+  direction). Existing precision (4 decimals for forwards).
+  - **Its header is the DATA'S DATE, not the word 현재 [OWNER, pass M].** The
+    column reads `2026-07-24`, from the payload's `asof`
+    (`lib/format.ts::levelHeadText`). 현재 named the quantity and not the day it
+    belongs to, and against a dataset that is a file those are different facts:
+    these are CLOSES, and on any day the xlsx has not been rebuilt the word
+    asserts a currency the numbers do not have. The date says the same thing
+    when the data IS current — that is the point — and says something true when
+    it is not.
+    - **The date is the dataset's, NEVER the reader's clock.** A header off
+      `new Date()` would print today over last Friday's closes, which is the
+      silent-staleness failure §21 exists to prevent, restated on the surface a
+      reader trusts most. It would also contradict the freshness chip in the
+      chrome, which sits inches away and says `asof`. Pinned by
+      `guards/label-quantity.test.ts`.
+    - **Every level surface carries the same header**: this column, the 주요
+      포워드 block (§8), and the idle curve's legend (`2026-07-24 · 어제`). One
+      quantity, one label, one source.
+    - **The column is sized by its HEADER now** (ten glyphs, not the six a
+      value needs) — `WIDEST.levelHead` in `ui/columns.ts`. It is the one
+      column whose width comes from its label rather than its format, and the
+      drop thresholds all moved +31px because of it. The 52주 sub-columns
+      deliberately did NOT grow: they hold level VALUES under their own labels,
+      so they still derive from `WIDEST.level` (`guards/table-grid.test.ts`).
+  - Elsewhere in this document the column is still called `현재` where the
+    subject is its QUANTITY (a level: ink, no hue, one formatter) — §5, §9 and
+    the 52주 rulings below. That is the name of what it holds, not of what its
+    header says.
 - **Five change columns** — change in bp vs each basis. Red for up, blue for
   down (§9). The mini-bar is gone (Session 13, §9): hue now carries the sign,
   so the bar triple-encoded. **There is no "Now" column** — Now minus Now is
@@ -201,12 +228,15 @@ Behaviour:
   a new named view is a definition, not a component. Default: no chip.
 - **The column grid is format-derived and frozen [grid session, Pass A].**
   Column widths come from each column's widest possible RENDERING — `1s1.5s10s`
-  for 종목, six tabular glyphs for 현재 (`−100.5` / `4.2446` / `12.00`) and for
-  each change column (`−999.9`) — never from today's data, so the grid is
+  for 종목, six tabular glyphs for a LEVEL (`−100.5` / `4.2446` / `12.00`) and
+  for each change column (`−999.9`) — never from today's data, so the grid is
   byte-identical across tabs, sorts, and filters and the header never moves.
-  52주 is the only flexible column: its three sub-columns are fixed at the
-  현재 width and all horizontal slack sits at the cell's trailing edge, never
-  between the numbers. One template string (`ui/columns.ts
+  **One exception since pass M:** the level column is sized by its HEADER, ten
+  glyphs of ISO date (`WIDEST.levelHead`), because that is now the widest thing
+  it renders. Still a format, still frozen, just the label's format rather than
+  the value's. 52주 is the only flexible column: its three sub-columns are fixed
+  at the level VALUE width (six glyphs — they did not follow the header) and all
+  horizontal slack sits at the cell's trailing edge, never between the numbers. One template string (`ui/columns.ts
   GRID_TEMPLATE`) is shared by the header row and every body row (a CSS-grid
   row list, not `<table>` — §14's press-feedback note already recorded that
   transforms don't reach `table-row`, and the reorder motion needs
@@ -238,12 +268,18 @@ Behaviour:
   format-derived — three sub-columns, `RANGE_SUBS × colPx().rangeSub`,
   replacing a flat `ONE_LINER_MIN_PX = 120` sized for a sentence — so it
   tracks the level grammar automatically. At the runtime ch (measured live:
-  **7.7431px**) the thresholds in TABLE-content px are: **52주 698** · QTD 487
+  **7.7431px**) the thresholds in TABLE-content px were: **52주 698** · QTD 487
   · MTD 422 · WTD 358 · YTD 293 · 어제 229 · (종목+현재 165). Only the last
   column moved: **606 → 698**, so the full table needs ~92px MORE width than
   it did, not less — three fixed sub-columns (211px at this ch) cost more than
   the 120px sentence floor they replaced. Every narrower threshold is
   unchanged. Pinned numerically by `guards/table-grid.test.ts`.
+  **Thresholds, pass M.** The level column grew from six glyphs to ten so its
+  header can be the data's date, so every figure above moved **+31px** at the
+  same ch and the ladder ORDER is untouched: **52주 729** · QTD 518 · MTD 453 ·
+  WTD 389 · YTD 324 · 어제 260 · (종목+레벨 196). The full set still fits the
+  table pane with room to spare (880 − 40 padding = 840 content), so no layout
+  loses a column to this. Pinned numerically by `guards/table-grid.test.ts`.
   **Verified live (pass L)** by driving the pane width directly (the same
   measurement path, and the same forced-frame caveat as below — the occluded
   renderer delivers ResizeObserver callbacks one frame late, so every read has
@@ -351,13 +387,23 @@ diverge the moment the quarter advances a month.
 
 ### Right pane — curve (idle) + preview (on hover)
 
-- **Idle state is the curve for the active tab [Session 13, restored]** —
-  curve viewing is priority 1 (§1). No row hovered → outrights show the IRS
-  par curve (9 equal-spaced nodes 3M…10Y); forwards show the 1YF forward
-  ladder (x = start point); spreads show the two-point-spread curve; volatility
-  shows the relative-ATR curve across tenors [Session 14]. Blue line, two
-  lines only (Now + D-1) — the six-basis ramp is enlarged-view only. Hand-rolled
+- **Idle state is the IRS par curve, on every tab [OWNER, pass M]** — curve
+  viewing is priority 1 (§1), and "the curve" is the par curve: 9 equal-spaced
+  nodes 3M…10Y. No row hovered → that is what the pane shows, whichever filter
+  chip is active. Blue line, two lines only (the data's date + D-1, labelled
+  `2026-07-24 · 어제`) — the six-basis ramp is enlarged-view only. Hand-rolled
   SVG (§11).
+  - **Superseded: one idle curve per tab [Session 13/14].** The pane used to
+    switch with the filter — the 1YF ladder on forwards, the two-point-spread
+    curve on spreads, the relative-ATR curve on volatility. Three faults, one
+    ruling: the other three curves restate, in a shape that takes a moment to
+    identify, columns the table beside them already prints as numbers; a pane
+    whose SUBJECT changes under a filter chip is a second piece of state to
+    track for no gain; and the IRS curve — the thing the product is for — was
+    absent from three of five tabs. The tab moves the list only.
+  - `VolatilityPayload.curve` is still served and no longer rendered by
+    anything. Left in place rather than removed with the component (the payload
+    is shared with the static build and its tests); see HANDOFF "Open".
 - Hovering a row replaces the curve with that series' history line; leaving the
   table returns to the curve; pinning keeps the history until Esc.
 - On row hover, after a ~120ms delay (so crossing the table does not strobe),
@@ -1779,7 +1825,9 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
 
   **RE-VERIFIED against the code [stability session, Pass F]** — carried into
   that session's brief as still open, and it is not. `KeyForwardBlock`
-  (`wall/ForwardMatrix.tsx`) renders exactly four headers — 주요 포워드 / 현재 /
+  (`wall/ForwardMatrix.tsx`) renders exactly four headers — 주요 포워드 / the
+  level (headed by the data's date since pass M, `levelHeadText`, the same
+  header the table's level column carries) /
   the 52주 최저–최고 track / 백분위 — and reads only `kf.values.now`; no basis
   key is rendered anywhere in the block, so nothing shares a header with the
   main table's change columns. The neighbouring matrix is headed by *tenors*,
@@ -1897,7 +1945,7 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
   was showing silently in the preview. Of the two offered cures — clear the pin,
   or keep it and mark which tab it belongs to — the pin is **cleared** on a tab
   change (simplest, removes the ambiguous state entirely). The preview falls
-  back to the tab's idle curve.
+  back to the idle curve (the IRS par curve since pass M, not the tab's own).
 - **`{start}xSPOT` dropped from the forward LIST [Session 16 §I].** A
   spot-starting par rate is the outright at that start with no forward period —
   a duplicate. It stays in the 표로 보기 matrix as the spot reference column but
@@ -2011,10 +2059,13 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
   (`vol:<tenor>`). The forward enlarged view still shows the forward matrix
   instead of a line chart. (Superseded the Session-13 note that forwards and
   volatility had no history and showed placeholder sentences.)
-- **Forward idle curve = the 1YF ladder** (the 1-year forward rate at each
-  start point, one line, x = start point). Chosen over "one line per
-  tenor" (8 same-colour lines are unreadable) and "x = tenor for a selected
-  start" (needs an extra selector). It is the standard 1y-forward curve.
+- **OBSOLETE — forward idle curve = the 1YF ladder** (the 1-year forward rate
+  at each start point, one line, x = start point). Chosen at the time over "one
+  line per tenor" (8 same-colour lines are unreadable) and "x = tenor for a
+  selected start" (needs an extra selector). **Superseded in pass M**: the idle
+  pane is the IRS par curve on every tab, so there is no per-tab idle curve to
+  choose. The reasoning is kept only because it also rules out those two shapes
+  if a forward curve ever returns somewhere else.
 - **Calendar heatmap removed [Session 15 §I].** It plotted daily change — the
   slope of the line drawn directly above it — and the one thing it added
   (volatility clustering) is now answered numerically by the relative-ATR

@@ -18,7 +18,8 @@
  * changes). THE SORTED COLUMN IS NEVER DROPPED: a list ordered by a column
  * the reader cannot see is unreadable, so the sort column is promoted to
  * slot 3 and whatever it displaced falls off the end. Ladder:
- *   1 종목 · 2 현재 · [3 sorted] · 어제 · YTD · WTD · MTD · QTD · 52주
+ *   1 종목 · 2 레벨 (헤더 = 데이터 일자) · [3 sorted] · 어제 · YTD · WTD ·
+ *   MTD · QTD · 52주
  * (52주 first to go, last to return). 52주 is NOT sortable: it never enters
  * the sort slot and its header carries no control. Dropping/restoring never
  * animates — it is a layout change, not a state change. Pinned by
@@ -32,20 +33,39 @@ export const WIDEST = {
    * butterfly (9 glyphs). Forwards top out at 7 (`1Y3Mx3M` — starts run
    * ON…5Y in 3M steps, tenors 3M…5Y); outright/vol tenors at 4 (`1.5Y`). */
   label: "1s1.5s10s",
-  /** 현재: a % level is 4dp (`4.2446`), a bp spread can read `−100.5`, a
-   * ratio is 2dp (`12.00`). Six glyphs covers all three grammars. */
+  /** The level column's VALUES: a % level is 4dp (`4.2446`), a bp spread can
+   * read `−100.5`, a ratio is 2dp (`12.00`). Six glyphs covers all three
+   * grammars. This is the count the 52주 sub-columns use — they hold level
+   * values too. */
   level: "−100.5",
+  /** The level column's HEADER: the dataset's as-of date, ISO
+   * (`lib/format.ts::levelHeadText`). Since pass M the header names the DAY
+   * rather than reading 현재, and at ten glyphs the HEADER — not the six-glyph
+   * value — is the widest thing this column renders. Counted at a full `ch`
+   * per glyph although the two hyphens are narrower than a digit: erring wide
+   * is what keeps a fallback face from clipping a header, and the surplus
+   * lands as leading slack in a right-aligned column where nothing sees it. */
+  levelHead: "2026-07-24",
   /** Change columns: sign + three integer digits + 1dp (`−999.9`); the ratio
    * delta (`−1.23`) is narrower. */
   delta: "−999.9",
 };
+
+/** Glyphs in the 현재 track: the wider of its values and its header, which
+ * since pass M is the header. Deliberately NOT used by the 52주 sub-columns —
+ * those carry level VALUES under their own labels, and letting the date's width
+ * leak into them would widen three columns to fit a header they do not have. */
+export const LEVEL_GLYPHS = Math.max(
+  WIDEST.level.length,
+  WIDEST.levelHead.length,
+);
 
 /* Cushions on top of the glyph count: label = quoted-dot (6px) + its gap
  * (6px) + pl-3 (12px) + slack; numeric = pr-3 (12px) + slack for the minus /
  * decimal point, whose advance is not exactly 1ch. */
 export const COL_PAD = { label: 30, level: 18, delta: 18 };
 const LABEL_W = `calc(${WIDEST.label.length}ch + ${COL_PAD.label}px)`;
-const LEVEL_W = `calc(${WIDEST.level.length}ch + ${COL_PAD.level}px)`;
+const LEVEL_W = `calc(${LEVEL_GLYPHS}ch + ${COL_PAD.level}px)`;
 const DELTA_W = `calc(${WIDEST.delta.length}ch + ${COL_PAD.delta}px)`;
 
 /** The 52주 column holds three sub-columns — high, low, mean — each carrying
@@ -104,7 +124,7 @@ export function colPx(chPx: number): {
   const rangeSub = WIDEST.level.length * chPx + RANGE_PAD;
   return {
     label: WIDEST.label.length * chPx + COL_PAD.label,
-    level: WIDEST.level.length * chPx + COL_PAD.level,
+    level: LEVEL_GLYPHS * chPx + COL_PAD.level,
     delta: WIDEST.delta.length * chPx + COL_PAD.delta,
     rangeSub,
     range: RANGE_SUBS * rangeSub,

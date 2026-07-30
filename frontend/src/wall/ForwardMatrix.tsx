@@ -8,6 +8,7 @@
  */
 
 import type { ForwardsPayload } from "@/lib/api";
+import { levelHeadText, levelHeadTitle } from "@/lib/format";
 
 import { matrixTint } from "@/ui/tint";
 
@@ -150,7 +151,14 @@ export function KeyForwardBlock({ payload }: { payload: ForwardsPayload }) {
       <thead>
         <tr className="h-8 align-bottom">
           <th className="w-16 text-left font-semibold">주요 포워드</th>
-          <th className="w-[74px] pr-3 text-right font-normal opacity-60">현재</th>
+          {/* the level's DATE, not 현재 — the same header the table's level
+              column carries (pass M). Widened from 74px to hold ten glyphs. */}
+          <th
+            className="w-[104px] whitespace-nowrap pr-3 text-right font-normal tabular-nums opacity-60"
+            title={levelHeadTitle(payload.asof)}
+          >
+            {levelHeadText(payload.asof)}
+          </th>
           {/* track ends labelled ONCE, here, not per row (§E1) */}
           <th className="min-w-[150px] px-1 font-normal">
             <div className="flex justify-between text-[11px] opacity-45">

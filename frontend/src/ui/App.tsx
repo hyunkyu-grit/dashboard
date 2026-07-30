@@ -394,6 +394,7 @@ export function App() {
               <ErrorBoundary region="table" fallback="표를 그리지 못했어요">
                 <InstrumentTable
                   rows={rows}
+                  asOf={summary.asof}
                   forwards={forwards}
                   curveBanner={summary.curveBanner}
                   filter={tab}
@@ -425,10 +426,7 @@ export function App() {
                       />
                     ) : (
                       <CurveView
-                        tab={tab}
                         summary={summary}
-                        forwards={forwards}
-                        volatility={volatility}
                         width={paneW - PANE_PAD}
                         height={Math.max(300, paneH - PANE_PAD)}
                       />

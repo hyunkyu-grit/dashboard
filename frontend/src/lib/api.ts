@@ -203,7 +203,11 @@ export async function fetchForwards(): Promise<ForwardsPayload> {
   return res.json();
 }
 
-/** Relative-ATR across tenors for the volatility tab's idle right pane. */
+/** Relative-ATR across tenors. Was the volatility tab's idle right pane; since
+ * pass M the idle pane is the IRS par curve on every tab, so this field is
+ * SERVED AND RENDERED BY NOTHING. Kept deliberately (removing it is a
+ * SCHEMA_VERSION bump + a static-tree rebuild, not a component edit) and
+ * tracked as an open item in HANDOFF — do not treat it as live. */
 export interface VolCurveNode {
   label: string;
   now: number | null;
