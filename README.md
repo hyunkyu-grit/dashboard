@@ -19,11 +19,39 @@ automated feed exists yet (that is an owner decision, out of scope here).
 To refresh:
 
 ```powershell
+# 1. open data/irsdata.xlsx so the Infomax add-in pulls the new day, save, CLOSE
+# 2+3. rebuild, check, and (after a y/n) commit + mirror + push
+powershell -File scripts/refresh.ps1
+```
+
+**Saving the workbook is step 1 of 3, and it is the one that feels like the
+whole job.** The deployed site never opens the xlsx — it serves the committed
+JSON tree — so a morning that ends at "save and close" leaves the site one day
+behind with nothing on screen to say so but the freshness chip. `refresh.ps1`
+is steps 2 and 3: it refuses to run while Excel still holds the workbook,
+refuses to commit unless the xlsx's `asof` actually **advanced** (a holiday, a
+workbook that did not recalculate, and a second run all land here), verifies the
+rebuilt manifest matches the file it was built from, runs the 18 agreement tests
+against a backend started from that tree, prints what changed, and only then
+asks. `-FullGate` runs both modes instead; `-Yes` skips the prompt; `-NoPush`
+stops after the mirror.
+
+The steps by hand, if you prefer them:
+
+```powershell
 # 1. replace data/irsdata.xlsx with a newer export in the same layout
 # 2. rebuild the static API that the deployed site reads
 python backend/scripts/build_static.py
 # 3. commit BOTH the xlsx and frontend/public/api/**, then push to deploy
 ```
+
+Two things no script can check. Whether the numbers are **right** — the loader
+warns about date gaps, so a workbook that stopped updating is visible, but an
+add-in that returned rubbish while logged out saves a file that looks perfect,
+so cross-checking against the terminal stays a human step. And whether Excel
+recalculated at all: `D1` is `=TODAY()` and `A2` is an `IMDH` array pull, so the
+new day arrives on open **provided** calculation is not set to manual and the
+add-in is logged in.
 
 For local development against the live backend, **restart it** as well — the
 dataset, curves and own-history caches are all built once at startup, so a

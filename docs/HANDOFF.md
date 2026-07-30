@@ -208,7 +208,28 @@ rule:
   - **If you ever ship non-integer notionals**, the integer assertion is the
     line that will tell you the bound must become `½ · 10⁻ᵈ · Σ d`.
 - **`~$*.xls*` is now gitignored.** Excel's lock file was sitting untracked in
-  `data/` during the refresh and `git add -A` would have committed it.
+  `data/` during the refresh and `git add -A` would have committed it. **It is
+  HIDDEN**, so `ls`, `dir` and Explorer all report `data/` clean while it sits
+  there — check with `ls -la` / `Get-ChildItem -Force`. This cost a wrong
+  statement in-session: the folder was declared clean off a plain `ls`.
+- **`scripts/refresh.ps1` is the morning routine** — the owner asked whether
+  "open the workbook, save, close" is the whole job; it is step 1 of 3, and this
+  is 2 and 3. It refuses while the lock file exists, refuses to commit unless
+  the xlsx's `asof` **advanced** (holiday / no-recalculation / already-run all
+  land there), checks the rebuilt manifest against the file it was built from,
+  runs the 18 agreement tests against a backend started from that tree, prints
+  the diff, then asks y/n before commit → mirror → push. `-FullGate`, `-Yes`,
+  `-NoPush`, `-Force`.
+  - Its mode-2 mechanism is lifted from `gate.ps1` deliberately (start uvicorn,
+    wait on the port, `finally` stop it) rather than reinvented.
+  - **Only the no-op path has been exercised end to end** — there was no new
+    data left to refresh the day it was written. The rebuild / agreement /
+    commit branches are the same commands run by hand that morning, and the
+    file parses clean, but the first real run will be its first real test.
+  - Excel rewrites the xlsx on open even when no value changes (measured
+    775,811 → 775,934 bytes at an identical 2612 observations), so `git status`
+    shows it modified after any peek. The script says so instead of committing
+    byte churn.
 - **Gates after the refresh**: see the numbers in the commit for the refresh
   itself; the two-mode gate was run to green before it landed.
 
