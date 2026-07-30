@@ -404,6 +404,30 @@ diverge the moment the quarter advances a month.
   - `VolatilityPayload.curve` is still served and no longer rendered by
     anything. Left in place rather than removed with the component (the payload
     is shared with the static build and its tests); see HANDOFF "Open".
+- **Hovering a curve NODE gives the same readout the history line gives
+  [OWNER, pass N].** A crosshair, a fattened dot, and a floating card:
+  **만기 · 레벨 · 52주 최고 · 52주 최저 · 52주 평균 · 당일 변화**. It is the
+  preview tooltip's set with the **tenor where the date is** — the question is
+  the same one ("what is this number, where does it sit in its own 52 weeks, how
+  far did it move"), asked of the curve instead of a series.
+  - **One card, two surfaces.** `ui/ReadoutCard.tsx` is the component and
+    `READOUT_LABEL` the wording; `PreviewChart` was refactored onto it in the
+    same pass. Two tooltips answering one question in two grammars is the
+    failure being prevented — the same reasoning as `ui/cells.ts` for the
+    table's two level cells. `CURVE_READOUTS` declares the set and
+    `guards/readout-parity.test.ts` pins it against `PREVIEW_READOUTS`: they may
+    differ only in `date` ↔ `tenor`.
+  - **Every number is read from the payload (§16)** — `deltas.d1` for the
+    change, `range1y.max/min/avg` for the window, the same fields the table's
+    어제 and 52주 columns print, so the curve and the table cannot disagree about
+    a node. Differencing `now − prev` in the browser is forbidden and is also
+    wrong at the displayed precision; the guard fails on it.
+  - **§I is untouched**: that ruling makes the chart tooltip the sole readout for
+    a hovered DATE. This is a readout for a hovered TENOR and adds no second
+    answer for a date. A level stays ink; only 당일 변화 takes a direction hue
+    (§5/§9). Levels print through `fmtLevel`; the curve's two y-axis gridline
+    labels keep their coarser 2dp, which is an orientation mark and not a
+    readout.
 - Hovering a row replaces the curve with that series' history line; leaving the
   table returns to the curve; pinning keeps the history until Esc.
 - On row hover, after a ~120ms delay (so crossing the table does not strobe),

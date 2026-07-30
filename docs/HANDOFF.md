@@ -90,7 +90,11 @@ cd frontend; pnpm vitest run; pnpm lint; pnpm build
 - `ui/cells.ts` — the table's two LEVEL call sites (`levelText`, `rangeText`),
   side by side so they cannot drift. Both are `fmtLevel`.
 - `ui/CurveView.tsx` — idle right-pane curve: the IRS par curve, on every tab
-  (pass M — it no longer dispatches on the tab).
+  (pass M — it no longer dispatches on the tab). Hovering a node opens the
+  shared readout card (pass N).
+- `ui/ReadoutCard.tsx` — THE hovered-point readout card, shared by the idle
+  curve and the preview chart (pass N). One card, one label map, one formatter
+  path; pinned by `guards/readout-parity.test.ts`.
 - `ui/PreviewPane.tsx` / `PreviewChart.tsx` / `CalendarHeatmap.tsx` — hover
   state: series history (blue SVG) + tooltip + calendar heatmap.
 - `ui/EnlargedView.tsx` — the `?tile=…` sheet; **the only place
@@ -175,9 +179,44 @@ rule:
 
 ---
 
-## 6. Current state (as of pass M, 2026-07-30)
+## 6. Current state (as of pass N, 2026-07-30)
 
-### Latest — pass M: one idle curve, and the level header is a date
+### Latest — pass N: the curve got the history line's readout
+
+One owner ask: hovering the IRS curve should say what hovering an outright's
+time series says. Frontend only, no payload change — every number it shows was
+already in the summary row.
+
+- **Hovering a curve node** draws a crosshair + a fattened dot and floats a
+  card: **만기 · 레벨 · 52주 최고 · 52주 최저 · 52주 평균 · 당일 변화**. That is
+  `PREVIEW_READOUTS` with the **tenor where the date is**.
+- **`ui/ReadoutCard.tsx` is new and is THE card** — `ReadoutCard` /
+  `ReadoutLevel` / `ReadoutChange` + `READOUT_LABEL`. `PreviewChart` was
+  refactored onto it in the same pass, so the two tooltips are one component;
+  its tooltip markup and its `Line` helper are gone. Levels print through
+  `fmtLevel`, the change through `fmtDelta` + `dirClass`, and there is **no
+  `toFixed` in the card**. Same reasoning as `ui/cells.ts` for the table's two
+  level cells: two call sites of one quantity must be one function.
+- **§16 held**: the card reads `deltas.d1` and `range1y.max/min/avg` off the
+  summary row — the same fields the table's 어제 and 52주 columns print, so the
+  curve and the table cannot disagree about a node. **Do not difference
+  `now − prev` in the browser** to save a field; the guard fails on it and it
+  would also disagree with the table at the displayed precision.
+- **The two y-axis gridline labels keep their coarser 2dp** (`axisLabel`, the
+  only rounding left in `CurveView`). They are orientation marks; `4.2446` in
+  that role reads as data. Deliberate, not an oversight.
+- **`CURVE_READOUTS`** joins the registry in `ui/readouts.ts`, and
+  `guards/readout-parity.test.ts` now pins it against the preview's set: they
+  may differ **only** in `date` ↔ `tenor`. It also fails if either surface stops
+  using the shared card or hardcodes a label.
+- **Verified live** against the payload, not just on screen: hovering 1.5Y
+  printed 3.7500 / 3.8750 / 2.3200 / 3.0155 / +4.0 and
+  `/api/wall/summary` gives `now 3.75`, `range1y {min 2.32, max 3.875, avg
+  3.0155}`, `deltas.d1 4.0`. 10Y printed 4.2675 / +5.0, matching the bottom
+  strip's `10Y 4.2675 +5.0`. The card clamps inside the pane at the 10Y edge.
+- **Gates**: FE 361 passed / 1 skipped, lint 0, build 0.
+
+### Before that — pass M: one idle curve, and the level header is a date
 
 Two owner asks, both about what a surface CLAIMS. No new data, no backend
 change; the whole pass is in five frontend files, two guards and DESIGN.

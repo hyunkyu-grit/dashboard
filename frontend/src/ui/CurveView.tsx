@@ -24,16 +24,34 @@
  * work, so the gesture was the worse of two attempts at one job. What
  * survives is the pane's corner label (App.tsx): pinned instrument · mode. */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import type { Unit, WallSummary } from "@/lib/api";
 import { levelHeadText, levelHeadTitle } from "@/lib/format";
 import { BASIS_SECONDARY_OPACITY } from "@/theme/ramp";
 
+import {
+  READOUT_CARD_W,
+  READOUT_LABEL,
+  ReadoutCard,
+  ReadoutChange,
+  ReadoutLevel,
+} from "./ReadoutCard";
+
 interface Node {
   label: string;
   now: number | null;
   prev: number | null; // D-1 comparison
+  /* The hovered-node readout (pass N). Every one of these is READ FROM THE
+   * PAYLOAD, never computed here (§16): `deltas.d1` is the backend's daily
+   * change and `range1y` its 52-week level stats — the same fields the table's
+   * 어제 and 52주 columns print. Differencing `now − prev` in the browser to
+   * save a field is exactly what §16 forbids, and it would also disagree with
+   * the table at the displayed precision. */
+  delta: number | null;
+  high: number | null;
+  low: number | null;
+  avg: number | null;
 }
 
 const PAD = { top: 14, right: 12, bottom: 20, left: 40 };
@@ -49,6 +67,10 @@ function NodeLine({
   width: number;
   height: number;
 }) {
+  // hovered node index — the curve's equivalent of the preview chart's hovered
+  // date. Nothing else in the app reacts to it: it does not pin, does not
+  // filter, and does not touch the table (§2 — hover on the TABLE owns that).
+  const [hi, setHi] = useState<number | null>(null);
   const pts = nodes.filter((n) => n.now != null);
   const { yMin, yMax } = useMemo(() => {
     let lo = Infinity;
@@ -75,46 +97,120 @@ function NodeLine({
       .map((n, i) => (n[key] == null ? null : `${x(i)},${y(n[key]!)}`))
       .filter(Boolean)
       .join(" ");
-  const fmt = (v: number) => (unit === "bp" ? v.toFixed(1) : v.toFixed(2));
+  /* The AXIS label's own grammar, coarser than a level's on purpose: two
+   * gridline values exist to orient the eye on the y-range, and `4.2446` in that
+   * role reads as data. The readout card is where a level prints at full
+   * precision, through `fmtLevel`. This is the only rounding in this file. */
+  const axisLabel = (v: number) => (unit === "bp" ? v.toFixed(1) : v.toFixed(2));
   const labelEvery = Math.ceil(nodes.length / 8);
 
+  // nearest node by x, the same snap the preview chart uses — the nodes are
+  // equal-spaced (§2), so this is arithmetic, not a search.
+  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const i = Math.round(((px - PAD.left) / plotW) * (nodes.length - 1));
+    setHi(Math.max(0, Math.min(nodes.length - 1, i)));
+  };
+
+  const hn = hi != null ? nodes[hi] : null;
+  const tipLeft =
+    hi != null
+      ? Math.min(width - READOUT_CARD_W - 10, Math.max(0, x(hi) + 10))
+      : 0;
+
   return (
-    <svg width={width} height={height} className="text-line" role="img" aria-label="curve">
-      {[yMin + (yMax - yMin) * 0.15, yMax - (yMax - yMin) * 0.15].map((v) => (
-        <text key={v} x={PAD.left - 5} y={y(v) + 4} textAnchor="end"
-          className="fill-ink" style={{ fontSize: 11, opacity: 0.5 }}>
-          {fmt(v)}
-        </text>
-      ))}
-      <polyline points={line("prev")} fill="none" stroke="currentColor"
-        strokeOpacity={BASIS_SECONDARY_OPACITY} strokeWidth={1.4} />
-      <polyline points={line("now")} fill="none" stroke="currentColor"
-        strokeWidth={1.8} strokeLinejoin="round" />
-      {nodes.map((n, i) =>
-        n.now == null ? null : (
-          <circle key={n.label} cx={x(i)} cy={y(n.now)} r={2.4} fill="currentColor" />
-        ),
-      )}
-      {nodes.map((n, i) =>
-        i % labelEvery === 0 || i === nodes.length - 1 ? (
-          <text key={`l-${n.label}`} x={x(i)} y={height - 6} textAnchor="middle"
-            className="fill-ink" style={{ fontSize: 10, opacity: 0.5 }}>
-            {n.label}
+    <div className="relative" style={{ width, height }}>
+      <svg
+        width={width}
+        height={height}
+        className="text-line"
+        onMouseMove={onMove}
+        onMouseLeave={() => setHi(null)}
+        role="img"
+        aria-label="curve"
+      >
+        {[yMin + (yMax - yMin) * 0.15, yMax - (yMax - yMin) * 0.15].map((v) => (
+          <text key={v} x={PAD.left - 5} y={y(v) + 4} textAnchor="end"
+            className="fill-ink" style={{ fontSize: 11, opacity: 0.5 }}>
+            {axisLabel(v)}
           </text>
-        ) : null,
+        ))}
+        <polyline points={line("prev")} fill="none" stroke="currentColor"
+          strokeOpacity={BASIS_SECONDARY_OPACITY} strokeWidth={1.4} />
+        <polyline points={line("now")} fill="none" stroke="currentColor"
+          strokeWidth={1.8} strokeLinejoin="round" />
+        {nodes.map((n, i) =>
+          n.now == null ? null : (
+            <circle key={n.label} cx={x(i)} cy={y(n.now)} r={2.4} fill="currentColor" />
+          ),
+        )}
+        {nodes.map((n, i) =>
+          i % labelEvery === 0 || i === nodes.length - 1 ? (
+            <text key={`l-${n.label}`} x={x(i)} y={height - 6} textAnchor="middle"
+              className="fill-ink" style={{ fontSize: 10, opacity: 0.5 }}>
+              {n.label}
+            </text>
+          ) : null,
+        )}
+        {/* crosshair + a fattened dot on the hovered node — the y marker, so
+            the card can stay pinned at the top and not chase the cursor */}
+        {hn && (
+          <>
+            <line
+              x1={x(hi!)}
+              x2={x(hi!)}
+              y1={PAD.top}
+              y2={PAD.top + plotH}
+              className="stroke-ink"
+              strokeWidth={1}
+              strokeOpacity={0.25}
+            />
+            {hn.now != null && (
+              <circle cx={x(hi!)} cy={y(hn.now)} r={3.6} fill="currentColor" />
+            )}
+          </>
+        )}
+      </svg>
+      {/* the hovered node's readout — the SAME card the preview chart uses,
+          with the tenor where the date would be (pass N) */}
+      {hn && (
+        <ReadoutCard title={hn.label} left={tipLeft}>
+          <ReadoutLevel k={READOUT_LABEL.level} v={hn.now} unit={unit} />
+          <ReadoutLevel k={READOUT_LABEL.rangeHigh} v={hn.high} unit={unit} />
+          <ReadoutLevel k={READOUT_LABEL.rangeLow} v={hn.low} unit={unit} />
+          <ReadoutLevel k={READOUT_LABEL.rangeAvg} v={hn.avg} unit={unit} />
+          <ReadoutChange
+            k={READOUT_LABEL.dailyChange}
+            v={hn.delta}
+            unit={unit}
+          />
+        </ReadoutCard>
       )}
-    </svg>
+    </div>
   );
 }
 
 const CURVE_NODES = ["3M", "6M", "9M", "1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y"];
 
-/** The IRS par curve across the 9 equal-spaced nodes. */
+/** The IRS par curve across the 9 equal-spaced nodes, each carrying the
+ * readout its hover shows. Every field is read straight off the summary row —
+ * the same row the table prints — so the curve and the table can never disagree
+ * about a node (§16). A tenor absent from the payload yields nulls, which the
+ * card prints as em dashes rather than hiding. */
 function parNodes(summary: WallSummary): Node[] {
   const byId = new Map(summary.outrights.map((o) => [o.id, o]));
   return CURVE_NODES.map((t) => {
     const o = byId.get(t);
-    return { label: t, now: o?.now ?? null, prev: o?.basisValues.d1 ?? null };
+    return {
+      label: t,
+      now: o?.now ?? null,
+      prev: o?.basisValues.d1 ?? null,
+      delta: o?.deltas.d1 ?? null,
+      high: o?.range1y.max ?? null,
+      low: o?.range1y.min ?? null,
+      avg: o?.range1y.avg ?? null,
+    };
   });
 }
 

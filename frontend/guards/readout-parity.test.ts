@@ -16,7 +16,11 @@ import { code } from "./_source";
 
 import type { Unit } from "../src/lib/api";
 import { levelText, rangeText } from "../src/ui/cells";
-import { POPUP_READOUTS, PREVIEW_READOUTS } from "../src/ui/readouts";
+import {
+  CURVE_READOUTS,
+  POPUP_READOUTS,
+  PREVIEW_READOUTS,
+} from "../src/ui/readouts";
 import type { Row } from "../src/ui/rows";
 
 describe("the popup is a superset of the preview (§C)", () => {
@@ -25,6 +29,61 @@ describe("the popup is a superset of the preview (§C)", () => {
     for (const r of PREVIEW_READOUTS) {
       expect(popup.has(r), `popup is missing the preview readout "${r}"`).toBe(true);
     }
+  });
+});
+
+/* pass N: the idle curve got the preview's readout, on a tenor instead of a
+ * date. Two surfaces answering one question must not drift into two answers, so
+ * the sets are pinned against each other and both must route through the one
+ * shared card. The interesting failure this catches is the cheap one: adding a
+ * statistic to whichever surface you happen to be editing. */
+describe("the curve tooltip and the preview tooltip are one readout (§C)", () => {
+  it("the two sets differ ONLY in what x is", () => {
+    const swapXForTenor = (r: string) => (r === "date" ? "tenor" : r);
+    expect([...CURVE_READOUTS].sort()).toEqual(
+      [...PREVIEW_READOUTS].map(swapXForTenor).sort(),
+    );
+  });
+
+  it("the curve names a tenor, never a date", () => {
+    // a curve node has no date: its x is a tenor, and claiming otherwise would
+    // put a second answer for a hovered DATE on the screen (§I)
+    expect(CURVE_READOUTS).toContain("tenor");
+    expect(CURVE_READOUTS).not.toContain("date");
+    expect(PREVIEW_READOUTS).not.toContain("tenor");
+  });
+
+  it("both surfaces render the ONE shared card, and neither rounds", () => {
+    for (const f of ["ui/CurveView.tsx", "ui/PreviewChart.tsx"]) {
+      const src = code(f);
+      expect(src, `${f} does not use the shared readout card`).toMatch(
+        /<ReadoutCard/,
+      );
+      // labels come from the shared map, so the two cannot word one row
+      // differently while showing the same statistic
+      expect(src, `${f} hardcodes a readout label`).toMatch(/READOUT_LABEL\./);
+    }
+    // The card itself is the only place a readout number is formatted, and it
+    // formats through fmtLevel/fmtDelta. No toFixed anywhere in it.
+    const card = code("ui/ReadoutCard.tsx");
+    expect(card).toContain("fmtLevel");
+    expect(card).toContain("fmtDelta");
+    expect(card, "the shared card rounds for display itself").not.toMatch(
+      /toFixed/,
+    );
+    expect(code("ui/PreviewChart.tsx")).not.toMatch(/toFixed\(\s*[24]\s*\)/);
+  });
+
+  it("the curve reads its statistics from the payload, never differences them", () => {
+    // §16: `deltas.d1` and `range1y` are the backend's. A `now - prev` here
+    // would be a browser-side calculation AND would disagree with the table's
+    // 어제 column at the displayed precision.
+    const src = code("ui/CurveView.tsx");
+    expect(src).toMatch(/deltas\.d1/);
+    expect(src).toMatch(/range1y\.(max|min|avg)/);
+    expect(src, "the curve differences levels in the browser").not.toMatch(
+      /now\s*-\s*(n\.)?prev/,
+    );
   });
 });
 

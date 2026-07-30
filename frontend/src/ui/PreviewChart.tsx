@@ -9,8 +9,14 @@
 import { useState } from "react";
 
 import type { HistoryPoint, SeriesStats, Unit } from "@/lib/api";
-import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 
+import {
+  READOUT_CARD_W,
+  READOUT_LABEL,
+  ReadoutCard,
+  ReadoutChange,
+  ReadoutLevel,
+} from "./ReadoutCard";
 import { dateLabels } from "./timeAxis";
 
 const PAD = { top: 10, right: 10, bottom: 18, left: 6 };
@@ -50,8 +56,6 @@ export function PreviewChart({
   const y = (v: number) => PAD.top + (1 - (v - yMin) / (yMax - yMin)) * plotH;
   const path = points.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
 
-  const lvl = (v: number) => fmtLevel(v, unit);
-
   const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const px = e.clientX - rect.left;
@@ -66,7 +70,10 @@ export function PreviewChart({
   const hp = hi != null ? points[hi] : null;
   // daily change arrives precomputed per point (§16) — no client differencing.
   const dailyChange = hp ? hp.d : null;
-  const tipLeft = hi != null ? Math.min(width - 150, Math.max(0, x(hi) + 10)) : 0;
+  const tipLeft =
+    hi != null
+      ? Math.min(width - READOUT_CARD_W - 10, Math.max(0, x(hi) + 10))
+      : 0;
 
   // date labels (dates session, Pass B): sparse orientation marks in the
   // bottom pad — no ticks, no rule. The preview has no zoom, so the span is
@@ -125,35 +132,23 @@ export function PreviewChart({
         )}
       </svg>
       {hi != null && hp && (
-        <div
-          className="pointer-events-none absolute top-2 rounded-[8px] bg-popover p-2 text-[12px] shadow-lg"
-          style={{ left: tipLeft, width: 140 }}
-        >
-          <div className="mb-1 font-semibold">{hp.t}</div>
-          <Line k="레벨" v={lvl(hp.v)} />
+        // the shared card (pass N) — the idle curve's tooltip is the same
+        // component, so the two cannot drift into two grammars for one quantity
+        <ReadoutCard title={hp.t} left={tipLeft}>
+          <ReadoutLevel k={READOUT_LABEL.level} v={hp.v} unit={unit} />
           {/* 52-week stats (annual-stats session) — the chart still shows the
               full history, only the statistics narrow; the popup, which
               zooms, uses visible-range "구간" stats (§F). */}
-          <Line k="52주 최고" v={lvl(stats.max)} />
-          <Line k="52주 최저" v={lvl(stats.min)} />
-          <Line k="52주 평균" v={lvl(stats.avg)} />
-          <div className="mt-1 flex justify-between">
-            <span className="opacity-50">당일 변화</span>
-            <span className={`tabular-nums ${dirClass(dailyChange)}`}>
-              {fmtDelta(dailyChange, unit)}
-            </span>
-          </div>
-        </div>
+          <ReadoutLevel k={READOUT_LABEL.rangeHigh} v={stats.max} unit={unit} />
+          <ReadoutLevel k={READOUT_LABEL.rangeLow} v={stats.min} unit={unit} />
+          <ReadoutLevel k={READOUT_LABEL.rangeAvg} v={stats.avg} unit={unit} />
+          <ReadoutChange
+            k={READOUT_LABEL.dailyChange}
+            v={dailyChange}
+            unit={unit}
+          />
+        </ReadoutCard>
       )}
-    </div>
-  );
-}
-
-function Line({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="flex justify-between">
-      <span className="opacity-50">{k}</span>
-      <span className="tabular-nums">{v}</span>
     </div>
   );
 }
