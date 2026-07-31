@@ -420,18 +420,38 @@ def run_backtest(dataset: Dataset, positions: list[Position]) -> dict:
         records.append(rec)
         series.append(own)
 
-    points = [
-        {
-            "t": dates[i].isoformat(),
-            "pnl": round(sum(s[i] for s in series), 0),
-        }
-        for i in sample
-    ]
+    # The published line, with each point's CHANGE from the one before it.
+    #
+    # Computed here and not in the browser (§16). The rule is not ceremony:
+    # `PreviewChart` carries the same note because differencing a rounded
+    # series client-side gives a number that disagrees with the difference of
+    # the two figures the reader can see.
+    #
+    # `d` is the step BETWEEN PUBLISHED POINTS, which is a day only while the
+    # series is unthinned. `daily` says which — a ten-year book is ~2,600
+    # business days thinned to 400, and calling a 6-day move "당일 변화" there
+    # would be a plain lie.
+    points = []
+    prev = None
+    for i in sample:
+        total = round(sum(s[i] for s in series), 0)
+        points.append(
+            {
+                "t": dates[i].isoformat(),
+                "pnl": total,
+                "d": None if prev is None else round(total - prev, 0),
+            }
+        )
+        prev = total
+
     pnls = [p["pnl"] for p in points]
     return {
         "positions": records,
         "from": dates[first].isoformat(),
         "to": dates[last].isoformat(),
+        # every business day in the window is published, so `d` is a real
+        # one-day change; false once thinning kicks in
+        "daily": len(sample) == last - first + 1,
         "points": points,
         "pnl": pnls[-1] if pnls else 0.0,
         "maxProfit": max(pnls) if pnls else 0.0,

@@ -286,6 +286,17 @@ and each row is another full daily revaluation pass.
   to, presented as arithmetic. Carry's sign follows the struck fixed rate
   against the CD that ACTUALLY printed over the holding period, not against CD
   on any one day.
+- **The P&L chart has a hovered readout**: date, cumulative, and the change
+  into that point. The change is SERVED, not differenced in the browser (§16) —
+  differencing a rounded series client-side gives a number that disagrees with
+  the difference of the two figures on screen. It is labelled 당일 only when
+  every business day in the window is published (`daily`); once the series is
+  thinned a step spans ~6 days and it reads 직전 대비 instead.
+  - The readout is local, not the shared `ReadoutCard`. That card owns
+    `fmtLevel`/`fmtDelta` so the preview chart and idle curve cannot drift into
+    two grammars for one quantity; this axis is MONEY (`fmtKrw`, 억/만), and
+    teaching the shared card a money mode would dissolve the property it exists
+    for.
 - **The entry date is the date you clicked** [OWNER: "커서가 가는 곳에서
   누르면 그 날부터 스타트해야지"]. The preview chart's crosshair is the only
   thing that knows which day the reader is pointing at, so it reports it and

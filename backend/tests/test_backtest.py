@@ -444,3 +444,27 @@ def test_the_trace_splits_the_same_way(ds):
     path = trace(ds, Position("10Y", +1, N, dt.date(2025, 7, 30)))
     for pt in path:
         assert abs((pt["valuation"] + pt["carry"]) - pt["pnl"]) <= 1
+
+
+def test_each_point_carries_its_own_change(ds):
+    """`d` is served, not differenced in the browser (§16). Differencing a
+    ROUNDED series client-side gives a number that disagrees with the
+    difference of the two figures the reader can see, which is exactly the
+    class of defect this repo has shipped before."""
+    book = run_backtest(ds, [Position("10Y", +1, N, dt.date(2026, 1, 2))])
+    pts = book["points"]
+    assert pts[0]["d"] is None  # nothing to change from
+    for a, b in zip(pts, pts[1:]):
+        assert b["d"] == round(b["pnl"] - a["pnl"], 0)
+
+
+def test_daily_says_whether_a_step_is_actually_one_day(ds):
+    """A ten-year book is ~2,600 business days thinned to 400, so its steps
+    span ~6 days; calling those "당일 변화" would be a lie. `daily` is what the
+    UI reads to decide the wording."""
+    short = run_backtest(ds, [Position("10Y", +1, N, dt.date(2026, 1, 2))])
+    long = run_backtest(ds, [Position("10Y", +1, N, dt.date(2016, 1, 5))])
+    assert short["daily"] is True
+    assert len(short["points"]) <= 400
+    assert long["daily"] is False
+    assert len(long["points"]) <= 400

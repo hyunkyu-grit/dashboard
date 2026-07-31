@@ -68,6 +68,9 @@ const EOK = 100_000_000;
  * each extra row is another full daily revaluation pass on the server. */
 const MAX_POSITIONS = 12;
 
+/** The hover card's fixed width, so the caller can clamp it inside the plot. */
+const CARD_W = 150;
+
 /* How a direction is NAMED [OWNER, after external research 2026-07-31].
  *
  * `+1` is always "long the quoted value" in the engine. What that gets CALLED
@@ -147,8 +150,21 @@ const INPUT =
   "rounded-[10px] bg-page px-3 py-2 text-[14px] tabular-nums outline-none " +
   "focus:ring-2 focus:ring-ink/15";
 
-/** The P&L line. Hand-rolled SVG like every other chart here; the zero line is
- * drawn because a P&L chart without one cannot be read at a glance. */
+/** The P&L line, with a hovered readout [OWNER].
+ *
+ * Hand-rolled SVG like every other chart here. Two things are deliberate:
+ *
+ * The zero line is always in frame, because it is the win/lose boundary and a
+ * P&L chart that can be entirely above or below its own axis cannot be read at
+ * a glance.
+ *
+ * The readout is LOCAL and not the shared `ReadoutCard`. That card owns
+ * `fmtLevel` and `fmtDelta` precisely so the preview chart and the idle curve
+ * cannot drift into two grammars for one quantity — but this axis is MONEY,
+ * formatted by `fmtKrw` in 억/만. Passing pre-formatted strings into the shared
+ * card, or teaching it a money mode, would dissolve the property it exists
+ * for. Different quantity, different card.
+ */
 function PnlChart({
   result,
   width,
@@ -158,75 +174,137 @@ function PnlChart({
   width: number;
   height: number;
 }) {
+  const [hi, setHi] = useState<number | null>(null);
   const pts = result.points;
-  if (pts.length < 2) return null;
+
   const PAD = { top: 8, right: 8, bottom: 18, left: 8 };
   const plotW = width - PAD.left - PAD.right;
   const plotH = height - PAD.top - PAD.bottom;
 
   let lo = 0; // the zero line is always in frame — it is the win/lose boundary
-  let hi = 0;
+  let hi2 = 0;
   for (const p of pts) {
     if (p.pnl < lo) lo = p.pnl;
-    if (p.pnl > hi) hi = p.pnl;
+    if (p.pnl > hi2) hi2 = p.pnl;
   }
-  const pad = (hi - lo) * 0.08 || 1;
+  const pad = (hi2 - lo) * 0.08 || 1;
   const yMin = lo - pad;
-  const yMax = hi + pad;
-  const x = (i: number) => PAD.left + (i / (pts.length - 1)) * plotW;
+  const yMax = hi2 + pad;
+  const x = (i: number) => PAD.left + (i / Math.max(1, pts.length - 1)) * plotW;
   const y = (v: number) => PAD.top + (1 - (v - yMin) / (yMax - yMin)) * plotH;
+
+  if (pts.length < 2) return null;
 
   const line = pts.map((p, i) => `${x(i).toFixed(1)},${y(p.pnl).toFixed(1)}`).join(" ");
   const up = result.pnl >= 0;
-  // the area under the line, closed on the zero axis rather than the bottom —
-  // so the fill reads as "distance from breakeven", which is what it is
+  // the area closed on the ZERO axis rather than the bottom of the box, so the
+  // fill reads as "distance from breakeven", which is what it is
   const area = `${line} ${x(pts.length - 1).toFixed(1)},${y(0).toFixed(1)} ${x(0).toFixed(1)},${y(0).toFixed(1)}`;
 
+  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const i = Math.round(((e.clientX - rect.left - PAD.left) / plotW) * (pts.length - 1));
+    setHi(Math.max(0, Math.min(pts.length - 1, i)));
+  };
+
+  const hp = hi != null ? pts[hi] : null;
+  const tipLeft =
+    hi != null ? Math.min(width - CARD_W - 8, Math.max(0, x(hi) + 10)) : 0;
+
   return (
-    <svg width={width} height={height} role="img" aria-label="누적 손익">
-      <defs>
-        <linearGradient id="btfill" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="currentColor" stopOpacity={0.18} />
-          <stop offset="100%" stopColor="currentColor" stopOpacity={0} />
-        </linearGradient>
-      </defs>
-      <g className={up ? "text-up" : "text-down"}>
-        <polygon points={area} fill="url(#btfill)" stroke="none" />
-        <polyline
-          points={line}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinejoin="round"
+    <div className="relative" style={{ width, height }}>
+      <svg
+        width={width}
+        height={height}
+        role="img"
+        aria-label="누적 손익"
+        onMouseMove={onMove}
+        onMouseLeave={() => setHi(null)}
+      >
+        <defs>
+          <linearGradient id="btfill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="currentColor" stopOpacity={0.18} />
+            <stop offset="100%" stopColor="currentColor" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <g className={up ? "text-up" : "text-down"}>
+          <polygon points={area} fill="url(#btfill)" stroke="none" />
+          <polyline
+            points={line}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinejoin="round"
+          />
+        </g>
+        <line
+          x1={PAD.left}
+          x2={width - PAD.right}
+          y1={y(0)}
+          y2={y(0)}
+          className="stroke-ink"
+          strokeWidth={1}
+          strokeOpacity={0.25}
         />
-      </g>
-      <line
-        x1={PAD.left}
-        x2={width - PAD.right}
-        y1={y(0)}
-        y2={y(0)}
-        className="stroke-ink"
-        strokeWidth={1}
-        strokeOpacity={0.25}
-      />
-      <text
-        x={PAD.left}
-        y={height - 5}
-        className="fill-ink"
-        style={{ fontSize: 10, opacity: 0.45 }}
-      >
-        {result.from}
-      </text>
-      <text
-        x={width - PAD.right}
-        y={height - 5}
-        textAnchor="end"
-        className="fill-ink"
-        style={{ fontSize: 10, opacity: 0.45 }}
-      >
-        {result.to}
-      </text>
-    </svg>
+        {hp && (
+          <>
+            <line
+              x1={x(hi!)}
+              x2={x(hi!)}
+              y1={PAD.top}
+              y2={PAD.top + plotH}
+              className="stroke-ink"
+              strokeWidth={1}
+              strokeOpacity={0.25}
+            />
+            <circle
+              cx={x(hi!)}
+              cy={y(hp.pnl)}
+              r={3.5}
+              className={up ? "fill-up" : "fill-down"}
+            />
+          </>
+        )}
+        <text x={PAD.left} y={height - 5} className="fill-ink"
+          style={{ fontSize: 10, opacity: 0.45 }}>
+          {result.from}
+        </text>
+        <text x={width - PAD.right} y={height - 5} textAnchor="end"
+          className="fill-ink" style={{ fontSize: 10, opacity: 0.45 }}>
+          {result.to}
+        </text>
+      </svg>
+      {hp && (
+        <div
+          className="pointer-events-none absolute top-1 rounded-[10px] bg-popover px-2.5 py-2 text-[12px] shadow-lg"
+          style={{ left: tipLeft, width: CARD_W }}
+        >
+          <div className="tabular-nums opacity-50">{hp.t}</div>
+          <div className="mt-1 flex justify-between gap-2">
+            <span className="opacity-50">누적</span>
+            <span
+              className={`font-semibold tabular-nums ${
+                hp.pnl >= 0 ? "text-up" : "text-down"
+              }`}
+            >
+              {fmtKrw(hp.pnl)}
+            </span>
+          </div>
+          <div className="mt-0.5 flex justify-between gap-2">
+            {/* 당일 only when every business day is published; once the series
+                is thinned a step spans ~6 days and saying 당일 would be false */}
+            <span className="opacity-50">{result.daily ? "당일" : "직전 대비"}</span>
+            <span
+              className={`tabular-nums ${
+                hp.d == null ? "opacity-40" : hp.d >= 0 ? "text-up" : "text-down"
+              }`}
+            >
+              {hp.d == null ? "—" : fmtKrw(hp.d)}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
