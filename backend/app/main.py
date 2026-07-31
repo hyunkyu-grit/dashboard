@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from . import payloads
-from .backtest import BacktestError, run_backtest
+from .backtest import BacktestError, Position, run_backtest
 from .cache import cached, data_hash
 from .curves import build_basis_curves
 from .dataset import load_dataset
@@ -116,37 +116,55 @@ def dv01(series_id: str) -> dict:
     return _dv01_table.get(series_id, payloads.empty_dv01(series_id))
 
 
-@app.get("/api/backtest/{series_id}")
-def backtest(
-    series_id: str,
-    direction: int = 1,
-    notional: float = 1e10,
-    entry: str = "",
-    exit: str | None = None,
-) -> dict:
-    """Enter `series_id` on `entry` and revalue it daily to `exit` (default:
-    the data's last date). Full revaluation on each day's own curve, plus the
-    cash the position has settled — not a DV01 approximation (§backtest).
+@app.get("/api/backtest")
+def backtest(positions: str = "") -> dict:
+    """Revalue a BOOK of positions daily and sum them (§backtest).
 
-    LIVE ONLY, by design. Every other endpoint here has a static twin under
+    `positions` is a `;`-separated list, one position per entry, each
+    `id,direction,notional,entry[,exit]` — e.g.
+
+        10Y,1,1e10,2025-07-30;3Y-10Y,1,5e9,2026-01-02,2026-05-01
+
+    A query string rather than a POST body because every other route here is a
+    GET and a backtest is a question, not a submission: this way a book is a
+    URL somebody can paste to a colleague, which is the same property `?tile=`
+    gives the rest of the product.
+
+    LIVE ONLY, by design. Every other endpoint has a static twin under
     `frontend/public/api/**` that the deployed site serves; this one cannot,
     because the answer depends on inputs the reader chooses. Vercel runs the
     frontend and this backend runs behind it [OWNER, 2026-07-31], which is also
     what keeps §16 intact — the browser still computes nothing.
     """
-    if not entry:
-        raise HTTPException(status_code=422, detail="entry date is required")
+    if not positions.strip():
+        raise HTTPException(status_code=422, detail="at least one position is required")
+
+    parsed: list[Position] = []
+    for raw in positions.split(";"):
+        raw = raw.strip()
+        if not raw:
+            continue
+        parts = [p.strip() for p in raw.split(",")]
+        if len(parts) not in (4, 5):
+            raise HTTPException(
+                status_code=422,
+                detail=f"bad position {raw!r}: expected id,direction,notional,entry[,exit]",
+            )
+        try:
+            parsed.append(
+                Position(
+                    series_id=parts[0],
+                    direction=int(parts[1]),
+                    notional=float(parts[2]),
+                    entry=dt.date.fromisoformat(parts[3]),
+                    exit=dt.date.fromisoformat(parts[4]) if len(parts) == 5 and parts[4] else None,
+                )
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"bad position {raw!r}: {exc}")
+
     try:
-        return run_backtest(
-            _dataset,
-            series_id,
-            direction=direction,
-            notional=notional,
-            entry=dt.date.fromisoformat(entry),
-            exit_=dt.date.fromisoformat(exit) if exit else None,
-        )
-    except ValueError as exc:  # fromisoformat
-        raise HTTPException(status_code=422, detail=f"bad date: {exc}")
+        return run_backtest(_dataset, parsed)
     except BacktestError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 

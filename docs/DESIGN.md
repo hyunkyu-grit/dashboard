@@ -234,6 +234,32 @@ still pins. It took the enlarged chart's slot, because the pane chart is now
 pane-sized and a popup whose job was "the same line, bigger" had nothing left
 to do.
 
+**A BOOK, NOT ONE TRADE** [OWNER]. Positions are rows: instrument, side, size,
+entry AND exit, each independent — you leg in on different days and out on
+different days. The chart click seeds the first row; more come from the row's
+own dropdown or by clicking another instrument in the table behind (the sheet
+stays open and captures it). Capped at 12: past that the sheet is unreadable
+and each row is another full daily revaluation pass.
+
+- **A closed position freezes and keeps counting.** After its exit its
+  contribution stops responding to the market but stays in the total — money
+  that was made does not un-make itself, and a position that kept marking after
+  it was closed is the classic way a backtest flatters itself.
+- **A position contributes nothing before its entry**, or the book pays out on
+  a trade the desk had not put on.
+- **Every position is sampled on the SAME dates**, so the totals add point for
+  point. Sampling each on its own grid and summing would add figures from
+  different days — which would look right and be wrong.
+- **The chart draws the BOOK total only**; per position there are numbers, not
+  lines. Three or four curves on one axis is a chart nobody reads, and "which
+  one carried it" is answered faster by a column of figures.
+- The book total rounds the SUM while each position rounds its OWN figure, so
+  they can differ by up to half a won per position. Both cannot be exact; the
+  tests assert the difference is bounded rather than zero.
+- Positions are named the way the rest of the product names them (`3s10s`, not
+  the `3Y-10Y` id the server echoes) and the direction reads in the
+  instrument's own words (스티프너, not "롱").
+
 - **Full revaluation, not Δrate × DV01.** Each day the position is revalued on
   THAT day's bootstrapped curve, so the number carries roll-down and carry. The
   approximation is first-order in the rate and blind to time: it cannot see
@@ -262,12 +288,24 @@ to do.
 - Toss-style is a constraint on the NUMBERS as much as the paint: one big
   figure in plain Korean, controls that read as a sentence, and everything that
   is machinery (per-leg notionals, DV01, settled cash) under a fold.
-- `ui/BacktestSheet.tsx`, `backend/app/backtest.py`, `/api/backtest/{id}`.
+- `ui/BacktestSheet.tsx`, `backend/app/backtest.py`, `/api/backtest?positions=`
+  (`id,direction,notional,entry[,exit]` joined by `;` — a book is a URL you can
+  paste to a colleague, the same property `?tile=` gives the rest of the product).
 
 **Orphaned by this and NOT yet deleted:** `ui/EnlargedView.tsx` and
 `wall/DetailChart.tsx` (the app's only lightweight-charts use). The swap costs
 weekly/monthly candles and the six-basis readout, which the owner did not ask
 to lose — see the ⚠ note at the top of EnlargedView.
+
+### Stacking order
+
+**A modal is above chrome, always** (`ui/layers.ts`). The bottom strip is
+chrome at `z-40` and the backtest sheet was a modal at `z-30`, so the strip
+painted over the sheet — the numbers said the opposite of what the product
+means. The preview sheet at `z-20` had the same bug and nobody had opened it
+beside the strip yet. Named layers rather than a number at each call site,
+because these are picked in five files and the conflict is invisible until two
+of them are on screen together.
 
 ### The page gutter [OWNER, 2026-07-31]
 

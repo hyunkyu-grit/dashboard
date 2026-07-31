@@ -69,18 +69,9 @@ export const volatilityUrl = () =>
  * ask, and callers must say so rather than fetch a file that will never exist.
  * Returns null in that case — a URL here would 404 as HTML and surface as a
  * JSON parse error, which tells the reader nothing. */
-export function backtestUrl(
-  seriesId: string,
-  q: { direction: number; notional: number; entry: string; exit?: string },
-): string | null {
+export function backtestUrl(spec: string): string | null {
   if (IS_STATIC) return null;
-  const p = new URLSearchParams({
-    direction: String(q.direction),
-    notional: String(q.notional),
-    entry: q.entry,
-  });
-  if (q.exit) p.set("exit", q.exit);
-  return `${API_BASE}/api/backtest/${encodeURIComponent(seriesId)}?${p}`;
+  return `${API_BASE}/api/backtest?positions=${encodeURIComponent(spec)}`;
 }
 
 export const manifestUrl = () => "/api/manifest.json";

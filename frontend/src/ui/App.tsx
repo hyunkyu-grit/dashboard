@@ -30,6 +30,7 @@ import { classify } from "./gloss";
 import { diagramSpec } from "./payReceiveModel";
 import { BacktestSheet } from "./BacktestSheet";
 import { InstrumentTable } from "./InstrumentTable";
+import { Z_MODAL } from "./layers";
 import { SHEET_SPRING } from "./motion";
 import { PreviewPane } from "./PreviewPane";
 import { PAGE_R, PAGE_X, PAGE_X_PX } from "./pageGutter";
@@ -61,7 +62,7 @@ function PreviewSheet({
   const [ref, w] = useMeasure<HTMLDivElement>();
   return (
     <motion.div
-      className="fixed inset-0 z-20 flex items-end justify-center bg-page/70"
+      className={`fixed inset-0 ${Z_MODAL} flex items-end justify-center bg-page/70`}
       onClick={onClose}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -488,7 +489,9 @@ export function App() {
           >
             <BacktestSheet
               row={enlargedRow}
+              rows={rows}
               asOf={summary.asof}
+              captured={pinned}
               onClose={closeBacktest}
             />
           </ErrorBoundary>

@@ -13,6 +13,17 @@
  * notionals, DV01, settled cash) sits under a fold, because it is the answer to
  * a second question and putting it beside the first one makes neither readable.
  *
+ * A BOOK, NOT ONE TRADE [OWNER, 2026-07-31]. Positions are rows: instrument,
+ * side, size, entry AND exit, each independent — you leg in on different days
+ * and out on different days. The chart click seeds the first row; more come
+ * from the row's own dropdown, or by clicking another instrument in the table
+ * behind (the sheet stays open and captures it).
+ *
+ * The headline is the BOOK total and the chart draws only that line. Per
+ * position there are numbers, not lines: three or four curves on one axis is
+ * a chart nobody reads, and the question "which one carried it" is answered
+ * by a column of figures faster than by picking lines apart.
+ *
  * IT DOES NOT RUN ON ITS OWN. The user presses 실행. A backtest is a question
  * someone asks, not a thing that happens while they are still typing the date,
  * and each run is a full daily revaluation on the server.
@@ -24,16 +35,17 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { motion, type PanInfo } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   BacktestUnavailable,
   fetchBacktest,
   type BacktestResult,
+  type PositionInput,
 } from "@/lib/api";
 
 import { ErrorBoundary } from "./ErrorBoundary";
-import { instrumentSubtitle } from "./gloss";
+import { Z_MODAL } from "./layers";
 import { SHEET_SPRING } from "./motion";
 import type { Row } from "./rows";
 
@@ -51,6 +63,10 @@ export function fmtKrw(v: number): string {
 /** 억 in, raw won out. The input is in 억 because nobody types eleven zeros. */
 const EOK = 100_000_000;
 
+/** Mirrors `backtest.MAX_POSITIONS`. Past this the sheet is unreadable and
+ * each extra row is another full daily revaluation pass on the server. */
+const MAX_POSITIONS = 12;
+
 const SIDE_WORDS: Record<string, [string, string]> = {
   // group → [what +1 is called, what -1 is called]
   outright: ["고정 지급", "고정 수취"],
@@ -58,10 +74,6 @@ const SIDE_WORDS: Record<string, [string, string]> = {
   fly: ["벨리 지급", "벨리 수취"],
   forward: ["고정 지급", "고정 수취"],
 };
-
-function sideWords(row: Row): [string, string] {
-  return SIDE_WORDS[row.group] ?? SIDE_WORDS.outright;
-}
 
 /** One year before the data's last date, ISO. Empty when there is no as-of
  * yet — the run button stays disabled until there is. */
@@ -159,7 +171,7 @@ function PnlChart({
         className="fill-ink"
         style={{ fontSize: 10, opacity: 0.45 }}
       >
-        {result.entry}
+        {result.from}
       </text>
       <text
         x={width - PAD.right}
@@ -168,24 +180,41 @@ function PnlChart({
         className="fill-ink"
         style={{ fontSize: 10, opacity: 0.45 }}
       >
-        {result.exit}
+        {result.to}
       </text>
     </svg>
   );
 }
 
-function Result({ result, row }: { result: BacktestResult; row: Row }) {
-  const up = result.pnl >= 0;
-  const unit = row.unit === "%" ? "%" : "bp";
-  const moved =
-    result.entryValue != null && result.exitValue != null
-      ? result.exitValue - result.entryValue
-      : null;
+function fmtMove(p: {
+  entryValue: number | null;
+  exitValue: number | null;
+  id: string;
+}): string {
+  if (p.entryValue == null || p.exitValue == null) return "";
+  // outrights are quoted in %, spreads and flies in bp — the id's leg count
+  // is what distinguishes them, the same rule rows.ts routes groups by
+  const isPct = !p.id.includes("-") && !p.id.includes("x");
+  const d = (p.exitValue - p.entryValue) * (isPct ? 100 : 1);
+  return `${p.entryValue} → ${p.exitValue} (${d >= 0 ? "+" : "−"}${Math.abs(d).toFixed(1)}bp)`;
+}
 
+function Result({
+  result,
+  naming,
+}: {
+  result: BacktestResult;
+  /** id → how the rest of the product names it. The server echoes the id it
+   * was given (`3Y-10Y`); every other surface says `3s10s`, and a backtest
+   * that names instruments differently from the table above it is two
+   * products. */
+  naming: Map<string, { label: string; group: string }>;
+}) {
+  const up = result.pnl >= 0;
   return (
     <div className="mt-5">
       <p className="text-[13px] opacity-55">
-        {result.entry}에 들어갔다면 {result.exit} 기준
+        {result.from} → {result.to} · 포지션 {result.positions.length}개
       </p>
       <p
         className={`mt-1 text-[34px] font-bold leading-tight tabular-nums ${
@@ -194,14 +223,6 @@ function Result({ result, row }: { result: BacktestResult; row: Row }) {
       >
         {fmtKrw(result.pnl)}
       </p>
-      {moved != null && (
-        <p className="mt-1 text-[13px] opacity-55 tabular-nums">
-          {result.entryValue}
-          {unit} → {result.exitValue}
-          {unit} ({moved >= 0 ? "+" : "−"}
-          {Math.abs(row.unit === "%" ? moved * 100 : moved).toFixed(1)}bp)
-        </p>
-      )}
 
       <div className="mt-4">
         <PnlChart result={result} width={880} height={200} />
@@ -218,96 +239,247 @@ function Result({ result, row }: { result: BacktestResult; row: Row }) {
         </span>
       </div>
 
-      {/* The machinery, folded. It answers "how was this built", which is a
-          different question from "what did it make", and side by side neither
-          is readable. */}
+      {/* Which position carried it. Numbers, not lines — see the header note. */}
+      <table className="mt-5 w-full text-[13px] tabular-nums">
+        <thead className="text-left text-ink/50">
+          <tr>
+            <th className="pb-1 font-normal">종목</th>
+            <th className="pb-1 font-normal">방향</th>
+            <th className="pb-1 text-right font-normal">명목</th>
+            <th className="pb-1 font-normal">기간</th>
+            <th className="pb-1 text-right font-normal">손익</th>
+          </tr>
+        </thead>
+        <tbody>
+          {result.positions.map((p, i) => (
+            <tr key={`${p.id}-${i}`} className="border-t border-edge">
+              <td className="py-1.5 font-semibold">
+                {naming.get(p.id)?.label ?? p.id}
+              </td>
+              <td className="py-1.5">
+                {
+                  (SIDE_WORDS[naming.get(p.id)?.group ?? "outright"] ??
+                    SIDE_WORDS.outright)[p.direction > 0 ? 0 : 1]
+                }
+              </td>
+              <td className="py-1.5 text-right">
+                {(p.notional / EOK).toLocaleString(undefined, {
+                  maximumFractionDigits: 0,
+                })}
+                억
+              </td>
+              <td className="py-1.5 text-[12px] opacity-60">
+                {p.entry} → {p.exit}
+                {p.closed && <span className="ml-1 opacity-70">(청산)</span>}
+              </td>
+              <td
+                className={`py-1.5 text-right font-semibold ${
+                  p.pnl >= 0 ? "text-up" : "text-down"
+                }`}
+              >
+                {fmtKrw(p.pnl)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
       <details className="mt-5">
         <summary className="cursor-pointer text-[13px] opacity-50 hover:opacity-80">
           자세히 — 다리별 구성과 정산
         </summary>
-        <table className="mt-3 w-full text-[13px] tabular-nums">
-          <thead className="text-left text-ink/50">
-            <tr>
-              <th className="pb-1 font-normal">다리</th>
-              <th className="pb-1 font-normal">방향</th>
-              <th className="pb-1 text-right font-normal">명목</th>
-              <th className="pb-1 text-right font-normal">진입금리</th>
-              <th className="pb-1 text-right font-normal">DV01</th>
-            </tr>
-          </thead>
-          <tbody>
-            {result.legs.map((l) => (
-              <tr key={l.tenor} className="border-t border-edge">
-                <td className="py-1 font-semibold">{l.tenor}</td>
-                <td className="py-1">{l.side === "pay" ? "지급" : "수취"}</td>
-                <td className="py-1 text-right">
-                  {(l.notional / EOK).toLocaleString(undefined, {
-                    maximumFractionDigits: 1,
-                  })}
-                  억
-                </td>
-                <td className="py-1 text-right">{l.entryRate}%</td>
-                <td className="py-1 text-right">
-                  {(l.dv01 * l.notional * 1e-4).toLocaleString(undefined, {
-                    maximumFractionDigits: 0,
-                  })}
-                  원/bp
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {result.positions.map((p, i) => (
+          <div key={`${p.id}-${i}`} className="mt-3">
+            <p className="text-[12px] font-semibold opacity-70">
+              {naming.get(p.id)?.label ?? p.id} · {fmtMove(p)}
+            </p>
+            <table className="mt-1 w-full text-[13px] tabular-nums">
+              <tbody>
+                {p.legs.map((l) => (
+                  <tr key={l.tenor} className="border-t border-edge">
+                    <td className="py-1 font-semibold">{l.tenor}</td>
+                    <td className="py-1">{l.side === "pay" ? "지급" : "수취"}</td>
+                    <td className="py-1 text-right">
+                      {(l.notional / EOK).toLocaleString(undefined, {
+                        maximumFractionDigits: 1,
+                      })}
+                      억
+                    </td>
+                    <td className="py-1 text-right">{l.entryRate}%</td>
+                    <td className="py-1 text-right">
+                      {(l.dv01 * l.notional * 1e-4).toLocaleString(undefined, {
+                        maximumFractionDigits: 0,
+                      })}
+                      원/bp
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-1 text-[12px] opacity-50">
+              누적 정산현금 {fmtKrw(p.cash)}
+            </p>
+          </div>
+        ))}
         <p className="mt-3 text-[12px] leading-relaxed opacity-55">
           매일 그날의 커브로 다시 평가하고, 그동안 실제로 정산된 현금을 더한
           값입니다. 금리 변동분만 곱한 근사치가 아니라 잔존만기가 줄어드는
           효과(롤다운)와 캐리가 들어 있습니다. 다리가 둘 이상이면 진입일 DV01
-          중립 비율로 명목을 잡았습니다.
-          {result.points.length > 0 && (
-            <>
-              {" "}
-              누적 정산현금{" "}
-              {fmtKrw(result.points[result.points.length - 1].cash)}.
-            </>
-          )}
+          중립 비율로 명목을 잡았습니다. 청산한 포지션은 청산일 손익에서 멈추고,
+          그 값은 합계에 계속 남습니다.
         </p>
       </details>
     </div>
   );
 }
 
+/** One editable row of the book. */
+function PositionRow({
+  value,
+  choices,
+  asOf,
+  onChange,
+  onRemove,
+  removable,
+}: {
+  value: PositionInput;
+  choices: { id: string; label: string; group: string }[];
+  asOf?: string;
+  onChange: (next: PositionInput) => void;
+  onRemove: () => void;
+  removable: boolean;
+}) {
+  const pick = choices.find((c) => c.id === value.id);
+  const [long, short] =
+    SIDE_WORDS[pick?.group ?? "outright"] ?? SIDE_WORDS.outright;
+  const set = (patch: Partial<PositionInput>) => onChange({ ...value, ...patch });
+
+  return (
+    <div className="flex flex-wrap items-end gap-2 border-b border-edge py-2.5">
+      <Field label="종목">
+        <select
+          value={value.id}
+          onChange={(e) => set({ id: e.target.value })}
+          className={`${INPUT} max-w-[13rem]`}
+        >
+          {choices.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="방향">
+        <select
+          value={value.direction}
+          onChange={(e) => set({ direction: Number(e.target.value) })}
+          className={INPUT}
+        >
+          <option value={1}>{long}</option>
+          <option value={-1}>{short}</option>
+        </select>
+      </Field>
+      <Field label="명목">
+        <div className="flex items-center gap-1">
+          <input
+            type="number"
+            min={1}
+            value={value.eok}
+            onChange={(e) => set({ eok: Math.max(1, Number(e.target.value)) })}
+            className={`${INPUT} w-20 text-right`}
+          />
+          <span className="text-[14px] opacity-55">억</span>
+        </div>
+      </Field>
+      <Field label="진입일">
+        <input
+          type="date"
+          value={value.entry}
+          max={asOf}
+          onChange={(e) => set({ entry: e.target.value })}
+          className={INPUT}
+        />
+      </Field>
+      <Field label="청산일">
+        <input
+          type="date"
+          value={value.exit}
+          max={asOf}
+          onChange={(e) => set({ exit: e.target.value })}
+          className={INPUT}
+        />
+      </Field>
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={!removable}
+        title="이 포지션 빼기"
+        className="rounded-[10px] px-2 py-2 text-[16px] opacity-40 hover:opacity-90 disabled:opacity-15"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+/** A fresh row, seeded from an instrument id. */
+function newRow(id: string, asOf: string | undefined): PositionInput {
+  return { id, direction: 1, eok: 100, entry: defaultEntry(asOf), exit: "" };
+}
+
 export function BacktestSheet({
   row,
+  rows,
   asOf,
+  captured,
   onClose,
 }: {
   row: Row;
-  /** the dataset's last date — the default 종료일 and the latest allowed */
+  /** every instrument the app knows, for the per-row dropdown */
+  rows: Row[];
+  /** the dataset's last date — the default 청산일 and the latest allowed */
   asOf?: string;
+  /** an instrument clicked in the table BEHIND the sheet, to be appended */
+  captured?: Row | null;
   onClose: () => void;
 }) {
-  const [pay, receive] = sideWords(row);
-  const [direction, setDirection] = useState(1);
-  const [eok, setEok] = useState(100);
-  const [entryRaw, setEntry] = useState("");
-  const [exit, setExit] = useState("");
+  const choices = useMemo(
+    () =>
+      rows
+        // a volatility ratio is not a position anyone can put on
+        .filter((r) => r.group !== "vol")
+        .map((r) => ({ id: r.seriesId ?? r.id, label: r.label, group: r.group })),
+    [rows],
+  );
 
-  /* A year back from the data's end, so the sheet opens ready to RUN rather
-   * than ready to be filled in. Derived during render, not set by an effect:
-   * setState in an effect body is lint-banned here, and it would also flash an
-   * empty date field for one frame before correcting itself. `entryRaw` is the
-   * user's choice and empty means "not chosen yet", which is a fine thing for
-   * state to mean — the default lives in the expression below. */
-  const entry = entryRaw || defaultEntry(asOf);
+  const naming = useMemo(
+    () =>
+      new Map(
+        rows.map((r) => [
+          r.seriesId ?? r.id,
+          { label: r.label, group: r.group as string },
+        ]),
+      ),
+    [rows],
+  );
 
-  const run = useMutation({
-    mutationFn: () =>
-      fetchBacktest(row.seriesId ?? row.id, {
-        direction,
-        notional: eok * EOK,
-        entry,
-        exit: exit || undefined,
-      }),
-  });
+  const [book, setBook] = useState<PositionInput[]>(() => [
+    newRow(row.seriesId ?? row.id, asOf),
+  ]);
+
+  /* An instrument clicked in the TABLE BEHIND the sheet is appended as a row.
+   * Guarded by the last id seen, because `captured` stays set until the click
+   * that replaces it — without this, any unrelated re-render would append the
+   * same instrument again. */
+  const lastCaptured = useRef<string | null>(null);
+  useEffect(() => {
+    const id = captured?.seriesId ?? captured?.id ?? null;
+    if (!id || id === lastCaptured.current) return;
+    lastCaptured.current = id;
+    setBook((b) => (b.length >= MAX_POSITIONS ? b : [...b, newRow(id, asOf)]));
+  }, [captured, asOf]);
+
+  const run = useMutation({ mutationFn: () => fetchBacktest(book) });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -321,12 +493,12 @@ export function BacktestSheet({
     if (info.offset.y > 120 || info.velocity.y > 500) onClose();
   };
 
-  const gloss = useMemo(() => instrumentSubtitle(row), [row]);
   const unavailable = run.error instanceof BacktestUnavailable;
+  const ready = book.length > 0 && book.every((b) => b.entry);
 
   return (
     <motion.div
-      className="fixed inset-0 z-30 flex items-end justify-center bg-page/70"
+      className={`fixed inset-0 ${Z_MODAL} flex items-end justify-center bg-page/70`}
       onClick={onClose}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -348,70 +520,55 @@ export function BacktestSheet({
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-edge" />
         <ErrorBoundary fallback="백테스트 화면을 그리지 못했어요">
           <div className="flex items-baseline gap-2">
-            <span className="text-[22px] font-bold">{row.label}</span>
-            <span className="text-[13px] opacity-50">{gloss}</span>
+            <span className="text-[22px] font-bold">백테스트</span>
+            <span className="text-[13px] opacity-50">
+              그때 들어갔으면 지금 얼마였을까
+            </span>
           </div>
-          <p className="mt-0.5 text-[13px] opacity-55">
-            그때 들어갔으면 지금 얼마였을까
-          </p>
 
-          {/* the controls, as a sentence rather than a stack of labelled boxes */}
-          <div className="mt-4 flex flex-wrap items-end gap-3">
-            <Field label="방향">
-              <select
-                value={direction}
-                onChange={(e) => setDirection(Number(e.target.value))}
-                className={INPUT}
-              >
-                <option value={1}>{pay}</option>
-                <option value={-1}>{receive}</option>
-              </select>
-            </Field>
-            <Field label="명목">
-              <div className="flex items-center gap-1">
-                <input
-                  type="number"
-                  min={1}
-                  value={eok}
-                  onChange={(e) => setEok(Math.max(1, Number(e.target.value)))}
-                  className={`${INPUT} w-24 text-right`}
-                />
-                <span className="text-[14px] opacity-55">억</span>
-              </div>
-            </Field>
-            <Field label="진입일">
-              <input
-                type="date"
-                value={entry}
-                max={asOf}
-                onChange={(e) => setEntry(e.target.value)}
-                className={INPUT}
+          <div className="mt-3">
+            {book.map((b, i) => (
+              <PositionRow
+                key={i}
+                value={b}
+                choices={choices}
+                asOf={asOf}
+                removable={book.length > 1}
+                onChange={(next) =>
+                  setBook((prev) => prev.map((p, j) => (j === i ? next : p)))
+                }
+                onRemove={() => setBook((prev) => prev.filter((_, j) => j !== i))}
               />
-            </Field>
-            <Field label="종료일">
-              <input
-                type="date"
-                value={exit}
-                max={asOf}
-                placeholder={asOf}
-                onChange={(e) => setExit(e.target.value)}
-                className={INPUT}
-              />
-            </Field>
+            ))}
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() =>
+                setBook((b) => [
+                  ...b,
+                  newRow(b[b.length - 1]?.id ?? choices[0]?.id ?? "", asOf),
+                ])
+              }
+              disabled={book.length >= MAX_POSITIONS}
+              className="rounded-[10px] border border-edge px-3 py-2 text-[13px] disabled:opacity-40"
+            >
+              + 포지션 추가
+            </button>
             <button
               type="button"
               onClick={() => run.mutate()}
-              disabled={!entry || run.isPending}
+              disabled={!ready || run.isPending}
               className="rounded-[10px] bg-ink px-5 py-2 text-[14px] font-semibold text-page disabled:opacity-40"
             >
               {run.isPending ? "계산 중…" : "실행"}
             </button>
+            <span className="text-[12px] opacity-45">
+              청산일을 비우면 {asOf ?? "마지막 영업일"}까지 · 뒤 표에서 종목을
+              눌러도 추가됩니다
+            </span>
           </div>
-          {!exit && (
-            <p className="mt-1.5 text-[12px] opacity-45">
-              종료일을 비우면 {asOf ?? "마지막 영업일"}까지 계산합니다
-            </p>
-          )}
 
           {unavailable && (
             <div className="mt-6 rounded-[12px] bg-page p-4 text-[13px] leading-relaxed">
@@ -429,7 +586,7 @@ export function BacktestSheet({
           {run.error && !unavailable && (
             <p className="mt-6 text-[13px] text-up">{run.error.message}</p>
           )}
-          {run.data && <Result result={run.data} row={row} />}
+          {run.data && <Result result={run.data} naming={naming} />}
           {!run.data && !run.error && !run.isPending && (
             <p className="mt-8 text-center text-[14px] opacity-45">
               조건을 정하고 실행을 눌러 주세요

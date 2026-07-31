@@ -312,41 +312,68 @@ export interface BacktestLeg {
   dv01: number;      // per unit notional, at the entry curve
 }
 
-export interface BacktestPoint {
-  t: string;
-  /** dirty NPV change since entry PLUS settled cash — continuous across
-   * coupon dates, which `npv` alone is not. This is the line to draw. */
-  pnl: number;
-  npv: number;
-  cash: number;
-}
-
-export interface BacktestResult {
+/** One line of the book, as the server priced it. */
+export interface BacktestPosition {
   id: string;
-  direction: number; // +1 long the quoted value, -1 the other side
+  direction: number;
   notional: number;
   entry: string;
   exit: string;
+  /** true when it was closed BEFORE the data ends — after that its P&L is
+   * frozen and still counted, so a closed winner keeps contributing. */
+  closed: boolean;
   legs: BacktestLeg[];
-  entryValue: number | null; // the instrument's own quote, % or bp
+  entryValue: number | null;
   exitValue: number | null;
-  points: BacktestPoint[];
+  pnl: number;
+  /** closing scalars, not paths — the sheet draws the book total only */
+  cash: number;
+  npv: number;
+}
+
+export interface BacktestResult {
+  positions: BacktestPosition[];
+  from: string;
+  to: string;
+  /** the BOOK total per date; positions carry their own closing figures */
+  points: { t: string; pnl: number }[];
   pnl: number;
   maxProfit: number;
   maxLoss: number;
 }
 
+/** What the user typed, before the server prices it. */
+export interface PositionInput {
+  id: string;
+  direction: number;
+  /** in 억 — nobody types eleven zeros */
+  eok: number;
+  entry: string;
+  exit: string;
+}
+
+/** `id,direction,notional,entry[,exit]` joined by `;` — see the endpoint.
+ * A book is a URL somebody can paste to a colleague, which is the same
+ * property `?tile=` gives the rest of the product. */
+export function encodePositions(rows: PositionInput[]): string {
+  return rows
+    .map((r) =>
+      [r.id, r.direction, r.eok * 1e8, r.entry, r.exit].
+        filter((v, i) => i < 4 || v !== "").join(","),
+    )
+    .join(";");
+}
+
 export async function fetchBacktest(
-  seriesId: string,
-  q: { direction: number; notional: number; entry: string; exit?: string },
+  rows: PositionInput[],
 ): Promise<BacktestResult> {
-  const url = backtestUrl(seriesId, q);
+  const url = backtestUrl(encodePositions(rows));
   if (url === null) throw new BacktestUnavailable();
   const r = await fetch(url);
   if (!r.ok) {
     // the backend returns 422 with a readable reason; surface it verbatim
     const detail = await r.json().catch(() => null);
-    throw new Error(detail?.detail ?? `backtest ${seriesId}: HTTP ${r.status}`);
+    throw new Error(detail?.detail ?? `backtest: HTTP ${r.status}`);
   }
   return r.json();
 }

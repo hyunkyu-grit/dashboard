@@ -3,6 +3,18 @@
 [OWNER, 2026-07-31] "며칠부터 며칠사이에 어떤 포지션으로 들어갔을 때 현재 기준
 또는 특정일자까지 손익이 어떻게 움직였을 것이다."
 
+A BOOK, NOT ONE TRADE [OWNER, 2026-07-31]. Several positions, each with its
+own instrument, side, size, entry date AND exit date — you leg into things on
+different days and out of them on different days. The published line is the
+book total; each position also reports its own P&L so the total can be read
+back to what made it.
+
+A closed position stops moving. After its exit its contribution is FROZEN at
+the P&L it had on that date, so it keeps counting toward the book total (that
+money was made) without responding to a market it is no longer in. A position
+that kept marking after it was closed is the classic way a backtest flatters
+itself, so it is asserted rather than assumed.
+
 WHAT THIS IS. On the entry date the position is struck at that day's own par
 rates, so it is worth ~nothing. Every business day after, the swap is revalued
 on THAT day's bootstrapped curve, and the P&L is the change in dirty NPV plus
@@ -61,6 +73,10 @@ CD_TENOR = "3M"
 # ten-year backtest is ~2,600 business days and the chart is ~1,100px wide, so
 # every point beyond this is a number nobody can see (§20).
 MAX_POINTS = 400
+
+# A book, not a portfolio system. Past this the sheet is unreadable and each
+# extra position is another full daily revaluation pass.
+MAX_POSITIONS = 12
 
 
 class BacktestError(Exception):
@@ -211,69 +227,85 @@ def _thin(idx: list[int], keep: int) -> list[int]:
     return out
 
 
-def run_backtest(
-    dataset: Dataset,
-    series_id: str,
-    direction: int,
-    notional: float,
-    entry: dt.date,
-    exit_: dt.date | None = None,
-) -> dict:
-    """Revalue `series_id` daily from `entry` to `exit_` (default: the data's
-    last date). `direction` is +1 for a position long the quoted value — pay
-    fixed on an outright, a steepener on a spread — and -1 for the other side.
+@dataclass
+class Position:
+    """One line of the book, as the caller states it."""
+
+    series_id: str
+    direction: int
+    notional: float
+    entry: dt.date
+    exit: dt.date | None = None
+
+
+def _run_one(
+    dataset: Dataset, pos: Position, sample: list[int]
+) -> tuple[dict, dict[int, float]]:
+    """One position: its record, and its P&L at each sampled index.
+
+    A position contributes NOTHING before its entry and stays FROZEN at its
+    closing P&L after its exit. Both matter: a position that started paying
+    before it was opened would be free money, and one that kept marking after
+    it was closed is the classic way a backtest flatters itself.
     """
-    if direction not in (1, -1):
+    if pos.direction not in (1, -1):
         raise BacktestError("direction must be +1 or -1")
-    if notional <= 0:
+    if pos.notional <= 0:
         raise BacktestError("notional must be positive")
 
     known = {sid for sid, _k, _l in derived_ids()} | set(dataset.series)
-    if series_id not in known:
-        raise BacktestError(f"unknown instrument {series_id!r}")
+    if pos.series_id not in known:
+        raise BacktestError(f"unknown instrument {pos.series_id!r}")
 
     dates = dataset.dates
-    entry_i = _index_on_or_after(dates, entry)
-    exit_i = _index_on_or_before(dates, exit_) if exit_ else len(dates) - 1
+    entry_i = _index_on_or_after(dates, pos.entry)
+    exit_i = _index_on_or_before(dates, pos.exit) if pos.exit else len(dates) - 1
     if exit_i <= entry_i:
-        raise BacktestError("the exit date must be after the entry date")
-
-    legs = _build_legs(dataset, series_id, notional, entry_i)
-    for leg in legs:
-        leg.sign *= direction
-
-    entry_date = dates[entry_i]
-    # Struck at par on the entry curve, so this is ~0; subtracting it rather
-    # than assuming zero is what keeps the line honest when it is not (a
-    # forward-starting leg, or an interpolated tenor off its own node).
-    base_fixings = _cd_fixings(dataset, entry_i)
-    base_npv = _value_on(legs, dataset, entry_i, entry_date, base_fixings)
-
-    sampled = _thin(list(range(entry_i, exit_i + 1)), MAX_POINTS)
-    points = []
-    for i in sampled:
-        d = dates[i]
-        fx = _cd_fixings(dataset, i)
-        npv = _value_on(legs, dataset, i, entry_date, fx)
-        cash = _settled_to(legs, entry_date, d, fx)
-        points.append(
-            {
-                "t": d.isoformat(),
-                # dirty + settled cash, so coupon dates do not saw the line
-                "pnl": round(npv - base_npv + cash, 0),
-                "npv": round(npv, 0),
-                "cash": round(cash, 0),
-            }
+        raise BacktestError(
+            f"{pos.series_id}: the exit date must be after the entry date"
         )
 
-    quoted = _quoted_value(dataset, series_id, entry_i), _quoted_value(dataset, series_id, exit_i)
-    pnls = [p["pnl"] for p in points]
-    return {
-        "id": series_id,
-        "direction": direction,
-        "notional": notional,
+    legs = _build_legs(dataset, pos.series_id, pos.notional, entry_i)
+    for leg in legs:
+        leg.sign *= pos.direction
+
+    entry_date = dates[entry_i]
+    base = _value_on(legs, dataset, entry_i, entry_date, _cd_fixings(dataset, entry_i))
+
+    # Valued only on the sampled dates INSIDE its own life, plus its exit — so
+    # the frozen tail is the real closing figure, not the last sample before it.
+    live = [i for i in sample if entry_i <= i <= exit_i]
+    if exit_i not in live:
+        live.append(exit_i)
+
+    own: dict[int, float] = {}
+    cash_at: dict[int, float] = {}
+    npv_at: dict[int, float] = {}
+    last = 0.0
+    for i in live:
+        fx = _cd_fixings(dataset, i)
+        npv = _value_on(legs, dataset, i, entry_date, fx)
+        cash = _settled_to(legs, entry_date, dates[i], fx)
+        own[i] = last = npv - base + cash
+        cash_at[i] = cash
+        npv_at[i] = npv
+
+    series = {}
+    for i in sample:
+        if i < entry_i:
+            series[i] = 0.0            # not yet on
+        elif i > exit_i:
+            series[i] = last           # closed: frozen, still counted
+        else:
+            series[i] = own[i]
+
+    record = {
+        "id": pos.series_id,
+        "direction": pos.direction,
+        "notional": pos.notional,
         "entry": entry_date.isoformat(),
         "exit": dates[exit_i].isoformat(),
+        "closed": pos.exit is not None and exit_i < len(dates) - 1,
         "legs": [
             {
                 "tenor": leg.tenor,
@@ -284,8 +316,90 @@ def run_backtest(
             }
             for leg in legs
         ],
-        "entryValue": quoted[0],
-        "exitValue": quoted[1],
+        "entryValue": _quoted_value(dataset, pos.series_id, entry_i),
+        "exitValue": _quoted_value(dataset, pos.series_id, exit_i),
+        "pnl": round(last, 0),
+        # Closing scalars, not paths. The sheet shows accumulated carry per
+        # position; shipping a full npv/cash series for each would be 12 × 400
+        # × 2 numbers to draw one total line. `trace()` below reconstructs the
+        # path when something needs to look at it.
+        "cash": round(cash_at.get(exit_i, 0.0), 0),
+        "npv": round(npv_at.get(exit_i, 0.0), 0),
+    }
+    return record, series
+
+
+def trace(dataset: Dataset, pos: Position) -> list[dict]:
+    """One position's full daily path: pnl, npv and settled cash per date.
+
+    Not served by any endpoint — the sheet draws the book total and needs only
+    closing scalars per position, and shipping this for a dozen positions would
+    be thousands of numbers to draw one line. It exists because the properties
+    worth asserting about this engine (cash steps only on payment dates, and
+    each step equal to the real net coupon) are properties of the PATH, and a
+    test that cannot see the path cannot check them.
+    """
+    dates = dataset.dates
+    entry_i = _index_on_or_after(dates, pos.entry)
+    exit_i = _index_on_or_before(dates, pos.exit) if pos.exit else len(dates) - 1
+    legs = _build_legs(dataset, pos.series_id, pos.notional, entry_i)
+    for leg in legs:
+        leg.sign *= pos.direction
+    entry_date = dates[entry_i]
+    base = _value_on(legs, dataset, entry_i, entry_date, _cd_fixings(dataset, entry_i))
+
+    out = []
+    for i in _thin(list(range(entry_i, exit_i + 1)), MAX_POINTS):
+        fx = _cd_fixings(dataset, i)
+        npv = _value_on(legs, dataset, i, entry_date, fx)
+        cash = _settled_to(legs, entry_date, dates[i], fx)
+        out.append(
+            {"t": dates[i].isoformat(), "pnl": round(npv - base + cash, 0),
+             "npv": round(npv, 0), "cash": round(cash, 0)}
+        )
+    return out
+
+
+def run_backtest(dataset: Dataset, positions: list[Position]) -> dict:
+    """Revalue a BOOK of positions daily and sum them.
+
+    The book's window is the earliest entry to the latest exit, and every
+    position is sampled on the same dates so the totals add up point for point
+    — sampling each on its own grid and summing would compare figures from
+    different days.
+    """
+    if not positions:
+        raise BacktestError("at least one position is required")
+    if len(positions) > MAX_POSITIONS:
+        raise BacktestError(f"at most {MAX_POSITIONS} positions")
+
+    dates = dataset.dates
+    first = min(_index_on_or_after(dates, p.entry) for p in positions)
+    last = max(
+        _index_on_or_before(dates, p.exit) if p.exit else len(dates) - 1
+        for p in positions
+    )
+    sample = _thin(list(range(first, last + 1)), MAX_POINTS)
+
+    records = []
+    series: list[dict[int, float]] = []
+    for pos in positions:
+        rec, own = _run_one(dataset, pos, sample)
+        records.append(rec)
+        series.append(own)
+
+    points = [
+        {
+            "t": dates[i].isoformat(),
+            "pnl": round(sum(s[i] for s in series), 0),
+        }
+        for i in sample
+    ]
+    pnls = [p["pnl"] for p in points]
+    return {
+        "positions": records,
+        "from": dates[first].isoformat(),
+        "to": dates[last].isoformat(),
         "points": points,
         "pnl": pnls[-1] if pnls else 0.0,
         "maxProfit": max(pnls) if pnls else 0.0,
