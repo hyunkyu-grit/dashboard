@@ -70,8 +70,18 @@ export const volatilityUrl = () =>
  * Returns null in that case — a URL here would 404 as HTML and surface as a
  * JSON parse error, which tells the reader nothing. */
 export function backtestUrl(spec: string): string | null {
-  if (IS_STATIC) return null;
-  return `${API_BASE}/api/backtest?positions=${encodeURIComponent(spec)}`;
+  const q = `positions=${encodeURIComponent(spec)}`;
+  // Development against a live backend: the explicit origin.
+  if (!IS_STATIC) return `${API_BASE}/api/backtest?${q}`;
+  /* Deployed: a SAME-ORIGIN path, proxied to the backend by the Next rewrite
+   * in next.config.ts when BACKEND_ORIGIN is set there. Same-origin on purpose
+   * — an absolute origin in the bundle is what
+   * `guards/production-env.test.ts` forbids, and it would need CORS too.
+   *
+   * With no rewrite configured this 404s, which `fetchBacktest` turns into the
+   * "백엔드가 필요한 화면이에요" panel. That is the honest answer: the route
+   * genuinely is not there. */
+  return `/api/backtest?${q}`;
 }
 
 export const manifestUrl = () => "/api/manifest.json";

@@ -49,7 +49,7 @@ goes from ~70 s to ~200 s, so any timing taken then is meaningless.
       Next.js project at its root. With this unset the build fails immediately
       (no `package.json`), which is the good failure — but set it anyway.
       `frontend/vercel.json` only takes effect with this set.
-- [ ] **Set no environment variables.** In particular do **not** set
+- [ ] **Set no `NEXT_PUBLIC_*` variables.** In particular do **not** set
       `NEXT_PUBLIC_API_BASE`. Empty means "read the committed JSON tree", which
       is the deployed behaviour; setting it points the browser at a backend
       that will not exist, and because `NEXT_PUBLIC_*` is inlined at build time
@@ -63,6 +63,39 @@ goes from ~70 s to ~200 s, so any timing taken then is meaningless.
       the config files and the emitted chunks. If you ever add a Vercel
       environment variable, that guard will not save you — it cannot see the
       dashboard.
+### The backtest is the one thing that is NOT static (2026-07-31)
+
+Everything above still holds: the site reads committed JSON and needs no
+backend. The backtest is the exception and cannot be made one — its answer
+depends on inputs the reader chooses, so there is no file to bake.
+
+- [ ] **Leave `BACKEND_ORIGIN` unset** unless a backend is actually reachable.
+      Unset emits no rewrite, `/api/backtest` 404s, and the sheet says a
+      backend is needed. Every other surface is unaffected.
+- [ ] When a backend does exist, set **`BACKEND_ORIGIN`** (server-side, NOT
+      `NEXT_PUBLIC_*`) to its origin. `next.config.ts` proxies
+      `/api/backtest` to it, so the browser only ever calls its own origin —
+      which keeps `guards/production-env.test.ts` green and removes CORS from
+      the picture. The backend's CORS list allows only `localhost:3100`, so a
+      direct browser call from the deployed site would be blocked anyway.
+
+**Prior art, and it is this owner's own.** `krw-fi-pms` ran exactly this
+topology — see `Rates Portfolio/deploy-prep/VERCEL_PRECHECK.md`: *"FE deploys
+to Vercel; BE stays local as an NSSM service"*, exposed through a Cloudflare
+tunnel, with a `next.config` rewrite reading a server-side `BACKEND_URL`.
+`deploy-prep/tools/` still holds the hash-verified `nssm.exe` and
+`cloudflared.exe`.
+
+The constraint that made that deployment hard does **not** apply here. Vercel's
+CDN allows 120 s to first byte on an external rewrite, and krw-fi-pms's
+`simulate` ran 106–118 s against it — a 1–13% margin the precheck called
+"technically passing on a warm day and operationally reckless", which is why it
+needed three lanes. A backtest is **0.6 s for ten years on one position, 3.4 s
+for three**, so the plain rewrite lane is not close to the wall.
+
+What it does inherit: **the backend is on a machine, and if that machine is off
+the backtest is off.** Nothing else on the site notices.
+
 - [ ] Confirm the build command is the framework default (`next build`). No
       Python step. Verified locally: the build succeeds with Python removed
       from `PATH` and no `.env.local` present.

@@ -40,6 +40,35 @@ const nextConfig: NextConfig = {
   // the dark floating dev indicator is not part of the product and sat over
   // the bottom-left of the table during layout checks (carry session, Pass D)
   devIndicators: false,
+  /* The backtest's route to a deployed backend (§backtest).
+   *
+   * Every other endpoint is a committed JSON file the deployed site serves
+   * itself. The backtest cannot be: its answer depends on inputs the reader
+   * chooses, so it needs the live FastAPI app. That app is not on Vercel —
+   * Vercel runs the frontend and a backend runs behind it [OWNER].
+   *
+   * A REWRITE, not `NEXT_PUBLIC_API_BASE`. The env var would be inlined into
+   * the browser bundle, and `guards/production-env.test.ts` exists to forbid
+   * exactly that: a build once shipped `http://localhost:8100` baked in, so
+   * every deployed request went to the READER's own machine and failed as
+   * mixed content. That guard stays green here because `BACKEND_ORIGIN` is
+   * read at build time on the SERVER and never reaches the client — the
+   * browser only ever calls `/api/backtest` on its own origin.
+   *
+   * It also removes CORS from the picture: the backend allows only
+   * localhost:3100, and a proxied request is not a cross-origin one.
+   *
+   * Unset — the local default and the current deployment — emits no rule at
+   * all, `/api/backtest` 404s, and the sheet says a backend is needed rather
+   * than drawing an empty chart.
+   */
+  async rewrites() {
+    const origin = process.env.BACKEND_ORIGIN?.replace(/\/$/, "");
+    if (!origin) return [];
+    return [
+      { source: "/api/backtest", destination: `${origin}/api/backtest` },
+    ];
+  },
   async headers() {
     return [
       {

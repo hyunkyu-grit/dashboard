@@ -386,6 +386,11 @@ export async function fetchBacktest(
   const url = backtestUrl(encodePositions(rows));
   if (url === null) throw new BacktestUnavailable();
   const r = await fetch(url);
+  /* 404 means the route is not there, which on a deployed site means no
+   * backend is proxied behind it (see `backtestUrl` and the rewrite in
+   * next.config.ts). That is a different thing from a rejected request and
+   * gets the "백엔드가 필요한 화면이에요" panel rather than a raw error. */
+  if (r.status === 404) throw new BacktestUnavailable();
   if (!r.ok) {
     // the backend returns 422 with a readable reason; surface it verbatim
     const detail = await r.json().catch(() => null);

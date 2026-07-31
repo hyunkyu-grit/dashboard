@@ -1,3 +1,33 @@
+# Runtime dependencies for the braveworld backend.
+#
+# THIS FILE WAS INCOMPLETE AND THE APP COULD NOT HAVE STARTED FROM IT. It
+# listed fastapi / uvicorn / openpyxl only — which is what a developer machine
+# already had lying around — while numpy, scipy, holidays and python-dateutil
+# are all needed at import time. Nothing caught it because every run so far has
+# been local, where the packages were already installed. A fresh host would
+# have failed on the first import.
+#
+# Lower bounds, not pins: this is an application served from one place, not a
+# library, and these floors are what the code actually needs.
+
 fastapi>=0.111
 uvicorn>=0.30
+
+# the workbook loaders (data/irsdata.xlsx, data/bokbaserate.xlsx)
 openpyxl>=3.1
+
+# the ported curve engine: zero-curve arrays, and brentq for the bootstrap
+numpy>=1.26
+scipy>=1.11
+
+# the KR business-day calendar. `engine_port` RAISES rather than degrading to
+# weekends-only when this is absent — an approved deviation from the frozen
+# source, recorded in its provenance header — so it is not optional in any
+# sense of the word.
+holidays>=0.45
+
+# `relativedelta`, used by the ported IRS_Trade schedule generator. It is
+# imported inside the method body rather than at module scope, which is why it
+# never showed up in an import scan of the file headers, and why it was the
+# easiest of the four to miss.
+python-dateutil>=2.8
