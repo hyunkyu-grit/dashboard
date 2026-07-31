@@ -277,6 +277,32 @@ and each row is another full daily revaluation pass.
   take the CD91 print of F(R) = reset − 1 Seoul business day through the ported
   `select_fixing`, and the fixing store handed to each valuation is truncated
   at that date so the port's guard is not the only thing in the way.
+- **손익 = 평가손익 + 캐리손익**, and that is an IDENTITY, not an attribution
+  model [OWNER]. `pnl = (clean_t − clean_0) + (accrued_t − accrued_0 + cash)`:
+  the first half is mark-to-market on the clean price (the rate move and
+  roll-down), the second is interest actually earned or paid, settled plus
+  still accruing. They reconstruct the headline to the rounding, which is
+  asserted — a split that only roughly added up would be a model nobody agreed
+  to, presented as arithmetic. Carry's sign follows the struck fixed rate
+  against the CD that ACTUALLY printed over the holding period, not against CD
+  on any one day.
+- **The entry date is the date you clicked** [OWNER: "커서가 가는 곳에서
+  누르면 그 날부터 스타트해야지"]. The preview chart's crosshair is the only
+  thing that knows which day the reader is pointing at, so it reports it and
+  the click carries it into `?from=`. Only the FIRST row is seeded that way —
+  rows added afterwards are new questions and fall back to a year before the
+  data's end.
+- **Direction is named by its LEGS**, not by a coined term — see
+  `BacktestSheet.directionLabel`. 스티프너/플래트너 is a genuine market
+  standard and leads with the legs spelled out after it; a butterfly gets the
+  legs alone, because "buy the fly" has no market standard at all.
+- **The instrument dropdown is grouped by kind** (`optgroup`): ~240 entries
+  running 1D → 10Y → 6M/9M → 1s2s → 3Mx3M with nothing marking the boundaries
+  required the reader to know the naming convention to know what they were
+  looking at.
+- **The sheet opens at 78vh**, not at its content height. Sized by content it
+  opened as a strip and jumped to full height when a result arrived, so the
+  reader met it twice.
 - **LIVE BACKEND ONLY.** Every other surface reads a baked JSON file; this
   answer depends on inputs the reader chooses, so it cannot be one. Vercel runs
   the frontend and a backend runs behind it [OWNER] — which is also what keeps

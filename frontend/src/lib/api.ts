@@ -326,9 +326,14 @@ export interface BacktestPosition {
   entryValue: number | null;
   exitValue: number | null;
   pnl: number;
-  /** closing scalars, not paths — the sheet draws the book total only */
+  /** The two halves of `pnl`, which they sum to exactly:
+   *   평가 = mark-to-market on the clean price — the rate move and roll-down
+   *   캐리 = interest actually earned or paid, settled plus still accruing
+   * An identity, not an attribution model (see backend/app/backtest.py). */
+  valuation: number;
+  carry: number;
+  /** settled cash alone, the part of `carry` that has actually been paid */
   cash: number;
-  npv: number;
 }
 
 export interface BacktestResult {

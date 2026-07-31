@@ -38,16 +38,17 @@ import { motion, type PanInfo } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  type BacktestLeg,
+  type BacktestResult,
   BacktestUnavailable,
   fetchBacktest,
-  type BacktestResult,
   type PositionInput,
 } from "@/lib/api";
 
 import { ErrorBoundary } from "./ErrorBoundary";
 import { Z_MODAL } from "./layers";
 import { SHEET_SPRING } from "./motion";
-import type { Row } from "./rows";
+import { GROUP_LABEL, type Group, type Row } from "./rows";
 
 /** Money, the way a Korean desk reads it: 억 / 만, never 12 raw digits. */
 export function fmtKrw(v: number): string {
@@ -67,21 +68,64 @@ const EOK = 100_000_000;
  * each extra row is another full daily revaluation pass on the server. */
 const MAX_POSITIONS = 12;
 
-const SIDE_WORDS: Record<string, [string, string]> = {
-  // group → [what +1 is called, what -1 is called]
-  outright: ["고정 지급", "고정 수취"],
-  spread: ["스티프너", "플래트너"],
-  fly: ["벨리 지급", "벨리 수취"],
-  forward: ["고정 지급", "고정 수취"],
-};
+/* How a direction is NAMED [OWNER, after external research 2026-07-31].
+ *
+ * `+1` is always "long the quoted value" in the engine. What that gets CALLED
+ * turned out to be three different questions:
+ *
+ *   outright / forward — 페이 / 리시브. KRW desks use these as verbs ("IRS
+ *   페이했다"); 고정 지급/수취 is the accounting register, not the trading one.
+ *
+ *   spread — 스티프너 / 플래트너 IS a market standard: buying or paying a
+ *   steepener means paying fixed on the LONGEST leg (Clarus, "Mechanics and
+ *   Definitions of Spread and Butterfly Swap Packages"), which is exactly what
+ *   `backtest._legs_for` builds. The legs are printed alongside anyway, so the
+ *   term never has to be trusted on its own.
+ *
+ *   butterfly — THERE IS NO TERM, and that is the finding rather than a gap in
+ *   the research. Clarus defines buying a fly as paying the belly; other desk
+ *   write-ups define it as receiving; TraditionData states the problem
+ *   outright — "one trader's 'buy the fly' may not mean the same thing as
+ *   another's unless the legs are explicitly stated". So the legs are stated
+ *   and no word is invented. Two earlier attempts here (벨리 지급/수취, then
+ *   벨리 페이/리시브) were both coinages the owner had never heard, which is
+ *   what inventing vocabulary for an unsettled convention gets you.
+ *
+ * MIRRORS `backtest._legs_for`: a 2-leg `A-B` pays B at +1, a 3-leg `A-B-C`
+ * pays the belly B at +1. That order is pinned server-side by
+ * test_backtest.py::test_a_spread_is_weighted_dv01_neutral_at_entry and
+ * ::test_a_butterfly_weights_the_belly_against_both_wings — a label that
+ * silently disagreed with the trade would be worse than no label.
+ */
+function directionLabel(id: string, direction: number): string {
+  const legs = id.split("-");
+  const pay = direction > 0 ? "페이" : "리시브";
+  const rec = direction > 0 ? "리시브" : "페이";
+  if (legs.length === 3) {
+    return `${legs[1]} ${pay} · ${legs[0]}/${legs[2]} ${rec}`;
+  }
+  if (legs.length === 2) {
+    const word = direction > 0 ? "스티프너" : "플래트너";
+    return `${word} (${legs[1]} ${pay} · ${legs[0]} ${rec})`;
+  }
+  return pay; // outright, and a forward is one swap too
+}
 
-/** One year before the data's last date, ISO. Empty when there is no as-of
- * yet — the run button stays disabled until there is. */
-function defaultEntry(asOf: string | undefined): string {
-  if (!asOf) return "";
-  const d = new Date(asOf);
-  d.setFullYear(d.getFullYear() - 1);
-  return d.toISOString().slice(0, 10);
+/** The same sentence, built from the legs the SERVER actually priced. Used in
+ * the result table: after a run there is no need to infer anything, and
+ * reading the server's own answer is one fewer place the two can disagree. */
+function legsSentence(legs: BacktestLeg[]): string {
+  if (legs.length === 1) return legs[0].side === "pay" ? "페이" : "리시브";
+  const say = (l: BacktestLeg) => (l.side === "pay" ? "페이" : "리시브");
+  const [head, ...rest] = legs;
+  const body = `${head.tenor} ${say(head)}${legs.length === 3 ? "×2" : ""} · ${rest
+    .map((l) => l.tenor)
+    .join("/")} ${say(rest[0])}`;
+  if (legs.length === 2) {
+    // the standard term, with the legs it stands for
+    return `${head.side === "pay" ? "스티프너" : "플래트너"} (${body})`;
+  }
+  return body;
 }
 
 function Field({
@@ -245,7 +289,7 @@ function Result({
           <tr>
             <th className="pb-1 font-normal">종목</th>
             <th className="pb-1 font-normal">방향</th>
-            <th className="pb-1 text-right font-normal">명목</th>
+            <th className="pb-1 pr-4 text-right font-normal">명목</th>
             <th className="pb-1 font-normal">기간</th>
             <th className="pb-1 text-right font-normal">손익</th>
           </tr>
@@ -256,13 +300,8 @@ function Result({
               <td className="py-1.5 font-semibold">
                 {naming.get(p.id)?.label ?? p.id}
               </td>
-              <td className="py-1.5">
-                {
-                  (SIDE_WORDS[naming.get(p.id)?.group ?? "outright"] ??
-                    SIDE_WORDS.outright)[p.direction > 0 ? 0 : 1]
-                }
-              </td>
-              <td className="py-1.5 text-right">
+              <td className="py-1.5">{legsSentence(p.legs)}</td>
+              <td className="py-1.5 pr-4 text-right">
                 {(p.notional / EOK).toLocaleString(undefined, {
                   maximumFractionDigits: 0,
                 })}
@@ -284,6 +323,61 @@ function Result({
         </tbody>
       </table>
 
+      {/* 손익 구성 [OWNER]: the headline split into the two things that made
+          it. Above the fold, because "was this a rate call or was I just
+          collecting coupon" is a question about the RESULT, not about how the
+          trade was built. */}
+      <table className="mt-5 w-full text-[13px] tabular-nums">
+        <thead className="text-left text-ink/50">
+          <tr>
+            <th className="pb-1 font-normal">손익 구성</th>
+            <th className="pb-1 text-right font-normal">평가손익</th>
+            <th className="pb-1 text-right font-normal">캐리손익</th>
+            <th className="pb-1 text-right font-normal">합계</th>
+          </tr>
+        </thead>
+        <tbody>
+          {result.positions.map((p, i) => (
+            <tr key={`${p.id}-${i}`} className="border-t border-edge">
+              <td className="py-1.5">{naming.get(p.id)?.label ?? p.id}</td>
+              <td
+                className={`py-1.5 text-right ${
+                  p.valuation >= 0 ? "text-up" : "text-down"
+                }`}
+              >
+                {fmtKrw(p.valuation)}
+              </td>
+              <td
+                className={`py-1.5 text-right ${
+                  p.carry >= 0 ? "text-up" : "text-down"
+                }`}
+              >
+                {fmtKrw(p.carry)}
+              </td>
+              <td className="py-1.5 text-right font-semibold">
+                {fmtKrw(p.pnl)}
+              </td>
+            </tr>
+          ))}
+          {result.positions.length > 1 && (
+            <tr className="border-t-2 border-t-edge font-semibold">
+              <td className="py-1.5">합계</td>
+              <td className="py-1.5 text-right">
+                {fmtKrw(result.positions.reduce((a, p) => a + p.valuation, 0))}
+              </td>
+              <td className="py-1.5 text-right">
+                {fmtKrw(result.positions.reduce((a, p) => a + p.carry, 0))}
+              </td>
+              <td className="py-1.5 text-right">{fmtKrw(result.pnl)}</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      <p className="mt-1.5 text-[12px] opacity-50">
+        평가손익은 금리가 움직이고 잔존만기가 줄면서 생긴 평가 변화,
+        캐리손익은 실제로 주고받은 이자입니다. 둘을 더하면 손익이 됩니다.
+      </p>
+
       <details className="mt-5">
         <summary className="cursor-pointer text-[13px] opacity-50 hover:opacity-80">
           자세히 — 다리별 구성과 정산
@@ -298,7 +392,7 @@ function Result({
                 {p.legs.map((l) => (
                   <tr key={l.tenor} className="border-t border-edge">
                     <td className="py-1 font-semibold">{l.tenor}</td>
-                    <td className="py-1">{l.side === "pay" ? "지급" : "수취"}</td>
+                    <td className="py-1">{l.side === "pay" ? "페이" : "리시브"}</td>
                     <td className="py-1 text-right">
                       {(l.notional / EOK).toLocaleString(undefined, {
                         maximumFractionDigits: 1,
@@ -343,40 +437,50 @@ function PositionRow({
   removable,
 }: {
   value: PositionInput;
-  choices: { id: string; label: string; group: string }[];
+  /** grouped for the dropdown — see the optgroup note at the call site */
+  choices: { group: string; label: string; items: { id: string; label: string }[] }[];
   asOf?: string;
   onChange: (next: PositionInput) => void;
   onRemove: () => void;
   removable: boolean;
 }) {
-  const pick = choices.find((c) => c.id === value.id);
-  const [long, short] =
-    SIDE_WORDS[pick?.group ?? "outright"] ?? SIDE_WORDS.outright;
   const set = (patch: Partial<PositionInput>) => onChange({ ...value, ...patch });
 
   return (
     <div className="flex flex-wrap items-end gap-2 border-b border-edge py-2.5">
       <Field label="종목">
+        {/* Grouped by kind [OWNER]: the flat list ran 1D → 10Y → 6M/9M →
+            1s2s → 6M/9M/1Y → 3Mx3M with nothing marking where outrights ended
+            and spreads began, and at ~200 entries the reader had to know the
+            naming convention to know what they were looking at. `optgroup` is
+            what HTML has for exactly this, so it needs no second control. */}
         <select
           value={value.id}
           onChange={(e) => set({ id: e.target.value })}
           className={`${INPUT} max-w-[13rem]`}
         >
-          {choices.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.label}
-            </option>
+          {choices.map((g) => (
+            <optgroup key={g.group} label={g.label}>
+              {g.items.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </Field>
       <Field label="방향">
+        {/* Both options spell out the legs. For a butterfly there is no term
+            to spell them out INSTEAD of (see directionLabel); for a spread the
+            standard term leads and the legs follow it. */}
         <select
           value={value.direction}
           onChange={(e) => set({ direction: Number(e.target.value) })}
-          className={INPUT}
+          className={`${INPUT} max-w-[16rem]`}
         >
-          <option value={1}>{long}</option>
-          <option value={-1}>{short}</option>
+          <option value={1}>{directionLabel(value.id, 1)}</option>
+          <option value={-1}>{directionLabel(value.id, -1)}</option>
         </select>
       </Field>
       <Field label="명목">
@@ -422,6 +526,17 @@ function PositionRow({
   );
 }
 
+/** One year before the data's last date, ISO. Empty when there is no as-of
+ * yet — the run button stays disabled until there is. Derived at call time
+ * rather than set by an effect: setState in an effect body is lint-banned
+ * here, and it would flash an empty date field for a frame first. */
+function defaultEntry(asOf: string | undefined): string {
+  if (!asOf) return "";
+  const d = new Date(asOf);
+  d.setFullYear(d.getFullYear() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 /** A fresh row, seeded from an instrument id. */
 function newRow(id: string, asOf: string | undefined): PositionInput {
   return { id, direction: 1, eok: 100, entry: defaultEntry(asOf), exit: "" };
@@ -431,6 +546,7 @@ export function BacktestSheet({
   row,
   rows,
   asOf,
+  entryFrom,
   captured,
   onClose,
 }: {
@@ -439,18 +555,27 @@ export function BacktestSheet({
   rows: Row[];
   /** the dataset's last date — the default 청산일 and the latest allowed */
   asOf?: string;
+  /** the date the reader clicked ON THE CHART, which is the entry date they
+   * asked for. Only the FIRST row gets it — rows added afterwards are new
+   * questions and fall back to a year before the data's end. */
+  entryFrom?: string;
   /** an instrument clicked in the table BEHIND the sheet, to be appended */
   captured?: Row | null;
   onClose: () => void;
 }) {
-  const choices = useMemo(
-    () =>
-      rows
-        // a volatility ratio is not a position anyone can put on
-        .filter((r) => r.group !== "vol")
-        .map((r) => ({ id: r.seriesId ?? r.id, label: r.label, group: r.group })),
-    [rows],
-  );
+  const choices = useMemo(() => {
+    // a volatility ratio is not a position anyone can put on
+    const order: Group[] = ["outright", "spread", "fly", "forward"];
+    return order
+      .map((g) => ({
+        group: g as string,
+        label: GROUP_LABEL[g],
+        items: rows
+          .filter((r) => r.group === g)
+          .map((r) => ({ id: r.seriesId ?? r.id, label: r.label })),
+      }))
+      .filter((g) => g.items.length > 0);
+  }, [rows]);
 
   const naming = useMemo(
     () =>
@@ -463,9 +588,10 @@ export function BacktestSheet({
     [rows],
   );
 
-  const [book, setBook] = useState<PositionInput[]>(() => [
-    newRow(row.seriesId ?? row.id, asOf),
-  ]);
+  const [book, setBook] = useState<PositionInput[]>(() => {
+    const seed = newRow(row.seriesId ?? row.id, asOf);
+    return [entryFrom ? { ...seed, entry: entryFrom } : seed];
+  });
 
   /* An instrument clicked in the TABLE BEHIND the sheet is appended as a row.
    * Guarded by the last id seen, because `captured` stays set until the click
@@ -506,7 +632,12 @@ export function BacktestSheet({
       transition={{ duration: 0.2 }}
     >
       <motion.div
-        className="max-h-[92vh] w-full max-w-[960px] overflow-y-auto rounded-t-[20px] bg-popover p-6 shadow-lg"
+        /* min-h as well as max-h [OWNER: "처음부터 충분히 세로로 많이 올라와
+           있어야 시각적인 부담이 덜"]. Sized by its content, the sheet opened
+           as a short strip at the bottom and then jumped to full height the
+           moment a result arrived — the reader met it twice. Opening at 78vh
+           means the controls sit where they will stay. */
+        className="flex max-h-[92vh] min-h-[78vh] w-full max-w-[960px] flex-col overflow-y-auto rounded-t-[20px] bg-popover p-6 shadow-lg"
         onClick={(e) => e.stopPropagation()}
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
@@ -548,7 +679,7 @@ export function BacktestSheet({
               onClick={() =>
                 setBook((b) => [
                   ...b,
-                  newRow(b[b.length - 1]?.id ?? choices[0]?.id ?? "", asOf),
+                  newRow(b[b.length - 1]?.id ?? choices[0]?.items[0]?.id ?? "", asOf),
                 ])
               }
               disabled={book.length >= MAX_POSITIONS}

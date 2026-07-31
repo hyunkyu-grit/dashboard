@@ -381,3 +381,66 @@ def test_an_empty_or_oversized_book_is_refused(ds):
         run_backtest(
             ds, [Position("10Y", +1, N, dt.date(2026, 1, 2))] * 13
         )
+
+
+def test_carry_and_valuation_sum_to_the_pnl(ds):
+    """The split is an IDENTITY, not an attribution model:
+
+        pnl = (dirty_t − dirty_0) + cash
+            = (clean_t − clean_0) + (accrued_t − accrued_0 + cash)
+            =      평가손익       +           캐리손익
+
+    so the two halves must reconstruct the published figure to the rounding.
+    A split that only approximately added up would be a model nobody agreed
+    to, presented as arithmetic.
+    """
+    book = run_backtest(
+        ds,
+        [
+            Position("10Y", +1, N, dt.date(2025, 7, 30)),
+            Position("3Y-10Y", +1, 5e9, dt.date(2026, 1, 2)),
+            Position("2Y", -1, 2e10, dt.date(2024, 6, 3), dt.date(2026, 3, 2)),
+        ],
+    )
+    for p in book["positions"]:
+        assert abs((p["valuation"] + p["carry"]) - p["pnl"]) <= 1, p["id"]
+
+
+def test_carry_follows_the_fixed_rate_against_the_average_cd(ds):
+    """Carry is what the position earns or pays on the coupon, so its sign
+    follows the struck fixed rate against the CD that ACTUALLY printed over the
+    holding period — not against CD on any one day.
+
+    Measured:
+      2020-01-02  struck 1.3475, CD 1.53 → 2.92   carry  +669,375,342
+      2023-01-02  struck 3.5425, CD 4.03 → 2.92   carry   −76,723,288
+      2026-01-02  struck 3.2850, CD 2.84 → 2.92   carry   −25,087,671
+
+    An earlier version of this test used a 2025-07-30 entry and asserted the
+    carry was negative. It is +202,740: struck at 2.6325 with CD starting below
+    it at 2.51 and ending above at 2.92, the two halves nearly cancel. The
+    figure was right and the expectation was wrong, which is the whole reason
+    to read the data before pinning a sign.
+    """
+    paying_up = one(ds, "10Y", +1, N, dt.date(2026, 1, 2))
+    paying_down = one(ds, "10Y", +1, N, dt.date(2020, 1, 2))
+    assert paying_up["carry"] < 0
+    assert paying_down["carry"] > 0
+    # and the receiver is the mirror of the payer
+    receiving = one(ds, "10Y", -1, N, dt.date(2026, 1, 2))
+    assert receiving["carry"] > 0
+
+
+def test_valuation_carries_the_rate_move(ds):
+    """The 10Y rose 151.8bp over this window, so the MtM half must be large and
+    positive for a payer — and it must dominate, which is what tells the reader
+    the split is the way round they expect."""
+    r = one(ds, "10Y", +1, N, dt.date(2025, 7, 30))
+    assert r["valuation"] > 0
+    assert abs(r["valuation"]) > abs(r["carry"])
+
+
+def test_the_trace_splits_the_same_way(ds):
+    path = trace(ds, Position("10Y", +1, N, dt.date(2025, 7, 30)))
+    for pt in path:
+        assert abs((pt["valuation"] + pt["carry"]) - pt["pnl"]) <= 1

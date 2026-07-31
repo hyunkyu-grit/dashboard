@@ -181,10 +181,17 @@ def _value_on(
     i: int,
     entry_date: dt.date,
     fixings: dict[dt.date, float],
-) -> float:
-    """Total dirty NPV of the position on the row at index `i`."""
+) -> tuple[float, float]:
+    """(clean NPV, accrued interest) of the position on the row at index `i`.
+
+    Split rather than summed [OWNER, 2026-07-31] so the P&L can be reported as
+    평가손익 + 캐리손익. Their sum is the dirty NPV, which is what the total is
+    built from, so nothing about the headline number changes — only that it can
+    now be read in two parts.
+    """
     curve = CurveBundle(dataset.dates[i], _curve_at(dataset, i), [])
-    total = 0.0
+    clean = 0.0
+    accrued = 0.0
     for leg in legs:
         swap = VanillaSwap(
             tenor_years=int(round(TENOR_T[leg.tenor])) or 1,
@@ -193,8 +200,10 @@ def _value_on(
             pay_fixed=leg.sign > 0,
             trade_date=entry_date,
         )
-        total += value_booked_trade(swap, curve, fixings).dirty_npv
-    return total
+        res = value_booked_trade(swap, curve, fixings)
+        clean += res.clean_npv
+        accrued += res.accrued_interest
+    return clean, accrued
 
 
 def _settled_to(
@@ -270,7 +279,9 @@ def _run_one(
         leg.sign *= pos.direction
 
     entry_date = dates[entry_i]
-    base = _value_on(legs, dataset, entry_i, entry_date, _cd_fixings(dataset, entry_i))
+    clean0, accrued0 = _value_on(
+        legs, dataset, entry_i, entry_date, _cd_fixings(dataset, entry_i)
+    )
 
     # Valued only on the sampled dates INSIDE its own life, plus its exit — so
     # the frozen tail is the real closing figure, not the last sample before it.
@@ -279,16 +290,22 @@ def _run_one(
         live.append(exit_i)
 
     own: dict[int, float] = {}
-    cash_at: dict[int, float] = {}
-    npv_at: dict[int, float] = {}
     last = 0.0
+    last_carry = 0.0
+    last_val = 0.0
+    last_cash = 0.0
     for i in live:
         fx = _cd_fixings(dataset, i)
-        npv = _value_on(legs, dataset, i, entry_date, fx)
+        clean, accrued = _value_on(legs, dataset, i, entry_date, fx)
         cash = _settled_to(legs, entry_date, dates[i], fx)
-        own[i] = last = npv - base + cash
-        cash_at[i] = cash
-        npv_at[i] = npv
+        # An exact split, not an attribution model:
+        #   pnl = (dirty_t − dirty_0) + cash
+        #       = (clean_t − clean_0) + (accrued_t − accrued_0 + cash)
+        # so 평가손익 and 캐리손익 sum to the published figure by construction.
+        val = clean - clean0
+        carry = accrued - accrued0 + cash
+        own[i] = last = val + carry
+        last_val, last_carry, last_cash = val, carry, cash
 
     series = {}
     for i in sample:
@@ -323,8 +340,13 @@ def _run_one(
         # position; shipping a full npv/cash series for each would be 12 × 400
         # × 2 numbers to draw one total line. `trace()` below reconstructs the
         # path when something needs to look at it.
-        "cash": round(cash_at.get(exit_i, 0.0), 0),
-        "npv": round(npv_at.get(exit_i, 0.0), 0),
+        # The two halves of `pnl`, which they sum to exactly (§backtest).
+        # 평가 = mark-to-market on the clean price: the rate move and the
+        # roll-down. 캐리 = interest actually earned or paid, settled plus
+        # still accruing.
+        "valuation": round(last_val, 0),
+        "carry": round(last_carry, 0),
+        "cash": round(last_cash, 0),
     }
     return record, series
 
@@ -346,16 +368,26 @@ def trace(dataset: Dataset, pos: Position) -> list[dict]:
     for leg in legs:
         leg.sign *= pos.direction
     entry_date = dates[entry_i]
-    base = _value_on(legs, dataset, entry_i, entry_date, _cd_fixings(dataset, entry_i))
+    clean0, accrued0 = _value_on(
+        legs, dataset, entry_i, entry_date, _cd_fixings(dataset, entry_i)
+    )
 
     out = []
     for i in _thin(list(range(entry_i, exit_i + 1)), MAX_POINTS):
         fx = _cd_fixings(dataset, i)
-        npv = _value_on(legs, dataset, i, entry_date, fx)
+        clean, accrued = _value_on(legs, dataset, i, entry_date, fx)
         cash = _settled_to(legs, entry_date, dates[i], fx)
+        val = clean - clean0
+        carry = accrued - accrued0 + cash
         out.append(
-            {"t": dates[i].isoformat(), "pnl": round(npv - base + cash, 0),
-             "npv": round(npv, 0), "cash": round(cash, 0)}
+            {
+                "t": dates[i].isoformat(),
+                "pnl": round(val + carry, 0),
+                "valuation": round(val, 0),
+                "carry": round(carry, 0),
+                "npv": round(clean + accrued, 0),
+                "cash": round(cash, 0),
+            }
         )
     return out
 

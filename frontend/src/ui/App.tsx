@@ -269,10 +269,15 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [tileParam]);
 
+  /* `from` is the date under the cursor when the chart was clicked [OWNER:
+   * "커서가 가는 곳에서 누르면 그 날부터 스타트해야지"]. It rides in the URL
+   * beside `?tile=` so the opened backtest is linkable at that entry date,
+   * the same property every other view here has. */
   const openBacktest = useCallback(
-    (row: Row) => {
+    (row: Row, from?: string) => {
       const target = row.seriesId ? `series:${row.seriesId}` : row.id;
-      router.push(`/?tile=${encodeURIComponent(target)}`, { scroll: false });
+      const q = `?tile=${encodeURIComponent(target)}${from ? `&from=${from}` : ""}`;
+      router.push(`/${q}`, { scroll: false });
     },
     [router],
   );
@@ -491,6 +496,7 @@ export function App() {
               row={enlargedRow}
               rows={rows}
               asOf={summary.asof}
+              entryFrom={params.get("from") ?? undefined}
               captured={pinned}
               onClose={closeBacktest}
             />

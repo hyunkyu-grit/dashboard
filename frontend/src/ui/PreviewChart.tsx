@@ -41,6 +41,7 @@ export function PreviewChart({
   height,
   policy,
   cd,
+  onHoverDate,
 }: {
   points: HistoryPoint[];
   stats: SeriesStats | null; // range min/max/avg, precomputed server-side (§16)
@@ -53,6 +54,11 @@ export function PreviewChart({
    * rate. Omitted when the instrument IS CD, where it would be the same line
    * twice. */
   cd?: HistoryPoint[];
+  /** The date under the cursor, reported as it moves. The chart click opens
+   * the backtest AT that date [OWNER: "커서가 가는 곳에서 누르면 그 날부터
+   * 스타트해야지"], and the crosshair is the only thing that knows which day
+   * the reader is pointing at. */
+  onHoverDate?: (iso: string | null) => void;
 }) {
   const [hi, setHi] = useState<number | null>(null);
 
@@ -93,9 +99,11 @@ export function PreviewChart({
     const i = Math.round(((px - PAD.left) / plotW) * (points.length - 1));
     const idx = Math.max(0, Math.min(points.length - 1, i));
     setHi(idx);
+    onHoverDate?.(points[idx].t);
   };
   const onLeave = () => {
     setHi(null);
+    onHoverDate?.(null);
   };
 
   const hp = hi != null ? points[hi] : null;

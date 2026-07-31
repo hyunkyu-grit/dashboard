@@ -6,6 +6,7 @@
  * volatility (no stage-2 history). Clicking the chart opens the enlarged view. */
 
 import { useQuery } from "@tanstack/react-query";
+import { useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 
 import { fetchSeries, type PolicyStep } from "@/lib/api";
@@ -72,7 +73,7 @@ export function PreviewPane({
   policy,
 }: {
   row: Row | null;
-  onOpen: (row: Row) => void;
+  onOpen: (row: Row, from?: string) => void;
   width: number;
   /** the pane's measured height; the chart takes what the header leaves */
   height: number;
@@ -141,7 +142,7 @@ function PreviewBody({
   height,
 }: {
   row: Row;
-  onOpen: (row: Row) => void;
+  onOpen: (row: Row, from?: string) => void;
   width: number;
   height: number;
   policy?: PolicyStep;
@@ -153,6 +154,10 @@ function PreviewBody({
 }) {
   // hooks run before any early return
   const cd = useCdReference(row.unit, row.seriesId);
+  /* The date under the cursor when the chart is clicked. A ref, not state:
+   * nothing renders from it, and re-rendering the chart on every mouse move
+   * would fight the crosshair it already draws. */
+  const hoveredDate = useRef<string | null>(null);
   if (!row.seriesId) {
     return (
       <>
@@ -181,8 +186,10 @@ function PreviewBody({
           key={row.seriesId}
           role="button"
           tabIndex={0}
-          onClick={() => onOpen(row)}
-          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onOpen(row)}
+          onClick={() => onOpen(row, hoveredDate.current ?? undefined)}
+          onKeyDown={(e) =>
+            (e.key === "Enter" || e.key === " ") && onOpen(row)
+          }
           whileTap={{ scale: PRESS_SCALE }}
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -201,6 +208,9 @@ function PreviewBody({
             height={Math.max(CHART_MIN_H, height - HEADER_H)}
             policy={policy}
             cd={cd}
+            onHoverDate={(d) => {
+              hoveredDate.current = d;
+            }}
           />
           <p className="mt-2 text-[12px] opacity-40">눌러서 크게 볼 수 있습니다</p>
         </motion.div>
