@@ -181,6 +181,56 @@ rule:
 
 ## 6. Current state (as of the 2026-07-31 session)
 
+### Latest — the backtest (2026-07-31, HEAD `ab65fda`)
+
+Gates: BE **232 passed / 1 skipped / 1 xfailed**, FE **418 passed / 1 skipped,
+lint 0, build 0**. Static tree unchanged since `4e1b35d` (rebuilt and diffed —
+only `builtAt` moved).
+
+**A second PORT landed.** `IRS_Trade` into `engine_port.py`, and
+`fixings`+`instruments`+`mtm_valuation` merged into `valuation_port.py`, bodies
+byte-identical, guarded by `tests/test_valuation_port.py` (which also asserts
+`CurveBundle` is the ONLY body in our file absent from the frozen source).
+`docs/PORT_PROPOSAL.md` has the full record. The CLAUDE.md guardrail that said
+"no portfolio valuation" was lifted by the owner for this.
+
+**`app/backtest.py`** revalues a BOOK of positions daily on each date's own
+curve, plus settled cash. Not Δrate × DV01 — that is blind to time passing.
+Split into 평가손익 + 캐리손익, which is an identity, not a model.
+
+**Things that only showed up by running numbers, all now guarded:**
+
+- **Sub-year tenors were priced as 1-year swaps.** `VanillaSwap` annotates
+  `tenor_years: int` but its body only does `round(tenor_years * 365)` — obeying
+  the annotation made 1D/3M/6M/9M all 1Y and 1.5Y a 2Y. Pass the FLOAT.
+- **A swap kept running past its maturity.** A 9M from 2020 was reported held
+  to 2026. The cap belongs where the position's SPAN is computed, because the
+  book's window is built from those spans — capping only inside the per-position
+  run made the period column say 만기 while the chart drew past it.
+- A maturity on a non-trading day breaks `maturity <= exit_date`; a maturity
+  beyond the data clamps to the last row and falsely reads as matured.
+- **Carry's sign follows the fixed rate against the CD that actually printed
+  over the holding period**, not against CD on any one day. A 2025-07-30 payer
+  has carry ≈ 0 because CD started below the struck rate and ended above.
+- **"buy the fly" has no market standard** (Clarus and other desks define it
+  oppositely; TraditionData says so outright). Directions are named by their
+  LEGS. 스티프너/플래트너 IS standard and keeps its name.
+
+**Deployment.** The site is still static and needs no backend — except the
+backtest, whose answer depends on reader input. `BACKEND_ORIGIN` (server-side)
+drives a Next rewrite so no origin is ever baked into the bundle; unset, the
+sheet says a backend is needed. See DEPLOY_CHECKLIST. The owner's own prior
+topology (krw-fi-pms: NSSM service + Cloudflare tunnel + rewrite) is the model,
+and its 120s-TTFB problem does not apply here (backtest 0.6–3.4s vs simulate's
+106–118s).
+
+**Open:** `ui/EnlargedView.tsx` and `wall/DetailChart.tsx` are unreferenced —
+the chart click opens the backtest now. Deleting them costs weekly/monthly
+candles and the six-basis readout, which the owner has not ruled on. They carry
+a ⚠ note.
+
+
+
 ### Latest — 전체 as three columns, a butterfly tab, three bases, and the base rate (2026-07-31)
 
 Five owner changes landed together. Gates: BE **177 passed / 19 skipped / 1
