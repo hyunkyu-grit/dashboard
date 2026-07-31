@@ -270,6 +270,19 @@ and each row is another full daily revaluation pass.
   it is paid; marking on NPV alone draws a sawtooth that is pure accounting
   artefact. The correction's size is asserted: notional × (fixed − CD fixing) ×
   accrual, to within 1%.
+- **A position ends at its own maturity.** A 9M struck in 2020 runs to 2021,
+  not to the end of the file. The cap is applied where the position's SPAN is
+  computed, so the book's window uses it too — computing the window from the
+  requested exit while capping separately made the period column read 만기 while
+  the chart drew a flat line past it. 만기 and 청산 are reported as different
+  facts. A maturity beyond the data is NOT a maturity: `_index_on_or_before`
+  clamps to the last row, so a 10Y struck in 2020 would otherwise claim to have
+  matured on the final date.
+- **Every tenor is priced at its own length.** `VanillaSwap` annotates
+  `tenor_years: int` but its body only does `round(tenor_years * 365)`, so the
+  float is what it wants. Obeying the annotation silently made 1D, 3M, 6M and
+  9M all ONE-YEAR swaps (`round(0.25)` is 0, and an `or 1` finished the job) and
+  1.5Y a 2Y — only whole-year tenors were ever right.
 - **Legs are DV01-neutral at the ENTRY curve**, so the quoted spread or fly is
   the P&L driver rather than a lopsided outright bet. The notional goes on the
   reference leg (longest for a spread, belly for a fly) and the others follow.

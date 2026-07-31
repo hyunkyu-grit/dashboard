@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 from app.backtest import BacktestError, Position, run_backtest, trace
-from app.curves import par_rates_at_index
+from app.curves import TENOR_T, par_rates_at_index
 from app.dataset import load_dataset
 from app.dv01 import pv01
 from app.engine_port import bootstrap_zero_curve
@@ -504,3 +504,83 @@ def test_complete_says_whether_every_business_day_is_drawn(ds):
     assert short["complete"] is True
     assert long["complete"] is False
     assert len(long["points"]) <= 400
+
+
+# ── the two defects the owner's "델타가 안 보인다" turned up ─────────────────
+
+
+def test_every_tenor_is_priced_at_its_own_length(ds):
+    """A 9M swap must be nine months of swap.
+
+    `VanillaSwap` annotates `tenor_years: int`, and the first version obeyed the
+    annotation with `int(round(TENOR_T[tenor])) or 1` — which silently repriced
+    every node that is not a whole year. 1D, 3M, 6M and 9M all became ONE-YEAR
+    swaps (round(0.25) is 0, and `or 1` finished the job) and 1.5Y became 2Y.
+    Only the integer-year tenors were ever right.
+
+    The port's body uses the field only as `round(tenor_years * 365)`, so the
+    float is what it wants; the annotation was the misleading part.
+    """
+    entry = dt.date(2020, 6, 30)
+    expected = {  # tenor -> number of quarterly periods
+        "3M": 1, "6M": 2, "9M": 3, "1Y": 4, "1.5Y": 6, "2Y": 8, "10Y": 40,
+    }
+    for tenor, periods in expected.items():
+        swap = VanillaSwap(TENOR_T[tenor], N, 0.03, True, trade_date=entry)
+        trade = swap.to_irs_trade(ds.dates[-1])
+        assert len(trade.pay_dates) == periods, tenor
+        # and the maturity is the tenor away from spot, not a rounded year
+        span = (trade.pay_dates[-1] - trade.start_date).days
+        assert abs(span - TENOR_T[tenor] * 365) <= 6, tenor
+
+    # The check above exercises the PORT. This one exercises the backtest's own
+    # use of it, which is where the bug actually lived: a 9M position must stop
+    # about nine months after entry, and a 6M about six.
+    for tenor, months in (("3M", 3), ("6M", 6), ("9M", 9), ("1.5Y", 18)):
+        r = one(ds, tenor, +1, N, entry)
+        held = (dt.date.fromisoformat(r["exit"]) - entry).days
+        assert abs(held - months * 30.4) <= 12, (tenor, held)
+        assert r["matured"] is True
+
+
+def test_a_position_ends_at_its_own_maturity(ds):
+    """A swap ends when it matures, whatever the requested exit.
+
+    Before this a 9M entered in 2020 was reported as held to 2026 — six years
+    of "position" for a trade that ceased to exist after nine months. The P&L
+    was already frozen, so the FIGURE was right and the story was wrong; the
+    daily change read 0원 for five years, which is what made the readout look
+    broken.
+    """
+    entry = dt.date(2020, 6, 30)
+    for tenor, ends in (("9M", "2021-04-01"), ("1Y", "2021-07-01"), ("2Y", "2022-07-01")):
+        r = one(ds, tenor, +1, N, entry)
+        assert r["exit"] == ends, tenor
+        assert r["matured"] is True
+        assert r["closed"] is True
+
+    # a 10Y entered in 2020 matures in 2030, so it is still open
+    long = one(ds, "10Y", +1, N, entry)
+    assert long["exit"] == ds.dates[-1].isoformat()
+    assert long["matured"] is False
+    assert long["closed"] is False
+
+
+def test_an_explicit_exit_before_maturity_still_wins(ds):
+    """Maturity is a CAP, not an override — closing early must still close
+    early."""
+    r = one(ds, "10Y", +1, N, dt.date(2020, 6, 30), dt.date(2022, 1, 3))
+    assert r["exit"] == "2022-01-03"
+    assert r["matured"] is False
+    assert r["closed"] is True
+
+
+def test_a_matured_position_still_counts_toward_the_book(ds):
+    """It stops moving, it does not stop existing."""
+    matured = Position("9M", +1, N, dt.date(2020, 6, 30))
+    live = Position("10Y", +1, N, dt.date(2020, 6, 30))
+    book = run_backtest(ds, [matured, live])
+    assert book["positions"][0]["matured"] is True
+    assert book["to"] == ds.dates[-1].isoformat()  # the book runs on
+    total = sum(p["pnl"] for p in book["positions"])
+    assert abs(book["pnl"] - total) <= 2

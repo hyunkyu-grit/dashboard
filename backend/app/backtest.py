@@ -61,7 +61,7 @@ import numpy as np
 from .curves import TENOR_T, par_rates_at_index
 from .dataset import Dataset
 from .derive import derived_ids
-from .engine_port import bootstrap_zero_curve
+from .engine_port import bootstrap_zero_curve, next_kr_business_day
 from .dv01 import pv01
 from .valuation_port import CurveBundle, VanillaSwap, settled_cash_between, value_booked_trade
 
@@ -119,6 +119,82 @@ def _index_on_or_before(dates: list[dt.date], d: dt.date) -> int:
     if i < 0:
         raise BacktestError(f"{d} is before the first observation ({dates[0]})")
     return i
+
+
+def _validate(dataset: Dataset, pos: Position) -> None:
+    """Everything that makes a position unrunnable, as a 422 rather than a
+    stray KeyError from somewhere deeper."""
+    if pos.direction not in (1, -1):
+        raise BacktestError("direction must be +1 or -1")
+    if pos.notional <= 0:
+        raise BacktestError("notional must be positive")
+    known = {sid for sid, _k, _l in derived_ids()} | set(dataset.series)
+    if pos.series_id not in known:
+        raise BacktestError(f"unknown instrument {pos.series_id!r}")
+    for tenor, _sign in _legs_for(pos.series_id):
+        if tenor not in TENOR_T:
+            raise BacktestError(f"unknown tenor {tenor!r}")
+
+
+def _maturity_of(entry: dt.date, tenor: str) -> dt.date:
+    """When a swap struck on `entry` for `tenor` actually ends.
+
+    Mirrors the ported `VanillaSwap.to_irs_trade`: spot is T+1 business days and
+    the raw termination is that plus `round(years * 365)` calendar days. Derived
+    rather than built, because this is asked once per leg per RUN while the
+    trade object is built once per leg per DATE."""
+    return next_kr_business_day(entry) + dt.timedelta(
+        days=round(TENOR_T[tenor] * 365)
+    )
+
+
+def _span_of(dataset: Dataset, pos: Position) -> tuple[int, int, bool]:
+    """(first index, last index, ended at maturity) for the position's real life.
+
+    A SWAP ENDS AT ITS MATURITY, whatever exit was asked for. Without this a 9M
+    entered in 2020 was reported as held to 2026 — six years of "position" for a
+    trade that ceased to exist after nine months. The P&L was already frozen
+    (there is nothing left to value), so the FIGURE was right and the story was
+    wrong: the period read six years and the daily change read 0원 for five of
+    them, which is what made the readout look broken.
+
+    The cap lives HERE rather than inside `_run_one` because the book's window
+    is built from these spans too — computing the window from the requested exit
+    while capping separately let the period column say 만기 while the chart drew
+    a flat line past it. The longest leg decides, since that is when the package
+    is finally done.
+    """
+    # Validated HERE because this is the first thing to touch a position — the
+    # book computes every span before it runs anything, so a bad instrument
+    # would otherwise reach `TENOR_T` as a KeyError instead of a 422.
+    _validate(dataset, pos)
+
+    dates = dataset.dates
+    entry_i = _index_on_or_after(dates, pos.entry)
+    exit_i = _index_on_or_before(dates, pos.exit) if pos.exit else len(dates) - 1
+    if exit_i <= entry_i:
+        raise BacktestError(
+            f"{pos.series_id}: the exit date must be after the entry date"
+        )
+    matures = max(
+        _maturity_of(dates[entry_i], t) for t, _sign in _legs_for(pos.series_id)
+    )
+    # The last row the swap still exists on. Reported rather than re-derived by
+    # the caller: a maturity landing on a non-trading day (3M struck 2020-06-30
+    # matures 2020-09-30, a day the file has no row for) makes
+    # `maturity <= exit_date` false even though the position DID mature, which
+    # is exactly the shape the first version got wrong.
+    # `_index_on_or_before` CLAMPS to the last row, so a 10Y struck in 2020 —
+    # maturing in 2030, well past the data — would otherwise report as matured
+    # on the final date. It has to still be inside the file to have happened.
+    matured = matures <= dates[-1] and _index_on_or_before(dates, matures) <= exit_i
+    if matured:
+        exit_i = _index_on_or_before(dates, matures)
+        if exit_i <= entry_i:
+            raise BacktestError(
+                f"{pos.series_id}: matures on {matures}, before it could be held"
+            )
+    return entry_i, exit_i, matured
 
 
 def _curve_at(dataset: Dataset, i: int, cache: dict[int, np.ndarray] | None = None) -> np.ndarray:
@@ -208,7 +284,14 @@ def _value_on(
     accrued = 0.0
     for leg in legs:
         swap = VanillaSwap(
-            tenor_years=int(round(TENOR_T[leg.tenor])) or 1,
+            # The FLOAT tenor, not a rounded integer. `VanillaSwap` annotates
+            # this `int`, but the ported body's only use of it is
+            # `round(tenor_years * 365)` to derive the maturity — so obeying the
+            # annotation silently repriced every non-whole-year node: 1D, 3M, 6M
+            # and 9M all became ONE-YEAR swaps (round(0.25) is 0, and `or 1`
+            # finished the job) and 1.5Y became 2Y. Only integer-year tenors
+            # were ever right.
+            tenor_years=TENOR_T[leg.tenor],
             notional=leg.notional,
             fixed_rate=leg.entry_rate,
             pay_fixed=leg.sign > 0,
@@ -229,7 +312,14 @@ def _settled_to(
     total = 0.0
     for leg in legs:
         swap = VanillaSwap(
-            tenor_years=int(round(TENOR_T[leg.tenor])) or 1,
+            # The FLOAT tenor, not a rounded integer. `VanillaSwap` annotates
+            # this `int`, but the ported body's only use of it is
+            # `round(tenor_years * 365)` to derive the maturity — so obeying the
+            # annotation silently repriced every non-whole-year node: 1D, 3M, 6M
+            # and 9M all became ONE-YEAR swaps (round(0.25) is 0, and `or 1`
+            # finished the job) and 1.5Y became 2Y. Only integer-year tenors
+            # were ever right.
+            tenor_years=TENOR_T[leg.tenor],
             notional=leg.notional,
             fixed_rate=leg.entry_rate,
             pay_fixed=leg.sign > 0,
@@ -274,23 +364,8 @@ def _run_one(
     before it was opened would be free money, and one that kept marking after
     it was closed is the classic way a backtest flatters itself.
     """
-    if pos.direction not in (1, -1):
-        raise BacktestError("direction must be +1 or -1")
-    if pos.notional <= 0:
-        raise BacktestError("notional must be positive")
-
-    known = {sid for sid, _k, _l in derived_ids()} | set(dataset.series)
-    if pos.series_id not in known:
-        raise BacktestError(f"unknown instrument {pos.series_id!r}")
-
     dates = dataset.dates
-    entry_i = _index_on_or_after(dates, pos.entry)
-    exit_i = _index_on_or_before(dates, pos.exit) if pos.exit else len(dates) - 1
-    if exit_i <= entry_i:
-        raise BacktestError(
-            f"{pos.series_id}: the exit date must be after the entry date"
-        )
-
+    entry_i, exit_i, matured = _span_of(dataset, pos)  # validates, caps at maturity 
     legs = _build_legs(dataset, pos.series_id, pos.notional, entry_i)
     for leg in legs:
         leg.sign *= pos.direction
@@ -350,7 +425,10 @@ def _run_one(
         "notional": pos.notional,
         "entry": entry_date.isoformat(),
         "exit": dates[exit_i].isoformat(),
-        "closed": pos.exit is not None and exit_i < len(dates) - 1,
+        "closed": exit_i < len(dates) - 1,
+        # 만기 and 청산 are different facts: one ran to the end of its own
+        # schedule, the other was closed out early.
+        "matured": matured,
         "legs": [
             {
                 "tenor": leg.tenor,
@@ -390,8 +468,9 @@ def trace(dataset: Dataset, pos: Position) -> list[dict]:
     test that cannot see the path cannot check them.
     """
     dates = dataset.dates
-    entry_i = _index_on_or_after(dates, pos.entry)
-    exit_i = _index_on_or_before(dates, pos.exit) if pos.exit else len(dates) - 1
+    # the same span the book uses, maturity cap included — a trace that ran
+    # past the swap's own end would disagree with the line drawn from it
+    entry_i, exit_i, _matured = _span_of(dataset, pos)
     legs = _build_legs(dataset, pos.series_id, pos.notional, entry_i)
     for leg in legs:
         leg.sign *= pos.direction
@@ -434,11 +513,10 @@ def run_backtest(dataset: Dataset, positions: list[Position]) -> dict:
         raise BacktestError(f"at most {MAX_POSITIONS} positions")
 
     dates = dataset.dates
-    first = min(_index_on_or_after(dates, p.entry) for p in positions)
-    last = max(
-        _index_on_or_before(dates, p.exit) if p.exit else len(dates) - 1
-        for p in positions
-    )
+    # the union of the positions' ACTUAL lives, maturity cap included
+    spans = [_span_of(dataset, p) for p in positions]
+    first = min(a for a, _b, _m in spans)
+    last = max(b for _a, b, _m in spans)
     sample = _thin(list(range(first, last + 1)), MAX_POINTS)
 
     # One curve per date for the whole run, shared by every position (see

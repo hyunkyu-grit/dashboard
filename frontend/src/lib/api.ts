@@ -319,9 +319,13 @@ export interface BacktestPosition {
   notional: number;
   entry: string;
   exit: string;
-  /** true when it was closed BEFORE the data ends — after that its P&L is
-   * frozen and still counted, so a closed winner keeps contributing. */
+  /** true when the position stopped before the data ends — after that its P&L
+   * is frozen and still counted, so a closed winner keeps contributing. */
   closed: boolean;
+  /** true when it stopped because the SWAP MATURED rather than because it was
+   * closed out. A different fact, and the one the period column used to get
+   * wrong — a 9M entered in 2020 was reported as held for six years. */
+  matured: boolean;
   legs: BacktestLeg[];
   entryValue: number | null;
   exitValue: number | null;

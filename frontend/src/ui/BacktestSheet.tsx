@@ -388,7 +388,13 @@ function Result({
               </td>
               <td className="py-1.5 text-[12px] opacity-60">
                 {p.entry} → {p.exit}
-                {p.closed && <span className="ml-1 opacity-70">(청산)</span>}
+                {/* 만기 and 청산 are different facts: one ran to the end of
+                    its own schedule, the other was closed out early. */}
+                {p.matured ? (
+                  <span className="ml-1 opacity-70">(만기)</span>
+                ) : p.closed ? (
+                  <span className="ml-1 opacity-70">(청산)</span>
+                ) : null}
               </td>
               <td
                 className={`py-1.5 text-right font-semibold ${
