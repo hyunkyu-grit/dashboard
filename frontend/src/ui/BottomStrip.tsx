@@ -24,6 +24,7 @@ import { useSyncExternalStore } from "react";
 
 import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 
+import { PAGE_X } from "./pageGutter";
 import type { Row } from "./rows";
 
 /** A level, a slope, a forward — one of each mode. Ids as the row builder
@@ -95,7 +96,7 @@ export function BottomStrip({
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-40 flex items-center gap-1 border-t border-edge bg-tile px-3 text-[12px]"
+      className={`fixed inset-x-0 bottom-0 z-40 flex items-center gap-1 border-t border-edge bg-tile text-[12px] ${PAGE_X}`}
       style={{ height: STRIP_H.open }}
     >
       {anchors.map((r) => (

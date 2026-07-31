@@ -30,6 +30,7 @@ import {
 } from "./columns";
 import { reorderAnimates, rowShouldFlip, SPRING } from "./motion";
 import { OverviewColumns } from "./OverviewColumns";
+import { PAGE_X } from "./pageGutter";
 import { RangeCells, RangeHeader } from "./RangeCells";
 import { TintLegend } from "./TintLegend";
 import {
@@ -365,7 +366,7 @@ export function InstrumentTable({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* fixed: tabs + forward controls stay at the top of the surface (§shell) */}
-      <div className="shrink-0 px-5 pt-4">
+      <div className={`shrink-0 pt-4 ${PAGE_X}`}>
       {/* Tabs: a sliding underline indicator (§14). No press-scale here — a
           tab shares an alignment with its neighbours; transform press feedback
           is reserved for isolated targets (rows, standalone buttons). */}
@@ -486,8 +487,17 @@ export function InstrumentTable({
            wrong here — a percentage min-height resolves against the content
            box while `pt-3 pb-8` sits outside it, so the grid would overshoot
            by 44px and put a permanent scrollbar on a page that fits. */
-        className={`min-h-0 flex-1 overflow-y-auto overflow-x-auto px-5 pb-8 pt-3 [scrollbar-gutter:stable] ${
-          isOverview ? "flex flex-col" : ""
+        /* The overview drops BOTH the gutter and the padding.
+           `scrollbar-gutter: stable` is there so the TABLE's grid width does
+           not shift when a filter crosses the overflow boundary — the overview
+           is a fixed set with no filters and nothing to scroll, so the 16px it
+           reserves is blank space that shows up as a wider RIGHT margin than
+           left, which is exactly the symmetry `justify-evenly` exists to
+           produce. `px-5` is dropped for the same reason: it sits outside the
+           content box the gaps are computed in, so it would add itself to both
+           outer margins. */
+        className={`min-h-0 flex-1 overflow-y-auto overflow-x-auto pb-8 pt-3 ${
+          isOverview ? "flex flex-col" : `${PAGE_X} [scrollbar-gutter:stable]`
         }`}
       >
         {isOverview ? (

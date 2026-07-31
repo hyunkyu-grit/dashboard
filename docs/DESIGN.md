@@ -110,12 +110,19 @@ showing only its **주요** set, each with **its own chart underneath**.
     floor here (211px) and absorbs pane slack in the tab (433px). That is the
     column doing its designed job, not drift; the five fixed tracks are
     byte-identical.
-- **Left / centre / right** [OWNER]. `max-content` columns +
-  `justify-between`: the tracks are the table's own width and every spare pixel
-  is spent as the two separations between them. Equal thirds spent the same
-  pixels as trailing slack *inside* each column, which put the widest gap on
-  the screen between one column's last number and the next column's 종목 — the
-  one stretch of that row with nothing in it.
+- **Left / centre / right, with the outer margins EQUAL to the inner gaps**
+  [OWNER]. `max-content` columns + `justify-evenly`: the tracks are the table's
+  own width and every spare pixel is split four ways — edge, column, column,
+  edge. Equal thirds spent the same pixels as trailing slack *inside* each
+  column, which put the widest gap on the screen between one column's last
+  number and the next column's 종목; `justify-between` then pinned the outer
+  columns to the window, giving 138px separations against a 20px margin.
+  - **This tab takes no page gutter and no scrollbar gutter.** Both sit
+    outside the content box the gaps are computed in, so either one would add
+    itself to the outer two margins only — the exact asymmetry `evenly`
+    removes. The 16px `scrollbar-gutter: stable` exists to stop the *table's*
+    grid shifting when a filter crosses the overflow boundary; the overview is
+    a fixed set with no filters and nothing to scroll.
 - **The charts sit on the floor at a FIXED height** (200px). They first grew
   into whatever each list left, which filled the space but made the curve the
   subject: 369px of chart under ~250px of table, and three charts of three
@@ -219,6 +226,31 @@ the instruction.
 - MPC dates are duplicated into `policy.MPC_DATES` from the frontend's verified
   `calendar.json` (the backend must not read the frontend tree at runtime);
   `test_mpc_dates_match_the_calendar` fails if the copies drift.
+
+### The page gutter [OWNER, 2026-07-31]
+
+**80px off the window edge, on every surface that reaches it** — the header
+band, the tab strip, the table's scroll container, the preview pane's outer
+edge, the bottom strip. Defined once in `ui/pageGutter.ts` (`PAGE_X`,
+`PAGE_R`, `PAGE_X_PX`), because those five reach the edge independently and
+four agreeing while the fifth does not is invisible until they are on screen
+together.
+
+The app sat at 20px before this: a card's inset applied to a full-bleed
+surface. The 전체 columns landed on a much wider margin first and the rest of
+the product looked cramped beside it.
+
+- 80 is a **plain number, not derived**. The 전체 tab's margin is a quarter of
+  its own leftover width (79px at the owner's window, different at every other
+  width); matching that exactly everywhere would mean every surface running the
+  overview's arithmetic. 80 is that figure rounded and fixed — measured live at
+  83 vs 80, which read as one decision.
+- It must be a **literal class**. Tailwind scans source text, so a class built
+  at runtime (`PAGE_X.replace("px-", "pr-")` — the first attempt) names a rule
+  that was never generated and the padding silently does not exist. Both edges
+  carry their own spelled-out constant.
+- The table pane keeps the full column set at this gutter: 702px of content
+  against the 600px threshold where 52주 drops (measured on all five tabs).
 
 ### Left pane — the instrument table
 

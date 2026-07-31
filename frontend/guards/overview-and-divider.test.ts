@@ -211,10 +211,15 @@ describe("the 전체 overview", () => {
     expect(overview).not.toContain("onAvail");
   });
 
-  it("sits left / centre / right", () => {
-    // spare width is spent BETWEEN the columns, never as trailing slack
-    // inside a row — which is where equal thirds put it, and it reads as a gap
-    expect(overview).toContain("justify-between");
+  it("sits left / centre / right with EQUAL outer and inner gaps", () => {
+    /* `evenly`, not `between`: `between` pins the outer columns to the window
+     * edge, so the two separations came to 138px against a 20px margin.
+     * `evenly` splits the leftover four ways — edge, column, column, edge —
+     * which is the only distribution that makes those equal. The gutter guard
+     * (guards/page-gutter.test.ts) holds the other half of this: the
+     * container must add NO padding, or it lands on the outer two only. */
+    expect(overview).toContain("justify-evenly");
+    expect(overview).not.toContain("justify-between");
     expect(overview).not.toContain("justify-start");
   });
 
@@ -236,7 +241,7 @@ describe("the 전체 overview", () => {
     // scroll container's pt-3/pb-8 sit outside it — min-h-full overshoots by
     // 44px and puts a permanent scrollbar on a page that fits
     expect(overview).not.toContain("min-h-full");
-    expect(table).toMatch(/isOverview \? "flex flex-col" : ""/);
+    expect(table).toMatch(/isOverview \? "flex flex-col"/);
   });
 });
 

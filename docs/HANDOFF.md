@@ -243,6 +243,13 @@ served with the old keys still in it).
   - **Three charts growing independently into their own leftover** filled the
     space but produced three sizes (307/372/437) and made the curve the
     subject of a tab about numbers.
+- **The page gutter is 80px now, app-wide** (`ui/pageGutter.ts`) — header, tab
+  strip, table, preview pane, bottom strip. It was 20px, which is a card's
+  inset on a full-bleed surface. Two things to know: it must be a LITERAL
+  Tailwind class (a runtime-built `pr-20` is never generated and the padding
+  silently vanishes), and the 전체 tab deliberately takes NO gutter because its
+  `justify-evenly` already supplies equal outer and inner gaps — padding would
+  land on the outer two only.
 - **The overview's grid was a FORK, and forking it was the root mistake.** It
   shipped with its own eight-track template at its own type size, and over four
   passes that second definition drifted every time: a level track sized by a

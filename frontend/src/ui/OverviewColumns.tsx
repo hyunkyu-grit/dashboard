@@ -348,17 +348,27 @@ export function OverviewColumns({
   /* Content-width columns, placed LEFT / CENTRE / RIGHT [OWNER, 2026-07-31 —
    * "아웃라이트는 이 위치 고정하고, 스프레드는 화면 중간, 포워드는 화면 우측"].
    *
-   * `max-content` + `justify-between` is exactly that: the tracks are the
-   * table's own width, and every spare pixel is spent as the two separations
-   * between them. Equal thirds spent the same pixels as trailing slack inside
-   * each column, which put the widest gap on the screen between one column's
-   * last number and the next column's 종목 — the one stretch of that row with
-   * nothing in it.
+   * `max-content` + `justify-evenly` is exactly that: the tracks are the
+   * table's own width, and every spare pixel is spent as FOUR equal gaps —
+   * edge, column, column, edge. Equal thirds spent the same pixels as trailing
+   * slack inside each column, which put the widest gap on the screen between
+   * one column's last number and the next column's 종목 — the one stretch of
+   * that row with nothing in it.
+   *
+   * `evenly`, not `between` [OWNER, 2026-07-31 — "맨 좌우 간격도 차트간 간격과
+   * 동일하게"]: `between` pins the outer columns to the edges, so the two
+   * separations were 138px against a 20px margin. `evenly` is the only
+   * distribution that makes the outer margins equal to the inner gaps.
+   *
+   * This is also why the scroll container drops its `px-5` on this tab
+   * (InstrumentTable): the padding sits OUTSIDE the content box the gaps are
+   * computed in, so leaving it on would add itself to the two outer margins
+   * and break the equality this line exists to produce.
    *
    * Below the two-pane breakpoint they stack: three full instrument tables
    * side by side on a laptop half-screen is unreadable at any type size. */
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 justify-between gap-y-8 lg:grid-cols-[repeat(3,max-content)]">
+    <div className="grid min-h-0 flex-1 grid-cols-1 justify-evenly gap-y-8 lg:grid-cols-[repeat(3,max-content)]">
       {OVERVIEW_GROUPS.map((g) => (
         <Column key={g} group={g} rows={rows} asOf={asOf} policy={policy} />
       ))}

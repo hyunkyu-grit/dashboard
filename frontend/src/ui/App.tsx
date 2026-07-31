@@ -33,6 +33,7 @@ import type { ChartType } from "@/wall/DetailChart";
 import { InstrumentTable } from "./InstrumentTable";
 import { SHEET_SPRING } from "./motion";
 import { PreviewPane } from "./PreviewPane";
+import { PAGE_R, PAGE_X, PAGE_X_PX } from "./pageGutter";
 import { buildRows, type Group, type Row } from "./rows";
 import { useIsWide } from "./useIsWide";
 import { useMeasure } from "./useMeasure";
@@ -40,7 +41,10 @@ import { useMeasure } from "./useMeasure";
 // Table pane sizes to its columns (§ layout); the preview takes the rest with a
 // floor. On an ultrawide the chart grows and the table does not stretch sparse.
 const TABLE_W = 880;
-const PANE_PAD = 40; // p-5 both sides
+// the preview pane's horizontal padding, subtracted from its measured width
+// to size the chart: the page gutter on the window side, 20px on the divider
+// side (that edge is interior, and the divider already separates the panes)
+const PANE_PAD = PAGE_X_PX + 20;
 
 /** Single-column preview: a bottom sheet over the full-width table (§ layout).
  * Opened by a row click (pin), dismissed by Esc / backdrop / downward drag. */
@@ -149,7 +153,9 @@ function Header({
   // the top, an opaque bg + a hairline along the bottom and nothing else — no
   // card, no radius. It is chrome, not content.
   return (
-    <header className="flex shrink-0 items-center gap-3 border-b border-edge bg-tile px-5 py-3">
+    <header
+      className={`flex shrink-0 items-center gap-3 border-b border-edge bg-tile py-3 ${PAGE_X}`}
+    >
       <span className="text-[17px] font-bold text-ink">Sauron</span>
       <span className="text-[13px] opacity-45">KRW IRS</span>
       <span className="flex-1" />
@@ -383,7 +389,7 @@ export function App() {
         {/* an unknown ?tile= id: the parameter is cleared and said, rather
             than leaving a bogus URL rendering nothing (Pass B) */}
         {missingTile && (
-          <p className="px-5 pb-2 text-center text-[12px] opacity-55">
+          <p className={`pb-2 text-center text-[12px] opacity-55 ${PAGE_X}`}>
             {missingTile} 종목을 찾지 못해 닫았어요
           </p>
         )}
@@ -426,7 +432,7 @@ export function App() {
             {wide && !fullWidth && (
               <div
                 ref={paneRef}
-                className="relative min-w-[600px] flex-1 overflow-y-auto overflow-x-hidden p-5"
+                className={`relative min-w-[600px] flex-1 overflow-y-auto overflow-x-hidden py-5 pl-5 ${PAGE_R}`}
               >
                 <ErrorBoundary region="pane" fallback="이 화면을 그리지 못했어요">
                   {paneW > 0 &&
