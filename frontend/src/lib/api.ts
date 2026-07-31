@@ -182,6 +182,12 @@ export async function fetchHealth(): Promise<Health> {
   return res.json();
 }
 
+/** CD 91d — the 3M curve node IS the CD fixing (`dataset._tenor_id`), so the
+ * outright series `3M` is the CD history. Named here so the reference-line
+ * callers do not each hard-code the string, and so the coupling to that
+ * mapping has one place to be found. */
+export const CD_SERIES_ID = "3M";
+
 export type AnyBasis = "now" | BasisKey;
 
 export interface ForwardCell {

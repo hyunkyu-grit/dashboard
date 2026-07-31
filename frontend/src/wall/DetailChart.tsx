@@ -33,6 +33,7 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   type CandlesPayload,
+  CD_SERIES_ID,
   fetchCandles,
   fetchSeries,
   type HistoryPoint,
@@ -129,6 +130,7 @@ export function DetailChart({
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Line" | "Candlestick"> | null>(null);
   const policyRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const cdRef = useRef<ISeriesApi<"Line"> | null>(null);
   const [themeTick, setThemeTick] = useState(0);
   const [hover, setHover] = useState<Hover | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -149,6 +151,17 @@ export function DetailChart({
     queryKey: ["chart", id, chartType],
     queryFn: (): Promise<CandlesPayload | LineDetail> =>
       isCandle ? fetchCandles(id, chartType as Interval) : fetchLine(id),
+    staleTime: 30_000,
+  });
+
+  /* CD at FULL resolution — this chart's axis is the full history, so the
+   * preview's ~150 points would draw a visibly coarser CD than the instrument
+   * beside it. Skipped when the instrument IS CD (one line under another). */
+  const wantsCd = takesPolicyOverlay(unit) && id !== CD_SERIES_ID;
+  const { data: cdData } = useQuery({
+    queryKey: ["series", CD_SERIES_ID, "full"],
+    queryFn: () => fetchSeries(CD_SERIES_ID, "full"),
+    enabled: wantsCd,
     staleTime: 30_000,
   });
 
@@ -234,6 +247,25 @@ export function DetailChart({
      * reference never competes with the subject. It is excluded from the
      * crosshair: `subscribeCrosshairMove` reads `seriesData.get(series)`,
      * which is the instrument's series and not this one. */
+    if (wantsCd) {
+      /* CD 91d — a plain line (no `WithSteps`: it is a daily fixing, not a
+       * policy decision), dotted so it is told from the base rate's longer
+       * dash by PATTERN and not by colour (§5). Added before the base rate so
+       * the two references stack under the instrument. */
+      const copts = {
+        color: resolveInk(),
+        lineWidth: 1 as const,
+        lineStyle: LineStyle.Dotted,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      };
+      assertNoCssVars(copts);
+      cdRef.current = chart.addSeries(LineSeries, copts);
+    } else {
+      cdRef.current = null;
+    }
+
     if (takesPolicyOverlay(unit) && policy && policy.steps.length) {
       const popts = {
         color: resolveInk(),
@@ -305,7 +337,7 @@ export function DetailChart({
       seriesRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width, height, themeTick, id, chartType, unit, policy]);
+  }, [width, height, themeTick, id, chartType, unit, policy, wantsCd]);
 
   useEffect(() => {
     if (!data || !seriesRef.current || !chartRef.current) return;
@@ -334,6 +366,9 @@ export function DetailChart({
     // has, and handing it to the chart would insert a column no trading day
     // occupies. Fed here rather than in the create effect so it refreshes
     // with the data, and bounded by `policy.through` — never the axis end.
+    if (cdRef.current && cdData) {
+      cdRef.current.setData(cdData.points.map((p) => ({ time: p.t, value: p.v })));
+    }
     if (policyRef.current && policy) {
       policyRef.current.setData(
         snapPolicyToTimes(timesRef.current.length ? timesRef.current : [first, last], policy),
@@ -348,7 +383,7 @@ export function DetailChart({
       assertDomainRendered(c.timeScale().getVisibleLogicalRange(), count, { first, last });
     });
     return () => cancelAnimationFrame(raf);
-  }, [data, themeTick, policy]);
+  }, [data, themeTick, policy, cdData]);
 
   if (isError) {
     return (

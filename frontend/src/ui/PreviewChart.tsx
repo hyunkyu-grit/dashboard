@@ -11,9 +11,12 @@ import { useState } from "react";
 import type { HistoryPoint, PolicyStep, SeriesStats, Unit } from "@/lib/api";
 
 import {
+  alignSeries,
   policyExtent,
   policyPath,
   policySegments,
+  seriesExtent,
+  seriesPath,
   takesPolicyOverlay,
 } from "./policyLine";
 
@@ -26,7 +29,9 @@ import {
 } from "./ReadoutCard";
 import { dateLabels } from "./timeAxis";
 
-const PAD = { top: 10, right: 10, bottom: 18, left: 6 };
+// top pad holds the reference-line legend (§ reference lines), so it is
+// deeper than the 10px the plot alone needed
+const PAD = { top: 16, right: 10, bottom: 18, left: 6 };
 
 export function PreviewChart({
   points,
@@ -35,6 +40,7 @@ export function PreviewChart({
   width,
   height,
   policy,
+  cd,
 }: {
   points: HistoryPoint[];
   stats: SeriesStats | null; // range min/max/avg, precomputed server-side (§16)
@@ -43,6 +49,10 @@ export function PreviewChart({
   height: number;
   /** BOK base rate step, drawn under % instruments only (§policy). */
   policy?: PolicyStep;
+  /** CD 91d history — the second reference line, always drawn with the base
+   * rate. Omitted when the instrument IS CD, where it would be the same line
+   * twice. */
+  cd?: HistoryPoint[];
 }) {
   const [hi, setHi] = useState<number | null>(null);
 
@@ -62,11 +72,13 @@ export function PreviewChart({
   // The policy step shares this axis, so the domain has to hold both before
   // anything is scaled — see policyLine.ts. Widening here (rather than
   // clipping the step) is what keeps two rates in the same unit comparable.
-  const segments = takesPolicyOverlay(unit) ? policySegments(points, policy) : [];
-  const pol = policyExtent(segments);
-  if (pol) {
-    if (pol.min < lo) lo = pol.min;
-    if (pol.max > hi2) hi2 = pol.max;
+  const refs = takesPolicyOverlay(unit);
+  const segments = refs ? policySegments(points, policy) : [];
+  const cdVals = refs ? alignSeries(points, cd) : [];
+  for (const e of [policyExtent(segments), seriesExtent(cdVals)]) {
+    if (!e) continue;
+    if (e.min < lo) lo = e.min;
+    if (e.max > hi2) hi2 = e.max;
   }
   const pad = (hi2 - lo) * 0.06 || 0.01;
   const yMin = lo - pad;
@@ -105,6 +117,14 @@ export function PreviewChart({
     })
     .filter((l) => l.px >= PAD.left && l.px <= width - PAD.right);
 
+  /* What the two ink lines ARE, named on the chart (§ reference lines). Both
+   * are the same ink at similar weights and differ only by dash pattern, so
+   * without this the reader has to infer which is which from the shape — and
+   * "the flat one is policy" stops being true the moment CD is flat too. */
+  const legend: { label: string; dash: string }[] = [];
+  if (cdVals.some((v) => v != null)) legend.push({ label: "CD 91일", dash: "1 2" });
+  if (segments.length) legend.push({ label: "기준금리", dash: "3 3" });
+
   return (
     <div className="relative" style={{ width, height }}>
       <svg
@@ -116,10 +136,22 @@ export function PreviewChart({
         role="img"
         aria-label="10y history"
       >
-        {/* the base rate goes UNDER the instrument line: it is the reference
-            the instrument is read against, not a second subject. Dashed and
-            at reduced ink so it never competes for the eye (§5 — the dash
-            pattern carries it in grayscale, the opacity is a layer). */}
+        {/* Both references go UNDER the instrument line: they are what the
+            instrument is read against, not second subjects. Ink, not hue, and
+            told apart by DASH PATTERN so the distinction survives in
+            grayscale (§5): CD is a fine dotted line, the base rate a longer
+            dash. The opacity is a layer on top of that, never the encoding. */}
+        {seriesPath(cdVals, x, y).map((run) => (
+          <polyline
+            key={`cd-${run.slice(0, 24)}`}
+            points={run}
+            fill="none"
+            className="stroke-ink"
+            strokeWidth={1}
+            strokeOpacity={0.4}
+            strokeDasharray="1 2"
+          />
+        ))}
         {policyPath(segments, x, y).map((run) => (
           <polyline
             key={run.slice(0, 24)}
@@ -138,6 +170,31 @@ export function PreviewChart({
           strokeWidth={1.6}
           strokeLinejoin="round"
         />
+        {legend.map((g, i) => {
+          const lx = width - PAD.right - 74 - i * 82;
+          return (
+            <g key={g.label}>
+              <line
+                x1={lx}
+                x2={lx + 14}
+                y1={PAD.top - 4}
+                y2={PAD.top - 4}
+                className="stroke-ink"
+                strokeWidth={1}
+                strokeOpacity={0.45}
+                strokeDasharray={g.dash}
+              />
+              <text
+                x={lx + 18}
+                y={PAD.top - 1}
+                className="fill-ink"
+                style={{ fontSize: 9, opacity: 0.45 }}
+              >
+                {g.label}
+              </text>
+            </g>
+          );
+        })}
         {labels.map((l) => (
           <text
             key={l.text}

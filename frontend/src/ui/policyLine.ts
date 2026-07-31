@@ -1,4 +1,12 @@
-/* The BOK base rate drawn onto a history chart [OWNER, 2026-07-31].
+/* The two REFERENCE lines every %-unit chart carries [OWNER, 2026-07-31]:
+ * CD 91d and the BOK base rate, always drawn together.
+ *
+ * The pairing is the owner's and it is one instruction, not two: CD is the
+ * floating leg every KRW IRS quote is struck against and the base rate is what
+ * CD tracks, so a rate is read against both or against neither. A first pass
+ * drew only the base rate on the reasoning that the 3M node IS CD91, so CD was
+ * already on screen wherever it mattered — which is true of exactly one chart
+ * out of twenty and was the wrong reading.
  *
  * The charts here are INDEX-SPACED, not time-spaced: x is the position of a
  * point in the fetched series, so the same trading day is a different x on a
@@ -7,8 +15,11 @@
  * scaled by calendar time — that projection is the whole of `policyPath`, and
  * it is why the step corners cannot simply be handed to an SVG.
  *
- * Three rules this module exists to enforce, each of which is a wrong number
- * on screen if it slips:
+ * CD is a daily SERIES, the base rate a STEP, and they are projected the same
+ * way but drawn differently — see `alignSeries` and `policySegments` below.
+ *
+ * Rules this module exists to enforce, each of which is a wrong number on
+ * screen if it slips:
  *
  *   SQUARE CORNERS. A policy rate holds flat and jumps. A diagonal between two
  *   decisions would draw rates that were never in force, on days they were
@@ -19,11 +30,16 @@
  *   Running the line to the axis end instead is the exact failure that bound
  *   exists to prevent, and it looks completely normal.
  *
- *   ONE AXIS. The step shares the instrument's y-scale, so the caller widens
- *   its domain to contain both. Clipping the step to the instrument's own
- *   domain would pin it flat against an edge and read as "equal to the
- *   minimum"; a second axis would let two rates in the same unit be compared
- *   at two different scales, which is worse than not drawing it at all.
+ *   ONE AXIS. Both references share the instrument's y-scale, so the caller
+ *   widens its domain to contain all three. Clipping a reference to the
+ *   instrument's own domain would pin it flat against an edge and read as
+ *   "equal to the minimum"; a second axis would let rates in the same unit be
+ *   compared at two different scales, which is worse than not drawing them.
+ *
+ *   ALIGNED BY DATE, NOT BY POSITION. Two ~150-point previews of different
+ *   series are downsampled independently, so index i is not the same day in
+ *   both. Zipping them would draw a CD level against an instrument level from
+ *   a different week — a plausible-looking chart that is simply wrong.
  */
 
 import type { HistoryPoint, PolicyStep } from "@/lib/api";
@@ -177,6 +193,66 @@ export function snapPolicyToTimes(
     out.push({ time: endTime, value: out[out.length - 1].value });
   }
   return out;
+}
+
+/** CD 91d projected onto another series' index space: for each of `points`,
+ * CD's level on that date, or the most recent one before it.
+ *
+ * A merge, not a zip. The two previews are downsampled independently — ~150
+ * points chosen per series — so index i is a different trading day in each,
+ * and pairing by position would plot a CD level from one week against an
+ * instrument level from another. It looks entirely plausible and is wrong,
+ * which is why this walks both date axes.
+ *
+ * `null` before CD's first observation; the caller breaks the line there
+ * rather than drawing a flat lead-in nobody measured. */
+export function alignSeries(
+  points: HistoryPoint[],
+  ref: HistoryPoint[] | undefined,
+): (number | null)[] {
+  if (!ref || !ref.length) return [];
+  const out: (number | null)[] = new Array(points.length).fill(null);
+  let j = 0;
+  for (let i = 0; i < points.length; i++) {
+    while (j + 1 < ref.length && ref[j + 1].t <= points[i].t) j++;
+    out[i] = ref[j].t <= points[i].t ? ref[j].v : null;
+  }
+  return out;
+}
+
+/** min/max of an aligned reference, so the caller can widen its y-domain. */
+export function seriesExtent(
+  values: (number | null)[],
+): { min: number; max: number } | null {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const v of values) {
+    if (v == null) continue;
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  return min <= max ? { min, max } : null;
+}
+
+/** SVG polyline runs for an aligned reference, broken wherever it is null. */
+export function seriesPath(
+  values: (number | null)[],
+  x: (i: number) => number,
+  y: (v: number) => number,
+): string[] {
+  const runs: string[] = [];
+  let cur: string[] = [];
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    if (v == null) {
+      if (cur.length > 1) runs.push(cur.join(" "));
+      cur = [];
+      continue;
+    }
+    cur.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+  }
+  if (cur.length > 1) runs.push(cur.join(" "));
+  return runs;
 }
 
 /** Does this instrument take the overlay at all? Percent only: the base rate

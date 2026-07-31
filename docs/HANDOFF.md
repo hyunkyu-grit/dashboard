@@ -200,8 +200,16 @@ served with the old keys still in it).
 4. **The 주요/전체 divider is on every instrument tab**, generalized from the
    forward tab. The sets are the owner's and live server-side; the browser
    reads a `key` boolean and never re-derives them.
-5. **The BOK base rate draws on every %-unit chart** (`data/bokbaserate.xlsx`,
-   `app/policy.py`, `ui/policyLine.ts`). See DESIGN § The BOK base rate.
+5. **CD 91d and the BOK base rate draw on every %-unit chart, together**
+   (`data/bokbaserate.xlsx`, `app/policy.py`, `ui/policyLine.ts`,
+   `ui/useCdReference.ts`). See DESIGN § The two reference lines.
+   - **The first pass drew only the base rate** and the owner caught it: "왜
+     기준금리만 그려지고 CD금리는 안 그려지냐". The reasoning had been that the
+     3M node IS CD91 so CD was already on screen where it mattered — true of
+     one chart out of twenty. When an instruction names two things, draw two.
+   - CD is aligned **by date**, not by position: two previews are downsampled
+     per series, so index *i* is a different day in each and a zip would pair
+     levels from different weeks. Plausible-looking and wrong.
 
 **Traps this session hit, worth keeping:**
 
@@ -225,7 +233,17 @@ served with the old keys still in it).
     influence what it is measured from.
   - **A `python replace` with no assert silently did nothing.** The GRID track
     edit did not apply and the "fixed" gap was still on screen; the guard
-    written alongside it is what caught it. Assert every scripted replace.
+    written alongside it is what caught it. Assert every scripted replace —
+    and note the second failure mode, which bit later the same session: when
+    an assert DOES fire mid-script, every earlier edit in that script is
+    rolled back too because nothing was written yet. Re-apply the whole
+    script, not just the piece that failed.
+  - **Equal-thirds columns put their slack between the columns**, which is the
+    one place on the screen with nothing in it. `max-content` columns moved it
+    to the right edge, where it reads as margin (170px gap → 40px).
+  - **Three charts growing independently into their own leftover** filled the
+    space but produced three sizes (307/372/437). One shared height — the
+    shortest column's — is more empty screen and the better trade.
 - **`guards/pane-still.test.ts` banned `strokeDasharray`** as a proxy for the
   removed ghost curve's draw-on animation. That is the wrong proxy: a dash
   PATTERN is static. Narrowed to `strokeDashoffset`, which is what actually

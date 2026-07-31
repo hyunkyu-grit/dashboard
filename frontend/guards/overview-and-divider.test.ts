@@ -179,8 +179,23 @@ describe("the 전체 overview", () => {
      * box, which reports larger. It does not settle — it ran the charts off
      * the bottom of the page. Absolute positioning is what makes the loop
      * impossible, so it is asserted rather than left to look like styling. */
-    expect(overview).toMatch(/className="absolute inset-0/);
+    expect(overview).toMatch(/className="absolute inset-x-0 bottom-0"/);
     expect(overview).toMatch(/relative mt-auto min-h-0 min-w-0 flex-1/);
+  });
+
+  it("the three charts are one height and one baseline", () => {
+    // the shortest column decides, so a 10-row list and a 6-row list do not
+    // produce charts of two sizes; the slack sits ABOVE the shorter chart
+    expect(overview).toMatch(/Math\.min\(\.\.\.reported\)/);
+    expect(overview).toMatch(/\(sharedH \?\? box\.h\) - 20/);
+  });
+
+  it("columns hug their content — the gap between them is the grid gap", () => {
+    /* Equal thirds put ~145px of trailing slack between one column's last
+     * number and the next column's first: the widest gap on screen, three
+     * times over, in the place with nothing in it. */
+    expect(overview).toMatch(/lg:grid-cols-\[repeat\(3,max-content\)\]/);
+    expect(overview).not.toMatch(/repeat\(3,minmax\(0,1fr\)\)/);
   });
 
   it("the charts sit on the floor of the column", () => {

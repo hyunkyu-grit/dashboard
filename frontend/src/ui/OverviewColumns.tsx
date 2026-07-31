@@ -32,6 +32,7 @@ import { dirClass, fmtDelta, levelHeadText, levelHeadTitle } from "@/lib/format"
 import { levelText, rangeText } from "./cells";
 import { ErrorState, LoadingState } from "./DataState";
 import { PreviewChart } from "./PreviewChart";
+import { useCdReference } from "./useCdReference";
 import { cmpKey, GROUP_LABEL, OVERVIEW_GROUPS, type Group, type Row } from "./rows";
 
 /* The chart's FLOOR, not its height. It grows into whatever the list leaves
@@ -167,6 +168,7 @@ function ColumnChart({
     enabled: !!row?.seriesId,
     staleTime: 30_000,
   });
+  const cd = useCdReference(row?.unit, row?.seriesId);
 
   if (!row) {
     return (
@@ -203,6 +205,7 @@ function ColumnChart({
           width={width}
           height={height}
           policy={policy}
+          cd={cd}
         />
       )}
     </div>
@@ -213,10 +216,14 @@ function Column({
   group,
   rows,
   policy,
+  onAvail,
+  sharedH,
 }: {
   group: Group;
   rows: Row[];
   policy?: PolicyStep;
+  onAvail: (h: number) => void;
+  sharedH: number | null;
 }) {
   /* Only 주요 here, in the backend's sort order. The 전체 members of each group
    * are one tab click away and this view is not where they belong — an
@@ -261,7 +268,12 @@ function Column({
           lists started at three different heights with dead space beneath
           them; pinned to the floor they share one baseline and the slack
           moves above the charts where it reads as separation, not emptiness. */}
-      <ColumnChartSlot row={selected} policy={policy} />
+      <ColumnChartSlot
+        row={selected}
+        policy={policy}
+        onAvail={onAvail}
+        sharedH={sharedH}
+      />
     </div>
   );
 }
@@ -272,9 +284,15 @@ function Column({
 function ColumnChartSlot({
   row,
   policy,
+  onAvail,
+  sharedH,
 }: {
   row: Row | null;
   policy?: PolicyStep;
+  /** report how much height this column has left, so the set can agree */
+  onAvail: (h: number) => void;
+  /** the agreed height — the SHORTEST column's, or null before all report */
+  sharedH: number | null;
 }) {
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -283,10 +301,11 @@ function ColumnChartSlot({
     const ro = new ResizeObserver((entries) => {
       const r = entries[0].contentRect;
       setBox({ w: r.width, h: r.height });
+      onAvail(r.height);
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [el]);
+  }, [el, onAvail]);
   /* flex-1 for the height, and the chart ABSOLUTELY POSITIONED inside it.
    *
    * The absolute layer is load-bearing, not styling. Measuring this box and
@@ -299,11 +318,14 @@ function ColumnChartSlot({
   return (
     <div ref={setEl} className="relative mt-auto min-h-0 min-w-0 flex-1 pt-4">
       {box.w > 0 && (
-        <div className="absolute inset-0 pt-4">
+        /* bottom-0, not inset-0: the three charts share one HEIGHT and one
+           BASELINE, so a column with a shorter list carries its slack above
+           the chart rather than below it. */
+        <div className="absolute inset-x-0 bottom-0">
           <ColumnChart
             row={row}
             width={box.w}
-            height={Math.max(CHART_MIN_H, box.h - 20)}
+            height={Math.max(CHART_MIN_H, (sharedH ?? box.h) - 20)}
             policy={policy}
           />
         </div>
@@ -321,12 +343,50 @@ export function OverviewColumns({
   asOf?: string;
   policy?: PolicyStep;
 }) {
-  /* Three equal columns, `minmax(0,1fr)` so a long instrument name cannot
-   * push its column wider than a third — `1fr` alone floors at min-content
-   * and one wide row would unbalance the set. Below the two-pane breakpoint
-   * they stack, because three of these side by side on a laptop half-screen
-   * is eight numeric columns in ~200px, which is unreadable at any type size.
-   */
+  /* Columns are CONTENT-WIDTH and packed left, not equal thirds [OWNER,
+   * 2026-07-31 — "아웃라이트 52주 고저평이 끝나는 부분이랑 스프레드 종목 사이에
+   * 빈칸이 너무 많다"].
+   *
+   * Equal thirds gave each column ~500px for ~355px of fixed tracks, and the
+   * 145px of trailing slack sat exactly between one column's last number and
+   * the next column's first — the widest gap on the screen, three times over,
+   * in the place with nothing in it. `max-content` columns close it to the
+   * grid gap alone.
+   *
+   * The cost is real and deliberate: the three columns no longer span the
+   * window, so a wide screen has empty space at the right. That space is at the
+   * EDGE, where empty space reads as margin; the same pixels between two
+   * columns read as a gap. Below the two-pane breakpoint they stack, because
+   * three of these side by side on a laptop half-screen is eight numeric
+   * columns in ~200px, unreadable at any type size. */
+  /* ONE CHART HEIGHT FOR ALL THREE [OWNER, 2026-07-31]. Each slot reports the
+   * height its own column has left, and the SHORTEST wins — so the three
+   * charts are the same size and share a baseline instead of being 307, 372
+   * and 437 tall because their lists are 10, 8 and 6 rows.
+   *
+   * The slack this gives back sits ABOVE the charts, under the shorter lists,
+   * which is strictly more empty screen than letting each chart grow. That is
+   * the trade the owner asked for: three charts of one size compare, three of
+   * three sizes do not.
+   *
+   * Safe from the feedback loop the first version hit only because the charts
+   * are absolutely positioned — a shared height derived from measurements that
+   * the height itself fed would oscillate across all three columns at once. */
+  const [avail, setAvail] = useState<Record<string, number>>({});
+  const report = useMemo(() => {
+    const out: Record<string, (h: number) => void> = {};
+    for (const g of OVERVIEW_GROUPS) {
+      out[g] = (h: number) =>
+        setAvail((prev) => (prev[g] === h ? prev : { ...prev, [g]: h }));
+    }
+    return out;
+  }, []);
+  const reported = OVERVIEW_GROUPS.map((g) => avail[g]).filter(
+    (h): h is number => typeof h === "number" && h > 0,
+  );
+  const sharedH =
+    reported.length === OVERVIEW_GROUPS.length ? Math.min(...reported) : null;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* The dataset's date, once for the whole overview — the level columns
@@ -338,9 +398,16 @@ export function OverviewColumns({
       >
         {levelHeadText(asOf)} 종가 기준
       </p>
-      <div className="grid flex-1 grid-cols-1 gap-x-6 gap-y-8 lg:grid-cols-[repeat(3,minmax(0,1fr))]">
+      <div className="grid flex-1 grid-cols-1 justify-start gap-x-10 gap-y-8 lg:grid-cols-[repeat(3,max-content)]">
         {OVERVIEW_GROUPS.map((g) => (
-          <Column key={g} group={g} rows={rows} policy={policy} />
+          <Column
+            key={g}
+            group={g}
+            rows={rows}
+            policy={policy}
+            onAvail={report[g]}
+            sharedH={sharedH}
+          />
         ))}
       </div>
     </div>

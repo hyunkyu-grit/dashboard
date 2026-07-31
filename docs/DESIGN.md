@@ -105,12 +105,19 @@ showing only its **주요** set, each with **its own chart underneath**.
   gap immediately after 종목, three times across the screen. The date is stated
   **once above the grid** instead, which is also the honest count: one fact
   about the dataset, not three about three columns.
-- **The charts sit on the floor and grow into what the lists leave.** The three
-  lists are 10, 8 and 6 rows; charts that simply followed their lists started
-  at three heights with dead screen under them. Pinned to the bottom
-  (`mt-auto`) they share one baseline, and `flex-1` spends the leftover on the
-  chart rather than on emptiness — so the three charts differ in height by
-  design.
+- **Columns hug their content; they are not equal thirds** [OWNER, second
+  pass]. Equal thirds gave each column ~500px for ~355px of tracks, and the
+  ~145px of trailing slack sat exactly between one column's last number and the
+  next column's 종목 — the widest gap on the screen, three times over, in the
+  place with nothing in it. `max-content` columns close it to the grid gap
+  (measured 170px → 40px). The cost is deliberate: the set no longer spans the
+  window, so the leftover sits at the right EDGE, where empty space reads as
+  margin — the same pixels between two columns read as a gap.
+- **The charts sit on the floor and share ONE height** — the shortest column's
+  [OWNER]. They first grew independently into what each list left, which filled
+  the space but made three charts of three sizes (307/372/437) that could not
+  be compared. One height is strictly more empty screen and the right trade:
+  the slack now sits **above** the shorter charts.
   - **The chart is measured OUT OF FLOW, and that is load-bearing.** Sizing an
     in-flow child from a ResizeObserver on its own parent is a feedback loop:
     the chart grows to the measured height, which grows the box, which reports
@@ -153,13 +160,32 @@ each row carries a `key` boolean and the browser never re-derives it (§16).
   can filter one side away; a lone 주요 heading would state a split that is not
   on screen).
 
-### The BOK base rate, on every % chart [OWNER, 2026-07-31]
+### The two reference lines, on every % chart [OWNER, 2026-07-31]
 
-CD and the base rate are always drawn together, and since the 3M node **is**
-CD91, that generalises to: the base rate rides on every **%-unit** chart —
-outrights and forwards, in the preview pane, the enlarged popup, and the 전체
-columns. Spread / butterfly / volatility charts are bp or ratio and are
+**CD 91d and the BOK base rate, always drawn together** — on every **%-unit**
+chart: outrights and forwards, in the preview pane, the enlarged popup, and the
+전체 columns. Spread / butterfly / volatility charts are bp or ratio and are
 **excluded**: a 2.75 line on a ±30bp axis is a rescale, not a comparison.
+
+The pairing is one instruction, not two. CD is the floating leg every KRW IRS
+quote is struck against and the base rate is what CD tracks, so a rate is read
+against both or against neither. A first pass drew **only** the base rate,
+reasoning that the 3M node IS CD91 so CD was already on screen where it
+mattered — true of exactly one chart out of twenty, and the wrong reading of
+the instruction.
+
+- Told apart by **DASH PATTERN, not colour** (§5): CD dotted (`1 2`), the base
+  rate a longer dash (`3 3`), both in ink under the instrument's blue line. A
+  **legend names them on the chart** — they are the same ink at the same weight,
+  and "the flat one is policy" stops being true the moment CD is flat too.
+- **CD is skipped on the 3M chart itself**, where the reference is the subject.
+  `useCdReference` owns that decision so every caller answers it the same way.
+- **CD is aligned BY DATE, never by position** (`alignSeries`). Two ~150-point
+  previews are downsampled independently, so index *i* is a different trading
+  day in each; zipping them would plot a CD level from one week against an
+  instrument level from another — a chart that looks entirely plausible and is
+  wrong. It is `null` before CD's first observation and the line **breaks**
+  there rather than drawing a flat lead-in nobody measured.
 
 - **Data**: `data/bokbaserate.xlsx` (Infomax `한국:기준금리`, 2016→). A static
   snapshot like the IRS workbook, refreshed by hand and separately.

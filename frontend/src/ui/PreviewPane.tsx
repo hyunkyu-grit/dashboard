@@ -15,6 +15,7 @@ import { AnimatedNumber } from "./AnimatedNumber";
 import { ErrorState, LoadingState } from "./DataState";
 import { PRESS_SCALE, SPRING } from "./motion";
 import { PreviewChart } from "./PreviewChart";
+import { useCdReference } from "./useCdReference";
 import type { Row } from "./rows";
 
 const CHART_H = 220;
@@ -131,6 +132,8 @@ function PreviewBody({
   retrying: boolean;
   onRetry: () => void;
 }) {
+  // hooks run before any early return
+  const cd = useCdReference(row.unit, row.seriesId);
   if (!row.seriesId) {
     return (
       <>
@@ -178,6 +181,7 @@ function PreviewBody({
             width={width}
             height={CHART_H}
             policy={policy}
+            cd={cd}
           />
           <p className="mt-2 text-[12px] opacity-40">눌러서 크게 볼 수 있습니다</p>
         </motion.div>

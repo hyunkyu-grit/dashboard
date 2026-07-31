@@ -15,9 +15,12 @@ import { describe, expect, it } from "vitest";
 
 import type { HistoryPoint, PolicyStep } from "../src/lib/api";
 import {
+  alignSeries,
   policyExtent,
   policyPath,
   policySegments,
+  seriesExtent,
+  seriesPath,
   snapPolicyToTimes,
   takesPolicyOverlay,
 } from "../src/ui/policyLine";
@@ -222,5 +225,56 @@ describe("which instruments take the overlay", () => {
     expect(takesPolicyOverlay("%")).toBe(true);
     expect(takesPolicyOverlay("bp")).toBe(false);
     expect(takesPolicyOverlay("ratio")).toBe(false);
+  });
+});
+
+describe("CD 91d — the second reference line", () => {
+  const inst = pts("2026-01-05", "2026-03-05", "2026-05-05", "2026-07-05");
+
+  it("aligns BY DATE, never by position", () => {
+    /* THE guard for this line. Two ~150-point previews are downsampled per
+     * series, so index i is a different trading day in each. A zip would plot
+     * a CD level from one week against an instrument level from another — a
+     * chart that looks entirely plausible and is simply wrong.
+     *
+     * `ref` here deliberately has different, denser dates than `inst`. */
+    const ref: HistoryPoint[] = [
+      { t: "2026-01-01", v: 3.0, d: 0 },
+      { t: "2026-02-01", v: 3.1, d: 0 },
+      { t: "2026-04-01", v: 3.2, d: 0 },
+      { t: "2026-06-01", v: 3.3, d: 0 },
+    ];
+    // each instrument date takes the last CD observation AT OR BEFORE it
+    expect(alignSeries(inst, ref)).toEqual([3.0, 3.1, 3.2, 3.3]);
+    // and the naive zip would have given [3.0, 3.1, 3.2, 3.3] here too only by
+    // coincidence of length — so assert the shape that distinguishes them:
+    const sparse: HistoryPoint[] = [{ t: "2026-04-01", v: 9.9, d: 0 }];
+    expect(alignSeries(inst, sparse)).toEqual([null, null, 9.9, 9.9]);
+  });
+
+  it("is null before CD's first observation, not flat", () => {
+    // a flat lead-in at CD's opening level would assert a rate for days the
+    // series does not cover; the caller breaks the line instead
+    const late: HistoryPoint[] = [{ t: "2026-06-01", v: 3.3, d: 0 }];
+    expect(alignSeries(inst, late)).toEqual([null, null, null, 3.3]);
+    expect(alignSeries(inst, undefined)).toEqual([]);
+    expect(alignSeries(inst, [])).toEqual([]);
+  });
+
+  it("the drawn path BREAKS at a null rather than bridging it", () => {
+    const runs = seriesPath([null, 1, 2, null, 3, 4], (i) => i * 10, (v) => v);
+    expect(runs).toHaveLength(2);
+    expect(runs[0]).toBe("10.0,1.0 20.0,2.0");
+    expect(runs[1]).toBe("40.0,3.0 50.0,4.0");
+  });
+
+  it("a single isolated point draws nothing — a line needs two", () => {
+    expect(seriesPath([null, 5, null], (i) => i, (v) => v)).toEqual([]);
+  });
+
+  it("the extent ignores nulls so the domain is not dragged to zero", () => {
+    expect(seriesExtent([null, 2, 5, null])).toEqual({ min: 2, max: 5 });
+    expect(seriesExtent([null, null])).toBeNull();
+    expect(seriesExtent([])).toBeNull();
   });
 });
