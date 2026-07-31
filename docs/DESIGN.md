@@ -92,32 +92,37 @@ showing only its **주요** set, each with **its own chart underneath**.
   columns need.
 - **버터플라이 and 변동성 are not in it.** Three columns is the point; a fourth
   and a fifth would make it the list again.
-- **It never drops a column to fit.** The table's priority ladder does not
-  apply: showing 어제 · MTD · YTD · 52주 고/저/평 at once is the entire reason
-  the tab exists. It stacks the three columns below the two-pane breakpoint
-  instead.
-- **Type is the table's 13px** [OWNER, after seeing it]. It shipped at 11px on
-  the theory that three tables side by side had to be small; on screen that
-  just read as small, and the eight tracks fit 13px at 1920 with room over.
-- **Every track is sized to its CONTENT, never to a header the column does not
-  print.** The level column was 10.5ch to hold the ten-glyph ISO date the table
-  heads it with, against six glyphs of value — and the surplus showed up as a
-  gap immediately after 종목, three times across the screen. The date is stated
-  **once above the grid** instead, which is also the honest count: one fact
-  about the dataset, not three about three columns.
-- **Columns hug their content; they are not equal thirds** [OWNER, second
-  pass]. Equal thirds gave each column ~500px for ~355px of tracks, and the
-  ~145px of trailing slack sat exactly between one column's last number and the
-  next column's 종목 — the widest gap on the screen, three times over, in the
-  place with nothing in it. `max-content` columns close it to the grid gap
-  (measured 170px → 40px). The cost is deliberate: the set no longer spans the
-  window, so the leftover sits at the right EDGE, where empty space reads as
-  margin — the same pixels between two columns read as a gap.
-- **The charts sit on the floor and share ONE height** — the shortest column's
-  [OWNER]. They first grew independently into what each list left, which filled
-  the space but made three charts of three sizes (307/372/437) that could not
-  be compared. One height is strictly more empty screen and the right trade:
-  the slack now sits **above** the shorter charts.
+- **It IS the instrument table's grid** [OWNER — "이거랑 동일하게"]. Header
+  text, column template (`gridTemplate(ALL_COLUMNS)`), row height, 13px type
+  and the 52주 sub-grid all come from the modules the tabs use (`columns.ts`,
+  `RangeCells`), so a column here and the 아웃라이트 tab print the same row the
+  same way. Each column is titled with that tab's own divider heading —
+  **주요 아웃라이트 / 주요 스프레드 / 주요 포워드**.
+  - It never drops a column: `ALL_COLUMNS`, never the ladder. Showing all six
+    figures at once is the entire reason the tab exists.
+  - **Do not re-fork this grid.** It shipped as a bespoke eight-track grid at
+    its own type size, and that second definition of one thing drifted twice in
+    one session — a level track sized by a header it did not print, and labels
+    clipped at three successive widths because `ch` is the ZERO advance while
+    `M` is far wider. The shared template had already solved both. If the
+    overview needs a column the table lacks, that is a change to `columns.ts`.
+  - The only track that differs is the elastic **52주** one, which sits at its
+    floor here (211px) and absorbs pane slack in the tab (433px). That is the
+    column doing its designed job, not drift; the five fixed tracks are
+    byte-identical.
+- **Left / centre / right** [OWNER]. `max-content` columns +
+  `justify-between`: the tracks are the table's own width and every spare pixel
+  is spent as the two separations between them. Equal thirds spent the same
+  pixels as trailing slack *inside* each column, which put the widest gap on
+  the screen between one column's last number and the next column's 종목 — the
+  one stretch of that row with nothing in it.
+- **The charts sit on the floor at a FIXED height** (200px). They first grew
+  into whatever each list left, which filled the space but made the curve the
+  subject: 369px of chart under ~250px of table, and three charts of three
+  sizes. A constant also makes "three charts, one height" true by
+  construction — it replaced a measured agreement (each column reporting its
+  leftover, shortest wins) that could disagree with itself and needed a
+  height measurement to exist at all.
   - **The chart is measured OUT OF FLOW, and that is load-bearing.** Sizing an
     in-flow child from a ResizeObserver on its own parent is a feedback loop:
     the chart grows to the measured height, which grows the box, which reports

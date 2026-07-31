@@ -139,38 +139,54 @@ describe("the 전체 overview", () => {
   it("prints all six figures — it never drops a column to fit", () => {
     /* The table drops columns when space runs out; the overview must not.
      * Showing 어제·MTD·YTD·52주 고/저/평 at once is the entire reason the tab
-     * exists, so it sets smaller type instead and stacks below the two-pane
-     * breakpoint. */
-    for (const b of BASIS_ORDER) expect(overview).toContain(`row.changes.${b}`);
-    expect(overview).toContain("row.rangeHigh");
-    expect(overview).toContain("row.rangeLow");
-    expect(overview).toContain("row.rangeAvg");
+     * exists. It renders ALL_COLUMNS and never calls the ladder. */
+    expect(overview).toMatch(/gridTemplate\(ALL_COLUMNS\)/);
     expect(overview).not.toContain("visibleColumns");
+    expect(overview).toMatch(/BASIS_ORDER\.map/);
   });
 
-  it("the 52주 figures go through rangeText, keeping the parity guard real", () => {
-    expect(overview).toMatch(/rangeText\(row\.rangeHigh, row\.unit\)/);
+  it("IS the table's grid — it does not fork one", () => {
+    /* The overview shipped with a bespoke eight-track grid at its own type
+     * size, and that second definition of one thing drifted twice in a single
+     * session: a level track sized by a header it did not print, and labels
+     * clipped at three successive widths because `ch` is the ZERO advance and
+     * `M` is not. The shared template had already solved both. */
+    expect(overview).toMatch(/from "\.\/columns"/);
+    expect(overview).toMatch(/<RangeCells row=\{row\} \/>/);
+    expect(overview).toMatch(/<RangeHeader \/>/);
+    // no private grid, no private type scale
+    expect(overview).not.toMatch(/const GRID =/);
+    expect(overview).not.toMatch(/\dch /);
+  });
+
+  it("prints the 52주 figures through the table's own component", () => {
+    // RangeCells is the single path the readout-parity guard compares against
+    // 현재; a local re-render of the three numbers would make it vacuous
+    expect(overview).toContain("RangeCells");
+    expect(overview).not.toMatch(/rangeText\(/);
     expect(overview).not.toMatch(/levelText\(\{ \.\.\.row/);
   });
 
-  it("sets the table's type size, not a smaller one", () => {
-    /* Shipped at 11px on the theory that three tables side by side had to be
-     * small; on screen it just read as small, and the tracks fit 13px with
-     * room over. `ch` resolves against the element's OWN font-size, so a
-     * stray size on the grid container silently resizes every track. */
-    // 12px is allowed for the one CAPTION (the dataset date above the grid),
-    // which is chrome and matches the freshness chip; the banned sizes are the
-    // ones the ROWS shipped at.
-    expect(overview).not.toMatch(/text-\[1[01]px\]/);
+  it("sets the table's type size — 13px, the same as every instrument tab", () => {
+    /* It shipped at 11px, was raised to 16px when that read as small, and
+     * landed at 13px when the owner asked for parity with the tabs. `ch`
+     * resolves against the element's OWN font-size, so the size and the
+     * column widths are one decision, not two — which is the argument for
+     * taking both from `columns.ts` rather than setting either here. */
     expect(overview).toMatch(/text-\[13px\]/);
+    expect(overview).not.toMatch(/text-\[1[0-2]px\]/);
+    expect(overview).not.toMatch(/text-\[1[4-9]px\]/);
   });
 
-  it("no track is widened by a header the column does not print", () => {
-    // the ten-glyph ISO date used to size the six-glyph level column, and the
-    // surplus showed as a gap right after 종목 — three times over. The date is
-    // stated once above the grid instead.
-    expect(overview).toMatch(/const GRID = "7ch 6\.5ch/);
-    expect(overview).toMatch(/levelHeadText\(asOf\)\} 종가 기준/);
+  it("heads the level column with the data's date, as the table does", () => {
+    // pass M's rule: these are closes, so the header names the DAY rather
+    // than reading 현재
+    expect(overview).toMatch(/levelHeadText\(asOf\)/);
+    expect(overview).not.toContain("현재</");
+  });
+
+  it("names each column with the tab's own 주요 heading", () => {
+    expect(overview).toMatch(/주요 \{GROUP_LABEL\[group\]\}/);
   });
 
   it("the chart is measured OUT OF FLOW — the loop that broke the page", () => {
@@ -183,11 +199,23 @@ describe("the 전체 overview", () => {
     expect(overview).toMatch(/relative mt-auto min-h-0 min-w-0 flex-1/);
   });
 
-  it("the three charts are one height and one baseline", () => {
-    // the shortest column decides, so a 10-row list and a 6-row list do not
-    // produce charts of two sizes; the slack sits ABOVE the shorter chart
-    expect(overview).toMatch(/Math\.min\(\.\.\.reported\)/);
-    expect(overview).toMatch(/\(sharedH \?\? box\.h\) - 20/);
+  it("the three charts are one height BY CONSTRUCTION", () => {
+    /* A constant, not a measured agreement. The previous version had each
+     * column report its leftover height and took the minimum — which worked,
+     * and was an apparatus that could disagree with itself. A constant cannot,
+     * and it needs no height measurement at all, so the ResizeObserver
+     * feedback loop has nothing to feed on. */
+    expect(overview).toMatch(/const CHART_H = \d+;/);
+    expect(overview).toMatch(/height=\{CHART_H\}/);
+    expect(overview).not.toContain("sharedH");
+    expect(overview).not.toContain("onAvail");
+  });
+
+  it("sits left / centre / right", () => {
+    // spare width is spent BETWEEN the columns, never as trailing slack
+    // inside a row — which is where equal thirds put it, and it reads as a gap
+    expect(overview).toContain("justify-between");
+    expect(overview).not.toContain("justify-start");
   });
 
   it("columns hug their content — the gap between them is the grid gap", () => {

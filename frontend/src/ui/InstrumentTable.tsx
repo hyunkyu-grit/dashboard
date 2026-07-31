@@ -22,7 +22,12 @@ import { getTile } from "@/wall/tileRegistry";
 import { useRegisterTile } from "@/wall/useRegisterTile";
 
 import { levelText } from "./cells";
-import { gridTemplate, visibleColumns, type VisibleColumns } from "./columns";
+import {
+  BASIS_HEAD,
+  gridTemplate,
+  visibleColumns,
+  type VisibleColumns,
+} from "./columns";
 import { reorderAnimates, rowShouldFlip, SPRING } from "./motion";
 import { OverviewColumns } from "./OverviewColumns";
 import { RangeCells, RangeHeader } from "./RangeCells";
@@ -36,12 +41,6 @@ import {
 } from "./rows";
 import { SCREENERS } from "./screener";
 import { columnCue } from "./tint";
-
-const BASIS_HEAD: Record<BasisKey, string> = {
-  d1: "어제",
-  mtd: "MTD",
-  ytd: "YTD",
-};
 
 /** The 52주 column's name in noun form — what the hidden-column note calls it
  * when the ladder drops it. The header itself renders the three sub-labels. */

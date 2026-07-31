@@ -27,6 +27,16 @@
 
 import type { BasisKey } from "@/lib/api";
 
+/** The change columns' header text. Lives here, beside the grid it is measured
+ * against, because BOTH the instrument table and the 전체 overview render this
+ * header row — and the overview is imported BY the table, so it cannot import
+ * the constant back without a cycle. */
+export const BASIS_HEAD: Record<BasisKey, string> = {
+  d1: "어제",
+  mtd: "MTD",
+  ytd: "YTD",
+};
+
 export const WIDEST = {
   /** Longest instrument identifier the product can produce: the `1s1.5s10s`
    * butterfly (9 glyphs). Forwards top out at 7 (`1Y3Mx3M` — starts run

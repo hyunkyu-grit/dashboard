@@ -239,11 +239,22 @@ served with the old keys still in it).
     rolled back too because nothing was written yet. Re-apply the whole
     script, not just the piece that failed.
   - **Equal-thirds columns put their slack between the columns**, which is the
-    one place on the screen with nothing in it. `max-content` columns moved it
-    to the right edge, where it reads as margin (170px gap → 40px).
+    one place on the screen with nothing in it.
   - **Three charts growing independently into their own leftover** filled the
-    space but produced three sizes (307/372/437). One shared height — the
-    shortest column's — is more empty screen and the better trade.
+    space but produced three sizes (307/372/437) and made the curve the
+    subject of a tab about numbers.
+- **The overview's grid was a FORK, and forking it was the root mistake.** It
+  shipped with its own eight-track template at its own type size, and over four
+  passes that second definition drifted every time: a level track sized by a
+  header it did not print, then labels clipped at 6ch, 6.5ch and 7ch because
+  `ch` is the ZERO advance and `M` is far wider than a digit, then a type size
+  that had to be re-picked twice. It now renders `gridTemplate(ALL_COLUMNS)`
+  and `RangeCells` — the instrument table's own — at 13px, and every one of
+  those defects is structurally gone. **If the overview needs a column the
+  table lacks, change `columns.ts`; do not re-fork.** Placement is
+  `max-content` + `justify-between` (left / centre / right) and the chart is a
+  fixed 200px, which also makes "three charts, one height" true by
+  construction rather than by measurement.
 - **`guards/pane-still.test.ts` banned `strokeDasharray`** as a proxy for the
   removed ghost curve's draw-on animation. That is the wrong proxy: a dash
   PATTERN is static. Narrowed to `strokeDashoffset`, which is what actually
