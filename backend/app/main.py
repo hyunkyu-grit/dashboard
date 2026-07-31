@@ -10,6 +10,7 @@ documents the gate.
 
 from __future__ import annotations
 
+import datetime as dt
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -17,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from . import payloads
+from .backtest import BacktestError, run_backtest
 from .cache import cached, data_hash
 from .curves import build_basis_curves
 from .dataset import load_dataset
@@ -112,6 +114,41 @@ def dv01(series_id: str) -> dict:
     # Per-leg DV01 + DV01-neutral notional ratio at the current curve (§B).
     # Forwards/vol/unknown ids get an empty block (kind null).
     return _dv01_table.get(series_id, payloads.empty_dv01(series_id))
+
+
+@app.get("/api/backtest/{series_id}")
+def backtest(
+    series_id: str,
+    direction: int = 1,
+    notional: float = 1e10,
+    entry: str = "",
+    exit: str | None = None,
+) -> dict:
+    """Enter `series_id` on `entry` and revalue it daily to `exit` (default:
+    the data's last date). Full revaluation on each day's own curve, plus the
+    cash the position has settled — not a DV01 approximation (§backtest).
+
+    LIVE ONLY, by design. Every other endpoint here has a static twin under
+    `frontend/public/api/**` that the deployed site serves; this one cannot,
+    because the answer depends on inputs the reader chooses. Vercel runs the
+    frontend and this backend runs behind it [OWNER, 2026-07-31], which is also
+    what keeps §16 intact — the browser still computes nothing.
+    """
+    if not entry:
+        raise HTTPException(status_code=422, detail="entry date is required")
+    try:
+        return run_backtest(
+            _dataset,
+            series_id,
+            direction=direction,
+            notional=notional,
+            entry=dt.date.fromisoformat(entry),
+            exit_=dt.date.fromisoformat(exit) if exit else None,
+        )
+    except ValueError as exc:  # fromisoformat
+        raise HTTPException(status_code=422, detail=f"bad date: {exc}")
+    except BacktestError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @app.get("/api/volatility")
