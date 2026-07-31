@@ -86,7 +86,14 @@ function PreviewSheet({
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-edge" />
         <div ref={ref}>
           {w > 0 && (
-            <PreviewPane row={row} onOpen={onOpen} width={w} policy={policy} />
+            <PreviewPane
+              row={row}
+              onOpen={onOpen}
+              width={w}
+              // the sheet is capped at 85vh; the chart takes a readable slice of it
+              height={Math.round(window.innerHeight * 0.5)}
+              policy={policy}
+            />
           )}
         </div>
       </motion.div>
@@ -441,6 +448,7 @@ export function App() {
                         row={previewRow}
                         onOpen={openEnlarged}
                         width={paneW - PANE_PAD}
+                        height={Math.max(360, paneH - PANE_PAD)}
                         policy={summary.policy}
                       />
                     ) : (

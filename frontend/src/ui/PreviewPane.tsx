@@ -18,7 +18,16 @@ import { PreviewChart } from "./PreviewChart";
 import { useCdReference } from "./useCdReference";
 import type { Row } from "./rows";
 
-const CHART_H = 220;
+/* The hover chart is now PANE-SIZED, not a thumbnail [OWNER, 2026-07-31 —
+ * "바로 보이는 커브를 내가 클릭했을 때의 커브 크기로... 조금 더 자세하고 세로로
+ * 길게"]. It was a fixed 220px under a pane that is ~800px tall, so most of the
+ * right-hand side was empty and the only way to see the series properly was to
+ * open the popup — which is the thing the click is being repurposed for.
+ *
+ * `CHART_MIN_H` is the floor for a short window; the real height comes from the
+ * measured pane (App passes it), less the header block above the chart. */
+const CHART_MIN_H = 320;
+const HEADER_H = 96; // name + level + delta, and the caption under the chart
 
 function Sentence({ children }: { children: React.ReactNode }) {
   return (
@@ -59,19 +68,26 @@ export function PreviewPane({
   row,
   onOpen,
   width,
+  height,
   policy,
 }: {
   row: Row | null;
   onOpen: (row: Row) => void;
   width: number;
+  /** the pane's measured height; the chart takes what the header leaves */
+  height: number;
   /** BOK base rate step — drawn on % instruments only (§policy). */
   policy?: PolicyStep;
 }) {
   const { data, isError, isLoading, isFetching, refetch } = useQuery({
     // preview resolution: ~150 downsampled line points (§16); the enlarged view
     // fetches full resolution under a distinct key.
-    queryKey: ["series", row?.seriesId, "preview"],
-    queryFn: () => fetchSeries(row!.seriesId!, "preview"),
+    /* FULL resolution, not "preview". The ~150-point preview was cut for a
+     * 220px thumbnail; across a pane-width chart that is one point per ~3.5
+     * weeks and the line reads as a polygon. react-query caches per id, so
+     * re-hovering a row costs nothing after the first look. */
+    queryKey: ["series", row?.seriesId, "full"],
+    queryFn: () => fetchSeries(row!.seriesId!, "full"),
     enabled: !!row?.seriesId,
     staleTime: 30_000,
   });
@@ -104,6 +120,7 @@ export function PreviewPane({
             retrying={isFetching}
             onRetry={() => void refetch()}
             policy={policy}
+            height={height}
           />
         </motion.div>
       </AnimatePresence>
@@ -121,10 +138,12 @@ function PreviewBody({
   retrying,
   onRetry,
   policy,
+  height,
 }: {
   row: Row;
   onOpen: (row: Row) => void;
   width: number;
+  height: number;
   policy?: PolicyStep;
   data: Awaited<ReturnType<typeof fetchSeries>> | undefined;
   isError: boolean;
@@ -179,7 +198,7 @@ function PreviewBody({
             stats={data.stats}
             unit={row.unit}
             width={width}
-            height={CHART_H}
+            height={Math.max(CHART_MIN_H, height - HEADER_H)}
             policy={policy}
             cd={cd}
           />
