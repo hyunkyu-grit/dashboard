@@ -19,16 +19,27 @@ import type {
   WallSummary,
 } from "@/lib/api";
 
-export type Group = "outright" | "spread" | "forward" | "vol";
+/* Butterflies are their OWN group since 2026-07-31 [OWNER]. They used to ride
+ * on the spread tab, which meant 20 flies buried 15 spreads; with 6M and 9M in
+ * the tenor set it would have been 56 under 28. Two-leg and three-leg are
+ * different instruments read for different reasons, so they are different
+ * tabs — and butterflies deliberately do NOT appear on the 전체 overview. */
+export type Group = "outright" | "spread" | "fly" | "forward" | "vol";
 
-export const BASIS_ORDER: BasisKey[] = ["d1", "wtd", "mtd", "qtd", "ytd"];
+export const BASIS_ORDER: BasisKey[] = ["d1", "mtd", "ytd"];
 
 export const GROUP_LABEL: Record<Group, string> = {
   outright: "아웃라이트",
   spread: "스프레드",
+  fly: "버터플라이",
   forward: "포워드",
   vol: "변동성",
 };
+
+/** The three groups the 전체 overview columns show, left to right (§전체).
+ * Volatility and butterflies are not among them — the overview is the three
+ * things a rates screen opens on, not a summary of every tab. */
+export const OVERVIEW_GROUPS: Group[] = ["outright", "spread", "forward"];
 
 export interface Row {
   id: string;
@@ -55,6 +66,10 @@ export interface Row {
   startLabel?: string;
   /** true for live-quoted (non-interpolated) outright nodes (§6). */
   quoted?: boolean;
+  /** 주요 membership — decides which side of the tab's divider this row sits
+   * on (§3). Server-decided for every group, including forwards (whose flag
+   * arrives as `keyForward`); the browser holds no copy of the owner's list. */
+  key: boolean;
 }
 
 /** Provenance of every Row field (§16). `dto` = read straight from the API;
@@ -79,6 +94,7 @@ export const ROW_FIELD_SOURCE: Record<keyof Row, "dto" | "format"> = {
   keyForward: "dto",
   startLabel: "format",
   quoted: "dto",
+  key: "dto",
 };
 
 /** lexicographic compare of numeric sort keys (§6). */
@@ -97,7 +113,13 @@ export function cmpKey(a: number[], b: number[]): number {
  *
  *   a change column is sorted → by |change| in that column, nulls last;
  *   nothing is sorted        → the backend's explicit sort key, ascending
- *                              (§6), key forwards pinned to the top.
+ *                              (§6), 주요 rows pinned to the top.
+ *
+ * The 주요 pin used to be forwards-only (`keyForwardFirst`). It now applies to
+ * every tab that has a 주요 set, because every tab now draws the divider —
+ * and the divider is only honest if the rows above it are in fact the ones
+ * ordered first. Sorting by a change column overrides it, deliberately: the
+ * question "what moved most" is asked of the whole tab, not of 주요 first.
  *
  * Only a CHANGE column can occupy the first state. The 52주 column carries no
  * sort key of its own — three statistics do not rank rows — so clicking its
@@ -111,7 +133,7 @@ export function orderRows(
   rows: Row[],
   sortCol: BasisKey | null,
   sortAsc: boolean,
-  keyForwardFirst: boolean,
+  keyFirst: boolean,
 ): Row[] {
   if (sortCol) {
     const withVal = rows.filter((r) => r.changes[sortCol] != null);
@@ -123,18 +145,30 @@ export function orderRows(
     return [...withVal, ...without];
   }
   return [...rows].sort((a, b) => {
-    if (keyForwardFirst) {
-      const ak = a.keyForward ? 0 : 1;
-      const bk = b.keyForward ? 0 : 1;
+    if (keyFirst) {
+      const ak = a.key ? 0 : 1;
+      const bk = b.key ? 0 : 1;
       if (ak !== bk) return ak - bk;
     }
     return cmpKey(a.sortKey, b.sortKey);
   });
 }
 
-/** "1Y-10Y" → "1s10s", "2Y-5Y-10Y" → "2s5s10s" (trader shorthand). */
+/** "1Y-10Y" → "1s10s", "2Y-5Y-10Y" → "2s5s10s" (trader shorthand).
+ *
+ * The shorthand only works when every leg is a YEAR count: it drops the unit
+ * and lets `s` carry it. A month leg has no such reading — 6M-9M-1Y through
+ * the old rule came out `6Ms9Ms1s`, which is not shorthand for anything and
+ * is the label the 6M/9M butterfly would have shipped with. So a legset that
+ * is not all-years keeps its units and joins on a slash: `6M/9M/1Y`. Both
+ * forms are what a KRW desk writes; the mixed one is what nobody writes.
+ * Pinned by guards/instrument-label.test.ts. */
 export function traderName(id: string): string {
-  return id.split("-").map((t) => t.replace("Y", "")).join("s") + "s";
+  const legs = id.split("-");
+  if (legs.every((t) => t.endsWith("Y"))) {
+    return legs.map((t) => t.slice(0, -1)).join("s") + "s";
+  }
+  return legs.join("/");
 }
 
 /* `renderOneLiner` phrased the backend 한 줄 classification into Korean and is
@@ -158,6 +192,7 @@ function fromSummary(s: SeriesSummary, group: Group, label: string): Row {
     sortKey: s.sortKey,
     movePct: s.movePct,
     quoted: s.quoted ?? undefined,
+    key: s.key,
   };
 }
 
@@ -172,7 +207,9 @@ export function buildRows(
     rows.push(fromSummary(o, "outright", o.id));
   }
   for (const d of summary.derived) {
-    rows.push(fromSummary(d, "spread", traderName(d.id)));
+    // `kind` already distinguishes the two server-side — a three-leg id is
+    // not a spread with an extra leg, it is a different instrument.
+    rows.push(fromSummary(d, d.kind === "fly" ? "fly" : "spread", traderName(d.id)));
   }
   if (forwards) {
     // every non-degenerate forward in the matrix, start-major (§3)
@@ -208,6 +245,7 @@ export function buildRows(
           sortKey: cell.sortKey,
           movePct: null, // forwards have no cheap daily-move history
           keyForward: cell.keyForward,
+          key: cell.keyForward,
           startLabel: sp.label,
         });
       }

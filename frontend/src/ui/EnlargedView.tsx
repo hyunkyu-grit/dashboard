@@ -212,6 +212,7 @@ function Body({
         chartType={chartType}
         width={900}
         height={420}
+        policy={summary.policy}
       />
       {/* This space is deliberately EMPTY. The curve heatmap sat here, then
           carry & roll; both were removed (see DESIGN §2) and nothing has

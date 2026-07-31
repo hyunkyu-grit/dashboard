@@ -13,7 +13,7 @@ import type {
 } from "../src/lib/api";
 import { buildRows } from "../src/ui/rows";
 
-const nullDeltas = { d1: 1, wtd: 1, mtd: 1, qtd: 1, ytd: 1 };
+const nullDeltas = { d1: 1, mtd: 1, ytd: 1 };
 
 // The sort key + quoted flag now arrive from the backend (§16); these fixtures
 // stand in for that DTO. `yr` mirrors the server tenor→years map.
@@ -31,10 +31,11 @@ function outright(id: string): SeriesSummary {
     unit: "%",
     now: 3,
     deltas: { ...nullDeltas },
-    basisValues: { d1: 3, wtd: 3, mtd: 3, qtd: 3, ytd: 3 },
+    basisValues: { d1: 3, mtd: 3, ytd: 3 },
     range1y: { min: 1, max: 5, avg: 3, pct: 50 },
     sortKey: id.split("-").map((t) => yr[t]),
     quoted: true,
+    key: true,
     movePct: 50,
   };
 }
@@ -60,11 +61,13 @@ function fwdCell(start: string, sortKey: number[]) {
 // plus interpolated tenors, a spread, and a butterfly.
 const summary: WallSummary = {
   asof: "2026-07-24",
-  basisDates: { d1: null, wtd: null, mtd: null, qtd: null, ytd: null },
+  basisDates: { d1: null, mtd: null, ytd: null },
   specNodeOrder: [],
   displayTenors: ["1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y"],
   missingNodes: [],
   curveBanner: { kind: null },
+  policy: { unit: "%" as const, asof: "2026-07-16", through: "2026-07-30",
+      steps: [{ date: "2026-07-16", rate: 2.75 }], latest: 2.75, warnings: [] },
   outrights: [
     "1D", "3M", "6M", "9M", "1Y", "1.5Y", "2Y", "3Y", "4Y", "5Y",
     "6Y", "7Y", "8Y", "9Y", "10Y",
@@ -75,7 +78,7 @@ const summary: WallSummary = {
 
 const forwards: ForwardsPayload = {
   asof: "2026-07-24",
-  basisDates: { d1: null, wtd: null, mtd: null, qtd: null, ytd: null },
+  basisDates: { d1: null, mtd: null, ytd: null },
   startPoints: [
     { label: "ON", t: 0, date: "2026-07-24" },
     { label: "2Y", t: 2, date: "2026-07-24" },

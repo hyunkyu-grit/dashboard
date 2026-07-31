@@ -35,7 +35,7 @@ describe("column widths derive from the format, not the data", () => {
     const label = `calc(${WIDEST.label.length}ch + 30px)`;
     const delta = `calc(${WIDEST.delta.length}ch + 18px)`;
     expect(GRID_TEMPLATE).toBe(
-      `${label} ${level} repeat(5, ${delta}) minmax(${range}, 1fr)`,
+      `${label} ${level} repeat(3, ${delta}) minmax(${range}, 1fr)`,
     );
   });
 
@@ -148,22 +148,22 @@ describe("one grid definition shared by header and body; stable gutter", () => {
 describe("the column priority ladder (columns session)", () => {
   const CH = 7.8; // a plausible 13px-font ch; the maths must hold for any
   const w = colPx(CH);
-  const LADDER_IDS = ["d1", "ytd", "wtd", "mtd", "qtd"] as const;
+  const LADDER_IDS = ["d1", "ytd", "mtd"] as const;
 
   function widthFor(nBases: number, range52: boolean): number {
     return w.label + w.level + nBases * w.delta + (range52 ? w.range : 0);
   }
 
   it("the visible set is always a prefix of the ladder", () => {
-    for (let n = 0; n <= 5; n++) {
+    for (let n = 0; n < LADDER_IDS.length; n++) {
       const v = visibleColumns(widthFor(n, false) + 1, CH, null);
       // exactly the first n ladder entries are visible, regardless of order
       expect(new Set(v.bases)).toEqual(new Set(LADDER_IDS.slice(0, n)));
       expect(v.range52).toBe(false);
-      expect(v.hidden).toBe(5 - n + 1);
+      expect(v.hidden).toBe(LADDER_IDS.length - n + 1);
     }
-    const all = visibleColumns(widthFor(5, true) + 1, CH, null);
-    expect(all.bases).toEqual(["d1", "wtd", "mtd", "qtd", "ytd"]);
+    const all = visibleColumns(widthFor(LADDER_IDS.length, true) + 1, CH, null);
+    expect(all.bases).toEqual(["d1", "mtd", "ytd"]);
     expect(all.range52).toBe(true);
     expect(all.hidden).toBe(0);
   });
@@ -178,35 +178,33 @@ describe("the column priority ladder (columns session)", () => {
     const rw = colPx(RUNTIME_CH);
     const at = (n: number, r: boolean) =>
       Math.ceil(rw.label + rw.level + n * rw.delta + (r ? rw.range : 0));
-    // Every figure moved +31px in pass M — the level column went from six
-    // glyphs to ten so its header can be the data's date. Nothing else about
-    // the ladder changed, which is why the whole set shifts by one column's
-    // growth and the ORDER is untouched.
+    // Two change columns fewer since 2026-07-31 (WTD/QTD deleted), so the
+    // full set now fits 129px earlier than it did — the per-column figures
+    // below are unchanged, the ladder simply ends three columns in.
     expect(at(0, false)).toBe(196); // 종목 + 레벨 — the backstop pair
     expect(at(1, false)).toBe(260); // 어제
     expect(at(2, false)).toBe(324); // YTD
-    expect(at(3, false)).toBe(389); // WTD
-    expect(at(4, false)).toBe(453); // MTD
-    expect(at(5, false)).toBe(518); // QTD
-    expect(at(5, true)).toBe(729); // 52주 — was 698 before the date header
-    // and the whole set genuinely needs MORE room than the sentence did, so
-    // this is stated rather than assumed: 3 sub-columns > a 120px floor
-    expect(at(5, true)).toBeGreaterThan(606);
+    expect(at(3, false)).toBe(389); // MTD — the last change column
+    expect(at(3, true)).toBe(600); // 52주 — was 729 with five change columns
   });
 
   it("the sorted column is NEVER dropped — it takes slot 3", () => {
-    // width for exactly one change column: sorting by qtd forces qtd in
-    const v = visibleColumns(widthFor(1, false) + 1, CH, "qtd");
-    expect(v.bases).toEqual(["qtd"]);
+    // width for exactly one change column: sorting by mtd forces mtd in,
+    // displacing 어제 which is otherwise the ladder head
+    const v = visibleColumns(widthFor(1, false) + 1, CH, "mtd");
+    expect(v.bases).toEqual(["mtd"]);
     // and with two slots, the displaced ladder head (어제) returns next
-    const v2 = visibleColumns(widthFor(2, false) + 1, CH, "qtd");
-    expect(new Set(v2.bases)).toEqual(new Set(["d1", "qtd"]));
+    const v2 = visibleColumns(widthFor(2, false) + 1, CH, "mtd");
+    expect(new Set(v2.bases)).toEqual(new Set(["d1", "mtd"]));
   });
 
   it("bases render in canonical display order, never ladder order", () => {
-    const v = visibleColumns(widthFor(3, false) + 1, CH, null);
-    // ladder admits d1, ytd, wtd — displayed as d1, wtd, ytd (canonical)
-    expect(v.bases).toEqual(["d1", "wtd", "ytd"]);
+    const v = visibleColumns(widthFor(2, false) + 1, CH, null);
+    // ladder admits d1 then ytd — displayed as d1, ytd; with the third slot
+    // MTD lands BETWEEN them, which is the whole point of a canonical order
+    expect(v.bases).toEqual(["d1", "ytd"]);
+    const v3 = visibleColumns(widthFor(3, false) + 1, CH, null);
+    expect(v3.bases).toEqual(["d1", "mtd", "ytd"]);
   });
 
   it("the summed width of the visible set never exceeds the container", () => {
@@ -219,9 +217,9 @@ describe("the column priority ladder (columns session)", () => {
   });
 
   it("52주 is first to go and last to return", () => {
-    // one px short of fitting 52주: all five bases visible, 52주 hidden
-    const v = visibleColumns(widthFor(5, true) - 1, CH, null);
-    expect(v.bases.length).toBe(5);
+    // one px short of fitting 52주: all three bases visible, 52주 hidden
+    const v = visibleColumns(widthFor(3, true) - 1, CH, null);
+    expect(v.bases.length).toBe(3);
     expect(v.range52).toBe(false);
     expect(v.hidden).toBe(1);
   });

@@ -1,0 +1,4 @@
+{"id":"9M-1Y-2Y",
+"kind":"fly",
+"legs":[{"dv01":0.738266,"notional":66,"tenor":"9M"},{"dv01":0.979839,"notional":100,"tenor":"1Y"},{"dv01":1.921925,"notional":25,"tenor":"2Y"}],
+"residual":1.210257}

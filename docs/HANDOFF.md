@@ -179,9 +179,64 @@ rule:
 
 ---
 
-## 6. Current state (as of the 2026-07-30 data refresh)
+## 6. Current state (as of the 2026-07-31 session)
 
-### Latest — data refresh to 2026-07-30, and the gate's one data-dependent test
+### Latest — 전체 as three columns, a butterfly tab, three bases, and the base rate (2026-07-31)
+
+Five owner changes landed together. Gates: BE **177 passed / 19 skipped / 1
+xfailed**, FE **vitest 395 passed / 1 skipped (32 files), lint 0, build 0**. Static tree rebuilt:
+**1229 files, 39.09 MB raw, 47.4 s**. `SCHEMA_VERSION` **3 → 4** (the forwards
+payload's shape and its key set both changed — a v3 cache would have been
+served with the old keys still in it).
+
+1. **전체 is no longer a list — it is three columns** (`ui/OverviewColumns.tsx`).
+   아웃라이트 · 스프레드 · 포워드 side by side, each showing only its 주요 set,
+   each with its own chart underneath, taking the full surface with the side
+   preview hidden. See DESIGN § The 전체 overview.
+2. **WTD and QTD are deleted app-wide.** Three bases: 어제 · MTD · YTD. The
+   ladder's full set now fits **129px earlier** (52주 at 600 content-px, was
+   729). `derive.BASIS_KEYS` and `api.ts::BasisKey` are the two definitions.
+3. **버터플라이 is its own tab**, split out of 스프레드.
+4. **The 주요/전체 divider is on every instrument tab**, generalized from the
+   forward tab. The sets are the owner's and live server-side; the browser
+   reads a `key` boolean and never re-derives them.
+5. **The BOK base rate draws on every %-unit chart** (`data/bokbaserate.xlsx`,
+   `app/policy.py`, `ui/policyLine.ts`). See DESIGN § The BOK base rate.
+
+**Traps this session hit, worth keeping:**
+
+- **`DISPLAY_TENORS` was doing double duty.** Widening it for the 6M/9M
+  butterfly silently widened the **변동성 tab** too, because `volatility.py`
+  read the same list. Split into `VOL_TENORS` (the original six). Check what
+  else reads a list before widening it.
+- **`traderName` produced `6Ms9Ms1s`** for `6M-9M-1Y`: it stripped a trailing
+  `Y` and appended `s` unconditionally. Sub-year legs now keep their unit and
+  join on a slash (`6M/9M/1Y`). This would have shipped looking like a ticker.
+- **`ch` is the ZERO advance, not the widest glyph.** The overview's 종목 track
+  at 6ch truncated `2s10s` → `2s1…` because the labels are semibold letters.
+  Widened to 9ch after seeing it on screen — the arithmetic looked fine.
+- **`guards/pane-still.test.ts` banned `strokeDasharray`** as a proxy for the
+  removed ghost curve's draw-on animation. That is the wrong proxy: a dash
+  PATTERN is static. Narrowed to `strokeDashoffset`, which is what actually
+  animates a dash.
+- **The base-rate carry is bounded and the bound is the whole feature.** If a
+  Board meeting falls between `bokbaserate.xlsx`'s last date and the dataset's
+  as-of, the step ENDS at the workbook's date rather than carrying an
+  unverified rate. `through` in the payload is that bound — **it is not the
+  chart's axis end**, and running the line to the axis end silently undoes it
+  on every chart at once.
+- **The two workbooks are refreshed separately and by hand.** `refresh.ps1`
+  does not touch `bokbaserate.xlsx`. As of this session it lags: base rate to
+  **2026-07-16**, IRS to **2026-07-30** — safe only because the Board's last
+  meeting was 07-16 and the next is 08-27. **After 2026-08-27 the step will
+  truncate and warn until the workbook is refreshed.**
+
+**Payload cost of the wider tenor set:** derived series 35 → 84 (spreads 15→28,
+flies 20→56), so `summary.json` went **17,580 → 30,885 bytes raw** (+76%;
+gzip is what ships). Series files 196 → 245. The combinatorics are quadratic
+and cubic in `DISPLAY_TENORS` — do not widen it casually.
+
+### Before that — data refresh to 2026-07-30, and the gate's one data-dependent test
 
 - **The dataset now runs to 2026-07-30** (2612 observations, +4 business days:
   07-27/28/29/30). Static tree rebuilt: 984 files, 31.52 MB raw, 28.7 s,

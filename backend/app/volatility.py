@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from .dataset import DISPLAY_TENORS, Dataset, tenor_years
+from .dataset import VOL_TENORS, Dataset, tenor_years
 from .derive import (
     BASIS_KEYS,
     annual_stats,
@@ -161,6 +161,10 @@ def _volatility_row(dataset: Dataset, tenor: str,
         "sortKey": [tenor_years(tenor)],
         "quoted": None,
         "movePct": move_pct,
+        # The 변동성 tab has no 주요/전체 split — six rows is already the short
+        # list. The field is present because every row shape carries it, and
+        # `false` here means "no divider", not "unimportant".
+        "key": False,
     }
 
 
@@ -169,7 +173,7 @@ def volatility_payload(dataset: Dataset, bases: dict[str, dt.date | None]) -> di
     as null all the way out — zero is never substituted (§ vol)."""
     rows: list[dict] = []
     curve: list[dict] = []
-    for tenor in DISPLAY_TENORS:
+    for tenor in VOL_TENORS:
         aligned = relative_atr_aligned(dataset, tenor)
         row = _volatility_row(dataset, tenor, bases, aligned)
         rows.append(row)

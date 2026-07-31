@@ -39,7 +39,8 @@ def _iso_bases(bases: dict[str, dt.date | None]) -> dict[str, str | None]:
     return {k: (d.isoformat() if d else None) for k, d in bases.items()}
 
 
-def wall_summary(dataset: Dataset, bases: dict, events: list) -> dict:
+def wall_summary(dataset: Dataset, bases: dict, events: list,
+                 policy: dict) -> dict:
     outrights = [
         summarize(dataset, t, outright_label(t), "outright", bases)
         for t in dataset.tenor_order
@@ -62,6 +63,9 @@ def wall_summary(dataset: Dataset, bases: dict, events: list) -> dict:
         "curveBanner": banner,  # §I: whole-curve extreme stated once, not per row
         "outrights": outrights,
         "derived": derived,
+        # BOK base rate as step corners (§policy). Every %-unit chart draws it;
+        # `through` bounds the carry and is not the reader's axis end.
+        "policy": policy,
         # Change-log EVENTS (D-1 fixed, collapsed) — DESIGN §12 rule (c).
         "events": events,
     }

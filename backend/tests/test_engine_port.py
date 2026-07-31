@@ -118,8 +118,25 @@ def test_payload_shape(ds, curves):
         col = p["grid"][tenor]
         assert len(col) == 21
         for row in col:
-            assert set(row["values"]) == {"now", "d1", "wtd", "mtd", "qtd", "ytd"}
+            assert set(row["values"]) == {"now", "d1", "mtd", "ytd"}
             assert row["values"]["now"] is not None
+    # Every 주요 forward must be a cell the grid actually renders. The label
+    # is assembled from a START_POINTS label and an FWD_TENORS label, so a
+    # key forward the owner names in years the grid only quotes in quarters
+    # (or vice versa) would flag NOTHING and the 주요 block would come back
+    # empty with no error anywhere. Names, then flags.
+    named = {
+        cell.get("keyForward") for col in p["grid"].values() for cell in col
+    }
+    assert named == {True, False}, "the keyForward flag never fires"
+    flagged = {
+        f"{cell['start']}x{tenor.replace('F', '')}"
+        for tenor, col in p["grid"].items()
+        for cell in col
+        if cell.get("keyForward")
+    }
+    assert flagged == {label for label, _s, _t in KEY_FORWARDS}
+
     # integer-year start rows carry Y labels (matrix separator rule §8)
     labels = [s["label"] for s in p["startPoints"]]
     for y in ("2Y", "3Y", "4Y", "5Y"):

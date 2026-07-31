@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app.dataset import DISPLAY_TENORS, load_dataset
+from app.dataset import VOL_TENORS, load_dataset
 from app.derive import basis_dates
 from app.volatility import (
     LONG_MEAN_FLOOR_BP,
@@ -120,8 +120,8 @@ def test_aligned_matches_dataset_dates():
 def test_volatility_payload_shape_matches_the_other_tabs():
     ds = load_dataset(DATA)
     payload = volatility_payload(ds, basis_dates(ds))
-    assert len(payload["rows"]) == len(DISPLAY_TENORS)
-    assert len(payload["curve"]) == len(DISPLAY_TENORS)
+    assert len(payload["rows"]) == len(VOL_TENORS)
+    assert len(payload["curve"]) == len(VOL_TENORS)
     for row in payload["rows"]:
         # SeriesSummary-like so the FE table component never branches
         assert set(row) >= {
@@ -131,7 +131,7 @@ def test_volatility_payload_shape_matches_the_other_tabs():
         assert row["unit"] == "ratio"
         assert row["quoted"] is None
         assert row["id"].startswith("vol:")
-        assert set(row["deltas"]) == {"d1", "wtd", "mtd", "qtd", "ytd"}
+        assert set(row["deltas"]) == {"d1", "mtd", "ytd"}
         # the 한 줄 classification is gone from every row shape (pass L)
         assert "oneLiner" not in row
         assert len(row["sortKey"]) == 1

@@ -9,7 +9,7 @@ import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { EventCluster } from "@/lib/api";
+import type { EventCluster, PolicyStep } from "@/lib/api";
 import {
   fetchForwards,
   fetchHealth,
@@ -48,10 +48,12 @@ function PreviewSheet({
   row,
   onOpen,
   onClose,
+  policy,
 }: {
   row: Row;
   onOpen: (row: Row) => void;
   onClose: () => void;
+  policy?: PolicyStep;
 }) {
   const [ref, w] = useMeasure<HTMLDivElement>();
   return (
@@ -79,7 +81,9 @@ function PreviewSheet({
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-edge" />
         <div ref={ref}>
-          {w > 0 && <PreviewPane row={row} onOpen={onOpen} width={w} />}
+          {w > 0 && (
+            <PreviewPane row={row} onOpen={onOpen} width={w} policy={policy} />
+          )}
         </div>
       </motion.div>
     </motion.div>
@@ -207,6 +211,13 @@ export function App() {
   const active = hovered ?? pinned;
   // the 표로 보기 matrix is a full-width MODE, only on the forward tab (§F)
   const matrixOpen = matrixOpenRaw && tab === "forward";
+  /* 전체 is the three-column overview and takes the full surface (§전체): it
+   * carries its own chart per column, so the shared preview pane beside it
+   * would be a fourth chart answering a question nobody asked, in space the
+   * three columns need. Same mechanism as the matrix mode — one flag that
+   * both widens the left pane and hides the right one, so the two can never
+   * disagree about who owns the width. */
+  const fullWidth = matrixOpen || tab === "all";
 
   // ~120ms hover delay so crossing the table does not strobe the preview (§2).
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -382,9 +393,9 @@ export function App() {
                 OR while the forward matrix mode is open (§F). */}
             <div
               className={`flex min-w-0 flex-col ${
-                wide && !matrixOpen ? "shrink-0 border-r border-edge" : "flex-1"
+                wide && !fullWidth ? "shrink-0 border-r border-edge" : "flex-1"
               }`}
-              style={wide && !matrixOpen ? { width: TABLE_W } : undefined}
+              style={wide && !fullWidth ? { width: TABLE_W } : undefined}
             >
               {/* Each region gets its OWN boundary (stability session, Pass B).
                   A throw anywhere under the root used to unmount the whole
@@ -405,13 +416,14 @@ export function App() {
                   onPin={setPinned}
                   matrixOpen={matrixOpen}
                   onToggleMatrix={() => setMatrixOpenRaw((v) => !v)}
+                  policy={summary.policy}
                 />
               </ErrorBoundary>
             </div>
             {/* right pane: hidden in one column and while the matrix mode is
                 open; else takes the leftover width, floored at 600px, and the
                 idle curve fills its full height (§ layout / §F). */}
-            {wide && !matrixOpen && (
+            {wide && !fullWidth && (
               <div
                 ref={paneRef}
                 className="relative min-w-[600px] flex-1 overflow-y-auto overflow-x-hidden p-5"
@@ -423,6 +435,7 @@ export function App() {
                         row={previewRow}
                         onOpen={openEnlarged}
                         width={paneW - PANE_PAD}
+                        policy={summary.policy}
                       />
                     ) : (
                       <CurveView
@@ -458,6 +471,7 @@ export function App() {
             row={pinned}
             onOpen={openEnlarged}
             onClose={() => setPinned(null)}
+            policy={summary.policy}
           />
         )}
       </AnimatePresence>

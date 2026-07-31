@@ -21,6 +21,8 @@ import {
   CandlestickSeries,
   createChart,
   LineSeries,
+  LineStyle,
+  LineType,
   type IChartApi,
   type ISeriesApi,
   type Logical,
@@ -36,6 +38,7 @@ import {
   type HistoryPoint,
   type Interval,
   type OhlcBar,
+  type PolicyStep,
   type Unit,
 } from "@/lib/api";
 import { fmtDelta, fmtLevel } from "@/lib/format";
@@ -43,10 +46,12 @@ import {
   assertNoCssVars,
   onThemeChange,
   resolveDirection,
+  resolveInk,
   resolveLine,
   resolveTheme,
 } from "@/theme/bridge";
 import { assertDomainRendered } from "@/theme/domainGuard";
+import { snapPolicyToTimes, takesPolicyOverlay } from "@/ui/policyLine";
 import { dateLabels } from "@/ui/timeAxis";
 
 export type ChartType = "line" | Interval;
@@ -105,12 +110,15 @@ export function DetailChart({
   height,
   onVisibleRange,
   onHoverDate,
+  policy,
 }: {
   id: string;
   unit: Unit;
   chartType: ChartType;
   width: number;
   height: number;
+  /** BOK base rate step — % instruments only (§policy). */
+  policy?: PolicyStep;
   // §C: let the curve heatmap track the chart — the visible [from,to] date
   // window (rebucket target) and the crosshair date (hovered column).
   onVisibleRange?: (from: string | null, to: string | null) => void;
@@ -120,6 +128,7 @@ export function DetailChart({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Line" | "Candlestick"> | null>(null);
+  const policyRef = useRef<ISeriesApi<"Line"> | null>(null);
   const [themeTick, setThemeTick] = useState(0);
   const [hover, setHover] = useState<Hover | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -216,6 +225,31 @@ export function DetailChart({
     chartRef.current = chart;
     seriesRef.current = series;
 
+    /* The BOK base rate, on % instruments only (§policy). `LineType.WithSteps`
+     * is what makes this correct rather than merely decorative: the library
+     * draws the horizontal-then-vertical corner itself, so no interpolated
+     * rate is ever painted between two decisions. Added AFTER the instrument
+     * series so it shares the price scale (one axis — two rates in percent
+     * compared at one scale), and styled down to a dashed hairline so the
+     * reference never competes with the subject. It is excluded from the
+     * crosshair: `subscribeCrosshairMove` reads `seriesData.get(series)`,
+     * which is the instrument's series and not this one. */
+    if (takesPolicyOverlay(unit) && policy && policy.steps.length) {
+      const popts = {
+        color: resolveInk(),
+        lineWidth: 1 as const,
+        lineType: LineType.WithSteps,
+        lineStyle: LineStyle.Dashed,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      };
+      assertNoCssVars(popts);
+      policyRef.current = chart.addSeries(LineSeries, popts);
+    } else {
+      policyRef.current = null;
+    }
+
     chart.subscribeCrosshairMove((param) => {
       const t = param.time as string | undefined;
       if (!t || !param.point) {
@@ -271,7 +305,7 @@ export function DetailChart({
       seriesRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width, height, themeTick, id, chartType]);
+  }, [width, height, themeTick, id, chartType, unit, policy]);
 
   useEffect(() => {
     if (!data || !seriesRef.current || !chartRef.current) return;
@@ -295,6 +329,16 @@ export function DetailChart({
       first = pts[0]?.t ?? "";
       last = pts[pts.length - 1]?.t ?? "";
     }
+    // The step is snapped onto the instrument's OWN dates (policyLine.ts):
+    // a decision that fell on a weekend or a holiday is not a date this axis
+    // has, and handing it to the chart would insert a column no trading day
+    // occupies. Fed here rather than in the create effect so it refreshes
+    // with the data, and bounded by `policy.through` — never the axis end.
+    if (policyRef.current && policy) {
+      policyRef.current.setData(
+        snapPolicyToTimes(timesRef.current.length ? timesRef.current : [first, last], policy),
+      );
+    }
     chartRef.current.timeScale().fitContent();
     const raf = requestAnimationFrame(() => {
       const c = chartRef.current;
@@ -304,7 +348,7 @@ export function DetailChart({
       assertDomainRendered(c.timeScale().getVisibleLogicalRange(), count, { first, last });
     });
     return () => cancelAnimationFrame(raf);
-  }, [data, themeTick]);
+  }, [data, themeTick, policy]);
 
   if (isError) {
     return (

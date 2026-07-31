@@ -65,8 +65,19 @@ SPEC_NODE_ORDER = [
     "1D", "3M", "6M", "9M", "1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y",
 ]
 
-# Display tenor set for spreads/flies. [OWNER]
-DISPLAY_TENORS = ["1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y"]
+# Volatility rows — one relative-ATR ratio per tenor. Its OWN list, deliberately
+# not DISPLAY_TENORS (2026-07-31): the two were the same six by coincidence, and
+# widening the derived universe for a 6M/9M butterfly would otherwise have grown
+# the 변동성 tab as a silent side effect of an unrelated decision. Nobody asked
+# for 6M/9M volatility rows; if that is wanted it is a separate ruling here.
+VOL_TENORS = ["1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y"]
+
+# Display tenor set for spreads/flies. [OWNER] Widened to include 6M and 9M
+# on 2026-07-31, because 6M/9M/1Y is one of the four 주요 버터플라이 and 주요
+# has to be a SUBSET of 전체 for the divider between them to mean anything.
+# The combinatorics are quadratic/cubic in this list — 6→8 tenors takes
+# spreads 15→28 and flies 20→56 — so do not widen it casually.
+DISPLAY_TENORS = ["6M", "9M", "1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y"]
 
 # Tenor id → years, for explicit numeric sort keys (§6/§16). Unknown → +inf so
 # a genuinely unmapped tenor sorts to the end loudly, never silently mid-list.
@@ -215,8 +226,8 @@ def load_dataset(xlsx_path: Path) -> Dataset:
 
     # Every date lookup in the product is a bisect on an assumed-ascending,
     # assumed-unique list (`derive.value_at`). A duplicate or a swapped pair
-    # does not crash it — it silently returns the wrong row, so D-1/WTD/MTD/
-    # QTD/YTD all read the wrong day while the levels look perfect. This is
+    # does not crash it — it silently returns the wrong row, so D-1/MTD/YTD
+    # all read the wrong day while the levels look perfect. This is
     # the single most dangerous thing a hand-updated sheet can do.
     first_seen: dict[dt.date, int] = {}
     for date, row_no in zip(dates_desc, sheet_rows):

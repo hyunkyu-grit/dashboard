@@ -6,11 +6,15 @@ import pytest
 from app.dataset import DISPLAY_TENORS, QUOTED_NODES, load_dataset, tenor_years
 from app.derive import (
     ANNUAL_OBS,
+    KEY_FLIES,
+    KEY_OUTRIGHTS,
+    KEY_SPREADS,
     annual_stats,
     basis_dates,
     curve_banner,
     day_move_pct,
     derived_ids,
+    is_key,
     downsample_triples,
     ohlc_buckets,
     series_history,
@@ -41,9 +45,44 @@ def test_tenor_columns(ds):
 
 def test_derived_count():
     ids = derived_ids()
-    assert len(ids) == 35
-    assert sum(1 for _, k, _l in ids if k == "spread") == 15
-    assert sum(1 for _, k, _l in ids if k == "fly") == 20
+    assert len(ids) == 84
+    assert sum(1 for _, k, _l in ids if k == "spread") == 28
+    assert sum(1 for _, k, _l in ids if k == "fly") == 56
+
+
+def test_key_sets_are_subsets_of_what_the_universe_produces():
+    """주요 is the TOP BLOCK of a tab, not a second universe. Every id in a
+    key set must be one `derived_ids()` / `QUOTED_NODES` actually produces —
+    otherwise the divider names a row that is nowhere in the list beneath it,
+    and the reader is looking for something the product never renders.
+
+    This is the guard that would have caught 6M-9M-1Y: when the owner picked
+    it the fly universe was combinations of six tenors starting at 1Y, so the
+    id was unreachable and only widening DISPLAY_TENORS made it real.
+    """
+    ids = {sid for sid, _k, _l in derived_ids()}
+    assert KEY_SPREADS <= ids
+    assert KEY_FLIES <= ids
+    assert KEY_OUTRIGHTS <= set(QUOTED_NODES)
+    # and the flags agree with the sets they are derived from
+    for sid, kind, _legs in derived_ids():
+        assert is_key(sid, kind) == (
+            sid in (KEY_SPREADS if kind == "spread" else KEY_FLIES)
+        )
+
+
+def test_key_sets_are_the_owners_lists():
+    """The lists themselves [OWNER, 2026-07-31]. Pinned literally so a later
+    edit to DISPLAY_TENORS or a refactor of `is_key` cannot quietly change
+    WHICH instruments sit above the divider."""
+    assert KEY_SPREADS == {
+        "1Y-2Y", "1Y-3Y", "2Y-3Y", "2Y-5Y",
+        "2Y-10Y", "3Y-5Y", "3Y-10Y", "5Y-10Y",
+    }
+    assert KEY_FLIES == {"6M-9M-1Y", "1Y-1.5Y-2Y", "2Y-3Y-5Y", "2Y-5Y-10Y"}
+    assert KEY_OUTRIGHTS == {
+        "1D", "3M", "6M", "9M", "1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y",
+    }
 
 
 def test_spread_and_fly_arithmetic(ds):
@@ -58,8 +97,8 @@ def test_spread_and_fly_arithmetic(ds):
 def test_basis_dates_strictly_before_periods(ds):
     b = basis_dates(ds)
     asof = ds.asof
+    assert set(b) == {"d1", "mtd", "ytd"}
     assert b["d1"] < asof
-    assert b["wtd"] < asof - dt.timedelta(days=asof.weekday())
     assert b["mtd"] < asof.replace(day=1)
     assert b["ytd"].year == asof.year - 1
 
@@ -69,7 +108,7 @@ def test_summary_shape(ds):
     s = summarize(ds, "10Y", "IRS 10Y", "outright", b)
     assert s["unit"] == "%"
     assert s["now"] is not None
-    assert set(s["deltas"]) == {"d1", "wtd", "mtd", "qtd", "ytd"}
+    assert set(s["deltas"]) == {"d1", "mtd", "ytd"}
     assert all(v is not None for v in s["deltas"].values())
     assert 0 <= s["range1y"]["pct"] <= 100
 

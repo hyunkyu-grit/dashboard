@@ -8,7 +8,14 @@
 
 import { useState } from "react";
 
-import type { HistoryPoint, SeriesStats, Unit } from "@/lib/api";
+import type { HistoryPoint, PolicyStep, SeriesStats, Unit } from "@/lib/api";
+
+import {
+  policyExtent,
+  policyPath,
+  policySegments,
+  takesPolicyOverlay,
+} from "./policyLine";
 
 import {
   READOUT_CARD_W,
@@ -27,12 +34,15 @@ export function PreviewChart({
   unit,
   width,
   height,
+  policy,
 }: {
   points: HistoryPoint[];
   stats: SeriesStats | null; // range min/max/avg, precomputed server-side (§16)
   unit: Unit;
   width: number;
   height: number;
+  /** BOK base rate step, drawn under % instruments only (§policy). */
+  policy?: PolicyStep;
 }) {
   const [hi, setHi] = useState<number | null>(null);
 
@@ -48,6 +58,15 @@ export function PreviewChart({
   for (const p of points) {
     if (p.v < lo) lo = p.v;
     if (p.v > hi2) hi2 = p.v;
+  }
+  // The policy step shares this axis, so the domain has to hold both before
+  // anything is scaled — see policyLine.ts. Widening here (rather than
+  // clipping the step) is what keeps two rates in the same unit comparable.
+  const segments = takesPolicyOverlay(unit) ? policySegments(points, policy) : [];
+  const pol = policyExtent(segments);
+  if (pol) {
+    if (pol.min < lo) lo = pol.min;
+    if (pol.max > hi2) hi2 = pol.max;
   }
   const pad = (hi2 - lo) * 0.06 || 0.01;
   const yMin = lo - pad;
@@ -97,6 +116,21 @@ export function PreviewChart({
         role="img"
         aria-label="10y history"
       >
+        {/* the base rate goes UNDER the instrument line: it is the reference
+            the instrument is read against, not a second subject. Dashed and
+            at reduced ink so it never competes for the eye (§5 — the dash
+            pattern carries it in grayscale, the opacity is a layer). */}
+        {policyPath(segments, x, y).map((run) => (
+          <polyline
+            key={run.slice(0, 24)}
+            points={run}
+            fill="none"
+            className="stroke-ink"
+            strokeWidth={1}
+            strokeOpacity={0.35}
+            strokeDasharray="3 3"
+          />
+        ))}
         <polyline
           points={path}
           fill="none"

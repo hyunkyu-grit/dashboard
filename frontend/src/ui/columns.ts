@@ -18,8 +18,7 @@
  * changes). THE SORTED COLUMN IS NEVER DROPPED: a list ordered by a column
  * the reader cannot see is unreadable, so the sort column is promoted to
  * slot 3 and whatever it displaced falls off the end. Ladder:
- *   1 종목 · 2 레벨 (헤더 = 데이터 일자) · [3 sorted] · 어제 · YTD · WTD ·
- *   MTD · QTD · 52주
+ *   1 종목 · 2 레벨 (헤더 = 데이터 일자) · [3 sorted] · 어제 · YTD · MTD · 52주
  * (52주 first to go, last to return). 52주 is NOT sortable: it never enters
  * the sort slot and its header carries no control. Dropping/restoring never
  * animates — it is a layout change, not a state change. Pinned by
@@ -96,13 +95,13 @@ const RANGE_W = `calc(${RANGE_SUBS * WIDEST.level.length}ch + ${
  * exactly as `gridTemplate` is shared by the header row and every body row. */
 export const RANGE_TEMPLATE = `repeat(${RANGE_SUBS}, ${RANGE_SUB_W}) minmax(0, 1fr)`;
 
-/** Change-column priority (slots 4–8): 어제 first, then YTD, then the rest.
+/** Change-column priority (slots 4–6): 어제 first, then YTD, then MTD.
  * The sorted column, if any, jumps this queue (slot 3). */
-export const BASIS_LADDER: BasisKey[] = ["d1", "ytd", "wtd", "mtd", "qtd"];
+export const BASIS_LADDER: BasisKey[] = ["d1", "ytd", "mtd"];
 
 // canonical DISPLAY order — the ladder decides WHICH columns show, never
 // their order (a reordering on resize would read as a glitch)
-const BASIS_CANON: BasisKey[] = ["d1", "wtd", "mtd", "qtd", "ytd"];
+const BASIS_CANON: BasisKey[] = ["d1", "mtd", "ytd"];
 
 export interface VisibleColumns {
   bases: BasisKey[]; // in canonical display order

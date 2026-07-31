@@ -16,7 +16,7 @@ import type {
 } from "../src/lib/api";
 import { buildRows, ROW_FIELD_SOURCE } from "../src/ui/rows";
 
-const deltas = { d1: 2, wtd: -3, mtd: 4, qtd: -5, ytd: 6 };
+const deltas = { d1: 2, mtd: 4, ytd: 6 };
 
 const src: SeriesSummary = {
   id: "10Y",
@@ -25,20 +25,23 @@ const src: SeriesSummary = {
   unit: "%",
   now: 3.1234,
   deltas: { ...deltas },
-  basisValues: { d1: 3, wtd: 3, mtd: 3, qtd: 3, ytd: 3 },
+  basisValues: { d1: 3, mtd: 3, ytd: 3 },
   range1y: { min: 1, max: 5, avg: 3, pct: 99 },
   sortKey: [10],
   quoted: true,
+  key: true,
   movePct: 42,
 };
 
 const summary: WallSummary = {
   asof: "2026-07-27",
-  basisDates: { d1: null, wtd: null, mtd: null, qtd: null, ytd: null },
+  basisDates: { d1: null, mtd: null, ytd: null },
   specNodeOrder: [],
   displayTenors: [],
   missingNodes: [],
   curveBanner: { kind: null },
+  policy: { unit: "%" as const, asof: "2026-07-16", through: "2026-07-30",
+      steps: [{ date: "2026-07-16", rate: 2.75 }], latest: 2.75, warnings: [] },
   outrights: [src],
   derived: [{ ...src, id: "1Y-10Y", kind: "spread", unit: "bp", quoted: null, sortKey: [1, 10] }],
   events: [],
@@ -46,7 +49,7 @@ const summary: WallSummary = {
 
 const forwards: ForwardsPayload = {
   asof: "2026-07-27",
-  basisDates: { d1: null, wtd: null, mtd: null, qtd: null, ytd: null },
+  basisDates: { d1: null, mtd: null, ytd: null },
   startPoints: [{ label: "1Y", t: 1, date: "2027-07-27" }],
   tenors: ["1YF"],
   grid: {

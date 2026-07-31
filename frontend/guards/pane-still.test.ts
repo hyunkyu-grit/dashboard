@@ -30,7 +30,13 @@ describe("no gesture in the right pane", () => {
 
   it("CurveView animates nothing — no motion imports, no ghost", () => {
     expect(curveView).not.toMatch(/from "motion\/react"/);
-    expect(curveView).not.toMatch(/animate\(|useReducedMotion|strokeDasharray/);
+    /* `strokeDasharray` used to be banned here too, as a proxy for the ghost
+     * curve's draw-on animation. It is the wrong proxy: a dash PATTERN is
+     * static, and the base-rate reference line (2026-07-31) is dashed
+     * precisely so it reads as a reference in grayscale without a second hue
+     * (§5). What actually animates a dash is `strokeDashoffset`, so that is
+     * what is banned — the guard now names the thing it means. */
+    expect(curveView).not.toMatch(/animate\(|useReducedMotion|strokeDashoffset/);
     expect(curveView).not.toMatch(/CurveGesture|ghost/i);
   });
 

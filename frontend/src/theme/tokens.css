@@ -18,17 +18,13 @@
   /* Time-basis ramp: ink opacity (light) */
   --bw-ramp-now: 1;
   --bw-ramp-d1: 0.78;
-  --bw-ramp-wtd: 0.6;
   --bw-ramp-mtd: 0.47;
-  --bw-ramp-qtd: 0.36;
   --bw-ramp-ytd: 0.28;
 
   /* Time-basis ramp: line width (theme-invariant) */
   --bw-rampw-now: 2;
   --bw-rampw-d1: 1.5;
-  --bw-rampw-wtd: 1.3;
   --bw-rampw-mtd: 1.1;
-  --bw-rampw-qtd: 1;
   --bw-rampw-ytd: 1;
 
   /* Hue layer (§9) — added ON TOP of the grayscale encodings, never
@@ -77,9 +73,7 @@
 
   --bw-ramp-now: 1;
   --bw-ramp-d1: 0.74;
-  --bw-ramp-wtd: 0.56;
   --bw-ramp-mtd: 0.43;
-  --bw-ramp-qtd: 0.32;
   --bw-ramp-ytd: 0.24;
 
   /* RETIRED (see the light block) — kept defined, unreferenced. */

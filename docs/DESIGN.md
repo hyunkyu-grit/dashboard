@@ -73,11 +73,109 @@ width, preview as a bottom sheet opened by a row click — rather than squeezing
 two panes into a space that cannot hold them. The idle curve fills the full
 height of the right pane.
 
+### The 전체 overview — three columns, not a list [OWNER, 2026-07-31]
+
+전체 used to be every instrument in one table, which is the least useful
+arrangement of them: outrights, spreads and forwards interleaved by a sort key,
+so the thing a rates screen is opened for — *where are the three blocks right
+now* — took scrolling to answer. 전체 is now a fixed overview and **takes the
+whole surface**: 아웃라이트 · 스프레드 · 포워드 side by side, each column
+showing only its **주요** set, each with **its own chart underneath**.
+
+- **One column owns one chart.** Clicking a tenor draws it in that column and
+  nowhere else, so three comparisons can be on screen at once and moving
+  between columns never costs the one already up. Each column opens on its own
+  first row — the space is never empty and the affordance needs no click.
+- **The side preview pane is hidden here**, by the same flag that widens the
+  left pane (`fullWidth` in `App.tsx`, the matrix mode's mechanism). A fourth
+  chart beside three would answer a question nobody asked, in the space the
+  columns need.
+- **버터플라이 and 변동성 are not in it.** Three columns is the point; a fourth
+  and a fifth would make it the list again.
+- **It never drops a column to fit.** The table's priority ladder does not
+  apply: showing 어제 · MTD · YTD · 52주 고/저/평 at once is the entire reason
+  the tab exists. It sets smaller type (11px) instead, and stacks the three
+  columns below the two-pane breakpoint.
+- `ui/OverviewColumns.tsx`; pinned by `guards/overview-and-divider.test.ts`.
+
+### 주요 / 전체 — the divider, on every instrument tab [OWNER, 2026-07-31]
+
+The forward tab's two-block layout is now every instrument tab's: 주요 members
+first under a **주요 <group>** heading, everything else under **전체 <group>**.
+변동성 does not divide (six rows do not need it) and 전체 is not a list at all.
+
+The 주요 sets are the owner's, defined **once, server-side** (`derive.py`
+`KEY_OUTRIGHTS` / `KEY_SPREADS` / `KEY_FLIES`, `forwards.py::KEY_FORWARDS`);
+each row carries a `key` boolean and the browser never re-derives it (§16).
+
+| tab | 주요 |
+|---|---|
+| 아웃라이트 | `1D 3M 6M 9M 1Y 1.5Y 2Y 3Y 5Y 10Y` — exactly the live-quoted node set |
+| 스프레드 | `1s2s 1s3s 2s3s 2s5s 2s10s 3s5s 3s10s 5s10s` |
+| 버터플라이 | `6M/9M/1Y 1s1.5s2s 2s3s5s 2s5s10s` |
+| 포워드 | `3Mx3M 6Mx3M 9Mx3M 1Yx1Y 2Yx1Y 5Yx5Y` |
+
+- **주요 must be a SUBSET of 전체**, or the divider names rows that are not in
+  the list beneath it. `6M/9M/1Y` is why `DISPLAY_TENORS` gained 6M and 9M
+  (spreads 15→28, flies 20→56 — the combinatorics are quadratic and cubic in
+  that list, so do not widen it casually). Pinned by
+  `test_derive.py::test_key_sets_are_subsets_of_what_the_universe_produces`.
+- **The 주요 pin is an ordering, not just a heading**: `orderRows(…, keyFirst)`
+  puts 주요 first, so the two cannot disagree. **Sorting a change column
+  overrides both** — "what moved most" is asked of the whole tab — and the
+  headings are suppressed in exactly that state.
+- A heading is never drawn over a block whose counterpart is empty (a screener
+  can filter one side away; a lone 주요 heading would state a split that is not
+  on screen).
+
+### The BOK base rate, on every % chart [OWNER, 2026-07-31]
+
+CD and the base rate are always drawn together, and since the 3M node **is**
+CD91, that generalises to: the base rate rides on every **%-unit** chart —
+outrights and forwards, in the preview pane, the enlarged popup, and the 전체
+columns. Spread / butterfly / volatility charts are bp or ratio and are
+**excluded**: a 2.75 line on a ±30bp axis is a rescale, not a comparison.
+
+- **Data**: `data/bokbaserate.xlsx` (Infomax `한국:기준금리`, 2016→). A static
+  snapshot like the IRS workbook, refreshed by hand and separately.
+- **It is a STEP.** Square corners, never interpolated — the rate holds flat
+  and jumps on a Board decision. ~3,850 daily rows are served as ~23 **corners**
+  (`policy.decisions`); the flat days would be one number sent thousands of
+  times (§20). On the cross-sectional idle curve the step degenerates to a
+  single horizontal reference at the current level.
+- **One axis.** The caller widens its y-domain to hold both. Clipping the step
+  to the instrument's own domain would pin it against an edge and read as
+  "equal to the minimum"; a second axis would compare two rates in the same
+  unit at two different scales.
+- **Ink, dashed, under the instrument line** — the dash pattern carries it in
+  grayscale, the reduced opacity is a layer (§5). It is the reference the
+  instrument is read against, not a second subject, and it is excluded from
+  the crosshair.
+- **Carrying it forward is a claim, and it is bounded.** The payload's
+  `through` is the last date the backend can vouch for: if a Board meeting
+  falls between the workbook's last date and the dataset's as-of date, the step
+  **ends at the workbook's last date** and a warning is logged, rather than
+  drawing the old rate across the day it may have changed — on every chart at
+  once, with nothing on screen to say so. **`through` is not the axis end**;
+  running the line to the axis end undoes the whole guard and looks completely
+  normal. `backend/app/policy.py`, `src/ui/policyLine.ts`; pinned by
+  `tests/test_policy.py` and `guards/policy-line.test.ts`.
+- MPC dates are duplicated into `policy.MPC_DATES` from the frontend's verified
+  `calendar.json` (the backend must not read the frontend tree at runtime);
+  `test_mpc_dates_match_the_calendar` fails if the copies drift.
+
 ### Left pane — the instrument table
 
 Columns, left to right:
 
-| Instrument | *the level* (header = the data's date) | Yesterday | WTD | MTD | QTD | YTD | 52주 고점·저점·평균 |
+| Instrument | *the level* (header = the data's date) | Yesterday | MTD | YTD | 52주 고점·저점·평균 |
+
+**Three change bases, not five [OWNER, 2026-07-31].** WTD and QTD were
+deleted app-wide. Between 어제 and MTD a week is rarely the interval anyone
+reasons in, and QTD differs from MTD in only two months of three — two
+columns that mostly restated their neighbours. A day, a month, a year; the
+52주 statistics carry the longer view. The set is defined once in
+`derive.BASIS_KEYS` and mirrored by `api.ts::BasisKey`.
 
 - **Instrument** — `10Y`, `3s10s`, `2s5s10s`, `2Yx1Y`, `SPOT`. Never
   translated (§15). Notation is defined once in **§ Instrument notation**
@@ -214,16 +312,30 @@ Columns, left to right:
 Behaviour:
 
 - **The global comparison-basis selector is deleted** (its state too) — the
-  five bases are columns.
+  three bases are columns.
 - **Filter chips (tabs)** above the table: 전체 / 아웃라이트 / 스프레드 /
-  포워드 / 변동성. Default 전체.
+  버터플라이 / 포워드 / 변동성. Default 전체.
+  - **버터플라이 is its own tab [OWNER, 2026-07-31].** Flies used to ride on
+    the spread tab, where 20 of them buried 15 spreads; with 6M and 9M in the
+    tenor set that would have been 56 under 28. Two-leg and three-leg are
+    different instruments read for different reasons.
+  - **전체 is no longer a list** — see § The 전체 overview below.
 - **Screener presets [§D, Session 15]** — a *second* row of chips beneath the
   tabs (never a left sidebar; one surface). A named view in plain language that
   **filters on top of the active tab**: 오늘 많이 움직인 것 (own-history move
   pct ≥ 90, FULL-history change distribution) / 52주 고점권 (level pct ≥ 90,
   52-week window) / 52주 저점권 (pct ≤ 10) / 되돌림 (sign
-  flip between adjacent bases) / 호가만 (live-quoted only) / 주요 포워드. One at
-  a time, clicking again clears; a one-line 합니다체 description shows beneath
+  flip between adjacent bases) / 주요 포워드. One at
+  a time, clicking again clears;
+  **호가만 was deleted [OWNER, 2026-07-31]** — its job, separating live-quoted
+  maturities from interpolated ones, is now done permanently and in place by
+  the 아웃라이트 tab's 주요/전체 divider, whose 주요 set IS the quoted node
+  list. A chip that must be found and pressed to reveal a distinction the list
+  can simply show was the worse of the two. The screener chips are hidden on
+  전체, which has no rows to filter.
+  Note 되돌림 now tests three bases rather than five, so it fires on fewer
+  rows — the honest consequence of having fewer bases, not a threshold to
+  compensate. a one-line 합니다체 description shows beneath
   the row when active. Data-driven (`ui/screener.ts` — a predicate per view), so
   a new named view is a definition, not a component. Default: no chip.
 - **The column grid is format-derived and frozen [grid session, Pass A].**
@@ -246,13 +358,13 @@ Behaviour:
   the header from jumping, but the full column set sums to ~680px; below that
   neither squeezing nor scrolling reads well. `ui/columns.ts::visibleColumns`
   renders the longest PREFIX of a priority ladder that fits the measured
-  container — 종목 · 현재 · [the sorted column] · 어제 · YTD · WTD · MTD ·
-  QTD · 52주 (first to go, last to return) — pure arithmetic against the
+  container — 종목 · 현재 · [the sorted column] · 어제 · YTD · MTD ·
+  52주 (first to go, last to return) — pure arithmetic against the
   fixed widths and a runtime-measured `ch` (no magic breakpoints; the maths
   stays correct if a width changes). **The sorted column is never dropped**:
   a list ordered by a column the reader cannot see is unreadable, so it takes
   slot 3 and whatever it displaced falls off. Displayed columns keep the
-  CANONICAL order (어제 · WTD · MTD · QTD · YTD) — the ladder decides which,
+  CANONICAL order (어제 · MTD · YTD) — the ladder decides which,
   never where. Header and body derive from the same `visible` set and share
   one `gridTemplate(visible)` string, so they cannot disagree. Dropping and
   restoring never animates (a layout change, not a state change — the FLIP's
@@ -280,6 +392,14 @@ Behaviour:
   WTD 389 · YTD 324 · 어제 260 · (종목+레벨 196). The full set still fits the
   table pane with room to spare (880 − 40 padding = 840 content), so no layout
   loses a column to this. Pinned numerically by `guards/table-grid.test.ts`.
+  **Thresholds, 2026-07-31 (WTD/QTD deleted).** The per-column figures are
+  unchanged — the ladder simply ends three columns in, so the full set fits
+  **129px earlier**: **52주 600** · MTD 389 · YTD 324 · 어제 260 · (종목+레벨
+  196). The ladder is now 어제 · YTD · MTD and the canonical display order
+  어제 · MTD · YTD, so with three slots MTD lands BETWEEN the two ladder
+  heads — which is the point of keeping the two orders separate. Pinned by
+  `guards/table-grid.test.ts`. Not re-verified live; the arithmetic is the
+  same function and only its input list got shorter.
   **Verified live (pass L)** by driving the pane width directly (the same
   measurement path, and the same forced-frame caveat as below — the occluded
   renderer delivers ResizeObserver callbacks one frame late, so every read has

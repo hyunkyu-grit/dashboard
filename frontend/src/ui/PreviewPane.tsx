@@ -8,7 +8,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 
-import { fetchSeries } from "@/lib/api";
+import { fetchSeries, type PolicyStep } from "@/lib/api";
 import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 
 import { AnimatedNumber } from "./AnimatedNumber";
@@ -58,10 +58,13 @@ export function PreviewPane({
   row,
   onOpen,
   width,
+  policy,
 }: {
   row: Row | null;
   onOpen: (row: Row) => void;
   width: number;
+  /** BOK base rate step — drawn on % instruments only (§policy). */
+  policy?: PolicyStep;
 }) {
   const { data, isError, isLoading, isFetching, refetch } = useQuery({
     // preview resolution: ~150 downsampled line points (§16); the enlarged view
@@ -99,6 +102,7 @@ export function PreviewPane({
             isLoading={isLoading}
             retrying={isFetching}
             onRetry={() => void refetch()}
+            policy={policy}
           />
         </motion.div>
       </AnimatePresence>
@@ -115,10 +119,12 @@ function PreviewBody({
   isLoading,
   retrying,
   onRetry,
+  policy,
 }: {
   row: Row;
   onOpen: (row: Row) => void;
   width: number;
+  policy?: PolicyStep;
   data: Awaited<ReturnType<typeof fetchSeries>> | undefined;
   isError: boolean;
   isLoading: boolean;
@@ -171,6 +177,7 @@ function PreviewBody({
             unit={row.unit}
             width={width}
             height={CHART_H}
+            policy={policy}
           />
           <p className="mt-2 text-[12px] opacity-40">눌러서 크게 볼 수 있습니다</p>
         </motion.div>

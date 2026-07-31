@@ -31,7 +31,11 @@ log = logging.getLogger("sauron.cache")
 DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache"
 
 # Bump on ANY change to a cached payload's shape (field renames included).
-SCHEMA_VERSION = 3  # 3 = oneLiner dropped, grid cells gained range1y (pass L)
+# 4 = WTD/QTD dropped from every deltas/values block, and KEY_FORWARDS
+#     re-picked (3Mx3M/9Mx3M in, 2Yx2Y/3Yx3Y out) — both change the cached
+#     forwards payload's shape and content, and a v3 cache would be served
+#     with the old keys still in it.
+SCHEMA_VERSION = 4
 
 
 def data_hash(path: Path) -> str:

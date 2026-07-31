@@ -72,6 +72,14 @@ export function resolveDirection(up: boolean): string {
   return resolveVar(up ? "--bw-up" : "--bw-down");
 }
 
+/** Resolve the ink (foreground) colour for canvas. The policy-rate overlay
+ * draws in ink rather than a hue on purpose (§5): it is a REFERENCE the
+ * instrument is read against, and the dash pattern — not a colour — is what
+ * distinguishes it, so the encoding survives in grayscale. */
+export function resolveInk(): string {
+  return resolveVar("--bw-ink");
+}
+
 /** Notify `cb` whenever the root data-theme attribute changes. */
 export function onThemeChange(cb: () => void): () => void {
   const observer = new MutationObserver(cb);

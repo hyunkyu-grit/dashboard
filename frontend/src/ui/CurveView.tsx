@@ -61,11 +61,18 @@ function NodeLine({
   unit,
   width,
   height,
+  baseRate,
 }: {
   nodes: Node[];
   unit: Unit;
   width: number;
   height: number;
+  /** BOK base rate in force at the as-of date, or null (§policy). This curve
+   * is CROSS-SECTIONAL — x is tenor, not time — so the step degenerates to a
+   * single horizontal reference at the current level. That is the useful
+   * reading here anyway: how far the whole curve sits above policy, and where
+   * it crosses. */
+  baseRate?: number | null;
 }) {
   // hovered node index — the curve's equivalent of the preview chart's hovered
   // date. Nothing else in the app reacts to it: it does not pin, does not
@@ -83,9 +90,16 @@ function NodeLine({
         }
       }
     }
+    // one axis, so the domain must hold the policy line too (§policy) —
+    // otherwise it would be drawn outside the plot box or clipped to an edge,
+    // where a flat line reads as "equal to the minimum"
+    if (baseRate != null) {
+      lo = Math.min(lo, baseRate);
+      hi = Math.max(hi, baseRate);
+    }
     const pad = (hi - lo) * 0.08 || 0.05;
     return { yMin: lo - pad, yMax: hi + pad };
-  }, [nodes]);
+  }, [nodes, baseRate]);
 
   if (pts.length < 2) return null;
   const plotW = width - PAD.left - PAD.right;
@@ -136,6 +150,32 @@ function NodeLine({
             {axisLabel(v)}
           </text>
         ))}
+        {/* the base rate: a dashed hairline in ink, UNDER both curves and
+            named at the right edge. Dash + label carry it in grayscale (§5);
+            it is the reference the curve is read against, not a third curve. */}
+        {baseRate != null && (
+          <>
+            <line
+              x1={PAD.left}
+              x2={width - PAD.right}
+              y1={y(baseRate)}
+              y2={y(baseRate)}
+              className="stroke-ink"
+              strokeWidth={1}
+              strokeOpacity={0.35}
+              strokeDasharray="3 3"
+            />
+            <text
+              x={width - PAD.right}
+              y={y(baseRate) - 4}
+              textAnchor="end"
+              className="fill-ink"
+              style={{ fontSize: 10, opacity: 0.5 }}
+            >
+              기준금리 {baseRate.toFixed(2)}
+            </text>
+          </>
+        )}
         <polyline points={line("prev")} fill="none" stroke="currentColor"
           strokeOpacity={BASIS_SECONDARY_OPACITY} strokeWidth={1.4} />
         <polyline points={line("now")} fill="none" stroke="currentColor"
@@ -238,7 +278,13 @@ export function CurveView({
           {levelHeadText(summary.asof)} · 어제
         </span>
       </div>
-      <NodeLine nodes={nodes} unit="%" width={width} height={height - 24} />
+      <NodeLine
+        nodes={nodes}
+        unit="%"
+        width={width}
+        height={height - 24}
+        baseRate={summary.policy?.latest ?? null}
+      />
     </div>
   );
 }

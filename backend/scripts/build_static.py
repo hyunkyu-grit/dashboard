@@ -62,6 +62,7 @@ from app.engine_port import (  # noqa: E402
 )
 from app.events import detect_event_clusters  # noqa: E402
 from app.forwards import FWD_TENORS, START_POINTS, forwards_payload  # noqa: E402
+from app.policy import load_base_rate, policy_step  # noqa: E402
 from app.static_paths import (  # noqa: E402
     FORWARDS_PATH,
     MANIFEST_PATH,
@@ -77,6 +78,7 @@ from app.staleness import _STALE_AT as STALE_AT  # noqa: E402
 from app.volatility import volatility_payload  # noqa: E402
 
 DATA = REPO / "data" / "irsdata.xlsx"
+POLICY = REPO / "data" / "bokbaserate.xlsx"
 OUT_ROOT = REPO / "frontend" / "public"
 
 # Arrays written one element per line (see the module docstring). Everything
@@ -323,7 +325,10 @@ def build(out_root: Path, quiet: bool = False) -> dict:
         shutil.rmtree(out)  # stale files from a removed id must not survive
     w = Writer(out_root)
 
-    w.write(SUMMARY_PATH, payloads.wall_summary(dataset, bases, events))
+    policy = policy_step(load_base_rate(POLICY), dataset.asof)
+    for msg in policy["warnings"]:
+        say(f"  {msg}")
+    w.write(SUMMARY_PATH, payloads.wall_summary(dataset, bases, events, policy))
     w.write(FORWARDS_PATH, fwd)
     w.write(VOLATILITY_PATH, payloads.volatility(dataset, bases, vol))
 

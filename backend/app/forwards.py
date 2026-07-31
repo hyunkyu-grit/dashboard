@@ -44,13 +44,17 @@ FWD_TENORS: list[tuple[str, float | None]] = [
     ("1YF", 1.0), ("2YF", 2.0), ("3YF", 3.0), ("5YF", 5.0),
 ]
 
-# Named key forwards from the legacy sheet (§8): (label, start, tenor).
+# Named key forwards (§8): (label, start, tenor). Re-picked by the owner on
+# 2026-07-31 — the front end of the ladder (3M/6M/9M starts on a 3M tenor) is
+# where the policy path is actually read, so 2Yx2Y and 3Yx3Y gave way to
+# 3Mx3M and 9Mx3M. They are still in the 전체 list and the matrix; only the
+# 주요 block changed.
 KEY_FORWARDS: list[tuple[str, float, float]] = [
+    ("3Mx3M", 0.25, 0.25),
     ("6Mx3M", 0.5, 0.25),
+    ("9Mx3M", 0.75, 0.25),
     ("1Yx1Y", 1.0, 1.0),
     ("2Yx1Y", 2.0, 1.0),
-    ("2Yx2Y", 2.0, 2.0),
-    ("3Yx3Y", 3.0, 3.0),
     ("5Yx5Y", 5.0, 5.0),
 ]
 

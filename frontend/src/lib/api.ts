@@ -28,7 +28,11 @@ import {
 export { API_BASE } from "./staticPaths";
 export type { Freshness, FreshnessLevel, Manifest };
 
-export type BasisKey = "d1" | "wtd" | "mtd" | "qtd" | "ytd";
+/* THE change bases. Three [OWNER, 2026-07-31]: WTD and QTD were dropped —
+ * between 어제 and MTD a week is rarely the interval anyone reasons in, and
+ * QTD differs from MTD in only two months of three. A day, a month, a year;
+ * the 52주 statistics carry the longer view. Mirrors `derive.BASIS_KEYS`. */
+export type BasisKey = "d1" | "mtd" | "ytd";
 
 /** Level/change unit. `ratio` is the dimensionless volatility ratio (§ vol):
  * shown to two decimals, its change is a ratio difference, never bp. */
@@ -70,6 +74,10 @@ export interface SeriesSummary {
   sortKey: number[];
   quoted: boolean | null;
   movePct: number | null; // own-history percentile of today's |D-1| move
+  /** 주요 membership — the tab's 주요/전체 divider (§3). The owner's lists
+   * live in `derive.py`; the browser reads the verdict and never re-derives
+   * it, so there is exactly one place to change which rows sit on top. */
+  key: boolean;
 }
 
 export interface ChangeEvent {
@@ -90,6 +98,27 @@ export interface EventCluster {
   count: number;
 }
 
+/** The BOK base rate as a STEP, drawn on every %-unit chart [OWNER,
+ * 2026-07-31] — CD and the base rate are always drawn together, and the 3M
+ * node IS CD91. bp/ratio charts (spread, butterfly, volatility) are excluded:
+ * a 2.75 line on a ±30bp axis is a rescale, not a comparison.
+ *
+ * `steps` are the CORNERS only — the date each decision took effect. Draw with
+ * square corners; never interpolate between two of them, and never extend the
+ * last level past `through`. `through` is NOT the chart's axis end: it is the
+ * last date the backend can vouch for, and it stops short of the as-of date
+ * when the workbook has not been refreshed through a Board meeting (see
+ * `backend/app/policy.py`). Running the line to the axis end instead would
+ * reintroduce exactly the silent error that bound exists to prevent. */
+export interface PolicyStep {
+  unit: "%";
+  asof: string;
+  through: string;
+  steps: { date: string; rate: number }[];
+  latest: number | null;
+  warnings: string[];
+}
+
 /** Whole-curve extreme, stated once above the table (§I). */
 export interface CurveBanner {
   kind: "curve_high" | "curve_low" | null;
@@ -105,6 +134,7 @@ export interface WallSummary {
   outrights: SeriesSummary[];
   derived: SeriesSummary[];
   events: EventCluster[];
+  policy: PolicyStep;
 }
 
 export async function fetchWallSummary(): Promise<WallSummary> {

@@ -24,10 +24,12 @@ from .derive import basis_dates, derived_ids
 from .dv01 import build_dv01_table
 from .events import detect_event_clusters
 from .forwards import forwards_payload
+from .policy import load_base_rate, policy_step
 from .staleness import dataset_freshness
 from .volatility import volatility_payload
 
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "irsdata.xlsx"
+POLICY_PATH = Path(__file__).resolve().parents[2] / "data" / "bokbaserate.xlsx"
 
 app = FastAPI(title="braveworld", version="0.1.0")
 
@@ -49,6 +51,12 @@ app.add_middleware(
 
 _dataset = load_dataset(DATA_PATH)
 _bases = basis_dates(_dataset)
+# The policy step, resolved ONCE against this dataset's as-of date — the carry
+# bound depends on both files, so it cannot be decided by policy.py alone (see
+# its docstring). Two dozen corners; it rides in the summary rather than
+# earning an endpoint, because every %-unit chart needs it and the summary is
+# already the first thing fetched.
+_policy = policy_step(load_base_rate(POLICY_PATH), _dataset.asof)
 _curves = build_basis_curves(_dataset)
 _events = detect_event_clusters(_dataset)
 _volatility = volatility_payload(_dataset, _bases)
@@ -81,7 +89,7 @@ def health() -> dict:
 
 @app.get("/api/wall/summary")
 def wall_summary() -> dict:
-    return payloads.wall_summary(_dataset, _bases, _events)
+    return payloads.wall_summary(_dataset, _bases, _events, _policy)
 
 
 @app.get("/api/series/{series_id}")

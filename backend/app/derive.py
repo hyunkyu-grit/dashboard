@@ -18,7 +18,12 @@ from .dataset import (
     tenor_years,
 )
 
-BASIS_KEYS = ["d1", "wtd", "mtd", "qtd", "ytd"]
+# THE change bases. Three, not five [OWNER, 2026-07-31]: WTD and QTD were
+# dropped from the product. Between 어제 and MTD a week is rarely the interval
+# anyone reasons in, and QTD only differs from MTD in two months of three — two
+# columns that mostly restated their neighbours. What is left is a day, a
+# month, and a year, and the 52주 statistics carry the longer view.
+BASIS_KEYS = ["d1", "mtd", "ytd"]
 
 PREVIEW_POINTS = 150  # ~150-pt downsampled preview series (§4/§16)
 CALENDAR_DAYS = 130  # ~26 trading weeks of daily changes for the heatmap (§2)
@@ -53,8 +58,8 @@ def annual_stats(values: list[float | None]) -> dict:
 def basis_dates(dataset: Dataset) -> dict[str, dt.date | None]:
     """Last close strictly BEFORE each period containing the as-of date.
 
-    d1 = previous available business day; wtd = last close of the previous
-    ISO week; mtd/qtd/ytd = last close before the month/quarter/year start.
+    d1 = previous available business day; mtd/ytd = last close before the
+    month/year start.
     """
     dates = dataset.dates
     asof = dataset.asof
@@ -63,16 +68,12 @@ def basis_dates(dataset: Dataset) -> dict[str, dt.date | None]:
         i = bisect_left(dates, cutoff)
         return dates[i - 1] if i > 0 else None
 
-    week_start = asof - dt.timedelta(days=asof.weekday())
     month_start = asof.replace(day=1)
-    quarter_start = asof.replace(month=3 * ((asof.month - 1) // 3) + 1, day=1)
     year_start = asof.replace(month=1, day=1)
 
     return {
         "d1": last_before(asof),
-        "wtd": last_before(week_start),
         "mtd": last_before(month_start),
-        "qtd": last_before(quarter_start),
         "ytd": last_before(year_start),
     }
 
@@ -117,13 +118,46 @@ def fly_series(dataset: Dataset, short: str, belly: str,
 
 
 def derived_ids() -> list[tuple[str, str, list[str]]]:
-    """All 35 derived series: (id, kind, legs). 15 spreads + 20 flies."""
+    """All 84 derived series: (id, kind, legs). 28 spreads + 56 flies."""
     out: list[tuple[str, str, list[str]]] = []
     for a, b in combinations(DISPLAY_TENORS, 2):
         out.append((f"{a}-{b}", "spread", [a, b]))
     for a, b, c in combinations(DISPLAY_TENORS, 3):
         out.append((f"{a}-{b}-{c}", "fly", [a, b, c]))
     return out
+
+
+# The 주요 sets [OWNER, 2026-07-31]. Each tab lists its 주요 members first
+# under a 주요 heading and everything else under 전체 — the same split the
+# forward tab already had, generalized. So these are SUBSETS, never a
+# separate universe: an id here that `derived_ids()` cannot produce is a bug,
+# and `tests/test_derive.py::test_key_sets_are_subsets` fails on it.
+#
+# 주요 아웃라이트 is exactly the live-quoted node set, which is why the 호가만
+# screener was deleted in the same pass — the divider now says what that chip
+# used to say, permanently and in place.
+KEY_OUTRIGHTS = frozenset(QUOTED_NODES)
+
+KEY_SPREADS = frozenset({
+    "1Y-2Y", "1Y-3Y", "2Y-3Y", "2Y-5Y",
+    "2Y-10Y", "3Y-5Y", "3Y-10Y", "5Y-10Y",
+})
+
+KEY_FLIES = frozenset({
+    "6M-9M-1Y", "1Y-1.5Y-2Y", "2Y-3Y-5Y", "2Y-5Y-10Y",
+})
+
+
+def is_key(series_id: str, kind: str) -> bool:
+    """Is this series 주요 — the top block of its tab? Forwards carry their own
+    flag from `forwards.KEY_FORWARDS` and never reach here."""
+    if kind == "outright":
+        return series_id in KEY_OUTRIGHTS
+    if kind == "spread":
+        return series_id in KEY_SPREADS
+    if kind == "fly":
+        return series_id in KEY_FLIES
+    return False
 
 
 def series_values(dataset: Dataset, series_id: str) -> list[float | None]:
@@ -336,6 +370,10 @@ def summarize(dataset: Dataset, series_id: str, label: str, kind: str,
         "range1y": annual_stats(values),
         "sortKey": sort_key,
         "quoted": quoted,
+        # 주요 membership — the tab's 주요/전체 divider reads this (§3). Decided
+        # server-side like every other classification (§16); the browser must
+        # not carry a second copy of the owner's list.
+        "key": is_key(series_id, kind),
         # own-history move percentile — powers the "오늘 많이 움직인 것" screener
         # (§D) and the tint density scale; the browser never recomputes it
         # (§16). CHANGE-based, so it deliberately stays on the FULL history

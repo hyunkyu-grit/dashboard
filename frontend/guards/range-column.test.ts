@@ -147,21 +147,24 @@ describe("a header click on this column leaves row order unchanged", () => {
       // produces an order the default sort key never would
       deltas: (() => {
         const m = ((i * 7) % 5) + 1; // 1, 3, 5, 2, 4 across the five rows
-        return { d1: m, wtd: -m, mtd: m, qtd: -m, ytd: m };
+        return { d1: m, mtd: m, ytd: m };
       })(),
-      basisValues: { d1: 3, wtd: 3, mtd: 3, qtd: 3, ytd: 3 },
+      basisValues: { d1: 3, mtd: 3, ytd: 3 },
       range1y: { min: 1 + i, max: 9 - i, avg: 5, pct: 50 },
       sortKey: [i + 1],
       quoted: true,
+      key: true,
       movePct: 50,
     });
     return {
       asof: "2026-07-29",
-      basisDates: { d1: null, wtd: null, mtd: null, qtd: null, ytd: null },
+      basisDates: { d1: null, mtd: null, ytd: null },
       specNodeOrder: [],
       displayTenors: [],
       missingNodes: [],
       curveBanner: { kind: null },
+      policy: { unit: "%" as const, asof: "2026-07-16", through: "2026-07-30",
+      steps: [{ date: "2026-07-16", rate: 2.75 }], latest: 2.75, warnings: [] },
       outrights: ids.map(row),
       derived: [],
       events: [],
@@ -185,7 +188,7 @@ describe("a header click on this column leaves row order unchanged", () => {
   });
 
   it("but a CHANGE column does reorder — so the check above is not vacuous", () => {
-    const bases: BasisKey[] = ["d1", "wtd", "mtd", "qtd", "ytd"];
+    const bases: BasisKey[] = ["d1", "mtd", "ytd"];
     for (const b of bases) {
       const sorted = ids(orderRows(rows, b, false, false));
       expect(sorted, `sorting by ${b} changed nothing`).not.toEqual(DEFAULT);

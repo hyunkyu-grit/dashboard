@@ -10,7 +10,12 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { BasisKey, CurveBanner, ForwardsPayload } from "@/lib/api";
+import type {
+  BasisKey,
+  CurveBanner,
+  ForwardsPayload,
+  PolicyStep,
+} from "@/lib/api";
 import { dirClass, fmtDelta, levelHeadText, levelHeadTitle } from "@/lib/format";
 import { ForwardMatrix, KeyForwardBlock } from "@/wall/ForwardMatrix";
 import { getTile } from "@/wall/tileRegistry";
@@ -19,6 +24,7 @@ import { useRegisterTile } from "@/wall/useRegisterTile";
 import { levelText } from "./cells";
 import { gridTemplate, visibleColumns, type VisibleColumns } from "./columns";
 import { reorderAnimates, rowShouldFlip, SPRING } from "./motion";
+import { OverviewColumns } from "./OverviewColumns";
 import { RangeCells, RangeHeader } from "./RangeCells";
 import { TintLegend } from "./TintLegend";
 import {
@@ -33,9 +39,7 @@ import { columnCue } from "./tint";
 
 const BASIS_HEAD: Record<BasisKey, string> = {
   d1: "어제",
-  wtd: "WTD",
   mtd: "MTD",
-  qtd: "QTD",
   ytd: "YTD",
 };
 
@@ -47,9 +51,16 @@ const FILTERS: { id: Group | "all"; label: string }[] = [
   { id: "all", label: "전체" },
   { id: "outright", label: GROUP_LABEL.outright },
   { id: "spread", label: GROUP_LABEL.spread },
+  { id: "fly", label: GROUP_LABEL.fly },
   { id: "forward", label: GROUP_LABEL.forward },
   { id: "vol", label: GROUP_LABEL.vol },
 ];
+
+/** Which tabs draw the 주요/전체 divider [OWNER, 2026-07-31]. Generalized from
+ * the forward tab, whose two-block layout is the reference. 변동성 is absent
+ * because six rows do not need dividing; 전체 is absent because it is no
+ * longer a list at all (see OverviewColumns). */
+const DIVIDED: Group[] = ["outright", "spread", "fly", "forward"];
 
 function TableRow({
   row,
@@ -172,6 +183,7 @@ export function InstrumentTable({
   onPin,
   matrixOpen,
   onToggleMatrix,
+  policy,
 }: {
   rows: Row[];
   /** The dataset's as-of date — the level column's HEADER (pass M). Comes from
@@ -189,6 +201,8 @@ export function InstrumentTable({
   // and the preview pane is hidden (§F).
   matrixOpen: boolean;
   onToggleMatrix: () => void;
+  /** BOK base rate step, forwarded to the overview's per-column charts. */
+  policy?: PolicyStep;
 }) {
   const [sortCol, setSortCol] = useState<BasisKey | null>(null);
   const [sortAsc, setSortAsc] = useState(false);
@@ -236,6 +250,11 @@ export function InstrumentTable({
   }>({ cause: "other", scrollTop: 0, viewH: 800, tops: new Map() });
 
   const isForward = filter === "forward";
+  // 전체 is not a list any more — it is the three-column overview (§전체). The
+  // tab strip, the freshness banner and the scroll container stay shared; only
+  // the body below them changes.
+  const isOverview = filter === "all";
+  const divided = DIVIDED.includes(filter as Group);
   const activeScreener = SCREENERS.find((s) => s.id === screener) ?? null;
 
   const startOptions = useMemo(() => {
@@ -257,26 +276,38 @@ export function InstrumentTable({
     if (activeScreener) base = base.filter(activeScreener.test);
     // ordering lives in rows.ts so it can be tested without a DOM; only a
     // CHANGE column can ever be the sort column (pass L)
-    return orderRows(base, sortCol, sortAsc, isForward);
-  }, [rows, filter, startFilter, sortCol, sortAsc, isForward, activeScreener]);
+    return orderRows(base, sortCol, sortAsc, divided);
+  }, [rows, filter, startFilter, sortCol, sortAsc, isForward, divided, activeScreener]);
 
-  // interleave group headings for the forward tab in default order (§3)
+  /* Interleave the 주요 / 전체 group headings (§3). Was forwards-only; every
+   * instrument tab draws it now, with the group's own noun in the heading.
+   *
+   * Suppressed while a change column is sorted, exactly as before: the reader
+   * asked "what moved most" of the whole tab, and a divider that no longer
+   * separates two contiguous blocks would be drawing a line through the
+   * middle of the answer. Suppressed too when a screener has filtered one
+   * side away entirely — a "주요" heading over an empty stretch, or a lone
+   * "전체" heading with no 주요 above it, states a split that isn't there. */
   const items = useMemo(() => {
-    if (!(isForward && !sortCol)) {
+    if (!divided || sortCol) {
       return shown.map((row) => ({ head: null, row }) as const);
     }
+    const noun = GROUP_LABEL[filter as Group];
     const out: { head: string | null; row: Row | null }[] = [];
     let phase: "key" | "rest" | null = null;
     for (const row of shown) {
-      const p = row.keyForward ? "key" : "rest";
+      const p = row.key ? "key" : "rest";
       if (p !== phase) {
-        out.push({ head: p === "key" ? "주요 포워드" : "전체 포워드", row: null });
+        // only head a block when the OTHER one also has rows
+        if (shown.some((r) => r.key !== row.key)) {
+          out.push({ head: `${p === "key" ? "주요" : "전체"} ${noun}`, row: null });
+        }
         phase = p;
       }
       out.push({ head: null, row });
     }
     return out;
-  }, [shown, isForward, sortCol]);
+  }, [shown, divided, sortCol, filter]);
 
   /** Event-time snapshot: old row tops (tile registry) + viewport window. */
   const snapReorder = (cause: "sort" | "screener" | "other") => {
@@ -377,8 +408,11 @@ export function InstrumentTable({
         </p>
       )}
 
-      {/* screener presets (§D): a second row of chips, a filter on top of the
-          active tab — one at a time, click again clears. Not a sidebar. */}
+      {/* Screener presets (§D): a second row of chips, a filter on top of the
+          active tab — one at a time, click again clears. Not a sidebar.
+          Hidden on 전체, which is no longer a list: the chips filter ROWS, and
+          there are no rows there to filter — only three fixed 주요 sets. */}
+      {!isOverview && (
       <div className="mt-2 flex flex-wrap gap-1.5">
         {SCREENERS.map((sc) => {
           const on = screener === sc.id;
@@ -401,7 +435,8 @@ export function InstrumentTable({
           );
         })}
       </div>
-      {activeScreener && (
+      )}
+      {activeScreener && !isOverview && (
         <p className="mt-1.5 text-[12px] opacity-55">{activeScreener.description}</p>
       )}
 
@@ -448,7 +483,9 @@ export function InstrumentTable({
         ref={scrollRef}
         className="min-h-0 flex-1 overflow-y-auto overflow-x-auto px-5 pb-8 pt-3 [scrollbar-gutter:stable]"
       >
-        {isForward && matrixOpen && forwards ? (
+        {isOverview ? (
+          <OverviewColumns rows={rows} asOf={asOf} policy={policy} />
+        ) : isForward && matrixOpen && forwards ? (
           // wrap the 주요 포워드 block below the matrix rather than clipping it
           // off the right edge (§F); the matrix scrolls horizontally itself.
           <div>
