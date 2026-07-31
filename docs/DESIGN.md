@@ -94,8 +94,33 @@ showing only its **주요** set, each with **its own chart underneath**.
   and a fifth would make it the list again.
 - **It never drops a column to fit.** The table's priority ladder does not
   apply: showing 어제 · MTD · YTD · 52주 고/저/평 at once is the entire reason
-  the tab exists. It sets smaller type (11px) instead, and stacks the three
-  columns below the two-pane breakpoint.
+  the tab exists. It stacks the three columns below the two-pane breakpoint
+  instead.
+- **Type is the table's 13px** [OWNER, after seeing it]. It shipped at 11px on
+  the theory that three tables side by side had to be small; on screen that
+  just read as small, and the eight tracks fit 13px at 1920 with room over.
+- **Every track is sized to its CONTENT, never to a header the column does not
+  print.** The level column was 10.5ch to hold the ten-glyph ISO date the table
+  heads it with, against six glyphs of value — and the surplus showed up as a
+  gap immediately after 종목, three times across the screen. The date is stated
+  **once above the grid** instead, which is also the honest count: one fact
+  about the dataset, not three about three columns.
+- **The charts sit on the floor and grow into what the lists leave.** The three
+  lists are 10, 8 and 6 rows; charts that simply followed their lists started
+  at three heights with dead screen under them. Pinned to the bottom
+  (`mt-auto`) they share one baseline, and `flex-1` spends the leftover on the
+  chart rather than on emptiness — so the three charts differ in height by
+  design.
+  - **The chart is measured OUT OF FLOW, and that is load-bearing.** Sizing an
+    in-flow child from a ResizeObserver on its own parent is a feedback loop:
+    the chart grows to the measured height, which grows the box, which reports
+    larger. It does not settle — the first attempt ran the charts off the
+    bottom of the page. Absolute positioning inside the measured box is what
+    makes the loop impossible.
+  - The container fills its space with **flex**, not `min-h-full`: a percentage
+    min-height resolves against the content box while the scroll container's
+    `pt-3 pb-8` sit outside it, so `min-h-full` overshoots by 44px and puts a
+    permanent scrollbar on a page that fits.
 - `ui/OverviewColumns.tsx`; pinned by `guards/overview-and-divider.test.ts`.
 
 ### 주요 / 전체 — the divider, on every instrument tab [OWNER, 2026-07-31]

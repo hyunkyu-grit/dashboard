@@ -152,6 +152,49 @@ describe("the 전체 overview", () => {
     expect(overview).toMatch(/rangeText\(row\.rangeHigh, row\.unit\)/);
     expect(overview).not.toMatch(/levelText\(\{ \.\.\.row/);
   });
+
+  it("sets the table's type size, not a smaller one", () => {
+    /* Shipped at 11px on the theory that three tables side by side had to be
+     * small; on screen it just read as small, and the tracks fit 13px with
+     * room over. `ch` resolves against the element's OWN font-size, so a
+     * stray size on the grid container silently resizes every track. */
+    // 12px is allowed for the one CAPTION (the dataset date above the grid),
+    // which is chrome and matches the freshness chip; the banned sizes are the
+    // ones the ROWS shipped at.
+    expect(overview).not.toMatch(/text-\[1[01]px\]/);
+    expect(overview).toMatch(/text-\[13px\]/);
+  });
+
+  it("no track is widened by a header the column does not print", () => {
+    // the ten-glyph ISO date used to size the six-glyph level column, and the
+    // surplus showed as a gap right after 종목 — three times over. The date is
+    // stated once above the grid instead.
+    expect(overview).toMatch(/const GRID = "7ch 6\.5ch/);
+    expect(overview).toMatch(/levelHeadText\(asOf\)\} 종가 기준/);
+  });
+
+  it("the chart is measured OUT OF FLOW — the loop that broke the page", () => {
+    /* Sizing an in-flow child from a ResizeObserver on its own parent is a
+     * feedback loop: the chart grows to the measured height, which grows the
+     * box, which reports larger. It does not settle — it ran the charts off
+     * the bottom of the page. Absolute positioning is what makes the loop
+     * impossible, so it is asserted rather than left to look like styling. */
+    expect(overview).toMatch(/className="absolute inset-0/);
+    expect(overview).toMatch(/relative mt-auto min-h-0 min-w-0 flex-1/);
+  });
+
+  it("the charts sit on the floor of the column", () => {
+    expect(overview).toContain("mt-auto");
+    expect(overview).toMatch(/flex h-full min-w-0 flex-col/);
+  });
+
+  it("the overview fills the container with flex, never min-h-full", () => {
+    // a percentage min-height resolves against the CONTENT box while the
+    // scroll container's pt-3/pb-8 sit outside it — min-h-full overshoots by
+    // 44px and puts a permanent scrollbar on a page that fits
+    expect(overview).not.toContain("min-h-full");
+    expect(table).toMatch(/isOverview \? "flex flex-col" : ""/);
+  });
 });
 
 describe("the tab set", () => {

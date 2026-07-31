@@ -481,7 +481,15 @@ export function InstrumentTable({
           of anything floating there. */}
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-auto px-5 pb-8 pt-3 [scrollbar-gutter:stable]"
+        /* `flex flex-col` only for the overview: it lets the three-column grid
+           take the container's CONTENT height with `flex-1`, so the charts can
+           sit on the floor. `min-h-full` was the obvious alternative and is
+           wrong here — a percentage min-height resolves against the content
+           box while `pt-3 pb-8` sits outside it, so the grid would overshoot
+           by 44px and put a permanent scrollbar on a page that fits. */
+        className={`min-h-0 flex-1 overflow-y-auto overflow-x-auto px-5 pb-8 pt-3 [scrollbar-gutter:stable] ${
+          isOverview ? "flex flex-col" : ""
+        }`}
       >
         {isOverview ? (
           <OverviewColumns rows={rows} asOf={asOf} policy={policy} />

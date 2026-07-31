@@ -214,7 +214,18 @@ served with the old keys still in it).
   join on a slash (`6M/9M/1Y`). This would have shipped looking like a ticker.
 - **`ch` is the ZERO advance, not the widest glyph.** The overview's 종목 track
   at 6ch truncated `2s10s` → `2s1…` because the labels are semibold letters.
-  Widened to 9ch after seeing it on screen — the arithmetic looked fine.
+  Corrected after seeing it on screen — the arithmetic looked fine.
+- **The overview's density was wrong on first sight and took a second pass**
+  (owner: "글자가 너무 작고 여백이 너무 많아"). 11px → 13px; the level track
+  stopped being sized by a header it no longer prints; the charts moved to the
+  floor and grew into the leftover. Two traps in that pass:
+  - **Sizing a chart from a ResizeObserver on its own parent is a feedback
+    loop** — it ran the charts off the bottom of the page. The chart is
+    absolutely positioned inside the measured box now, so the child cannot
+    influence what it is measured from.
+  - **A `python replace` with no assert silently did nothing.** The GRID track
+    edit did not apply and the "fixed" gap was still on screen; the guard
+    written alongside it is what caught it. Assert every scripted replace.
 - **`guards/pane-still.test.ts` banned `strokeDasharray`** as a proxy for the
   removed ghost curve's draw-on animation. That is the wrong proxy: a dash
   PATTERN is static. Narrowed to `strokeDashoffset`, which is what actually

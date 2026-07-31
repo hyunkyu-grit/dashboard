@@ -34,41 +34,55 @@ import { ErrorState, LoadingState } from "./DataState";
 import { PreviewChart } from "./PreviewChart";
 import { cmpKey, GROUP_LABEL, OVERVIEW_GROUPS, type Group, type Row } from "./rows";
 
-const CHART_H = 180;
+/* The chart's FLOOR, not its height. It grows into whatever the list leaves
+ * (see ColumnChartSlot): the three lists are 10, 8 and 6 rows, so a fixed
+ * height left a band of dead screen between the numbers and the charts that
+ * got taller the shorter the list was. Growing into it spends that space on
+ * the one thing here that can use more of it. */
+const CHART_MIN_H = 160;
 
 /* The column grid, in `ch` so it tracks the font rather than a guessed pixel
  * (the same rule as columns.ts). Eight tracks: 종목 · 현재 · 어제 · MTD · YTD ·
- * 52주 고 · 저 · 평. The overview sets its own type at 11px — three of these
- * live side by side, and at the table's 13px the eight tracks do not fit a
- * third of a 1440 screen without dropping columns, which is the one thing
- * this view must not do: its whole job is showing all six numbers at once.
+ * 52주 고 · 저 · 평.
+ *
+ * TYPE IS 13px — the table's size, not a smaller one [OWNER, 2026-07-31].
+ * This shipped at 11px on the theory that three tables side by side needed to
+ * be small, and on screen it just read as small. The eight tracks fit 13px at
+ * 1920 with room over, so the smaller type bought nothing and cost legibility.
  *
  * `ch` resolves against the ELEMENT'S OWN font-size, so this template must be
- * applied on an element that is already 11px — putting it on a 13px parent
- * silently widens every track (a trap this repo has hit before).
+ * applied on an element that is already 13px — putting it on a parent of a
+ * different size silently resizes every track (a trap this repo has hit
+ * before, in the table's 52주 header).
  *
- * The 종목 track is 9ch for a 5-glyph worst case (`2s10s`, `3Mx3M`) because a
- * `ch` is the ZERO advance and these labels are semibold letters and digits,
- * which are wider — at 6ch the live screen truncated `2s10s` to `2s1…` and
- * `1Yx1Y` to `1Yx…`. Sized generously on purpose: the eight tracks come to
- * ~430px against a ~600px column at 1920, so the slack is free here, and a
- * truncated instrument name is the one thing in this view that cannot be
- * recovered by looking harder. */
-const GRID = "9ch 7.5ch 7ch 7ch 7ch 7ch 7ch 7ch";
+ * Tracks are sized to their CONTENT and no wider, because every surplus `ch`
+ * shows up as a gap between 종목 and the 52주 trio, which is the one stretch
+ * of this row with nothing in it:
+ *   종목  7ch — 5 semibold glyphs (`2s10s`, `9Mx3M`); a `ch` is the ZERO
+ *                advance and letters are wider, so 5 glyphs need more than 5ch
+ *   the rest 6.5ch — six glyphs (`+113.9`, `−100.5`, `2.4090`), the level
+ *                     column included
+ *
+ * The level track is 6.5ch like the others, NOT 10.5ch for the ISO date the
+ * table heads it with. The date is ten glyphs against six of value, so the
+ * surplus landed as leading slack in a right-aligned column — a visible gap
+ * immediately after 종목, three times over. The date is stated ONCE above the
+ * grid instead, which is also the honest count: one fact about the dataset,
+ * not three about three columns. */
+const GRID = "7ch 6.5ch 6.5ch 6.5ch 6.5ch 6.5ch 6.5ch 6.5ch";
 
-function Head({ asOf }: { asOf?: string }) {
+function Head() {
   return (
     <div
       style={{ gridTemplateColumns: GRID }}
-      className="grid gap-x-1.5 border-b border-edge pb-1 text-[11px] text-ink/50"
+      className="grid gap-x-1 border-b border-edge pb-1 text-[13px] text-ink/50"
     >
       <div>종목</div>
-      <div
-        className="whitespace-nowrap text-right tabular-nums"
-        title={levelHeadTitle(asOf)}
-      >
-        {levelHeadText(asOf)}
-      </div>
+      {/* deliberately empty: the level is the bold number and needs no naming,
+          and the date that heads this column in the table is said once above
+          the grid (see OverviewColumns). Heading it 현재 is what pass M ruled
+          out — these are closes, not a live quote. */}
+      <div />
       <div className="text-right">어제</div>
       <div className="text-right">MTD</div>
       <div className="text-right">YTD</div>
@@ -93,11 +107,11 @@ function OverviewRow({
       type="button"
       onClick={() => onSelect(row)}
       style={{ gridTemplateColumns: GRID }}
-      className={`grid w-full gap-x-1.5 border-b border-edge py-1.5 text-left text-[11px] ${
+      className={`grid w-full gap-x-1 border-b border-edge py-1.5 text-left text-[13px] ${
         selected ? "bg-page" : "hover:bg-page/50"
       }`}
     >
-      <div className="relative truncate pl-2 font-semibold">
+      <div className="relative truncate pl-1.5 font-semibold">
         {/* which row this column's chart is showing — the same left rule the
             table uses for a pin, because it means the same thing */}
         {selected && (
@@ -137,10 +151,12 @@ function OverviewRow({
 function ColumnChart({
   row,
   width,
+  height,
   policy,
 }: {
   row: Row | null;
   width: number;
+  height: number;
   policy?: PolicyStep;
 }) {
   const { data, isError, isLoading, isFetching, refetch } = useQuery<SeriesDetail>({
@@ -154,23 +170,23 @@ function ColumnChart({
 
   if (!row) {
     return (
-      <div className="flex items-center justify-center text-[11px] opacity-45"
-        style={{ height: CHART_H }}>
+      <div className="flex items-center justify-center text-[13px] opacity-45"
+        style={{ height: CHART_MIN_H }}>
         종목을 누르면 흐름이 나옵니다
       </div>
     );
   }
   if (!row.seriesId) {
     return (
-      <div className="flex items-center justify-center text-[11px] opacity-45"
-        style={{ height: CHART_H }}>
+      <div className="flex items-center justify-center text-[13px] opacity-45"
+        style={{ height: CHART_MIN_H }}>
         과거 흐름을 볼 수 없습니다
       </div>
     );
   }
   return (
-    <div style={{ minHeight: CHART_H }}>
-      <div className="mb-1 text-[11px] font-semibold">{row.label}</div>
+    <div>
+      <div className="mb-1 text-[13px] font-semibold">{row.label}</div>
       {isError && (
         <ErrorState
           what="이 종목의 과거 흐름을"
@@ -185,7 +201,7 @@ function ColumnChart({
           stats={data.stats}
           unit={row.unit}
           width={width}
-          height={CHART_H}
+          height={height}
           policy={policy}
         />
       )}
@@ -196,12 +212,10 @@ function ColumnChart({
 function Column({
   group,
   rows,
-  asOf,
   policy,
 }: {
   group: Group;
   rows: Row[];
-  asOf?: string;
   policy?: PolicyStep;
 }) {
   /* Only 주요 here, in the backend's sort order. The 전체 members of each group
@@ -226,10 +240,12 @@ function Column({
   const selected = shown.find((r) => r.id === selectedId) ?? shown[0] ?? null;
 
   return (
-    <div className="flex min-w-0 flex-col">
+    // h-full + the grid's default `stretch`: every column is the container's
+    // full height, which is what gives `mt-auto` on the chart a floor to sit on
+    <div className="flex h-full min-w-0 flex-col">
       <div className="mb-1 text-[13px] font-semibold">{GROUP_LABEL[group]}</div>
-      <div className="text-[11px]">
-        <Head asOf={asOf} />
+      <div className="text-[13px]">
+        <Head />
         {shown.map((r) => (
           <OverviewRow
             key={r.id}
@@ -239,6 +255,12 @@ function Column({
           />
         ))}
       </div>
+      {/* mt-auto: the chart sits at the BOTTOM of the column, not directly
+          under a list whose length differs per group [OWNER, 2026-07-31].
+          The three lists are 10, 8 and 6 rows, so charts that followed their
+          lists started at three different heights with dead space beneath
+          them; pinned to the floor they share one baseline and the slack
+          moves above the charts where it reads as separation, not emptiness. */}
       <ColumnChartSlot row={selected} policy={policy} />
     </div>
   );
@@ -255,16 +277,37 @@ function ColumnChartSlot({
   policy?: PolicyStep;
 }) {
   const [el, setEl] = useState<HTMLDivElement | null>(null);
-  const [w, setW] = useState(0);
+  const [box, setBox] = useState({ w: 0, h: 0 });
   useEffect(() => {
     if (!el) return;
-    const ro = new ResizeObserver((entries) => setW(entries[0].contentRect.width));
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0].contentRect;
+      setBox({ w: r.width, h: r.height });
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, [el]);
+  /* flex-1 for the height, and the chart ABSOLUTELY POSITIONED inside it.
+   *
+   * The absolute layer is load-bearing, not styling. Measuring this box and
+   * then sizing an in-flow child from the measurement is a ResizeObserver
+   * feedback loop: the chart grows to the measured height, which grows the
+   * box, which reports a larger height, which grows the chart. It does not
+   * settle — first attempt ran the charts off the bottom of the page and put a
+   * scrollbar on a screen that fits. Out of flow, the child cannot influence
+   * the parent it is measured from, so the loop cannot form. */
   return (
-    <div ref={setEl} className="mt-3 min-w-0">
-      {w > 0 && <ColumnChart row={row} width={w} policy={policy} />}
+    <div ref={setEl} className="relative mt-auto min-h-0 min-w-0 flex-1 pt-4">
+      {box.w > 0 && (
+        <div className="absolute inset-0 pt-4">
+          <ColumnChart
+            row={row}
+            width={box.w}
+            height={Math.max(CHART_MIN_H, box.h - 20)}
+            policy={policy}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -285,10 +328,21 @@ export function OverviewColumns({
    * is eight numeric columns in ~200px, which is unreadable at any type size.
    */
   return (
-    <div className="grid grid-cols-1 gap-x-6 gap-y-8 lg:grid-cols-[repeat(3,minmax(0,1fr))]">
-      {OVERVIEW_GROUPS.map((g) => (
-        <Column key={g} group={g} rows={rows} asOf={asOf} policy={policy} />
-      ))}
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* The dataset's date, once for the whole overview — the level columns
+          used to each head themselves with it (pass M's rule, applied three
+          times). One surface, one dataset, one date. */}
+      <p
+        className="mb-2 shrink-0 text-[12px] tabular-nums opacity-45"
+        title={levelHeadTitle(asOf)}
+      >
+        {levelHeadText(asOf)} 종가 기준
+      </p>
+      <div className="grid flex-1 grid-cols-1 gap-x-6 gap-y-8 lg:grid-cols-[repeat(3,minmax(0,1fr))]">
+        {OVERVIEW_GROUPS.map((g) => (
+          <Column key={g} group={g} rows={rows} policy={policy} />
+        ))}
+      </div>
     </div>
   );
 }
