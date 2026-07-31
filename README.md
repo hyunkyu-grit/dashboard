@@ -12,14 +12,22 @@ stay untouched.
 
 ## Data refresh — currently manual
 
-`data/irsdata.xlsx` is a **static snapshot**. Nothing in this repo fetches or
-schedules a new close; getting tomorrow's data in is a manual step, and no
-automated feed exists yet (that is an owner decision, out of scope here).
+**Two** static snapshots, on two schedules:
+
+| file | what it is | how often it moves |
+|---|---|---|
+| `data/irsdata.xlsx` | daily KRW IRS closes | every business day |
+| `data/bokbaserate.xlsx` | the BOK base rate | only on a Board decision |
+
+Nothing in this repo fetches or schedules a new close; getting tomorrow's data
+in is a manual step, and no automated feed exists yet (that is an owner
+decision, out of scope here).
 
 To refresh:
 
 ```powershell
 # 1. open data/irsdata.xlsx so the Infomax add-in pulls the new day, save, CLOSE
+#    (and data/bokbaserate.xlsx too, on a day the Board met)
 # 2+3. rebuild, check, and (after a y/n) commit + mirror + push
 powershell -File scripts/refresh.ps1
 ```
@@ -36,13 +44,24 @@ against a backend started from that tree, prints what changed, and only then
 asks. `-FullGate` runs both modes instead; `-Yes` skips the prompt; `-NoPush`
 stops after the mirror.
 
+**It also refuses when the base rate has fallen behind a Board meeting.** The
+two workbooks move on different schedules, and the base rate is drawn on every
+%-unit chart, so a `bokbaserate.xlsx` that has not been refreshed through a
+decision would make the step line stop short on every chart at once. That
+truncation is correct — the backend will not carry a rate nobody checked — but
+it is not what you want to deploy, so the refresh stops (exit 3) and tells you
+which workbook to open. `-SkipBaseRate` proceeds anyway, with the truncated
+line. On a day with no new IRS data it says so without stopping, since there is
+nothing being built.
+
 The steps by hand, if you prefer them:
 
 ```powershell
 # 1. replace data/irsdata.xlsx with a newer export in the same layout
+#    (and data/bokbaserate.xlsx if the Board met since it was last pulled)
 # 2. rebuild the static API that the deployed site reads
 python backend/scripts/build_static.py
-# 3. commit BOTH the xlsx and frontend/public/api/**, then push to deploy
+# 3. commit the xlsx files AND frontend/public/api/**, then push to deploy
 ```
 
 Two things no script can check. Whether the numbers are **right** — the loader
