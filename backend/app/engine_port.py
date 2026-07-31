@@ -12,8 +12,9 @@ PROVENANCE (owner-approved 2026-07-24, docs/PORT_PROPOSAL.md Option A):
   Do NOT edit the ported bodies; fix upstream understanding first, then
   re-port deliberately with a provenance note.
 
-Excluded by design (spec §0): all valuation/scenario code — NPV, PVBP,
-KRD, theta, bumped curves, path simulation, trade objects.
+Scope: the curve side, plus `IRS_Trade` (ported 2026-07-31 for the backtest —
+see the banner above it). Still excluded: PVBP, KRD, theta, bumped curves and
+path simulation.
 """
 
 import numpy as np
@@ -273,3 +274,160 @@ def forward_rate_simple(
     if df2 < 1e-12:
         return 0.0
     return (df1 / df2 - 1.0) / (t2 - t1)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Trade object — ported 2026-07-31 for the backtest [OWNER].
+#
+# The module docstring above used to end "Excluded by design (spec §0): all
+# valuation/scenario code — NPV, PVBP, KRD, theta, bumped curves, path
+# simulation, trade objects." The owner lifted that exclusion for the backtest
+# and directed the frozen code be brought over rather than rewritten, so
+# IRS_Trade comes across BYTE-IDENTICAL like everything above it — including
+# `compute_npv`, which nothing here calls: a port is of a thing, not of the
+# parts of it we happen to want, and trimming it would end the byte-identity
+# that makes the parity test meaningful.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class IRS_Trade:
+    """ISDA 표준 IRS 트레이드 객체.
+
+    초기화 시 start_date → maturity_date의 전체 지급 스케줄을 Forward Generation 방식으로
+    영구 확정한다. 과거 임의 날짜로의 타임머신 재평가 및 백테스팅에 필요한 연속성을 보장.
+
+    스케줄 생성 규칙 (ISDA 표준):
+      1. Forward Generation : start_date + N × freq_months (dateutil.relativedelta 사용)
+      2. EOM 룰             : start_date가 월말이면 이후 지급일도 해당 월 말일로 고정
+      3. Modified Following : 주말이면 다음 영업일, 월경(Month-End Crossing) 시 직전 영업일
+      4. Maturity Snap      : 생성 날짜 ≥ maturity_date이면 maturity_date로 대체 후 종료
+    """
+
+    __slots__ = (
+        "notional", "fixed_rate_pct", "direction", "sector",
+        "start_date", "maturity_date", "fixed_freq", "float_freq",
+        "pay_dates", "accruals", "_pay_date_set",
+    )
+
+    def __init__(
+        self,
+        start_date: _date,
+        maturity_date: _date,
+        fixed_rate_pct: float,
+        direction: int,
+        notional: float,
+        sector: str = "IRS",
+        fixed_freq: float = 0.25,
+        float_freq: float = 0.25,
+    ) -> None:
+        # start_date를 영업일로 보정(_next_business_day는 이미 영업일이면 그대로 반환하는
+        # idempotent 함수라 안전하다). 호출측이 "최초거래일+1(캘린더일)"처럼 순수 T+1을
+        # 앵커로 넘길 때, 그 T+1이 하필 공휴일(예: 성탄절 다음날 거래 → T+1=성탄절)이면
+        # 실제 효력발생일은 그다음 영업일로 밀려야 한다 — 실측 확인: 이 보정이 없으면
+        # 이후 전체 지급일이 하루씩 밀려서 실제 파일의 "차기지급일자"와 어긋난다.
+        self.start_date     = _next_business_day(start_date)
+        self.maturity_date  = maturity_date
+        self.fixed_rate_pct = fixed_rate_pct
+        self.direction      = direction
+        self.notional       = notional
+        self.sector         = sector
+        self.fixed_freq     = fixed_freq
+        self.float_freq     = float_freq
+        self.pay_dates, self.accruals = self._build_schedule()
+        self._pay_date_set: set[_date] = set(self.pay_dates)
+
+    def _build_schedule(self) -> tuple[list[_date], list[float]]:
+        """ISDA Forward Generation 스케줄 확정.
+
+        Returns:
+            pay_dates : Modified Following 조정 지급일 목록
+            accruals  : 각 기간의 ACT/365 어큐럴 (전기간 지급일 → 당기간 지급일)
+        """
+        from dateutil.relativedelta import relativedelta as _rd
+        import calendar as _cal
+
+        freq_months = max(1, round(self.float_freq * 12))
+        last_of_start = _cal.monthrange(self.start_date.year, self.start_date.month)[1]
+        is_eom = (self.start_date.day == last_of_start)
+
+        raw_dates: list[_date] = []
+        i = 1
+        while True:
+            raw = self.start_date + _rd(months=freq_months * i)
+            if is_eom:
+                last_of_raw = _cal.monthrange(raw.year, raw.month)[1]
+                raw = _date(raw.year, raw.month, last_of_raw)
+            # maturity_date 직전(10일 이내)이면 별도 스텁을 만들지 않고 바로 만기로 스냅
+            # → ModFol 조정 후 두 날짜가 동일해져 accrual=0인 유령 마지막 기간이
+            #   생기는 것을 방지 (raw >= maturity_date 조건만으로는 걸러지지 않는 엣지케이스)
+            if raw >= self.maturity_date or (self.maturity_date - raw).days <= 10:
+                raw_dates.append(self.maturity_date)
+                break
+            raw_dates.append(raw)
+            i += 1
+
+        adj_dates = [_modfol_bd(d) for d in raw_dates]
+
+        prev = self.start_date
+        accruals: list[float] = []
+        for d in adj_dates:
+            accruals.append((d - prev).days / 365.0)
+            prev = d
+
+        return adj_dates, accruals
+
+    def compute_npv(
+        self,
+        val_date: _date,
+        zc: np.ndarray,
+        current_float_rate_pct: float,
+        df_fn: Callable[[float, np.ndarray], float] = df_linear_rate,
+    ) -> float:
+        """val_date 기준 Full Revaluation NPV.
+
+        확정된 스케줄에서 val_date 이후(strictly greater) 잔여 지급일만 필터링.
+          Fixed Leg  : Σ N × fixed_rate × accrual_i × DF(t_i)   (사전확정 어큐럴 사용)
+          Float Leg
+            현재 스텁: N × current_float × cur_accrual × DF(t_next)   (확정 픽싱)
+            미래 스텁: N × fwd(t_s, t_e) × accrual_i × DF(t_e)        (포워드 투영)
+
+        df_fn 기본값 df_linear_rate(linear-on-rate): KRW CD IRS 전 구간의 공식
+        보간법을 linear-on-rate로 통일하기로 한 결정에 따름(KRX 청산제도
+        설명자료 2019 — "일별 무이표금리는 3개월 노드 사이 단순 선형보간").
+        이전에는 df()(log-linear-on-DF)가 하드코딩되어 있어, 이 메서드를 쓰는
+        simulate_irs_path_fm/대시보드 시나리오 시뮬레이션 경로만 나머지 엔진
+        (compute_irs_pvbp/krd_map/theta)과 다른 보간법을 쓰는 불일치가 있었다.
+        """
+        fixed_rate  = self.fixed_rate_pct / 100.0
+        float_rate0 = current_float_rate_pct / 100.0
+        is_ois      = (self.sector == "OIS")
+
+        rem: list[int] = [i for i, pd in enumerate(self.pay_dates) if pd > val_date]
+        if not rem:
+            return 0.0
+
+        first_i     = rem[0]
+        t_next      = max((self.pay_dates[first_i] - val_date).days / 365.0, 1.0 / 365.0)
+        cur_accrual = self.accruals[first_i]
+
+        fixed_pv = 0.0
+        for i in rem:
+            t_pay    = (self.pay_dates[i] - val_date).days / 365.0
+            fixed_pv += self.notional * fixed_rate * self.accruals[i] * df_fn(t_pay, zc)
+
+        float_pv = self.notional * float_rate0 * cur_accrual * df_fn(t_next, zc)
+
+        if is_ois:
+            t_s = t_next
+            for i in rem[1:]:
+                t_e       = (self.pay_dates[i] - val_date).days / 365.0
+                float_pv += self.notional * (df_fn(t_s, zc) - df_fn(t_e, zc))
+                t_s       = t_e
+        else:
+            t_s = t_next
+            for i in rem[1:]:
+                t_e       = (self.pay_dates[i] - val_date).days / 365.0
+                fwd       = forward_rate_simple(t_s, t_e, zc, df_fn=df_fn)
+                float_pv += self.notional * fwd * self.accruals[i] * df_fn(t_e, zc)
+                t_s       = t_e
+
+        return self.direction * (fixed_pv - float_pv)

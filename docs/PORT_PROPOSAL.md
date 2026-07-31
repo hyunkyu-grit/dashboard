@@ -59,3 +59,72 @@ their config/import surface. Not recommended for a standalone monitor.
 2. Approve the holidays-range (2016–2035) and loud-fallback deviations?
 3. Forward par-swap convention for matrix cells: quarterly fixed annuity on
    the single CD/IRS curve (matches KRW IRS quoting) — confirm.
+
+---
+
+# Port 2 — the single-swap valuation core (2026-07-31)
+
+**Decided and executed the same day.** The owner lifted the CLAUDE.md guardrail
+that read *"no portfolio valuation / MtM / scenario / trade code"* to allow the
+backtest, and directed that the frozen code be **brought over rather than
+rewritten** ("풀고 새로만들 필요없이 코드 가져와도").
+
+## What crossed
+
+| frozen source | into |
+|---|---|
+| `engine/quant_engine.py :: IRS_Trade` | `app/engine_port.py` (appended, byte-identical) |
+| `engine/fixings.py` — all 5 bodies | `app/valuation_port.py` |
+| `engine/instruments.py :: VanillaSwap` | `app/valuation_port.py` |
+| `engine/mtm_valuation.py` — all 4 bodies | `app/valuation_port.py` |
+
+Source of record: `krw-fi-pms-backend/irs_pricer/engine/`, the same checkout
+the curve-side port pins. There is a second copy under
+`krw-fi-pms/backend/irs_pricer/engine/`; the two were compared byte-for-byte
+and differ **only in line endings** (LF vs CRLF), so either is the same code.
+
+`IRS_Trade` came across whole, including `compute_npv`, which nothing here
+calls. A port is of a thing, not of the parts of it we happen to want, and
+trimming it would end the byte-identity that makes the parity test mean
+anything.
+
+## What did NOT cross, and why
+
+- **`engine/curve.py :: build_curve`.** It consumes a `MarketSnapshot`
+  assembled by a DB-backed market-data service. braveworld bootstraps the same
+  array from the xlsx (`app/curves.py`). Only the `CurveBundle` container
+  crossed, and `test_valuation_port.py` asserts it is the *only* body in our
+  file that is not in the frozen source.
+- **`services/npv_trace_service.py`**, which does roughly what this repo's
+  backtest does. It reaches for a SQLAlchemy `Session`, trade and trace
+  repositories, booked position ids, `funding_basis`, `mtm_service` and
+  `market_data_service`. braveworld has no database — it reads one workbook —
+  so the service layer is written natively in `app/backtest.py`.
+- Still excluded from `engine_port.py`: PVBP, KRD, theta, bumped curves, path
+  simulation.
+
+## Deviations from byte-identity
+
+Import lines only, because the frozen package layout does not exist here:
+`.quant_engine` and `.curve` become `.engine_port`, and `CurveBundle` is
+declared locally. Every class and function BODY is byte-identical, re-extracted
+from the frozen source and compared by
+`tests/test_valuation_port.py::test_ported_bodies_byte_identical_to_frozen_source`.
+
+`mtm_valuation.py` carries a UTF-8 BOM in the frozen repo; it is read with
+`utf-8-sig`, which is a file-encoding artefact and touches no body.
+
+## The unit trap this port inherits
+
+Every rate crossing into `valuation_port` is an annualized **decimal**
+(0.0251 == 2.51%). Percent exists only inside `IRS_Trade`'s `*_pct` arguments,
+and `VanillaSwap.to_irs_trade()` is the single decimal→percent conversion. The
+frozen repo shipped a bug here once — a second `/100` on an already-decimal CD
+fixing, which crushed the floating stub ~100x and silently corrupted every P&L
+surface downstream. Our test pins it from both sides: a missing `/100` and a
+doubled one each move the NPV by >50x and fail.
+
+The check that would catch almost any other mistake in the chain is
+`test_a_swap_struck_at_par_is_worth_about_nothing`: enter a 10Y payer at
+today's own 10Y par rate, value it on today's curve, and the NPV must be ~0
+against the notional.
