@@ -286,12 +286,22 @@ and each row is another full daily revaluation pass.
   to, presented as arithmetic. Carry's sign follows the struck fixed rate
   against the CD that ACTUALLY printed over the holding period, not against CD
   on any one day.
-- **The P&L chart has a hovered readout**: date, cumulative, and the change
-  into that point. The change is SERVED, not differenced in the browser (§16) —
+- **The P&L chart has a hovered readout**: date, cumulative, and the ONE-DAY
+  change. The change is SERVED, not differenced in the browser (§16) —
   differencing a rounded series client-side gives a number that disagrees with
-  the difference of the two figures on screen. It is labelled 당일 only when
-  every business day in the window is published (`daily`); once the series is
-  thinned a step spans ~6 days and it reads 직전 대비 instead.
+  the difference of the two figures on screen.
+  - **It is a real day even where the line is thinned.** A ten-year book draws
+    400 of ~2,600 business days, so consecutive dots are ~6 days apart; the
+    server therefore values the business day BEFORE every published point.
+    Measured on the same chart: 당일 +789만원 against a −3,801만원 step between
+    dots — the step was never a daily move. Costs one extra valuation per
+    point (10y: 0.6s → 1.2s), which is not a trade worth agonising over.
+  - `complete` says whether every business day is DRAWN. It no longer has
+    anything to do with `d`, which is one day either way.
+  - **Curves are bootstrapped once per date per run**, shared across positions.
+    A three-position book was rebuilding the same array three times — 0.7ms
+    each, 0.8s of a 2.2s run. The cache is per-request on purpose: a
+    module-level one would survive a data refresh and serve a stale curve.
   - The readout is local, not the shared `ReadoutCard`. That card owns
     `fmtLevel`/`fmtDelta` so the preview chart and idle curve cannot drift into
     two grammars for one quantity; this axis is MONEY (`fmtKrw`, 억/만), and

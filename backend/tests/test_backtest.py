@@ -446,25 +446,61 @@ def test_the_trace_splits_the_same_way(ds):
         assert abs((pt["valuation"] + pt["carry"]) - pt["pnl"]) <= 1
 
 
-def test_each_point_carries_its_own_change(ds):
-    """`d` is served, not differenced in the browser (§16). Differencing a
-    ROUNDED series client-side gives a number that disagrees with the
-    difference of the two figures the reader can see, which is exactly the
-    class of defect this repo has shipped before."""
+def test_each_point_carries_a_real_one_day_change(ds):
+    """`d` is the change over ONE BUSINESS DAY, at every published point,
+    however far apart the points are drawn.
+
+    Served, not differenced in the browser (§16): subtracting a series that has
+    already been rounded to the won gives a figure that disagrees with the two
+    the reader can see on screen.
+
+    On an UNTHINNED window the neighbours ARE one day apart, so `d` must equal
+    the step — that is the cheap half of the check.
+    """
     book = run_backtest(ds, [Position("10Y", +1, N, dt.date(2026, 1, 2))])
+    assert book["complete"] is True
     pts = book["points"]
     assert pts[0]["d"] is None  # nothing to change from
     for a, b in zip(pts, pts[1:]):
         assert b["d"] == round(b["pnl"] - a["pnl"], 0)
 
 
-def test_daily_says_whether_a_step_is_actually_one_day(ds):
-    """A ten-year book is ~2,600 business days thinned to 400, so its steps
-    span ~6 days; calling those "당일 변화" would be a lie. `daily` is what the
-    UI reads to decide the wording."""
+def test_the_one_day_change_survives_thinning(ds):
+    """THE point of valuing the day before each sample. A ten-year book draws
+    400 of ~2,600 business days, so consecutive dots are ~6 days apart — the
+    step between them is NOT a daily move and must not be reported as one.
+
+    Checked against the truth: re-run the same position ending on the point's
+    own date and on the business day before it, and the difference of those two
+    closing figures is what `d` must equal.
+    """
+    entry = dt.date(2016, 1, 5)
+    book = run_backtest(ds, [Position("10Y", +1, N, entry)])
+    assert book["complete"] is False
+    pts = book["points"]
+
+    # a dot in the middle, and the business day before it
+    probe = pts[len(pts) // 2]
+    d_at = dt.date.fromisoformat(probe["t"])
+    i = ds.dates.index(d_at)
+    before = ds.dates[i - 1]
+
+    on = run_backtest(ds, [Position("10Y", +1, N, entry, d_at)])["pnl"]
+    prior = run_backtest(ds, [Position("10Y", +1, N, entry, before)])["pnl"]
+    assert abs(probe["d"] - (on - prior)) <= 2
+
+    # and it is genuinely SMALLER than the step between dots, which is the
+    # whole reason the extra valuation is worth doing
+    idx = pts.index(probe)
+    step = abs(probe["pnl"] - pts[idx - 1]["pnl"])
+    assert abs(probe["d"]) < step
+
+
+def test_complete_says_whether_every_business_day_is_drawn(ds):
+    """Not about `d` any more — that is one day either way — but about the
+    line's resolution."""
     short = run_backtest(ds, [Position("10Y", +1, N, dt.date(2026, 1, 2))])
     long = run_backtest(ds, [Position("10Y", +1, N, dt.date(2016, 1, 5))])
-    assert short["daily"] is True
-    assert len(short["points"]) <= 400
-    assert long["daily"] is False
+    assert short["complete"] is True
+    assert long["complete"] is False
     assert len(long["points"]) <= 400

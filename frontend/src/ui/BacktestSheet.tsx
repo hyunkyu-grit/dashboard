@@ -291,9 +291,10 @@ function PnlChart({
             </span>
           </div>
           <div className="mt-0.5 flex justify-between gap-2">
-            {/* 당일 only when every business day is published; once the series
-                is thinned a step spans ~6 days and saying 당일 would be false */}
-            <span className="opacity-50">{result.daily ? "당일" : "직전 대비"}</span>
+            {/* Always 당일: the server values the business day before every
+                published point, so this is a real one-day change even where
+                the line is drawn at one dot per ~6 days. */}
+            <span className="opacity-50">당일</span>
             <span
               className={`tabular-nums ${
                 hp.d == null ? "opacity-40" : hp.d >= 0 ? "text-up" : "text-down"

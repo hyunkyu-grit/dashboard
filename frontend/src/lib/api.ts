@@ -340,15 +340,15 @@ export interface BacktestResult {
   positions: BacktestPosition[];
   from: string;
   to: string;
-  /** The BOOK total per date, each with its CHANGE from the point before it
-   * (`d`, null on the first). Served rather than differenced in the browser
-   * (§16): differencing a rounded series client-side gives a number that
-   * disagrees with the difference of the two figures on screen. */
+  /** The BOOK total per date, each with its ONE-BUSINESS-DAY change (`d`,
+   * null on the first). Always a day, however far apart the points are drawn:
+   * the server values the day before each sample for exactly this. Served
+   * rather than differenced here (§16) — subtracting a series already rounded
+   * to the won gives a figure that disagrees with the two on screen. */
   points: { t: string; pnl: number; d: number | null }[];
-  /** true when every business day in the window is published, so `d` really is
-   * a one-day change. False once the series is thinned — a ten-year book's
-   * steps span ~6 days and must not be labelled 당일. */
-  daily: boolean;
+  /** whether every business day in the window is DRAWN. Nothing to do with
+   * `d`, which is one day either way; it describes the line's resolution. */
+  complete: boolean;
   pnl: number;
   maxProfit: number;
   maxLoss: number;
