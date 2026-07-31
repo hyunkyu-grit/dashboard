@@ -227,6 +227,48 @@ the instruction.
   `calendar.json` (the backend must not read the frontend tree at runtime);
   `test_mpc_dates_match_the_calendar` fails if the copies drift.
 
+### The backtest [OWNER, 2026-07-31]
+
+**"그때 들어갔으면 지금 얼마였을까."** Clicking the CHART opens it; a row click
+still pins. It took the enlarged chart's slot, because the pane chart is now
+pane-sized and a popup whose job was "the same line, bigger" had nothing left
+to do.
+
+- **Full revaluation, not Δrate × DV01.** Each day the position is revalued on
+  THAT day's bootstrapped curve, so the number carries roll-down and carry. The
+  approximation is first-order in the rate and blind to time: it cannot see
+  that a 10Y entered a year ago is a 9Y today, and it books no coupon.
+  Measured divergence: −4.9% over 7 days, −12.7% over 209, −43.1% over 2401.
+- **Dirty NPV + settled cash.** A swap's dirty NPV drops by the net coupon on
+  every payment date, because the flow leaves the valuation schedule the moment
+  it is paid; marking on NPV alone draws a sawtooth that is pure accounting
+  artefact. The correction's size is asserted: notional × (fixed − CD fixing) ×
+  accrual, to within 1%.
+- **Legs are DV01-neutral at the ENTRY curve**, so the quoted spread or fly is
+  the P&L driver rather than a lopsided outright bet. The notional goes on the
+  reference leg (longest for a spread, belly for a fly) and the others follow.
+- **No look-ahead.** Curves come from the row AT each date; floating periods
+  take the CD91 print of F(R) = reset − 1 Seoul business day through the ported
+  `select_fixing`, and the fixing store handed to each valuation is truncated
+  at that date so the port's guard is not the only thing in the way.
+- **LIVE BACKEND ONLY.** Every other surface reads a baked JSON file; this
+  answer depends on inputs the reader chooses, so it cannot be one. Vercel runs
+  the frontend and a backend runs behind it [OWNER] — which is also what keeps
+  §16 intact, since the browser still computes nothing. With no backend
+  configured the sheet says so rather than drawing an empty chart.
+- **It does not run on its own.** The reader presses 실행. A backtest is a
+  question someone asks, not something that happens while they are still typing
+  the date, and each run is a full daily revaluation.
+- Toss-style is a constraint on the NUMBERS as much as the paint: one big
+  figure in plain Korean, controls that read as a sentence, and everything that
+  is machinery (per-leg notionals, DV01, settled cash) under a fold.
+- `ui/BacktestSheet.tsx`, `backend/app/backtest.py`, `/api/backtest/{id}`.
+
+**Orphaned by this and NOT yet deleted:** `ui/EnlargedView.tsx` and
+`wall/DetailChart.tsx` (the app's only lightweight-charts use). The swap costs
+weekly/monthly candles and the six-basis readout, which the owner did not ask
+to lose — see the ⚠ note at the top of EnlargedView.
+
 ### The page gutter [OWNER, 2026-07-31]
 
 **80px off the window edge, on every surface that reaches it** — the header

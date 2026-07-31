@@ -1,5 +1,21 @@
 "use client";
 
+/* ⚠ CURRENTLY UNREFERENCED — awaiting an owner call, do not "clean up" blindly.
+ *
+ * The chart click used to open this; since 2026-07-31 it opens `BacktestSheet`
+ * instead [OWNER: "차트 클릭 → 백테스트", stage 3 replaced]. Nothing in the app
+ * imports this file any more, and `wall/DetailChart.tsx` is imported only from
+ * here — so the two are dead together, along with the app's only use of
+ * lightweight-charts.
+ *
+ * Left in place rather than deleted because the swap orphans FEATURES the
+ * owner did not ask to lose: weekly/monthly candles, the six-basis readout,
+ * and the DV01 block. The backtest sheet covers per-leg DV01 and the gloss;
+ * it does not cover the candles or the basis ladder. Deleting is a one-line
+ * change once the owner says those are not wanted; un-deleting after the
+ * static tree stops shipping `*.w.json` / `*.m.json` is not.
+ */
+
 /* Enlarged view (DESIGN §2). Full-screen sheet over the list: for a series,
  * the large lightweight-charts history (blue line, assertDomainRendered) + a
  * six-basis segmented readout (the full ramp lives here) + the larger calendar

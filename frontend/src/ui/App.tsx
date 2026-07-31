@@ -28,8 +28,7 @@ import { ErrorState, LoadingState } from "./DataState";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { classify } from "./gloss";
 import { diagramSpec } from "./payReceiveModel";
-import { EnlargedView } from "./EnlargedView";
-import type { ChartType } from "@/wall/DetailChart";
+import { BacktestSheet } from "./BacktestSheet";
 import { InstrumentTable } from "./InstrumentTable";
 import { SHEET_SPRING } from "./motion";
 import { PreviewPane } from "./PreviewPane";
@@ -269,14 +268,14 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [tileParam]);
 
-  const openEnlarged = useCallback(
+  const openBacktest = useCallback(
     (row: Row) => {
       const target = row.seriesId ? `series:${row.seriesId}` : row.id;
       router.push(`/?tile=${encodeURIComponent(target)}`, { scroll: false });
     },
     [router],
   );
-  const closeEnlarged = useCallback(
+  const closeBacktest = useCallback(
     () => router.push("/", { scroll: false }),
     [router],
   );
@@ -313,19 +312,6 @@ export function App() {
       scroll: false,
     });
   }, [tileParam, rowsComplete, enlargedRow, router]);
-
-  // chart type lives in the URL alongside ?tile (§G) so a view can be linked.
-  const typeParam = params.get("type");
-  const chartType: ChartType =
-    typeParam === "w" || typeParam === "m" ? typeParam : "line";
-  const setChartType = useCallback(
-    (t: ChartType) => {
-      if (!tileParam) return;
-      const q = `?tile=${encodeURIComponent(tileParam)}${t === "line" ? "" : `&type=${t}`}`;
-      router.push(`/${q}`, { scroll: false });
-    },
-    [router, tileParam],
-  );
 
   const scrollTo = useCallback((el: HTMLElement) => {
     el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -446,7 +432,7 @@ export function App() {
                     (previewRow ? (
                       <PreviewPane
                         row={previewRow}
-                        onOpen={openEnlarged}
+                        onOpen={openBacktest}
                         width={paneW - PANE_PAD}
                         height={Math.max(360, paneH - PANE_PAD)}
                         policy={summary.policy}
@@ -483,7 +469,7 @@ export function App() {
         {summary && !wide && pinned && (
           <PreviewSheet
             row={pinned}
-            onOpen={openEnlarged}
+            onOpen={openBacktest}
             onClose={() => setPinned(null)}
             policy={summary.policy}
           />
@@ -492,20 +478,18 @@ export function App() {
 
       <AnimatePresence>
         {enlargedRow && summary && (
-          // the popup already boundaries its CHART; this covers the sheet
-          // itself, so a throw in the header or the stats grid leaves the
-          // table behind it alive and the popup closable
+          /* The sheet boundaries its own body; this covers the shell, so a
+             throw in the controls leaves the table behind it alive and the
+             sheet closable. */
           <ErrorBoundary
-            key="enlarged"
+            key="backtest"
             region="popup"
-            fallback="상세 화면을 그리지 못했어요"
+            fallback="백테스트 화면을 그리지 못했어요"
           >
-            <EnlargedView
+            <BacktestSheet
               row={enlargedRow}
-              summary={summary}
-              chartType={chartType}
-              onChartType={setChartType}
-              onClose={closeEnlarged}
+              asOf={summary.asof}
+              onClose={closeBacktest}
             />
           </ErrorBoundary>
         )}

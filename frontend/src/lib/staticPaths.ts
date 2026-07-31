@@ -62,5 +62,26 @@ export const volatilityUrl = () =>
 /** The manifest replaces `/api/health` when static: freshness is a "now"
  * question and the client owns the clock (§21). Against a live backend the
  * server still answers it, so the caller branches on IS_STATIC. */
+/** The backtest is LIVE-ONLY. Every other endpoint has a static twin the
+ * deployed site serves, but this answer depends on inputs the reader chooses,
+ * so it cannot be baked. Vercel runs the frontend and a backend runs behind it
+ * [OWNER, 2026-07-31]; with no `NEXT_PUBLIC_API_BASE` set there is nothing to
+ * ask, and callers must say so rather than fetch a file that will never exist.
+ * Returns null in that case — a URL here would 404 as HTML and surface as a
+ * JSON parse error, which tells the reader nothing. */
+export function backtestUrl(
+  seriesId: string,
+  q: { direction: number; notional: number; entry: string; exit?: string },
+): string | null {
+  if (IS_STATIC) return null;
+  const p = new URLSearchParams({
+    direction: String(q.direction),
+    notional: String(q.notional),
+    entry: q.entry,
+  });
+  if (q.exit) p.set("exit", q.exit);
+  return `${API_BASE}/api/backtest/${encodeURIComponent(seriesId)}?${p}`;
+}
+
 export const manifestUrl = () => "/api/manifest.json";
 export const healthUrl = () => `${API_BASE}/api/health`;

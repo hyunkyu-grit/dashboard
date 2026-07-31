@@ -70,7 +70,7 @@ describe("one failing region does not blank the app", () => {
     // the strip; each named region must sit inside its own
     expect(app).toMatch(/region="table"[\s\S]{0,200}<InstrumentTable/);
     expect(app).toMatch(/region="strip"[\s\S]{0,120}<BottomStrip/);
-    expect(app).toMatch(/region="popup"[\s\S]{0,200}<EnlargedView/);
+    expect(app).toMatch(/region="popup"[\s\S]{0,200}<BacktestSheet/);
   });
 
   it("the strip's fallback is bar-sized, not a centred block", () => {

@@ -9,6 +9,7 @@
  * changed for this. */
 
 import {
+  backtestUrl,
   dv01Url,
   forwardsUrl,
   healthUrl,
@@ -285,6 +286,69 @@ export async function fetchDv01(id: string): Promise<Dv01Payload> {
   const res = await fetch(dv01Url(id));
   if (!res.ok) throw new Error(`dv01 ${id}: HTTP ${res.status}`);
   return res.json();
+}
+
+/* ── Backtest (§backtest) ───────────────────────────────────────────────────
+ * Enter a position on a past date and revalue it every day since. Full
+ * revaluation on each day's own curve plus settled cash — NOT Δrate × DV01,
+ * which is blind to time passing. Legs are DV01-neutral at the entry curve.
+ *
+ * LIVE BACKEND ONLY: the answer depends on the reader's inputs so it cannot be
+ * a static file. `BacktestUnavailable` is thrown when none is configured, and
+ * the UI says so instead of showing a broken chart. */
+
+export class BacktestUnavailable extends Error {
+  constructor() {
+    super("백테스트는 실행 중인 백엔드가 필요합니다");
+    this.name = "BacktestUnavailable";
+  }
+}
+
+export interface BacktestLeg {
+  tenor: string;
+  side: "pay" | "receive";
+  notional: number;
+  entryRate: number; // percent
+  dv01: number;      // per unit notional, at the entry curve
+}
+
+export interface BacktestPoint {
+  t: string;
+  /** dirty NPV change since entry PLUS settled cash — continuous across
+   * coupon dates, which `npv` alone is not. This is the line to draw. */
+  pnl: number;
+  npv: number;
+  cash: number;
+}
+
+export interface BacktestResult {
+  id: string;
+  direction: number; // +1 long the quoted value, -1 the other side
+  notional: number;
+  entry: string;
+  exit: string;
+  legs: BacktestLeg[];
+  entryValue: number | null; // the instrument's own quote, % or bp
+  exitValue: number | null;
+  points: BacktestPoint[];
+  pnl: number;
+  maxProfit: number;
+  maxLoss: number;
+}
+
+export async function fetchBacktest(
+  seriesId: string,
+  q: { direction: number; notional: number; entry: string; exit?: string },
+): Promise<BacktestResult> {
+  const url = backtestUrl(seriesId, q);
+  if (url === null) throw new BacktestUnavailable();
+  const r = await fetch(url);
+  if (!r.ok) {
+    // the backend returns 422 with a readable reason; surface it verbatim
+    const detail = await r.json().catch(() => null);
+    throw new Error(detail?.detail ?? `backtest ${seriesId}: HTTP ${r.status}`);
+  }
+  return r.json();
 }
 
 /** One point of a history line. `d` = true daily change in bp (from the
