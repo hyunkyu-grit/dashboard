@@ -19,10 +19,10 @@
  * the reader cannot see is unreadable, so the sort column is promoted to
  * slot 3 and whatever it displaced falls off the end. Ladder:
  *   1 종목 · 2 레벨 (헤더 = 데이터 일자) · [3 sorted] · 어제 · YTD · MTD · 52주
- * (52주 first to go, last to return). 52주 is NOT sortable: it never enters
- * the sort slot and its header carries no control. Dropping/restoring never
- * animates — it is a layout change, not a state change. Pinned by
- * guards/table-grid.test.ts.
+ *   · 위치 (the position track — first to go, last to return; then 52주)
+ * Neither 52주 nor 위치 is sortable: they never enter the sort slot and their
+ * headers carry no control. Dropping/restoring never animates — it is a
+ * layout change, not a state change. Pinned by guards/table-grid.test.ts.
  */
 
 import type { BasisKey } from "@/lib/api";
@@ -100,10 +100,24 @@ const RANGE_W = `calc(${RANGE_SUBS * WIDEST.level.length}ch + ${
   RANGE_SUBS * RANGE_PAD
 }px)`;
 
-/** The sub-grid INSIDE the 52주 cell — three fixed tracks, then a filler that
- * takes the slack. Shared by the header's sub-labels and every body cell,
- * exactly as `gridTemplate` is shared by the header row and every body row. */
-export const RANGE_TEMPLATE = `repeat(${RANGE_SUBS}, ${RANGE_SUB_W}) minmax(0, 1fr)`;
+/** The 52주 cell with the POSITION TRACK (pass N): a fourth sub-track to the
+ * right of 평균 — a low→high slider with a marker at the current level. It is
+ * sized as ONE MORE range sub-column, so it keeps the sub-grid's rhythm and
+ * scales with the table font like its neighbours; a graphic has no format to
+ * derive a width from, and borrowing the numbers' track is the next-best
+ * discipline. It has its OWN ladder rung (first to drop, before the three
+ * numbers) — see `visibleColumns`. */
+const RANGE_W_SLIDER = `calc(${(RANGE_SUBS + 1) * WIDEST.level.length}ch + ${
+  (RANGE_SUBS + 1) * RANGE_PAD
+}px)`;
+
+/** The sub-grid INSIDE the 52주 cell — the fixed tracks (three numbers, plus
+ * the position track when it fits), then a filler that takes the slack.
+ * Shared by the header's sub-labels and every body cell, exactly as
+ * `gridTemplate` is shared by the header row and every body row. */
+export function rangeTemplate(slider: boolean): string {
+  return `repeat(${RANGE_SUBS + (slider ? 1 : 0)}, ${RANGE_SUB_W}) minmax(0, 1fr)`;
+}
 
 /** Change-column priority (slots 4–6): 어제 first, then YTD, then MTD.
  * The sorted column, if any, jumps this queue (slot 3). */
@@ -116,7 +130,10 @@ const BASIS_CANON: BasisKey[] = ["d1", "mtd", "ytd"];
 export interface VisibleColumns {
   bases: BasisKey[]; // in canonical display order
   range52: boolean;
-  hidden: number; // how many columns are dropped (bases + 52주)
+  /** the 52주 position track (pass N). Implies `range52` — the marker's frame
+   * of reference is the three numbers beside it, so it can never outlive them. */
+  slider: boolean;
+  hidden: number; // how many columns are dropped (bases + 52주 + 위치)
 }
 
 /** Fixed column widths in px for a measured `ch` (the '0' advance in the
@@ -161,10 +178,17 @@ export function visibleColumns(
   }
   const range52 =
     included.length === ladder.length && used + w.range <= containerPx;
+  // the position track is the ladder's last rung: it returns only after the
+  // three numbers it is read against, and drops before anything else
+  const slider = range52 && used + w.range + w.rangeSub <= containerPx;
   return {
     bases: BASIS_CANON.filter((b) => included.includes(b)),
     range52,
-    hidden: BASIS_LADDER.length - included.length + (range52 ? 0 : 1),
+    slider,
+    hidden:
+      BASIS_LADDER.length - included.length +
+      (range52 ? 0 : 1) +
+      (slider ? 0 : 1),
   };
 }
 
@@ -172,6 +196,7 @@ export function visibleColumns(
 export const ALL_COLUMNS: VisibleColumns = {
   bases: BASIS_CANON,
   range52: true,
+  slider: true,
   hidden: 0,
 };
 
@@ -181,7 +206,9 @@ export const ALL_COLUMNS: VisibleColumns = {
  * card (hairlines/hover) and the header's hidden-column note has a slot. */
 export function gridTemplate(v: VisibleColumns): string {
   const deltas = v.bases.length ? ` repeat(${v.bases.length}, ${DELTA_W})` : "";
-  const tail = v.range52 ? `minmax(${RANGE_W}, 1fr)` : "minmax(0, 1fr)";
+  const tail = v.range52
+    ? `minmax(${v.slider ? RANGE_W_SLIDER : RANGE_W}, 1fr)`
+    : "minmax(0, 1fr)";
   return `${LABEL_W} ${LEVEL_W}${deltas} ${tail}`;
 }
 

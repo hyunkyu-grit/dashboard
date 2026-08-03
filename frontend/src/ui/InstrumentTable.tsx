@@ -47,6 +47,9 @@ import { columnCue } from "./tint";
  * when the ladder drops it. The header itself renders the three sub-labels. */
 const RANGE_COL_NAME = "52주 레인지";
 
+/** The position track's noun for the same note (pass N). */
+const SLIDER_COL_NAME = "52주 내 위치";
+
 const FILTERS: { id: Group | "all"; label: string }[] = [
   { id: "all", label: "전체" },
   { id: "outright", label: GROUP_LABEL.outright },
@@ -164,8 +167,9 @@ function TableRow({
           {fmtDelta(row.changes[b], row.unit)}
         </div>
       ))}
-      {/* 52주 고점/저점/평균 — levels, so ink, and not sortable (RangeCells) */}
-      {visible.range52 && <RangeCells row={row} />}
+      {/* 52주 고점/저점/평균 + 위치 track — levels, so ink, and not sortable
+          (RangeCells) */}
+      {visible.range52 && <RangeCells row={row} slider={visible.slider} />}
     </motion.div>
   );
 }
@@ -361,6 +365,7 @@ export function InstrumentTable({
       (b) => BASIS_HEAD[b],
     ),
     ...(visible.range52 ? [] : [RANGE_COL_NAME]),
+    ...(visible.slider ? [] : [SLIDER_COL_NAME]),
   ];
 
   return (
@@ -562,7 +567,14 @@ export function InstrumentTable({
                 </div>
               ))}
               {visible.range52 ? (
-                <RangeHeader />
+                // when only the position track is dropped, the hidden-column
+                // note rides in the range header's filler track — the one
+                // slot that still exists in that state
+                <RangeHeader
+                  slider={visible.slider}
+                  note={visible.slider ? undefined : `${visible.hidden}열 숨김`}
+                  noteTitle={visible.slider ? undefined : hiddenNames.join(" · ")}
+                />
               ) : (
                 // what is hidden, stated (Pass B) — a statement, not a
                 // control: the reader must not wonder whether a column is

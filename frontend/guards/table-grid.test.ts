@@ -17,7 +17,7 @@ import {
   LEVEL_GLYPHS,
   RANGE_PAD,
   RANGE_SUBS,
-  RANGE_TEMPLATE,
+  rangeTemplate,
   visibleColumns,
   WIDEST,
 } from "../src/ui/columns";
@@ -27,8 +27,10 @@ import { traderName } from "../src/ui/rows";
 describe("column widths derive from the format, not the data", () => {
   const level = `calc(${LEVEL_GLYPHS}ch + 18px)`;
   const sub = `calc(${WIDEST.level.length}ch + ${RANGE_PAD}px)`;
-  const range = `calc(${RANGE_SUBS * WIDEST.level.length}ch + ${
-    RANGE_SUBS * RANGE_PAD
+  // the full tail floor is FOUR sub-tracks since pass N: three numbers plus
+  // the position track, which is one more sub-column of the same width
+  const range = `calc(${(RANGE_SUBS + 1) * WIDEST.level.length}ch + ${
+    (RANGE_SUBS + 1) * RANGE_PAD
   }px)`;
 
   it("the template is a constant built only from the WIDEST renderings", () => {
@@ -44,10 +46,10 @@ describe("column widths derive from the format, not the data", () => {
     expect(GRID_TEMPLATE.endsWith(`minmax(${range}, 1fr)`)).toBe(true);
   });
 
-  it("the 52주 floor is THREE sub-columns — derived, not a magic number", () => {
+  it("the 52주 floor is derived sub-columns — never a magic number", () => {
     // pass L: the floor used to be a flat 120px sized for a sentence. It is
-    // now the level glyph count times three, so it tracks any change to the
-    // level grammar automatically. A hardcoded px floor here fails this.
+    // now the level glyph count times the sub-track count, so it tracks any
+    // change to the level grammar automatically. A hardcoded px floor fails.
     expect(range).not.toMatch(/\b120px\b/);
     for (const ch of [6.5, 7.74, 9]) {
       expect(colPx(ch).range).toBeCloseTo(RANGE_SUBS * colPx(ch).rangeSub, 10);
@@ -79,12 +81,22 @@ describe("column widths derive from the format, not the data", () => {
     }
   });
 
-  it("the sub-grid inside the cell is three fixed tracks then the slack", () => {
+  it("the sub-grid inside the cell is fixed tracks then the slack", () => {
     // slack at the TRAILING edge: the column keeps absorbing leftover table
-    // width while the three numbers stay put and stay aligned down the table
-    expect(RANGE_TEMPLATE).toBe(`repeat(${RANGE_SUBS}, ${sub}) minmax(0, 1fr)`);
-    expect(RANGE_TEMPLATE.match(/1fr/g)).toHaveLength(1);
-    expect(RANGE_TEMPLATE.endsWith("minmax(0, 1fr)")).toBe(true);
+    // width while the numbers stay put and stay aligned down the table. The
+    // position track (pass N) is the fourth fixed track, SAME width, so the
+    // sub-grid's rhythm survives it — and dropping it removes exactly one
+    // track without moving the other three.
+    expect(rangeTemplate(false)).toBe(
+      `repeat(${RANGE_SUBS}, ${sub}) minmax(0, 1fr)`,
+    );
+    expect(rangeTemplate(true)).toBe(
+      `repeat(${RANGE_SUBS + 1}, ${sub}) minmax(0, 1fr)`,
+    );
+    for (const t of [rangeTemplate(false), rangeTemplate(true)]) {
+      expect(t.match(/1fr/g)).toHaveLength(1);
+      expect(t.endsWith("minmax(0, 1fr)")).toBe(true);
+    }
   });
 });
 
@@ -150,8 +162,11 @@ describe("the column priority ladder (columns session)", () => {
   const w = colPx(CH);
   const LADDER_IDS = ["d1", "ytd", "mtd"] as const;
 
-  function widthFor(nBases: number, range52: boolean): number {
-    return w.label + w.level + nBases * w.delta + (range52 ? w.range : 0);
+  function widthFor(nBases: number, range52: boolean, slider = false): number {
+    return (
+      w.label + w.level + nBases * w.delta +
+      (range52 ? w.range : 0) + (slider ? w.rangeSub : 0)
+    );
   }
 
   it("the visible set is always a prefix of the ladder", () => {
@@ -160,11 +175,18 @@ describe("the column priority ladder (columns session)", () => {
       // exactly the first n ladder entries are visible, regardless of order
       expect(new Set(v.bases)).toEqual(new Set(LADDER_IDS.slice(0, n)));
       expect(v.range52).toBe(false);
-      expect(v.hidden).toBe(LADDER_IDS.length - n + 1);
+      expect(v.slider).toBe(false);
+      // +2: the 52주 numbers and the position track are both still hidden
+      expect(v.hidden).toBe(LADDER_IDS.length - n + 2);
     }
-    const all = visibleColumns(widthFor(LADDER_IDS.length, true) + 1, CH, null);
+    const all = visibleColumns(
+      widthFor(LADDER_IDS.length, true, true) + 1,
+      CH,
+      null,
+    );
     expect(all.bases).toEqual(["d1", "mtd", "ytd"]);
     expect(all.range52).toBe(true);
+    expect(all.slider).toBe(true);
     expect(all.hidden).toBe(0);
   });
 
@@ -176,8 +198,11 @@ describe("the column priority ladder (columns session)", () => {
     // TABLE-CONTENT px: the smallest container at which each column appears.
     const RUNTIME_CH = 7.74;
     const rw = colPx(RUNTIME_CH);
-    const at = (n: number, r: boolean) =>
-      Math.ceil(rw.label + rw.level + n * rw.delta + (r ? rw.range : 0));
+    const at = (n: number, r: boolean, s = false) =>
+      Math.ceil(
+        rw.label + rw.level + n * rw.delta +
+        (r ? rw.range : 0) + (s ? rw.rangeSub : 0),
+      );
     // Two change columns fewer since 2026-07-31 (WTD/QTD deleted), so the
     // full set now fits 129px earlier than it did — the per-column figures
     // below are unchanged, the ladder simply ends three columns in.
@@ -186,6 +211,7 @@ describe("the column priority ladder (columns session)", () => {
     expect(at(2, false)).toBe(324); // YTD
     expect(at(3, false)).toBe(389); // MTD — the last change column
     expect(at(3, true)).toBe(600); // 52주 — was 729 with five change columns
+    expect(at(3, true, true)).toBe(671); // 위치 — the position track (pass N)
   });
 
   it("the sorted column is NEVER dropped — it takes slot 3", () => {
@@ -208,20 +234,38 @@ describe("the column priority ladder (columns session)", () => {
   });
 
   it("the summed width of the visible set never exceeds the container", () => {
-    for (let px = 60; px <= 900; px += 7) {
+    for (let px = 60; px <= 980; px += 7) {
       const v = visibleColumns(px, CH, "mtd");
       const sum =
-        w.label + w.level + v.bases.length * w.delta + (v.range52 ? w.range : 0);
+        w.label + w.level + v.bases.length * w.delta +
+        (v.range52 ? w.range : 0) + (v.slider ? w.rangeSub : 0);
       expect(sum, `at ${px}px`).toBeLessThanOrEqual(Math.max(px, w.label + w.level));
     }
   });
 
-  it("52주 is first to go and last to return", () => {
-    // one px short of fitting 52주: all three bases visible, 52주 hidden
+  it("the position track is first to go; 52주 second; both return in reverse", () => {
+    // one px short of fitting the track: everything else visible, track hidden
+    const noSlider = visibleColumns(widthFor(3, true, true) - 1, CH, null);
+    expect(noSlider.bases.length).toBe(3);
+    expect(noSlider.range52).toBe(true);
+    expect(noSlider.slider).toBe(false);
+    expect(noSlider.hidden).toBe(1);
+    // one px short of fitting 52주: the track is gone too — never without
+    // its frame of reference
     const v = visibleColumns(widthFor(3, true) - 1, CH, null);
     expect(v.bases.length).toBe(3);
     expect(v.range52).toBe(false);
-    expect(v.hidden).toBe(1);
+    expect(v.slider).toBe(false);
+    expect(v.hidden).toBe(2);
+  });
+
+  it("the track NEVER shows without the numbers it is read against", () => {
+    for (let px = 60; px <= 980; px += 3) {
+      for (const sort of [null, "mtd"] as const) {
+        const v = visibleColumns(px, CH, sort);
+        expect(!v.slider || v.range52, `slider without 52주 at ${px}px`).toBe(true);
+      }
+    }
   });
 
   it("gridTemplate(ALL_COLUMNS) is the frozen full template", () => {

@@ -641,6 +641,24 @@ Behaviour:
   heads — which is the point of keeping the two orders separate. Pinned by
   `guards/table-grid.test.ts`. Not re-verified live; the arithmetic is the
   same function and only its input list got shorter.
+  **The 52주 POSITION TRACK, and its threshold [pass N, 2026-08-03].** A
+  fourth sub-track right of 평균: a low→high line (ink at 25% alpha, 2px)
+  with a 2×12px full-ink marker where the current level sits — the marker
+  position is `(now − low) / (high − low)`, clamped, from the SAME
+  `rangeValues` the three numbers print, so the two surfaces cannot disagree
+  (`ui/RangeCells.tsx::markerPct`, pinned by `guards/range-slider.test.ts`).
+  It is one more range sub-column wide (6ch + 24px — a graphic has no format
+  to derive a width from, so it borrows the numbers' track and scales with
+  the font), has its OWN ladder rung, and is FIRST to drop: **위치 671** at
+  the measured ch 7.7431, with 52주 at 600 and everything narrower unchanged.
+  When only the track is dropped the "1열 숨김" note rides in the range
+  header's filler track — the one slot that still exists in that state.
+  Degenerate cases are explicit: at or outside an extreme the marker clamps
+  to the track end (the current print being the new high IS the right end);
+  a zero-width range or missing statistics render an empty cell, the
+  graphic's em dash. **It is NOT the chips' percentile** — `range1y.pct` is a
+  rank percentile and stays exactly what the 고점권/저점권 chips read; see
+  `## Provisional` (pass N) for the divergence this leaves on screen.
   **Verified live (pass L)** by driving the pane width directly (the same
   measurement path, and the same forced-frame caveat as below — the occluded
   renderer delivers ResizeObserver callbacks one frame late, so every read has
@@ -2479,6 +2497,39 @@ evidence that forced it. Referenced from several places above; it did not exist
 as a heading until the hardening session, which is itself worth noting: the
 references pointed at a section that had been absorbed into "Settled decisions"
 and stopped being a live record.
+
+### Pass N (2026-08-03) — the position track shows a statistic the chips do not use
+
+**The track was shipped WITHOUT touching the chip predicate**, as the brief
+directed. What this leaves on screen, named rather than resolved:
+
+- **The marker is a RANGE position** — `(now − low) / (high − low)` over the
+  52-week min–max — because that is what a low→high slider depicts, and
+  because it derives from `range1y.{min,max}` + `now`, fields EVERY row
+  carries, forwards included. The 고점권/저점권 chips read `range1y.pct`, a
+  RANK percentile over the 252 observations, which forwards deliberately do
+  not ship (Pass L, item 2 above).
+- **Two visible consequences.** (1) Every FORWARD row now shows a marker,
+  including one sitting hard against the track's right end, while the 고점권
+  chip can never return a forward — the chip reads a field the forward
+  payload does not carry. (2) On any row, a skewed year separates the two
+  statistics: a series that spent most of the window near its high can print
+  the 90th RANK percentile mid-range on the track, so a row the 고점권 chip
+  returns can show a marker that does not hug the end. Rank answers "how
+  unusual is this level"; the track answers "where is it between the
+  extremes". Both are true at once.
+- **Why not resolve it by wiring the track to `pct`:** that either strips the
+  track from 168 forward rows (the rows a position gauge helps most) or
+  ships the forward percentile — and shipping it silently changes which rows
+  the chips return, which item 2 above records as an owner decision, not a
+  side effect of a column change.
+
+**Owner decisions open:** (a) whether the chips should start returning
+forwards (= emit `pct` from `forwards.py::cell`, a SCHEMA_VERSION bump); (b)
+whether the chip threshold should move to range-position so chip and track
+agree by construction; (c) leave both as documented. **To reverse** the track
+itself: delete `markerPct`/`RangeTrack`/`SLIDER_LABEL` in `RangeCells.tsx`,
+the `slider` rung in `columns.ts`, and `guards/range-slider.test.ts`.
 
 ### Pass L — the three arbitrary choices in the 52주 column
 

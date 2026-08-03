@@ -59,18 +59,27 @@ describe("the cell carries no colour or tint (§5)", () => {
     }
   });
 
-  it("the body values are plain ink; only the header is muted", () => {
-    // exactly two colour declarations in the file: the header's text-ink/50,
-    // the same muting every other column header uses, and the body cell's
-    // plain text-ink. A third would be something new on the numbers.
-    expect(src.match(/text-ink[^"\s]*/g)).toEqual(["text-ink/50", "text-ink"]);
-    // The only inline styles in the file are the two copies of the shared
-    // sub-grid template — header and body, one definition, exactly as the
-    // table's outer grid works. Counting them and then pinning what they are
-    // is how "no per-value style object" is stated without a regex that has
-    // to reason about what a style object contains.
-    expect((src.match(/style=\{/g) ?? []).length).toBe(2);
-    expect((src.match(/gridTemplateColumns: RANGE_TEMPLATE/g) ?? []).length).toBe(2);
+  it("the body values are plain ink; only the header and the note are muted", () => {
+    // exactly three text-colour declarations in the file: the header's
+    // text-ink/50 (the same muting every other column header uses), the
+    // hidden-column note's text-ink/45 (the table's own note idiom), and the
+    // body cell's plain text-ink. A fourth would be something new on the
+    // numbers. The track's bg-ink/25 hairline and bg-ink marker are ink at
+    // alpha too — a graphic of a level is still a level (§5).
+    expect(src.match(/text-ink[^"\s]*/g)).toEqual([
+      "text-ink/50",
+      "text-ink/45",
+      "text-ink",
+    ]);
+    expect(src.match(/bg-ink[^"\s]*/g)).toEqual(["bg-ink/25", "bg-ink"]);
+    // Three inline styles: the two copies of the shared sub-grid template
+    // (header and body, one definition, exactly as the table's outer grid
+    // works) and the track marker's position — which is a percentage of the
+    // track, derived in markerPct from the same values the numbers print,
+    // never a per-value colour or width.
+    expect((src.match(/style=\{/g) ?? []).length).toBe(3);
+    expect((src.match(/gridTemplateColumns: rangeTemplate\(slider\)/g) ?? []).length).toBe(2);
+    expect(src).toMatch(/style=\{\{ left: `\$\{pct\}%` \}\}/);
   });
 });
 
@@ -102,8 +111,11 @@ describe("the column carries no sort affordance", () => {
       table.indexOf("visible.bases.map", table.indexOf("columnheader")),
     );
     expect(headerLoop.indexOf("clickSort(")).toBeGreaterThan(-1);
-    // the range header is rendered as a bare component, no props, no handler
-    expect(table).toContain("<RangeHeader />");
+    // the range header carries LAYOUT props only (which tracks show, the
+    // hidden-column note) and never a handler — it is still not a control
+    const headerTag = /<RangeHeader\b[^>]*>|<RangeHeader\b[\s\S]*?\/>/.exec(table)?.[0] ?? "";
+    expect(headerTag).not.toBe("");
+    expect(headerTag).not.toMatch(/on[A-Z]/);
   });
 
   it("header and body resolve the shared sub-grid at the SAME font size", () => {
