@@ -213,7 +213,14 @@ function PreviewBody({
               hoveredDate.current = d;
             }}
           />
-          <p className="mt-2 text-[12px] opacity-40">눌러서 크게 볼 수 있습니다</p>
+          {/* the click's real destination (pass Q): it has opened the
+              BACKTEST since the enlarged view was replaced, and this caption
+              still promised "크게 볼 수 있습니다" — a claim about a view that
+              no longer opens. The date under the cursor becomes the entry
+              date, which is the half worth saying. */}
+          <p className="mt-2 text-[12px] opacity-40">
+            누르면 커서 날짜부터 백테스트가 열립니다
+          </p>
         </motion.div>
       )}
     </>

@@ -47,6 +47,7 @@ import {
 } from "@/lib/api";
 import { fmtDelta, fmtLevel } from "@/lib/format";
 
+import { loadBacktestMemory, saveBacktestMemory } from "./backtestMemory";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { Z_MODAL } from "./layers";
 import { SHEET_SPRING } from "./motion";
@@ -698,6 +699,7 @@ export function BacktestSheet({
   rows,
   asOf,
   entryFrom,
+  memoryKey,
   captured,
   onClose,
 }: {
@@ -710,6 +712,11 @@ export function BacktestSheet({
    * asked for. Only the FIRST row gets it — rows added afterwards are new
    * questions and fall back to a year before the data's end. */
   entryFrom?: string;
+  /** this popup INSTANCE's session-memory key (pass Q): the `bt` nonce the
+   * URL carries. A history traversal that re-enters this URL re-mounts the
+   * sheet with the same key and finds the book and the last result AS LEFT;
+   * a fresh chart click mints a new key and seeds fresh. */
+  memoryKey: string;
   /** an instrument clicked in the table BEHIND the sheet, to be appended */
   captured?: Row | null;
   onClose: () => void;
@@ -739,24 +746,59 @@ export function BacktestSheet({
     [rows],
   );
 
+  /* AS LEFT, or seeded (pass Q). Both reads happen ONCE, at mount: this is
+   * the remount a history traversal performs, and what it must show is the
+   * state at the moment the reader left — not a live view of anything. */
   const [book, setBook] = useState<PositionInput[]>(() => {
+    const remembered = loadBacktestMemory(memoryKey);
+    if (remembered && remembered.book.length > 0) return remembered.book;
     const seed = newRow(row.seriesId ?? row.id, asOf);
     return [entryFrom ? { ...seed, entry: entryFrom } : seed];
   });
+  const [restoredResult] = useState(
+    () => loadBacktestMemory(memoryKey)?.result,
+  );
+
+  /* Write-through: the memory tracks the book as it changes, so whatever
+   * instant the reader navigates away at is the instant that is kept. No
+   * setState here — the lint's effect rule stays satisfied. */
+  useEffect(() => {
+    saveBacktestMemory(memoryKey, { book });
+  }, [memoryKey, book]);
 
   /* An instrument clicked in the TABLE BEHIND the sheet is appended as a row.
    * Guarded by the last id seen, because `captured` stays set until the click
    * that replaces it — without this, any unrelated re-render would append the
-   * same instrument again. */
-  const lastCaptured = useRef<string | null>(null);
+   * same instrument again.
+   *
+   * A capture is a click WHILE THE SHEET IS OPEN ("뒤 표에서 종목을 눌러도" —
+   * behind the sheet). A pin that already exists at MOUNT is not that: it is
+   * residue of however the sheet was reached, and appending it did two wrong
+   * things — it duplicated the seed when the sheet was opened from the
+   * pinned row's own chart, and it appended a phantom row on every history
+   * traversal back INTO the sheet (pass Q: the restored book must be AS
+   * LEFT, and the pin is still set from before). The `undefined` sentinel
+   * marks the first run: record what is already pinned, append nothing. */
+  const lastCaptured = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     const id = captured?.seriesId ?? captured?.id ?? null;
+    if (lastCaptured.current === undefined) {
+      lastCaptured.current = id;
+      return;
+    }
     if (!id || id === lastCaptured.current) return;
     lastCaptured.current = id;
     setBook((b) => (b.length >= MAX_POSITIONS ? b : [...b, newRow(id, asOf)]));
   }, [captured, asOf]);
 
-  const run = useMutation({ mutationFn: () => fetchBacktest(book) });
+  /* The RESULT is remembered too — an answer the reader already pressed
+   * 실행 for. Restoring it costs no server round-trip and does not violate
+   * "IT DOES NOT RUN ON ITS OWN": nothing runs, the last answer is shown. */
+  const run = useMutation({
+    mutationFn: () => fetchBacktest(book),
+    onSuccess: (data) => saveBacktestMemory(memoryKey, { result: data }),
+  });
+  const shownResult = run.data ?? restoredResult;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -868,8 +910,8 @@ export function BacktestSheet({
           {run.error && !unavailable && (
             <p className="mt-6 text-[13px] text-up">{run.error.message}</p>
           )}
-          {run.data && <Result result={run.data} naming={naming} />}
-          {!run.data && !run.error && !run.isPending && (
+          {shownResult && <Result result={shownResult} naming={naming} />}
+          {!shownResult && !run.error && !run.isPending && (
             <p className="mt-8 text-center text-[14px] opacity-45">
               조건을 정하고 실행을 눌러 주세요
             </p>

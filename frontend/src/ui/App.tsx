@@ -22,6 +22,7 @@ import { getTile } from "@/wall/tileRegistry";
 
 import { ChangeLog } from "./ChangeLog";
 
+import { mintBacktestKey } from "./backtestMemory";
 import { BottomStrip, STRIP_H, useStripCollapsed } from "./BottomStrip";
 import { CurveView } from "./CurveView";
 import { ErrorState, LoadingState } from "./DataState";
@@ -272,19 +273,40 @@ export function App() {
   /* `from` is the date under the cursor when the chart was clicked [OWNER:
    * "커서가 가는 곳에서 누르면 그 날부터 스타트해야지"]. It rides in the URL
    * beside `?tile=` so the opened backtest is linkable at that entry date,
-   * the same property every other view here has. */
+   * the same property every other view here has.
+   *
+   * `bt` is the popup INSTANCE's session-memory key (pass Q): minted fresh
+   * on each deliberate open, so a history traversal that re-enters this URL
+   * restores the sheet AS LEFT while a new chart click still seeds fresh.
+   * In a pasted link it names a session the recipient does not have, so it
+   * harmlessly seeds fresh there. */
+  const pushedTile = useRef(false);
   const openBacktest = useCallback(
     (row: Row, from?: string) => {
       const target = row.seriesId ? `series:${row.seriesId}` : row.id;
-      const q = `?tile=${encodeURIComponent(target)}${from ? `&from=${from}` : ""}`;
+      const q = `?tile=${encodeURIComponent(target)}${
+        from ? `&from=${from}` : ""
+      }&bt=${mintBacktestKey()}`;
+      pushedTile.current = true;
       router.push(`/${q}`, { scroll: false });
     },
     [router],
   );
-  const closeBacktest = useCallback(
-    () => router.push("/", { scroll: false }),
-    [router],
-  );
+  /* CLOSE IS BACK (pass Q). Opening pushed one entry, so every in-sheet
+   * close (Esc, backdrop, drag) pops that same entry — one step, one
+   * meaning, and the history collects no popup residue for a later back to
+   * land on emptied. The old shape — push("/") on close — is what filled
+   * the stack with `[/, A, /, B, /]`, where back from the table re-entered
+   * old popups as blank sheets. A COLD link is the one case nothing was
+   * pushed: backing there would leave the site, so it replaces instead. */
+  const closeBacktest = useCallback(() => {
+    if (pushedTile.current) {
+      pushedTile.current = false;
+      router.back();
+    } else {
+      router.replace("/", { scroll: false });
+    }
+  }, [router]);
 
   /* An unknown `?tile=` used to render the ordinary screen with the bogus
    * parameter still in the URL, no sheet and no message (Pass A finding).
@@ -497,6 +519,12 @@ export function App() {
               rows={rows}
               asOf={summary.asof}
               entryFrom={params.get("from") ?? undefined}
+              /* the URL's own nonce; a link minted elsewhere (no bt, or an
+                 unknown one) simply finds no memory and seeds fresh */
+              memoryKey={
+                params.get("bt") ??
+                `${tileParam}|${params.get("from") ?? ""}`
+              }
               captured={pinned}
               onClose={closeBacktest}
             />

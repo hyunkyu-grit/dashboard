@@ -289,6 +289,29 @@ the DISPLAYED endpoints, so the sentence agrees with itself at displayed
 precision — the raw form could print `26.5 → 25.3 (−1.3bp)` on the 0.25bp
 quote grid, whose own subtraction says 1.2.
 
+**BACK RETURNS THE SHEET AS LEFT [pass Q, 2026-08-03].** The rule, stated
+per level: the URL decides WHICH popup is open (`tile` + `from`); the
+popup's CONTENTS (the book, the last run's answer) live in session memory
+keyed to the popup INSTANCE (`bt`, a nonce `openBacktest` mints per
+deliberate open — `ui/backtestMemory.ts`); and BACK means one step out —
+from an open sheet it closes it, and every in-sheet close (Esc, backdrop,
+drag) IS that same back step (`router.back()`), so the two paths are one
+operation and the history collects no popup residue. The old close pushed a
+fresh `/`, which filled the stack with `[/, A, /, B, /]` — a later back from
+the table re-entered old `?tile=` URLs as EMPTY sheets, because the contents
+were component state discarded on unmount. Now any traversal that re-shows a
+popup entry restores book AND result from memory — the result is REMEMBERED,
+never re-run ("IT DOES NOT RUN ON ITS OWN" holds; what returns is an answer
+already asked for, at zero server cost). A COLD link (nothing pushed)
+replaces to `/` on close rather than backing out of the site, and its
+foreign `bt` finds no memory, so it seeds fresh. A capture is a click WHILE
+the sheet is open: a pin already set at MOUNT no longer appends (it
+duplicated the seed on open-from-own-chart, and appended a phantom row on
+every traversal back in). Pinned by `guards/backtest-back.test.ts`, whose
+reproduction was watched to FAIL on the pre-fix sheet (it rendered the seed
+and "조건을 정하고…" where the remembered two-position book and its headline
+were asserted).
+
 **A BOOK, NOT ONE TRADE** [OWNER]. Positions are rows: instrument, side, size,
 entry AND exit, each independent — you leg in on different days and out on
 different days. The chart click seeds the first row; more come from the row's
