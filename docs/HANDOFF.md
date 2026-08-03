@@ -179,7 +179,78 @@ rule:
 
 ---
 
-## 6. Current state (as of the 2026-07-31 session)
+## 6. Current state (as of the 2026-08-03 session)
+
+### Latest — passes M–Q batch 2 (2026-08-03, HEAD `406d163`)
+
+Gates after every pass, both modes: BE **214 passed / 19 skipped / 1
+xfailed**, FE **458 passed / 1 skipped (37 files)**, lint 0, build 0,
+agreement 18/18. One commit per pass, each mirrored to D:. **origin pushes
+after `5be9717` were blocked by the session's permission layer — run
+`git push origin main` to deploy** (Vercel currently builds the data-refresh
+commit; everything since is frontend-only and safe to ship together).
+
+**A data refresh rode in first (`5be9717`, via `scripts/refresh.ps1 -Yes` —
+its first real non-noop run, clean).** 2026-07-30 → **2026-08-03** (2614
+observations). ⚠ The refresh REVISED history: 07-30's closes changed (3Y
+3.8625→3.8925, 10Y 4.135→4.1525), which broke a backtest test twice over —
+its parallel-window premise floated on exit=None AND the pinned window
+stopped being parallel. Repinned on 2025-08-14 → 2026-07-24 (spread 24.5bp
+at both ends, 10Y +167bp), both edges strictly inside the data (`410cfd8`).
+Same family as the dv01-percentage gotcha: a data premise must be fixed
+dates, never the file's last row.
+
+The five passes (letters collide with the 2026-07-29 M/N — different work):
+
+1. **M `187389d` — CD + base rate on spread/butterfly charts, dual axis.**
+   `policyAxisMode(unit)`: % shared (unchanged), **bp secondary** (references
+   keep their OWN % scale; both axes carry unit-suffixed `fmtAxis` ticks),
+   ratio none. The instrument's bp path is byte-identical with the overlay
+   on/off. `fmtAxis` moved to lib/format.ts (one axis grammar; CurveView
+   delegates). The dead DetailChart is pinned to shared-only with a ⚠ (one
+   price scale — widening its gate without a second scale puts % on a bp
+   axis). Guard `policy-dual-axis.test.ts` derives its kind list from
+   buildRows over the committed payloads.
+2. **N `fcf9a3c` — the 52주 position track (위치).** Fourth sub-track right
+   of 평균: low→high hairline + 2×12px ink marker at `(now−low)/(high−low)`,
+   clamped, from the SAME `rangeValues` the numbers print (markerPct). Own
+   ladder rung, FIRST to drop: **위치 671** content-px at ch 7.7431 (52주
+   stays 600); the slider-only-hidden note rides the range header's filler.
+   **Chips untouched** — the track is a RANGE position, the chips read the
+   RANK percentile `pct`; the divergence (forwards show markers but can
+   never chip; skewed years split the two statistics) is an OWNER DECISION,
+   documented in DESIGN ## Provisional (pass N) with three options.
+3. **O `c854aeb` — visible-window extremes + background grid** on the pane
+   chart (THE detail chart now; the zoomable DetailChart is unreachable —
+   choice recorded in Provisional pass O). `ui/extremes.ts::windowExtremes`,
+   same scan as the y-domain; ties = first occurrence; flat window = marks
+   coincide. Cost on 10Y full (2,614 pts): 4.4µs vs the ~0.97ms per-hover
+   render. Grid = `stroke-edge` hairline (ink 12%/18%), horizontals at
+   quarter lines, verticals on the date labels; verified both themes. The
+   sanctioned exception to S14's no-vertical-gridlines default.
+4. **P `ae20740` — entry level + par rate on the backtest entry row.** BOTH
+   were already in the payload, computed once at backtest time (entryValue =
+   quoted level lookup; legs[].entryRate = struck par from the entry-date
+   bootstrap) — display-only, no backend change. Levels via `entryLevelText`
+   (= fmtLevel; readout-parity pins byte-identity). Par shows only for
+   one-swap positions (a package has par PER LEG, in the fold). fmtMove now
+   differences DISPLAYED endpoints so `A → B (Δ)` agrees with itself on the
+   0.25bp grid.
+5. **Q `406d163` — back returns the backtest AS LEFT.** Root cause: close
+   pushed a fresh `/` (history filled with popup entries) and the sheet's
+   contents were component state. Now: `bt` nonce per open →
+   `ui/backtestMemory.ts` (session Map) restores book AND result on any
+   traversal (result REMEMBERED, never re-run); close IS `router.back()`
+   when the app pushed (cold links replace). A pin present at MOUNT no
+   longer counts as a capture (it duplicated the seed and appended a phantom
+   row per traversal). Pane caption fixed ("누르면 커서 날짜부터 백테스트가
+   열립니다"). Guard `backtest-back.test.ts` — its reproduction was watched
+   FAIL RED on the pre-fix sheet before the fix landed.
+
+**Open for the owner (new):** the pass-N chip/track divergence (three options
+in Provisional); plus the carried items below.
+
+## 6a. Before that (as of the 2026-07-31 session)
 
 ### Latest — the backtest (2026-07-31, HEAD `ab65fda`)
 
