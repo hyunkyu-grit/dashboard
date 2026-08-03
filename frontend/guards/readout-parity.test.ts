@@ -15,6 +15,7 @@ import { describe, expect, it } from "vitest";
 import { code } from "./_source";
 
 import type { Unit } from "../src/lib/api";
+import { entryLevelText } from "../src/ui/BacktestSheet";
 import { levelText, rangeText } from "../src/ui/cells";
 import {
   CURVE_READOUTS,
@@ -143,6 +144,33 @@ describe("현재 and the 52-week stats are one grammar (pass L)", () => {
       expect(rangeText(null, unit)).toBe(levelText(rowWith(null, unit)));
       expect(rangeText(null, unit)).toBe("—");
     }
+  });
+
+  it("the backtest's entry level is the SAME bytes as the main table's level (pass P)", () => {
+    // The backtest entry row prints the level the table prints — one
+    // quantity, one grammar, byte for byte. The failure this pins shipped in
+    // that very sheet: `${p.entryValue}` raw and `${l.entryRate}%` raw, a
+    // second display grammar beside fmtLevel's.
+    for (const { kind, unit } of KINDS) {
+      for (const v of VALUES) {
+        expect(
+          entryLevelText(v, unit),
+          `${kind} (${unit}) at ${v}: backtest entry and 현재 disagree`,
+        ).toBe(levelText(rowWith(v, unit)));
+      }
+    }
+  });
+
+  it("the backtest sheet rounds nothing for DISPLAY of its own", () => {
+    // levels route through entryLevelText (= fmtLevel); money through
+    // fmtKrw's integer-won Math.round. A toFixed on a displayed quantity is
+    // a second grammar — the deleted fmtMove used one on its bp difference.
+    // The only toFixed allowed is the SVG path-coordinate form `x(…)/y(…)
+    // .toFixed(1)`, which rounds PIXELS, exactly as PreviewChart does.
+    const src = code("ui/BacktestSheet.tsx");
+    const all = (src.match(/\.toFixed\(/g) ?? []).length;
+    const pixels = (src.match(/[xy]\([^()]*\)\.toFixed\(1\)/g) ?? []).length;
+    expect(all, "a toFixed that is not a pixel coordinate").toBe(pixels);
   });
 
   it("neither surface reimplements the rounding", () => {

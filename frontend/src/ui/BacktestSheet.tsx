@@ -43,7 +43,9 @@ import {
   BacktestUnavailable,
   fetchBacktest,
   type PositionInput,
+  type Unit,
 } from "@/lib/api";
+import { fmtDelta, fmtLevel } from "@/lib/format";
 
 import { ErrorBoundary } from "./ErrorBoundary";
 import { Z_MODAL } from "./layers";
@@ -309,17 +311,45 @@ function PnlChart({
   );
 }
 
-function fmtMove(p: {
-  entryValue: number | null;
-  exitValue: number | null;
-  id: string;
-}): string {
+/* Levels here print through the ONE formatter (pass P). The raw
+ * interpolation this replaced (`${p.entryValue} → ${p.exitValue}` plus its
+ * own toFixed on the difference) was a second display grammar for the same
+ * quantity the main table prints via fmtLevel — the two-displays defect that
+ * has shipped in this repo once already (the carry block whose components
+ * summed to −3.2 against a −3.1 headline, purely from display digits). */
+
+/** THE entry/exit level text — `fmtLevel`, exactly as the table's 현재 and
+ * 52주 cells (`ui/cells.ts`). Exported so `guards/readout-parity.test.ts`
+ * can pin byte-identity between this and the main table's rendering. */
+export function entryLevelText(v: number | null, unit: Unit): string {
+  return fmtLevel(v, unit);
+}
+
+/** The instrument's own unit suffix beside a level (the pane header's rule:
+ * ratio carries none — not that a ratio can be a position anyway). */
+const LEVEL_SUFFIX: Record<Unit, string> = { "%": "%", bp: "bp", ratio: "" };
+
+/** Fallback only for an id the row set does not name: outrights/forwards
+ * quote in %, spreads and flies in bp — the id's leg count distinguishes
+ * them, the same rule rows.ts routes groups by. */
+function unitFromShape(id: string): Unit {
+  return !id.includes("-") ? "%" : "bp";
+}
+
+function fmtMove(
+  p: { entryValue: number | null; exitValue: number | null; id: string },
+  unit: Unit,
+): string {
   if (p.entryValue == null || p.exitValue == null) return "";
-  // outrights are quoted in %, spreads and flies in bp — the id's leg count
-  // is what distinguishes them, the same rule rows.ts routes groups by
-  const isPct = !p.id.includes("-") && !p.id.includes("x");
-  const d = (p.exitValue - p.entryValue) * (isPct ? 100 : 1);
-  return `${p.entryValue} → ${p.exitValue} (${d >= 0 ? "+" : "−"}${Math.abs(d).toFixed(1)}bp)`;
+  const a = entryLevelText(p.entryValue, unit);
+  const b = entryLevelText(p.exitValue, unit);
+  /* The parenthetical is differenced from the DISPLAYED endpoints, so the
+   * sentence always agrees with itself at the displayed precision. A bp
+   * level prints at 1dp while the quotes sit on a 0.25bp grid — differencing
+   * the raw values would print `26.5 → 25.3 (−1.3bp)`, whose own subtraction
+   * says 1.2. */
+  const d = (Number(b) - Number(a)) * (unit === "%" ? 100 : 1);
+  return `${a} → ${b} (${fmtDelta(d, unit)}bp)`;
 }
 
 function Result({
@@ -327,13 +357,15 @@ function Result({
   naming,
 }: {
   result: BacktestResult;
-  /** id → how the rest of the product names it. The server echoes the id it
-   * was given (`3Y-10Y`); every other surface says `3s10s`, and a backtest
-   * that names instruments differently from the table above it is two
-   * products. */
-  naming: Map<string, { label: string; group: string }>;
+  /** id → how the rest of the product names it AND its unit. The server
+   * echoes the id it was given (`3Y-10Y`); every other surface says `3s10s`,
+   * and a backtest that names instruments differently from the table above
+   * it is two products. The unit rides along so entry levels print in the
+   * row's own grammar, not one inferred from the id. */
+  naming: Map<string, { label: string; group: string; unit: Unit }>;
 }) {
   const up = result.pnl >= 0;
+  const unitOf = (id: string): Unit => naming.get(id)?.unit ?? unitFromShape(id);
   return (
     <div className="mt-5">
       <p className="text-[13px] opacity-55">
@@ -362,13 +394,24 @@ function Result({
         </span>
       </div>
 
-      {/* Which position carried it. Numbers, not lines — see the header note. */}
+      {/* Which position carried it. Numbers, not lines — see the header note.
+          진입 레벨 and 진입 par (pass P): both were computed at backtest time
+          and already in the payload — the level is the instrument's quoted
+          number on the entry date, the par rate is what the swap was struck
+          at from that date's own curve. The row shows less than the server
+          knows otherwise. Levels print through `entryLevelText` (= fmtLevel,
+          the table's grammar); the par rate is a single number only for a
+          one-swap position — a package has one par rate PER LEG, and those
+          are in the fold below, stated per leg rather than averaged into a
+          figure no desk quotes. */}
       <table className="mt-5 w-full text-[13px] tabular-nums">
         <thead className="text-left text-ink/50">
           <tr>
             <th className="pb-1 font-normal">종목</th>
             <th className="pb-1 font-normal">방향</th>
             <th className="pb-1 pr-4 text-right font-normal">명목</th>
+            <th className="pb-1 pr-4 text-right font-normal">진입 레벨</th>
+            <th className="pb-1 pr-4 text-right font-normal">진입 par</th>
             <th className="pb-1 font-normal">기간</th>
             <th className="pb-1 text-right font-normal">손익</th>
           </tr>
@@ -385,6 +428,24 @@ function Result({
                   maximumFractionDigits: 0,
                 })}
                 억
+              </td>
+              <td className="py-1.5 pr-4 text-right">
+                {entryLevelText(p.entryValue, unitOf(p.id))}
+                {p.entryValue != null && (
+                  <span className="ml-0.5 text-[11px] opacity-45">
+                    {LEVEL_SUFFIX[unitOf(p.id)]}
+                  </span>
+                )}
+              </td>
+              <td className="py-1.5 pr-4 text-right">
+                {p.legs.length === 1 ? (
+                  <>
+                    {entryLevelText(p.legs[0].entryRate, "%")}
+                    <span className="ml-0.5 text-[11px] opacity-45">%</span>
+                  </>
+                ) : (
+                  <span title="다리마다 par가 다릅니다 — 아래 다리별 구성에 있습니다">—</span>
+                )}
               </td>
               <td className="py-1.5 text-[12px] opacity-60">
                 {p.entry} → {p.exit}
@@ -470,7 +531,7 @@ function Result({
         {result.positions.map((p, i) => (
           <div key={`${p.id}-${i}`} className="mt-3">
             <p className="text-[12px] font-semibold opacity-70">
-              {naming.get(p.id)?.label ?? p.id} · {fmtMove(p)}
+              {naming.get(p.id)?.label ?? p.id} · {fmtMove(p, unitOf(p.id))}
             </p>
             <table className="mt-1 w-full text-[13px] tabular-nums">
               <tbody>
@@ -484,7 +545,12 @@ function Result({
                       })}
                       억
                     </td>
-                    <td className="py-1 text-right">{l.entryRate}%</td>
+                    {/* the struck par rate, in the level grammar (pass P) —
+                        a raw `{l.entryRate}%` here printed 3.75 where every
+                        other surface says 3.7500 */}
+                    <td className="py-1 text-right">
+                      {entryLevelText(l.entryRate, "%")}%
+                    </td>
                     <td className="py-1 text-right">
                       {(l.dv01 * l.notional * 1e-4).toLocaleString(undefined, {
                         maximumFractionDigits: 0,
@@ -667,7 +733,7 @@ export function BacktestSheet({
       new Map(
         rows.map((r) => [
           r.seriesId ?? r.id,
-          { label: r.label, group: r.group as string },
+          { label: r.label, group: r.group as string, unit: r.unit },
         ]),
       ),
     [rows],

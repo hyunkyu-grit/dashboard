@@ -274,6 +274,21 @@ still pins. It took the enlarged chart's slot, because the pane chart is now
 pane-sized and a popup whose job was "the same line, bigger" had nothing left
 to do.
 
+**The entry row states the level and the par rate at entry [pass P,
+2026-08-03].** Both were ALREADY in the payload, computed once at backtest
+time — `entryValue` is the instrument's quoted number on the entry date
+(`_quoted_value`, a table lookup) and `legs[].entryRate` is what each swap
+was struck at from that date's own bootstrap — so this is a display change
+with zero new backend work; the per-row-bootstrap cost the brief warned
+about never arises. Levels print through `entryLevelText` (= `fmtLevel`, the
+main table's grammar; pinned byte-identical by `guards/readout-parity`). The
+par column is a single number only for a one-swap position; a package has
+one par PER LEG (stated in the fold), and averaging them would invent a
+figure no desk quotes. The fold's `entry → exit (Δbp)` line now differences
+the DISPLAYED endpoints, so the sentence agrees with itself at displayed
+precision — the raw form could print `26.5 → 25.3 (−1.3bp)` on the 0.25bp
+quote grid, whose own subtraction says 1.2.
+
 **A BOOK, NOT ONE TRADE** [OWNER]. Positions are rows: instrument, side, size,
 entry AND exit, each independent — you leg in on different days and out on
 different days. The chart click seeds the first row; more come from the row's
