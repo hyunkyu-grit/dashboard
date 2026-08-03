@@ -85,7 +85,7 @@ function Head({ asOf }: { asOf?: string }) {
     <div
       role="row"
       style={{ gridTemplateColumns: TEMPLATE }}
-      className="grid items-end border-b border-edge pb-2 text-left text-[13px] text-ink/50"
+      className="grid items-end border-b border-edge pb-2 text-left text-ink/50"
     >
       <div role="columnheader" className="pl-3">
         종목
@@ -126,7 +126,7 @@ function OverviewRow({
       role="row"
       onClick={() => onSelect(row)}
       style={{ gridTemplateColumns: TEMPLATE }}
-      className={`grid h-11 cursor-pointer items-center border-b border-edge text-[13px] ${
+      className={`grid h-11 cursor-pointer items-center border-b border-edge ${
         selected ? "bg-page" : "hover:bg-page/50"
       }`}
     >
@@ -271,7 +271,14 @@ function Column({
       <div className="mb-1.5 text-[13px] font-semibold opacity-60">
         주요 {GROUP_LABEL[group]}
       </div>
-      <div>
+      {/* The type size sits HERE, on the wrapper both grids inherit from —
+          never on a ch-track grid container. The template is written in `ch`,
+          which resolves against the element's OWN font size, so a size set on
+          one grid but not the other is the 63.3-vs-70.4 track drift
+          (RangeCells has the full history). One declaration, both grids, and
+          the two cannot resolve `ch` differently. Pinned by
+          guards/table-grid.test.ts. */}
+      <div className="text-[13px]">
         <Head asOf={asOf} />
         {shown.map((r) => (
           <OverviewRow

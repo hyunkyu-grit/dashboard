@@ -4,6 +4,9 @@
  * — the header must never move. One template string is shared by the header
  * row and every body row so the two cannot drift apart. */
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { code } from "./_source";
@@ -22,7 +25,9 @@ import {
   WIDEST,
 } from "../src/ui/columns";
 import { levelHeadText } from "../src/lib/format";
-import { traderName } from "../src/ui/rows";
+import { InstrumentTable } from "../src/ui/InstrumentTable";
+import { OverviewColumns } from "../src/ui/OverviewColumns";
+import { traderName, type Group, type Row } from "../src/ui/rows";
 
 describe("column widths derive from the format, not the data", () => {
   const level = `calc(${LEVEL_GLYPHS}ch + 18px)`;
@@ -270,5 +275,125 @@ describe("the column priority ladder (columns session)", () => {
 
   it("gridTemplate(ALL_COLUMNS) is the frozen full template", () => {
     expect(gridTemplate(ALL_COLUMNS)).toBe(GRID_TEMPLATE);
+  });
+});
+
+describe("rendered grids: one template, and no font-size on a ch-track container", () => {
+  /* The alignment invariant, asserted on RENDERED MARKUP rather than on
+   * source text (2026-08-03 audit — docs/diagnostics/table-column-alignment.md).
+   * Two rules, one failure mode between them:
+   *
+   *   1. Every outer grid a tab renders — the header row and every body row —
+   *      carries THE one template string. Equality by identity: if only one
+   *      outer value exists on the surface, header and body cannot disagree.
+   *   2. No element that carries a ch-derived `grid-template-columns` style
+   *      also carries a font-size utility. `ch` resolves against the
+   *      element's OWN font size, so a size on the container re-derives every
+   *      track at that size — the 63.3px-vs-70.4px drift that once slid the
+   *      52주 labels 7/14/21px off their numbers. The size belongs on spans
+   *      (headers) or on a wrapper both grids inherit from (the overview).
+   *
+   * Rendering the real components is what makes this unfoolable by comments
+   * or string fixtures: a violation has to reach the DOM to exist here, and
+   * the guard reads exactly what the browser would. */
+
+  function row(id: string, group: Group, key: boolean): Row {
+    return {
+      id,
+      label: id,
+      group,
+      unit: group === "outright" || group === "vol" ? "%" : "bp",
+      now: 1.5,
+      changes: { d1: 0.5, mtd: -0.5, ytd: 1.0 },
+      pct: null,
+      seriesId: group === "forward" ? null : id,
+      rangeHigh: 2,
+      rangeLow: 0,
+      rangeAvg: 1,
+      sortKey: [1],
+      movePct: null,
+      key,
+    };
+  }
+  const GROUPS: Group[] = ["outright", "spread", "fly", "forward", "vol"];
+  const ROWS: Row[] = GROUPS.flatMap((g) => [
+    row(`${g}-a`, g, true),
+    row(`${g}-b`, g, false),
+  ]);
+
+  const gridTags = (markup: string): string[] =>
+    markup.match(/<[a-zA-Z][^>]*grid-template-columns[^>]*>/g) ?? [];
+  const templateOf = (tag: string): string => {
+    const style = /style="([^"]*)"/.exec(tag)?.[1] ?? "";
+    const decl = style
+      .split(";")
+      .map((s) => s.trim())
+      .find((s) => s.startsWith("grid-template-columns:"));
+    return decl ? decl.slice("grid-template-columns:".length).trim() : "";
+  };
+  const classOf = (tag: string): string =>
+    /class="([^"]*)"/.exec(tag)?.[1] ?? "";
+  // size utilities only — text-ink/50, text-left, text-up are not sizes
+  const SIZE_UTILITY = /text-\[\d|\btext-(?:xs|sm|base|lg|xl|[2-9]xl)\b/;
+
+  const renderTab = (filter: Group): string =>
+    renderToStaticMarkup(
+      createElement(InstrumentTable, {
+        rows: ROWS,
+        asOf: "2026-08-03",
+        filter,
+        onFilter: () => undefined,
+        activeId: null,
+        pinnedId: null,
+        onHover: () => undefined,
+        onPin: () => undefined,
+        matrixOpen: false,
+        onToggleMatrix: () => undefined,
+      }),
+    );
+  const renderOverview = (): string =>
+    renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
+        createElement(OverviewColumns, { rows: ROWS, asOf: "2026-08-03" }),
+      ),
+    );
+
+  const SURFACES: [string, string][] = [
+    ...GROUPS.map((g): [string, string] => [g, renderTab(g)]),
+    ["overview", renderOverview()],
+  ];
+
+  it("header and body render THE template — no second outer value exists", () => {
+    // before the first width measurement every column renders (ALL_COLUMNS),
+    // so the one legal outer template is the frozen full one, and the only
+    // other grids on the surface are the 52주 sub-grids
+    const allowed = new Set([
+      gridTemplate(ALL_COLUMNS),
+      rangeTemplate(true),
+      rangeTemplate(false),
+    ]);
+    for (const [name, markup] of SURFACES) {
+      const tags = gridTags(markup);
+      const outer = tags.filter((t) => templateOf(t) === gridTemplate(ALL_COLUMNS));
+      // at least a header row and two body rows carry it (the overview: three
+      // Head rows and six body rows)
+      expect(outer.length, `${name}: outer grids`).toBeGreaterThanOrEqual(3);
+      for (const t of tags) {
+        expect(allowed.has(templateOf(t)), `${name}: stray template in ${t}`).toBe(true);
+      }
+    }
+  });
+
+  it("no ch-track grid container carries a font-size utility", () => {
+    for (const [name, markup] of SURFACES) {
+      for (const t of gridTags(markup)) {
+        expect(
+          SIZE_UTILITY.test(classOf(t)),
+          `${name}: font-size on a ch-track grid container — ${t}`,
+        ).toBe(false);
+      }
+    }
   });
 });

@@ -113,3 +113,22 @@ strengthens `guards/table-grid.test.ts` so both invariants are structural:
 render the real components and assert (a) every outer grid on the surface
 carries the ONE shared template, and (b) no element that carries a ch-derived
 `grid-template-columns` style also carries a font-size utility.
+
+## Pass B result
+
+- `OverviewColumns.tsx`: `text-[13px]` moved off the two grid containers onto
+  the wrapper `<div>` both grids inherit from — one declaration, both grids,
+  `ch` cannot resolve differently between them. Overview still renders at
+  13px (verified computed).
+- `guards/table-grid.test.ts`: new rendered-markup describe (renders
+  `InstrumentTable` per tab + `OverviewColumns` under a `QueryClientProvider`,
+  node env via `renderToStaticMarkup`). Verified RED on the pre-fix
+  `OverviewColumns` (stash test: exit 1, exactly the font-size assertion) and
+  green after. Render-based, so comments/strings cannot fool it.
+- Ladder thresholds untouched — no track width changed, so 600 (52주) / 671
+  (위치) and the change-column figures all stand.
+- Post-fix re-measurement (same method as step 2): worst |offset| = 0.00px on
+  all five tabs and all three overview columns; templates still byte-equal.
+  Before: also 0.00px (the fix removed a latent risk, not a live offset).
+- Gates: FE vitest 472 passed / 1 skipped (38 files), lint 0, build 0.
+  Backend untouched.
