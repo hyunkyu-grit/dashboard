@@ -271,15 +271,22 @@ not the unreachable `DetailChart`):
   동시에 지난 10년간 최고치 최저치를 바로 보일 수 있게", all five tabs].
   Before this, a chart without the reference overlay — every outright, the
   whole 변동성 tab — had NO numbers anywhere on its axis. Gridline values
-  print in `fmtAxis`'s coarse orientation grammar, BARE on a single-scale
-  chart; unit suffixes appear only in "secondary" mode where two scales
-  share the plot (left bp, right %) — one scale needs no disambiguation, and
-  this is what keeps pass M's unlabelled-second-axis rule and the
-  single-axis minimalism from contradicting each other. The extreme dots'
-  values are DATA, so they print through `fmtLevel` (high above its dot, low
-  below, clamped inside the plot, end-anchored near the edges); a flat
-  window prints its one value once. `GRID_FRACS` is one list for the lines
-  and their labels, so the two cannot drift.
+  print in `fmtAxis`'s coarse orientation grammar; WHICH SIDE is a rule
+  [OWNER, 2026-08-03 — "스프레드랑 버터플라이 같은 레벨은 좌측 axis에 금리는
+  우측 axis에"]: a LEVEL in bp or ratio reads on the LEFT axis, a RATE in %
+  on the RIGHT, on every chart — which on a dual-scale chart lands the
+  instrument's bp left and the references' % right, each with its unit,
+  while a single scale prints bare (one scale needs no disambiguation; this
+  is what keeps pass M's unlabelled-second-axis rule and the single-axis
+  minimalism from contradicting each other). The extreme dots' values are
+  DATA, so they print through `fmtLevel` (high above its dot, low below,
+  clamped inside the plot, end-anchored near the edges); a flat window
+  prints its one value once. **The HIGH is red, the LOW is blue** [OWNER,
+  2026-08-03 — "확실하게 눈에 띄게"]: the product's own up/down pair (§9)
+  landing on the ends it already means — an owner-sanctioned exception to
+  "levels stay ink" (§5), for these two marks only; dot and value carry the
+  same hue (fill-up / fill-down, 11px semibold). `GRID_FRACS` is one list
+  for the lines and their labels, so the two cannot drift.
   - ⚠ **The low label exposed a served wrong number**: `3Mx3M`'s first ten
     dates (2016-01-04 → 01-15, exactly the loader's "3M: 10 blank value(s)"
     rows) are served as **0.0%** — the forward reprice on a blank-3M date

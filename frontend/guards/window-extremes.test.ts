@@ -108,6 +108,38 @@ describe("the rendered chart: marks move with the window; the grid stays behind"
     expect(flat.match(/>3\.0000</g)).toHaveLength(1);
   });
 
+  it("the high is RED, the low is BLUE — dot and value both [OWNER, 2026-08-03]", () => {
+    // "최고=빨간색으로, 최저는 파란색으로 확실하게 눈에 띄게" — the product's
+    // own up/down pair landing on the ends it already means. An
+    // owner-sanctioned exception to "levels stay ink" (§5), for these two
+    // marks only.
+    const m = render(SERIES);
+    expect(m).toMatch(/data-extreme="hi"[^>]*class="fill-up"/);
+    expect(m).toMatch(/data-extreme="lo"[^>]*class="fill-down"/);
+    expect(m).toMatch(/class="fill-up"[^>]*>4\.2000</);
+    expect(m).toMatch(/class="fill-down"[^>]*>2\.4000</);
+  });
+
+  it("levels read on the LEFT axis, rates on the RIGHT [OWNER, 2026-08-03]", () => {
+    // "스프레드랑 버터플라이 같은 레벨은 좌측 axis에 금리는 우측 axis에" —
+    // one rule on every chart, single- or dual-scale. A % chart's gridline
+    // values sit at the right edge, end-anchored; a bp/ratio chart's at the
+    // left. (The dual-scale case — bp left, % right — is pinned with its
+    // unit suffixes in guards/policy-dual-axis.test.ts.)
+    const pct = render(SERIES); // W=600, PAD.right=10 → right labels at x=588
+    expect(pct).toMatch(/<text x="588"[^>]*text-anchor="end"[^>]*>-?\d+\.\d\d</);
+    const ratio = renderToStaticMarkup(
+      createElement(PreviewChart, {
+        points: DATES4.map((t, i) => ({ t, v: 1 + i * 0.2, d: 0 })),
+        stats: { min: 1, max: 1.6, avg: 1.3 },
+        unit: "ratio",
+        width: 600,
+        height: 300,
+      }),
+    );
+    expect(ratio).toMatch(/<text x="8"[^>]*>-?\d+\.\d\d</); // PAD.left + 2
+  });
+
   it("every horizontal gridline carries its level [OWNER, 2026-08-03]", () => {
     // before this, a chart without the reference overlay — every outright,
     // the whole 변동성 tab — had no numbers anywhere on its axis. Three
