@@ -77,7 +77,8 @@ export function PreviewPane({
   width: number;
   /** the pane's measured height; the chart takes what the header leaves */
   height: number;
-  /** BOK base rate step — drawn on % instruments only (§policy). */
+  /** BOK base rate step — shared axis on %, own labelled % scale on bp,
+   * absent on ratio (§policy). */
   policy?: PolicyStep;
 }) {
   const { data, isError, isLoading, isFetching, refetch } = useQuery({

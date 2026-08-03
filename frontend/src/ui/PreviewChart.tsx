@@ -10,14 +10,16 @@ import { useState } from "react";
 
 import type { HistoryPoint, PolicyStep, SeriesStats, Unit } from "@/lib/api";
 
+import { fmtAxis } from "@/lib/format";
+
 import {
   alignSeries,
+  policyAxisMode,
   policyExtent,
   policyPath,
   policySegments,
   seriesExtent,
   seriesPath,
-  takesPolicyOverlay,
 } from "./policyLine";
 
 import {
@@ -48,7 +50,8 @@ export function PreviewChart({
   unit: Unit;
   width: number;
   height: number;
-  /** BOK base rate step, drawn under % instruments only (§policy). */
+  /** BOK base rate step — shares the axis on % instruments, keeps its own
+   * labelled % scale on bp instruments, absent on ratio (§policy). */
   policy?: PolicyStep;
   /** CD 91d history — the second reference line, always drawn with the base
    * rate. Omitted when the instrument IS CD, where it would be the same line
@@ -75,22 +78,55 @@ export function PreviewChart({
     if (p.v < lo) lo = p.v;
     if (p.v > hi2) hi2 = p.v;
   }
-  // The policy step shares this axis, so the domain has to hold both before
-  // anything is scaled — see policyLine.ts. Widening here (rather than
-  // clipping the step) is what keeps two rates in the same unit comparable.
-  const refs = takesPolicyOverlay(unit);
-  const segments = refs ? policySegments(points, policy) : [];
-  const cdVals = refs ? alignSeries(points, cd) : [];
-  for (const e of [policyExtent(segments), seriesExtent(cdVals)]) {
-    if (!e) continue;
-    if (e.min < lo) lo = e.min;
-    if (e.max > hi2) hi2 = e.max;
+  /* How the overlay meets this axis is a UNIT question (policyLine.ts):
+   *
+   *   shared    (%)  — the references are in the instrument's own unit, so the
+   *                    domain has to hold all three series before anything is
+   *                    scaled. Widening here (rather than clipping the step) is
+   *                    what keeps two rates in the same unit comparable.
+   *   secondary (bp) — a spread and a policy rate share no unit; the
+   *                    references get their OWN % scale over the same plot,
+   *                    the instrument's bp domain stays exactly what its own
+   *                    points make it, and BOTH axes are labelled with their
+   *                    unit below. Never a shared scale, never a rebasing —
+   *                    the overlay exists to read the spread against the
+   *                    policy LEVEL, and an index rebase destroys the level. */
+  const mode = policyAxisMode(unit);
+  const segments = mode ? policySegments(points, policy) : [];
+  const cdVals = mode ? alignSeries(points, cd) : [];
+  if (mode === "shared") {
+    for (const e of [policyExtent(segments), seriesExtent(cdVals)]) {
+      if (!e) continue;
+      if (e.min < lo) lo = e.min;
+      if (e.max > hi2) hi2 = e.max;
+    }
   }
   const pad = (hi2 - lo) * 0.06 || 0.01;
   const yMin = lo - pad;
   const yMax = hi2 + pad;
   const x = (i: number) => PAD.left + (i / (points.length - 1)) * plotW;
   const y = (v: number) => PAD.top + (1 - (v - yMin) / (yMax - yMin)) * plotH;
+
+  /* The secondary % scale, derived from the references alone. `yRef` is the
+   * y-mapping every reference stroke uses: identical to `y` when the axis is
+   * shared, its own scale when it is not — so the draw code below cannot
+   * accidentally mix scales per series. */
+  let refDomain: { min: number; max: number } | null = null;
+  if (mode === "secondary") {
+    for (const e of [policyExtent(segments), seriesExtent(cdVals)]) {
+      if (!e) continue;
+      refDomain = refDomain
+        ? { min: Math.min(refDomain.min, e.min), max: Math.max(refDomain.max, e.max) }
+        : { ...e };
+    }
+  }
+  const refPad = refDomain ? (refDomain.max - refDomain.min) * 0.06 || 0.01 : 0;
+  const refMin = refDomain ? refDomain.min - refPad : 0;
+  const refMax = refDomain ? refDomain.max + refPad : 1;
+  const yRef =
+    mode === "secondary" && refDomain
+      ? (v: number) => PAD.top + (1 - (v - refMin) / (refMax - refMin)) * plotH
+      : y;
   const path = points.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
 
   const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -149,7 +185,7 @@ export function PreviewChart({
             told apart by DASH PATTERN so the distinction survives in
             grayscale (§5): CD is a fine dotted line, the base rate a longer
             dash. The opacity is a layer on top of that, never the encoding. */}
-        {seriesPath(cdVals, x, y).map((run) => (
+        {seriesPath(cdVals, x, yRef).map((run) => (
           <polyline
             key={`cd-${run.slice(0, 24)}`}
             points={run}
@@ -160,7 +196,7 @@ export function PreviewChart({
             strokeDasharray="1 2"
           />
         ))}
-        {policyPath(segments, x, y).map((run) => (
+        {policyPath(segments, x, yRef).map((run) => (
           <polyline
             key={run.slice(0, 24)}
             points={run}
@@ -171,6 +207,36 @@ export function PreviewChart({
             strokeDasharray="3 3"
           />
         ))}
+        {/* Two axes on one plot exist only in "secondary" mode, and BOTH are
+            then labelled with their unit [OWNER, 2026-08-03]: the instrument's
+            bp scale on the left, the references' % scale on the right. An
+            unlabelled second axis is a misreading waiting to happen — a
+            reader has no way to know 2.75 is not 2.75bp. Orientation marks in
+            `fmtAxis`'s coarse grammar (same role as CurveView's y labels),
+            never data. */}
+        {mode === "secondary" &&
+          refDomain &&
+          [0.15, 0.85].map((f) => (
+            <g key={f}>
+              <text
+                x={PAD.left + 2}
+                y={y(yMin + (yMax - yMin) * f) + 4}
+                className="fill-ink"
+                style={{ fontSize: 10, opacity: 0.5 }}
+              >
+                {`${fmtAxis(yMin + (yMax - yMin) * f, unit)}${unit}`}
+              </text>
+              <text
+                x={width - PAD.right - 2}
+                y={yRef(refMin + (refMax - refMin) * f) + 4}
+                textAnchor="end"
+                className="fill-ink"
+                style={{ fontSize: 10, opacity: 0.5 }}
+              >
+                {`${fmtAxis(refMin + (refMax - refMin) * f, "%")}%`}
+              </text>
+            </g>
+          ))}
         <polyline
           points={path}
           fill="none"

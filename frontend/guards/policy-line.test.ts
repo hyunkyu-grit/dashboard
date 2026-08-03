@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import type { HistoryPoint, PolicyStep } from "../src/lib/api";
 import {
   alignSeries,
+  policyAxisMode,
   policyExtent,
   policyPath,
   policySegments,
@@ -220,10 +221,15 @@ describe("snapPolicyToTimes (the lightweight-charts feed)", () => {
   });
 });
 
-describe("which instruments take the overlay", () => {
-  it("percent only — a policy rate on a bp axis is a rescale", () => {
+describe("which instruments take the overlay, and on which axis", () => {
+  it("% shares the axis; bp gets a secondary % scale; ratio gets nothing", () => {
+    // [OWNER, 2026-08-03] spreads and butterflies read against the policy
+    // level too — on their OWN % scale, never forced onto the bp axis
+    expect(policyAxisMode("%")).toBe("shared");
+    expect(policyAxisMode("bp")).toBe("secondary");
+    expect(policyAxisMode("ratio")).toBeNull();
     expect(takesPolicyOverlay("%")).toBe(true);
-    expect(takesPolicyOverlay("bp")).toBe(false);
+    expect(takesPolicyOverlay("bp")).toBe(true);
     expect(takesPolicyOverlay("ratio")).toBe(false);
   });
 });

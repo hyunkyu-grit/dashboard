@@ -99,10 +99,12 @@ export interface EventCluster {
   count: number;
 }
 
-/** The BOK base rate as a STEP, drawn on every %-unit chart [OWNER,
- * 2026-07-31] — CD and the base rate are always drawn together, and the 3M
- * node IS CD91. bp/ratio charts (spread, butterfly, volatility) are excluded:
- * a 2.75 line on a ±30bp axis is a rescale, not a comparison.
+/** The BOK base rate as a STEP, drawn on every %-unit AND bp-unit chart —
+ * CD and the base rate are always drawn together [OWNER, 2026-07-31], and the
+ * 3M node IS CD91. On a bp chart (spread, butterfly) the pair keeps its OWN
+ * labelled % scale beside the instrument's [OWNER, 2026-08-03] — never forced
+ * onto the bp axis, which would be a rescale, not a comparison. Ratio charts
+ * (volatility) are still excluded. See `ui/policyLine.ts::policyAxisMode`.
  *
  * `steps` are the CORNERS only — the date each decision took effect. Draw with
  * square corners; never interpolate between two of them, and never extend the

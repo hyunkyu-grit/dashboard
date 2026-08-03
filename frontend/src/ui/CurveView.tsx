@@ -27,7 +27,7 @@
 import { useMemo, useState } from "react";
 
 import type { Unit, WallSummary } from "@/lib/api";
-import { levelHeadText, levelHeadTitle } from "@/lib/format";
+import { fmtAxis, levelHeadText, levelHeadTitle } from "@/lib/format";
 import { BASIS_SECONDARY_OPACITY } from "@/theme/ramp";
 
 import {
@@ -111,11 +111,10 @@ function NodeLine({
       .map((n, i) => (n[key] == null ? null : `${x(i)},${y(n[key]!)}`))
       .filter(Boolean)
       .join(" ");
-  /* The AXIS label's own grammar, coarser than a level's on purpose: two
-   * gridline values exist to orient the eye on the y-range, and `4.2446` in that
-   * role reads as data. The readout card is where a level prints at full
-   * precision, through `fmtLevel`. This is the only rounding in this file. */
-  const axisLabel = (v: number) => (unit === "bp" ? v.toFixed(1) : v.toFixed(2));
+  /* The AXIS label's grammar is `fmtAxis` — coarser than a level's on purpose
+   * (see lib/format.ts). The readout card is where a level prints at full
+   * precision, through `fmtLevel`. No other rounding lives in this file. */
+  const axisLabel = (v: number) => fmtAxis(v, unit);
   const labelEvery = Math.ceil(nodes.length / 8);
 
   // nearest node by x, the same snap the preview chart uses — the nodes are

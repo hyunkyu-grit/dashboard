@@ -69,6 +69,16 @@ export function levelHeadTitle(asof: string | null | undefined): string {
   return asof && asof.length > 0 ? `${asof} 종가 기준` : "가장 최근 레벨";
 }
 
+/** AXIS orientation label — deliberately COARSER than a level (bp → 1dp,
+ * % / ratio → 2dp). Two gridline values exist to orient the eye on a y-range,
+ * and `4.2446` in that role reads as data; full precision belongs to the
+ * readout card, through `fmtLevel`. One definition for every chart axis
+ * (CurveView's y marks, the preview's dual-axis unit ticks) so "how coarse is
+ * an axis" cannot drift per surface. */
+export function fmtAxis(v: number, unit: Unit): string {
+  return unit === "bp" ? v.toFixed(1) : v.toFixed(2);
+}
+
 /** Tailwind text-color class for a signed value: red up, blue down, ink flat
  * (§9 direction). Null/zero is neutral ink. */
 export function dirClass(v: number | null | undefined): string {

@@ -30,11 +30,16 @@
  *   Running the line to the axis end instead is the exact failure that bound
  *   exists to prevent, and it looks completely normal.
  *
- *   ONE AXIS. Both references share the instrument's y-scale, so the caller
- *   widens its domain to contain all three. Clipping a reference to the
- *   instrument's own domain would pin it flat against an edge and read as
- *   "equal to the minimum"; a second axis would let rates in the same unit be
- *   compared at two different scales, which is worse than not drawing them.
+ *   ONE AXIS PER UNIT. On a %-unit chart both references share the
+ *   instrument's y-scale and the caller widens its domain to contain all
+ *   three — a second axis would let rates in the SAME unit be compared at two
+ *   different scales, which is worse than not drawing them. On a bp-unit
+ *   chart (spread, butterfly) the references keep their OWN percent scale
+ *   beside the instrument's [OWNER, 2026-08-03]: the two units cannot share
+ *   an axis at all, and neither rebasing to a common index (destroys the
+ *   level, which is the point of the overlay) nor clipping to the
+ *   instrument's domain (pins the line to an edge) is a comparison. Each
+ *   axis is labelled with its unit — see `policyAxisMode` below.
  *
  *   ALIGNED BY DATE, NOT BY POSITION. Two ~150-point previews of different
  *   series are downsampled independently, so index i is not the same day in
@@ -255,9 +260,28 @@ export function seriesPath(
   return runs;
 }
 
-/** Does this instrument take the overlay at all? Percent only: the base rate
- * is a level in percent, and laying 2.75 over a ±30bp spread or a 12.0
- * volatility ratio rescales the chart instead of comparing anything. */
+/** How this instrument's chart carries the overlay [OWNER, 2026-08-03]:
+ *
+ *   "shared"    — % instruments. Same unit as the references, ONE axis; the
+ *                 caller widens its y-domain to hold all three series.
+ *   "secondary" — bp instruments (spreads, butterflies). The references keep
+ *                 their own % scale beside the instrument's bp scale, and the
+ *                 chart labels BOTH axes with their unit — two unlabelled
+ *                 scales on one plot is a misreading waiting to happen.
+ *   null        — ratio (volatility). A policy rate says nothing about a
+ *                 dimensionless ratio; no overlay.
+ *
+ * The mode is decided by UNIT, not by chart kind, because unit is what the
+ * axis actually plots — the row model routes every kind through its unit. */
+export type PolicyAxisMode = "shared" | "secondary";
+
+export function policyAxisMode(unit: string): PolicyAxisMode | null {
+  if (unit === "%") return "shared";
+  if (unit === "bp") return "secondary";
+  return null;
+}
+
+/** Does this instrument take the overlay at all? % and bp; never ratio. */
 export function takesPolicyOverlay(unit: string): boolean {
-  return unit === "%";
+  return policyAxisMode(unit) !== null;
 }

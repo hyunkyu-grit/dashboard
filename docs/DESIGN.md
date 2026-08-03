@@ -172,12 +172,23 @@ each row carries a `key` boolean and the browser never re-derives it (§16).
   can filter one side away; a lone 주요 heading would state a split that is not
   on screen).
 
-### The two reference lines, on every % chart [OWNER, 2026-07-31]
+### The two reference lines, on every % and bp chart [OWNER, 2026-07-31 / 2026-08-03]
 
 **CD 91d and the BOK base rate, always drawn together** — on every **%-unit**
-chart: outrights and forwards, in the preview pane, the enlarged popup, and the
-전체 columns. Spread / butterfly / volatility charts are bp or ratio and are
-**excluded**: a 2.75 line on a ±30bp axis is a rescale, not a comparison.
+chart (outrights and forwards) AND, since 2026-08-03, on every **bp-unit**
+chart (spreads and butterflies): the preview pane, the bottom sheet, and the
+전체 columns. Volatility charts are ratio and stay **excluded** — a policy
+rate says nothing about a dimensionless ratio.
+
+**On a bp chart the references keep their OWN % scale** (`policyAxisMode` =
+`"secondary"`): the instrument's bp domain is exactly what its own points
+make it, the references are scaled to their own extent over the same plot,
+and **both axes carry unit-suffixed tick labels** (`fmtAxis` grammar —
+orientation marks, not data). Never a shared scale — 2.75 on a ±30bp axis
+flattens the spread into a hairline — and never a rebasing to a common
+index, which destroys the LEVEL the overlay exists to be read against.
+Pinned by `guards/policy-dual-axis.test.ts`, whose chart-kind list comes from
+`buildRows` over the shipped payloads, not from a hand-written list.
 
 The pairing is one instruction, not two. CD is the floating leg every KRW IRS
 quote is struck against and the base rate is what CD tracks, so a rate is read
@@ -206,10 +217,12 @@ the instruction.
   (`policy.decisions`); the flat days would be one number sent thousands of
   times (§20). On the cross-sectional idle curve the step degenerates to a
   single horizontal reference at the current level.
-- **One axis.** The caller widens its y-domain to hold both. Clipping the step
-  to the instrument's own domain would pin it against an edge and read as
-  "equal to the minimum"; a second axis would compare two rates in the same
-  unit at two different scales.
+- **One axis PER UNIT.** On a % chart the caller widens its y-domain to hold
+  both — clipping the step to the instrument's own domain would pin it
+  against an edge and read as "equal to the minimum", and a second axis would
+  compare two rates in the SAME unit at two different scales. On a bp chart
+  the units differ, so the references get the secondary % scale above — the
+  same reasoning, landing on the other side.
 - **Ink, dashed, under the instrument line** — the dash pattern carries it in
   grayscale, the reduced opacity is a layer (§5). It is the reference the
   instrument is read against, not a second subject, and it is excluded from

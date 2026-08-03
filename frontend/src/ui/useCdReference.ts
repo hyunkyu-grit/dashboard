@@ -5,10 +5,11 @@
  * query key — a second copy at another resolution would be a second, subtly
  * different CD line on screen, and react-query would happily cache both.
  *
- * Returns undefined for a bp/ratio instrument and for CD itself: on the 3M
+ * Returns undefined for a ratio instrument and for CD itself: on the 3M
  * chart the reference IS the subject, and drawing it again is one line under
- * another. The check lives here rather than in each caller so "does this chart
- * take CD" has one answer. */
+ * another. bp instruments (spreads, butterflies) DO take it since 2026-08-03
+ * [OWNER] — on their own % scale, see policyLine.ts. The check lives here
+ * rather than in each caller so "does this chart take CD" has one answer. */
 
 import { useQuery } from "@tanstack/react-query";
 

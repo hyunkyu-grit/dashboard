@@ -52,7 +52,7 @@ import {
   resolveTheme,
 } from "@/theme/bridge";
 import { assertDomainRendered } from "@/theme/domainGuard";
-import { snapPolicyToTimes, takesPolicyOverlay } from "@/ui/policyLine";
+import { policyAxisMode, snapPolicyToTimes } from "@/ui/policyLine";
 import { dateLabels } from "@/ui/timeAxis";
 
 export type ChartType = "line" | Interval;
@@ -156,8 +156,12 @@ export function DetailChart({
 
   /* CD at FULL resolution — this chart's axis is the full history, so the
    * preview's ~150 points would draw a visibly coarser CD than the instrument
-   * beside it. Skipped when the instrument IS CD (one line under another). */
-  const wantsCd = takesPolicyOverlay(unit) && id !== CD_SERIES_ID;
+   * beside it. Skipped when the instrument IS CD (one line under another).
+   * SHARED-axis units only: this (unreferenced, see the header ⚠) chart has a
+   * single price scale, so the "secondary" mode the preview grew on
+   * 2026-08-03 would put a % rate on a bp scale here. If this component ever
+   * returns, it needs its own second scale before widening this gate. */
+  const wantsCd = policyAxisMode(unit) === "shared" && id !== CD_SERIES_ID;
   const { data: cdData } = useQuery({
     queryKey: ["series", CD_SERIES_ID, "full"],
     queryFn: () => fetchSeries(CD_SERIES_ID, "full"),
@@ -266,7 +270,7 @@ export function DetailChart({
       cdRef.current = null;
     }
 
-    if (takesPolicyOverlay(unit) && policy && policy.steps.length) {
+    if (policyAxisMode(unit) === "shared" && policy && policy.steps.length) {
       const popts = {
         color: resolveInk(),
         lineWidth: 1 as const,
