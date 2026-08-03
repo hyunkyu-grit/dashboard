@@ -181,7 +181,25 @@ rule:
 
 ## 6. Current state (as of the 2026-08-03 session)
 
-### Latest — table column alignment audit (2026-08-03, HEAD `c2eb62e`)
+### Latest — visible-range 최고/최저 in the dormant zoom chart (2026-08-03)
+
+Owner-directed follow-through of Provisional pass O's reserved extension:
+`wall/DetailChart.tsx` (STILL unreferenced — dark until the popup is
+re-wired, the open owner decision) now recomputes 최고/최저 marks from the
+visible logical range on every zoom/pan. Pure scan in `ui/extremes.ts`
+(`extremeMarks` + `lineSpans`/`candleSpans`: closes in line mode, wick
+high/low in candle mode — the same data autoscale reads, so marks agree
+with the picture by construction; range convention = the tooltip stats'
+ceil/floor, so mark and 구간 최고 cannot disagree). Rendered via the
+library's `createSeriesMarkers` primitive, wired into the ONE existing
+`subscribeVisibleLogicalRangeChange` pipeline, rAF-throttled; tie rule =
+MOST RECENT [OWNER task] — deliberately diverging from the preview's
+first-occurrence rule, both stated; flat window = one bare ink mark.
+`guards/visible-extremes.test.ts` pins scan, parity-with-slice, wiring.
+DESIGN `## Provisional` has the entry. FE **489 passed / 1 skipped
+(39 files)**, lint 0, build 0; backend untouched.
+
+### Before that — table column alignment audit (2026-08-03, HEAD `c2eb62e`)
 
 An owner report of header/number right-edge misalignment across the tabs did
 NOT reproduce: measured 0.00px on every tab (sorted and unsorted) and the

@@ -20,6 +20,7 @@
 import {
   CandlestickSeries,
   createChart,
+  createSeriesMarkers,
   LineSeries,
   LineStyle,
   LineType,
@@ -27,6 +28,8 @@ import {
   type ISeriesApi,
   type Logical,
   type LogicalRange,
+  type SeriesMarker,
+  type Time,
 } from "lightweight-charts";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
@@ -52,6 +55,7 @@ import {
   resolveTheme,
 } from "@/theme/bridge";
 import { assertDomainRendered } from "@/theme/domainGuard";
+import { candleSpans, extremeMarks, lineSpans, type Span } from "@/ui/extremes";
 import { policyAxisMode, snapPolicyToTimes } from "@/ui/policyLine";
 import { dateLabels } from "@/ui/timeAxis";
 
@@ -176,14 +180,20 @@ export function DetailChart({
   const barByTime = useRef<Map<string, OhlcBar>>(new Map());
   const linePointsRef = useRef<HistoryPoint[]>([]);
   const timesRef = useRef<string[]>([]); // ordered times, both modes
+  // vertical extents per x-position for the 최고/최저 marks (extremes.ts):
+  // closes in line mode, wick ranges in candle mode — the same data the
+  // library's autoscale stretches the visible y-axis to.
+  const spansRef = useRef<Span[]>([]);
   useEffect(() => {
     if (data && "points" in data) {
       linePointsRef.current = data.points;
       dByTime.current = new Map(data.points.map((p) => [p.t, p.d]));
       timesRef.current = data.points.map((p) => p.t);
+      spansRef.current = lineSpans(data.points);
     } else if (data && "bars" in data) {
       barByTime.current = new Map(data.bars.map((b) => [b.t, b]));
       timesRef.current = data.bars.map((b) => b.t);
+      spansRef.current = candleSpans(data.bars);
     }
   }, [data]);
 
@@ -286,6 +296,47 @@ export function DetailChart({
       policyRef.current = null;
     }
 
+    /* 최고/최저 marks that FOLLOW THE ZOOM (2026-08-03). The preview's marks
+     * cover its whole (unzoomed) plot; here the window is whatever the reader
+     * has zoomed or panned to, so the extremes are recomputed from the visible
+     * slice on every range change and the marks REPLACE the old pair — an
+     * extreme that scrolls out of view is not retained. Same red-high /
+     * blue-low pair as the preview (§9 owner exception), values through
+     * `fmtLevel` via extremeMarks; a flat window's single bare mark is ink —
+     * neither a high nor a low, so it takes the levels' colour.
+     *
+     * Wired into the ONE existing range subscription below (the pipeline the
+     * date strip and 구간 stats already use), throttled to one recompute per
+     * animation frame so drag-panning scans once per painted frame, not once
+     * per event. The markers primitive repositions with the chart's own
+     * paint — no transition of ours, so there is nothing reduced-motion
+     * would need to disable, and the data line itself never animates
+     * (pane-still). */
+    const markers = createSeriesMarkers(series, []);
+    const markHue = { hi: resolveDirection(true), lo: resolveDirection(false), flat: resolveInk() };
+    assertNoCssVars(markHue);
+    let extremesRaf = 0;
+    let lastRange: LogicalRange | null = null;
+    const scheduleExtremes = (r: LogicalRange | null) => {
+      lastRange = r;
+      if (extremesRaf) return; // one scan per frame — drag emits many events
+      extremesRaf = requestAnimationFrame(() => {
+        extremesRaf = 0;
+        markers.setMarkers(
+          extremeMarks(spansRef.current, lastRange, unit).map(
+            (m): SeriesMarker<Time> => ({
+              time: m.time,
+              position: m.kind === "lo" ? "belowBar" : "aboveBar",
+              color: markHue[m.kind],
+              shape: "circle",
+              text: m.text,
+              size: 0.5,
+            }),
+          ),
+        );
+      });
+    };
+
     chart.subscribeCrosshairMove((param) => {
       const t = param.time as string | undefined;
       if (!t || !param.point) {
@@ -310,6 +361,10 @@ export function DetailChart({
     // the buckets set the span.
     chart.timeScale().subscribeVisibleLogicalRangeChange((r) => {
       if (!isCandle) setStats(statsForRange(linePointsRef.current, r));
+      // the r the library actually rendered — the same object the domain
+      // guard validates after fitContent — so the marks can never cover
+      // indices the chart silently dropped (the minBarSpacing clip class)
+      scheduleExtremes(r);
       emitRange(r);
       const times = timesRef.current;
       if (times.length === 0) {
@@ -336,6 +391,7 @@ export function DetailChart({
     });
 
     return () => {
+      cancelAnimationFrame(extremesRaf);
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;

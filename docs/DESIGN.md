@@ -2623,7 +2623,30 @@ as a heading until the hardening session, which is itself worth noting: the
 references pointed at a section that had been absorbed into "Settled decisions"
 and stopped being a live record.
 
-### V-PASS V5 (2026-08-03) — two decisions taken inside the validation pass
+### Visible-range extremes (2026-08-03) — the dormant zoom chart gets live 최고/최저
+
+The extension path Pass O below reserved has been walked, on owner direction:
+`wall/DetailChart.tsx` (still UNREFERENCED — the surface stays dark until the
+popup is re-wired, which remains the open owner decision) now recomputes its
+최고/최저 marks from the VISIBLE logical range on every zoom/pan, via
+`extremeMarks` in `ui/extremes.ts` — client-side, §16-consistent (a viewport
+property; no API). Line mode scans closes, candle mode wick highs/lows — the
+same data autoscale stretches the y-axis to, so marks and picture agree by
+construction. Decisions taken inside the pass, stated:
+
+- **Tie rule DIVERGES from the preview**: most recent occurrence [OWNER task,
+  2026-08-03] against `windowExtremes`' first-occurrence. One rule per
+  surface, both stated in `extremes.ts`; unify only with an owner call.
+- **A flat window's single bare mark is INK** (`resolveInk`), not red or
+  blue: a level that is the whole window is neither a high nor a low, so it
+  falls back to "levels stay ink" (§5) rather than the extremes' sanctioned
+  hue exception.
+- **Marker geometry is the library's markers primitive** (`createSeriesMarkers`,
+  size 0.5, circle, above/below bar) rather than a DOM overlay: it repositions
+  in the chart's own paint (nothing for reduced-motion to disable, nothing
+  animating the pane) and cannot drift from the data coordinate system.
+  **To reverse:** drop the `scheduleExtremes` block and the two span adapters;
+  `guards/visible-extremes.test.ts` pins all of the above.
 
 **1. Same-day entry/exit returns zero instead of a 422.** The V-PASS brief
 required PnL exactly 0 for settlement date = entry date; the engine refused
