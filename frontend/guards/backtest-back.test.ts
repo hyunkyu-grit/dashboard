@@ -35,7 +35,7 @@ import {
   mintBacktestKey,
   saveBacktestMemory,
 } from "../src/ui/backtestMemory";
-import { BacktestSheet } from "../src/ui/BacktestSheet";
+import { BacktestWindow } from "../src/ui/BacktestWindow";
 import type { Row } from "../src/ui/rows";
 
 function row(id: string, unit: Row["unit"] = "%"): Row {
@@ -95,7 +95,7 @@ const sheet = (key: string) =>
     createElement(
       QueryClientProvider,
       { client: new QueryClient() },
-      createElement(BacktestSheet, {
+      createElement(BacktestWindow, {
         row: row("10Y"),
         rows: [row("10Y"), row("3Y")],
         asOf: "2026-08-03",
@@ -151,25 +151,40 @@ describe("the reported sequence: leave the popup, come back, find it as left", (
   });
 });
 
-describe("close IS back — one meaning per step, no residue for back to land on", () => {
+describe("the window is parallel to navigation — replace, never push (backtest-window session)", () => {
   const app = code("ui/App.tsx");
 
-  it("closing a popup the app pushed goes BACK, never pushes a fresh entry", () => {
-    // the old shape — router.push("/") on close — is what filled the history
-    // with emptied popups
-    expect(app).not.toMatch(/closeBacktest[\s\S]{0,200}router\.push\("\/"/);
-    expect(app).toMatch(/closeBacktest[\s\S]{0,400}router\.back\(\)/);
-    // …but a COLD link (nothing pushed) must not back out of the site
-    expect(app).toMatch(/closeBacktest[\s\S]{0,400}router\.replace\("\/"/);
+  /* The structural supersession of the close-is-back patch: the window is
+   * not a page, so opening and closing it REPLACE the current history entry.
+   * Back/forward then walk tab/tile state UNDERNEATH the window — they can
+   * never close it, so they can never wipe it. The pass-Q nonce + session
+   * memory still carry the contents across any traversal that does re-enter
+   * a bt-bearing URL. */
+  it("open and close both replace — the history collects no window entries", () => {
+    expect(app).toMatch(/openBacktest[\s\S]{0,500}router\.replace/);
+    expect(app).not.toMatch(/openBacktest[\s\S]{0,500}router\.push/);
+    expect(app).toMatch(/closeBacktest[\s\S]{0,200}router\.replace/);
+    expect(app).not.toMatch(/closeBacktest[\s\S]{0,200}router\.back/);
+  });
+
+  it("every bt write goes through mergeQuery, preserving the tile namespace", () => {
+    expect(app).toMatch(/openBacktest[\s\S]{0,600}mergeQuery\(params/);
+    expect(app).toMatch(/closeBacktest[\s\S]{0,200}mergeQuery\(params, clearBtPatch\(\)\)/);
   });
 
   it("each deliberate open mints its own instance key into the URL", () => {
-    expect(app).toMatch(/openBacktest[\s\S]{0,400}mintBacktestKey\(\)/);
-    expect(app).toMatch(/bt=/);
+    expect(app).toMatch(/openBacktest[\s\S]{0,600}mintBacktestKey\(\)/);
+    expect(app).toMatch(/bt: mintBacktestKey\(\)/);
   });
 
-  it("the sheet records what the reader builds, as it changes", () => {
-    const src = code("ui/BacktestSheet.tsx");
+  it("the enlarged view's close is still BACK when the app pushed it", () => {
+    // pass Q's rule lives on where it belongs — the page-like modal
+    expect(app).toMatch(/closeEnlarged[\s\S]{0,400}router\.back\(\)/);
+    expect(app).toMatch(/openEnlarged[\s\S]{0,400}router\.push/);
+  });
+
+  it("the window records what the reader builds, as it changes", () => {
+    const src = code("ui/BacktestWindow.tsx");
     expect(src).toMatch(/saveBacktestMemory\(\s*memoryKey,\s*\{\s*book/);
     expect(src).toMatch(/saveBacktestMemory\(\s*memoryKey,\s*\{\s*result/);
     expect(src).toMatch(/loadBacktestMemory\(memoryKey\)/);

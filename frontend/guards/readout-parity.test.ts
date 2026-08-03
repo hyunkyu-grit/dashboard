@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
 import { code } from "./_source";
 
 import type { Unit } from "../src/lib/api";
-import { entryLevelText } from "../src/ui/BacktestSheet";
+import { entryLevelText } from "../src/ui/BacktestWindow";
 import { levelText, rangeText } from "../src/ui/cells";
 import {
   CURVE_READOUTS,
@@ -167,7 +167,7 @@ describe("현재 and the 52-week stats are one grammar (pass L)", () => {
     // a second grammar — the deleted fmtMove used one on its bp difference.
     // The only toFixed allowed is the SVG path-coordinate form `x(…)/y(…)
     // .toFixed(1)`, which rounds PIXELS, exactly as PreviewChart does.
-    const src = code("ui/BacktestSheet.tsx");
+    const src = code("ui/BacktestWindow.tsx");
     const all = (src.match(/\.toFixed\(/g) ?? []).length;
     const pixels = (src.match(/[xy]\([^()]*\)\.toFixed\(1\)/g) ?? []).length;
     expect(all, "a toFixed that is not a pixel coordinate").toBe(pixels);

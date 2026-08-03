@@ -372,6 +372,29 @@ reproduction was watched to FAIL on the pre-fix sheet (it rendered the seed
 and "조건을 정하고…" where the remembered two-position book and its headline
 were asserted).
 
+**A FLOATING WINDOW, NOT A SHEET [backtest-window session, 2026-08-04].**
+The modal sheet made every glance at the app behind it a destroy-and-rebuild;
+the backtest is a workbench the reader consults the app AROUND. The window is
+parallel to everything — table, tabs, pins and the enlarged view keep working
+underneath it. Mechanics deliberately minimal (`ui/floatingWindow.ts`): ONE
+instance (presence IS the `bt` URL param), draggable by its HEADER only, no
+resize, no minimize; position is session memory, clamped so the handle never
+leaves the viewport; opaque surface + `border-edge-live` hairline, no shadow
+(§9), no backdrop; `Z_WINDOW` above chrome, BELOW modals. The URL split into
+namespaces (`ui/urlState.ts`): `tile`/`type` for the enlarged view,
+`bt`/`bti`/`btf` for the window, every write through `mergeQuery`, which
+patches only its own keys — the STRUCTURAL fix for the back-wipes-the-popup
+family pass Q patched one member of. Open and close REPLACE the history entry
+(a window is not a place you navigate to; back/forward walk the state UNDER
+it); pass Q's nonce + session memory still restore contents on any traversal
+that re-enters a `bt` URL, and its close-is-back rule lives on where it
+belongs — the page-like enlarged view. Freeing `?tile=` brought
+**`EnlargedView` back LIVE**, entered by the pane header's 크게 보기 (the
+chart click still belongs to the backtest [OWNER]); the visible-range
+extremes built dark the day before render there now. Pinned by
+`guards/backtest-window.test.ts`; `backtest-back.test.ts` rewritten to the
+replace-never-push shape.
+
 **A BOOK, NOT ONE TRADE** [OWNER]. Positions are rows: instrument, side, size,
 entry AND exit, each independent — you leg in on different days and out on
 different days. The chart click seeds the first row; more come from the row's
@@ -461,20 +484,21 @@ and each row is another full daily revaluation pass.
 - **The entry date is the date you clicked** [OWNER: "커서가 가는 곳에서
   누르면 그 날부터 스타트해야지"]. The preview chart's crosshair is the only
   thing that knows which day the reader is pointing at, so it reports it and
-  the click carries it into `?from=`. Only the FIRST row is seeded that way —
+  the click carries it into `btf`. Only the FIRST row is seeded that way —
   rows added afterwards are new questions and fall back to a year before the
   data's end.
 - **Direction is named by its LEGS**, not by a coined term — see
-  `BacktestSheet.directionLabel`. 스티프너/플래트너 is a genuine market
+  `BacktestWindow.directionLabel`. 스티프너/플래트너 is a genuine market
   standard and leads with the legs spelled out after it; a butterfly gets the
   legs alone, because "buy the fly" has no market standard at all.
 - **The instrument dropdown is grouped by kind** (`optgroup`): ~240 entries
   running 1D → 10Y → 6M/9M → 1s2s → 3Mx3M with nothing marking the boundaries
   required the reader to know the naming convention to know what they were
   looking at.
-- **The sheet opens at 78vh**, not at its content height. Sized by content it
-  opened as a strip and jumped to full height when a result arrived, so the
-  reader met it twice.
+- **The window's body opens with a 420px floor**, not at bare content height.
+  Sized purely by content the sheet-era popup opened as a strip and jumped to
+  full height when a result arrived, so the reader met it twice — the fix
+  carried into the window form.
 - **LIVE BACKEND ONLY.** Every other surface reads a baked JSON file; this
   answer depends on inputs the reader chooses, so it cannot be one. Vercel runs
   the frontend and a backend runs behind it [OWNER] — which is also what keeps
@@ -486,14 +510,15 @@ and each row is another full daily revaluation pass.
 - Toss-style is a constraint on the NUMBERS as much as the paint: one big
   figure in plain Korean, controls that read as a sentence, and everything that
   is machinery (per-leg notionals, DV01, settled cash) under a fold.
-- `ui/BacktestSheet.tsx`, `backend/app/backtest.py`, `/api/backtest?positions=`
+- `ui/BacktestWindow.tsx`, `backend/app/backtest.py`, `/api/backtest?positions=`
   (`id,direction,notional,entry[,exit]` joined by `;` — a book is a URL you can
   paste to a colleague, the same property `?tile=` gives the rest of the product).
 
-**Orphaned by this and NOT yet deleted:** `ui/EnlargedView.tsx` and
-`wall/DetailChart.tsx` (the app's only lightweight-charts use). The swap costs
-weekly/monthly candles and the six-basis readout, which the owner did not ask
-to lose — see the ⚠ note at the top of EnlargedView.
+**Orphaned by this** were `ui/EnlargedView.tsx` and `wall/DetailChart.tsx`
+(the app's only lightweight-charts use) — kept unreferenced rather than
+deleted precisely so the candles, the six-basis readout and the DV01 block
+could return, which they did in the backtest-window session (above) instead
+of being rebuilt.
 
 ### Stacking order
 
@@ -503,7 +528,9 @@ painted over the sheet — the numbers said the opposite of what the product
 means. The preview sheet at `z-20` had the same bug and nobody had opened it
 beside the strip yet. Named layers rather than a number at each call site,
 because these are picked in five files and the conflict is invisible until two
-of them are on screen together.
+of them are on screen together. The floating backtest window added `Z_WINDOW`
+(z-45) between them: above chrome — a work surface the reader positioned —
+but below modals, which dim the screen and must never be paintable-over.
 
 ### The page gutter [OWNER, 2026-07-31]
 
@@ -957,7 +984,10 @@ diverge the moment the quarter advances a month.
 ### Enlarged view
 
 A full-screen sheet over the list (§14: springs up; Esc / backdrop / downward
-drag dismiss; `?tile=series:<id>` keeps working).
+drag dismiss; `?tile=series:<id>` keeps working). Entered by the pane
+header's 크게 보기 since the backtest-window session — the chart click
+belongs to the backtest [OWNER] — and, as a modal, it covers the floating
+backtest window without touching its state.
 
 - Large chart, full history, plus a **segmented control exposing all six time
   bases** — the full opacity ramp lives here now.
@@ -2684,7 +2714,9 @@ pane-sized, full-resolution `PreviewChart` (which the owner asked to be "더
 function of the plotted slice, so a future zoom or range control inherits
 them unchanged. **To reverse / extend:** if the enlarged chart ever returns,
 give it the same two features via `windowExtremes` over its visible range —
-the module is chart-agnostic on purpose.
+the module is chart-agnostic on purpose. [It DID return, two sessions later:
+the visible-range extremes were built into `DetailChart` on 2026-08-03 and
+the backtest-window change (2026-08-04) re-wired the popup that shows them.]
 
 ### Pass N (2026-08-03) — the position track shows a statistic the chips do not use
 

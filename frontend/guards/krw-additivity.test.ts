@@ -25,7 +25,7 @@ import {
   fmtKrwFromMan,
   manUnits,
   splitKrw,
-} from "../src/ui/BacktestSheet";
+} from "../src/ui/BacktestWindow";
 
 /* The ENGINE-LEVEL identity — |손익 − (평가 + 캐리)| ≤ 1원 — lives where the
  * engine does: backend test_carry_and_valuation_sum_to_the_pnl and the V1
@@ -106,7 +106,7 @@ describe("the 손익 구성 table actually uses the additive path", () => {
     // banned calls) cannot trip the scan; the anchors are the table's OWN
     // header text and the fold that follows it, asserted present rather
     // than trusted, so a rename fails loudly instead of degrading the slice
-    const src = code("ui/BacktestSheet.tsx");
+    const src = code("ui/BacktestWindow.tsx");
     const from = src.indexOf("손익 구성");
     const to = src.indexOf("자세히");
     expect(from, "구성 table header not found — re-anchor this guard").toBeGreaterThan(-1);

@@ -1,10 +1,23 @@
 "use client";
 
-/* The backtest sheet — "그때 들어갔으면 지금 얼마였을까" (§backtest).
+/* The backtest window — "그때 들어갔으면 지금 얼마였을까" (§backtest).
  *
- * Opened by clicking the CHART (a row click still pins). It replaced the
- * enlarged chart popup in that slot: the pane chart is now pane-sized, so a
- * popup whose job was "the same line, bigger" had nothing left to do.
+ * Opened by clicking the CHART (a row click still pins). A FLOATING WINDOW
+ * since the backtest-window session (2026-08-03), not a modal sheet: the
+ * backtest is a workbench the reader consults the app AROUND — check a level,
+ * pin a row, open the enlarged view — and a modal made every one of those a
+ * destroy-and-rebuild. The main app stays fully interactive underneath; the
+ * window's own state (`bt` namespace in the URL + session memory) is
+ * orthogonal to tab/tile state, which is the STRUCTURAL fix for the
+ * back-wipes-the-popup family pass Q patched one member of.
+ *
+ * Window mechanics, kept deliberately minimal: ONE instance (presence is the
+ * `bt` URL param — a second cannot exist), draggable by its HEADER only, no
+ * resize, no minimize, position remembered for the session (floatingWindow.ts)
+ * and clamped so the handle never leaves the viewport. Depth is a surface
+ * step + the strong hairline (`border-edge-live`) — no shadow, per §9; the
+ * background is opaque (sticky-opaque spirit: no translucent chrome over
+ * data). Reduced motion opens/closes it instantly (`instant()`).
  *
  * TOSS-STYLE, WHICH IS A CONSTRAINT ON THE NUMBERS AS MUCH AS THE PAINT
  * [OWNER standing rule]. The result is one big figure in plain Korean, and the
@@ -34,7 +47,7 @@
  */
 
 import { useMutation } from "@tanstack/react-query";
-import { motion, type PanInfo } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -49,8 +62,15 @@ import { fmtDelta, fmtLevel } from "@/lib/format";
 
 import { loadBacktestMemory, saveBacktestMemory } from "./backtestMemory";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { Z_MODAL } from "./layers";
-import { SHEET_SPRING } from "./motion";
+import {
+  clampWindowPos,
+  initialWindowPos,
+  rememberWindowPos,
+  WINDOW_W,
+  type WinPos,
+} from "./floatingWindow";
+import { Z_WINDOW } from "./layers";
+import { instant } from "./motion";
 import { GROUP_LABEL, type Group, type Row } from "./rows";
 
 /* Money, the way a Korean desk reads it: 억 / 만, never 12 raw digits.
@@ -752,7 +772,7 @@ function newRow(id: string, asOf: string | undefined): PositionInput {
   return { id, direction: 1, eok: 100, entry: defaultEntry(asOf), exit: "" };
 }
 
-export function BacktestSheet({
+export function BacktestWindow({
   row,
   rows,
   asOf,
@@ -770,12 +790,12 @@ export function BacktestSheet({
    * asked for. Only the FIRST row gets it — rows added afterwards are new
    * questions and fall back to a year before the data's end. */
   entryFrom?: string;
-  /** this popup INSTANCE's session-memory key (pass Q): the `bt` nonce the
+  /** this window INSTANCE's session-memory key (pass Q): the `bt` nonce the
    * URL carries. A history traversal that re-enters this URL re-mounts the
-   * sheet with the same key and finds the book and the last result AS LEFT;
+   * window with the same key and finds the book and the last result AS LEFT;
    * a fresh chart click mints a new key and seeds fresh. */
   memoryKey: string;
-  /** an instrument clicked in the table BEHIND the sheet, to be appended */
+  /** an instrument clicked in the table BEHIND the window, to be appended */
   captured?: Row | null;
   onClose: () => void;
 }) {
@@ -858,57 +878,89 @@ export function BacktestSheet({
   });
   const shownResult = run.data ?? restoredResult;
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const onDragEnd = (_: unknown, info: PanInfo) => {
-    if (info.offset.y > 120 || info.velocity.y > 500) onClose();
+  /* Drag, by the HEADER only. Event-time snapshots throughout (compiler
+   * rules): pointer-down records where the drag started and where the window
+   * was — reading `pos` inside the handler, never a ref during render — and
+   * every move derives the new position from that snapshot, clamped against
+   * the viewport read AT THE EVENT. Pointer capture keeps the moves flowing
+   * to the header even when the cursor outruns it. No effects involved. */
+  const [pos, setPos] = useState<WinPos>(() =>
+    typeof window === "undefined"
+      ? { left: 0, top: 56 }
+      : initialWindowPos({ w: window.innerWidth, h: window.innerHeight }),
+  );
+  const dragRef = useRef<{ px: number; py: number; base: WinPos } | null>(null);
+  const onHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { px: e.clientX, py: e.clientY, base: pos };
+  };
+  const onHeaderPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current;
+    if (!d) return;
+    setPos(
+      rememberWindowPos(
+        clampWindowPos(
+          {
+            left: d.base.left + e.clientX - d.px,
+            top: d.base.top + e.clientY - d.py,
+          },
+          { w: window.innerWidth, h: window.innerHeight },
+        ),
+      ),
+    );
+  };
+  const onHeaderPointerUp = () => {
+    dragRef.current = null;
   };
 
+  const reduced = useReducedMotion();
   const unavailable = run.error instanceof BacktestUnavailable;
   const ready = book.length > 0 && book.every((b) => b.entry);
 
   return (
     <motion.div
-      className={`fixed inset-0 ${Z_MODAL} flex items-end justify-center bg-page/70`}
-      onClick={onClose}
+      role="dialog"
+      aria-label="백테스트"
+      /* Opaque surface + the STRONG hairline: depth by surface step + border
+         (§9), no shadow. In light theme popover and tile are both white, so
+         the hairline carries the boundary alone — border-edge-live (40% ink)
+         is the live-weight one for exactly that job. NO backdrop: the app
+         behind stays fully interactive. */
+      className={`fixed ${Z_WINDOW} flex max-h-[88vh] flex-col overflow-hidden rounded-[16px] border border-edge-live bg-popover`}
+      style={{ left: pos.left, top: pos.top, width: WINDOW_W, maxWidth: "96vw" }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
+      transition={instant({ duration: 0.15 }, reduced === true)}
     >
-      <motion.div
-        /* min-h as well as max-h [OWNER: "처음부터 충분히 세로로 많이 올라와
-           있어야 시각적인 부담이 덜"]. Sized by its content, the sheet opened
-           as a short strip at the bottom and then jumped to full height the
-           moment a result arrived — the reader met it twice. Opening at 78vh
-           means the controls sit where they will stay. */
-        className="flex max-h-[92vh] min-h-[78vh] w-full max-w-[960px] flex-col overflow-y-auto rounded-t-[20px] bg-popover p-6 shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        transition={SHEET_SPRING}
-        drag="y"
-        dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0, bottom: 0.5 }}
-        onDragEnd={onDragEnd}
+      {/* the drag handle — the ONLY draggable surface, and the strip the
+          clamp keeps on-screen. The close button opts out of starting a
+          drag; there is no resize and no minimize on purpose. */}
+      <div
+        onPointerDown={onHeaderPointerDown}
+        onPointerMove={onHeaderPointerMove}
+        onPointerUp={onHeaderPointerUp}
+        className="flex shrink-0 cursor-grab touch-none select-none items-baseline gap-2 border-b border-edge bg-popover px-5 py-3"
       >
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-edge" />
+        <span className="text-[17px] font-bold">백테스트</span>
+        <span className="text-[13px] opacity-50">
+          그때 들어갔으면 지금 얼마였을까
+        </span>
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={onClose}
+          onPointerDown={(e) => e.stopPropagation()}
+          title="닫기"
+          className="cursor-pointer rounded-[8px] px-2 text-[15px] opacity-50 hover:opacity-100"
+        >
+          ×
+        </button>
+      </div>
+      <div className="min-h-[420px] flex-1 overflow-y-auto p-6 pt-4">
         <ErrorBoundary fallback="백테스트 화면을 그리지 못했어요">
-          <div className="flex items-baseline gap-2">
-            <span className="text-[22px] font-bold">백테스트</span>
-            <span className="text-[13px] opacity-50">
-              그때 들어갔으면 지금 얼마였을까
-            </span>
-          </div>
-
-          <div className="mt-3">
+          <div className="mt-0">
             {book.map((b, i) => (
               <PositionRow
                 key={i}
@@ -975,7 +1027,7 @@ export function BacktestSheet({
             </p>
           )}
         </ErrorBoundary>
-      </motion.div>
+      </div>
     </motion.div>
   );
 }

@@ -1,27 +1,21 @@
 "use client";
 
-/* ⚠ CURRENTLY UNREFERENCED — awaiting an owner call, do not "clean up" blindly.
+/* Enlarged view (DESIGN §2) — LIVE AGAIN since the backtest-window session
+ * (2026-08-03). The chart click still opens the backtest [OWNER, 2026-07-31:
+ * "차트 클릭 → 백테스트"]; this view returned on `?tile` with its own way in
+ * (the pane header's 크게 보기), now that the backtest window lives in its
+ * own `bt` URL namespace and no longer squats on the tile slot. Between
+ * 2026-07-31 and then this file was kept-but-unreferenced precisely so the
+ * candles, the six-basis readout and the DV01 block could come back like
+ * this rather than be rebuilt.
  *
- * The chart click used to open this; since 2026-07-31 it opens `BacktestSheet`
- * instead [OWNER: "차트 클릭 → 백테스트", stage 3 replaced]. Nothing in the app
- * imports this file any more, and `wall/DetailChart.tsx` is imported only from
- * here — so the two are dead together, along with the app's only use of
- * lightweight-charts.
- *
- * Left in place rather than deleted because the swap orphans FEATURES the
- * owner did not ask to lose: weekly/monthly candles, the six-basis readout,
- * and the DV01 block. The backtest sheet covers per-leg DV01 and the gloss;
- * it does not cover the candles or the basis ladder. Deleting is a one-line
- * change once the owner says those are not wanted; un-deleting after the
- * static tree stops shipping `*.w.json` / `*.m.json` is not.
- */
-
-/* Enlarged view (DESIGN §2). Full-screen sheet over the list: for a series,
- * the large lightweight-charts history (blue line, assertDomainRendered) + a
- * six-basis segmented readout (the full ramp lives here) + the larger calendar
- * heatmap + a reserved-but-empty strategy region. For a forward, the forward
- * matrix instead. Esc / backdrop dismiss (drag added in Pass 4); wrapped in an
- * error boundary so a thrown guard shows a message, not a blank region. */
+ * Full-screen sheet over the list: for a series, the large lightweight-charts
+ * history (blue line, assertDomainRendered, visible-range 최고/최저) + a
+ * six-basis segmented readout (the full ramp lives here) + a reserved-but-
+ * empty strategy region. Esc / backdrop dismiss (drag added in Pass 4);
+ * wrapped in an error boundary so a thrown guard shows a message, not a
+ * blank region. A MODAL (Z_MODAL): it dims and takes the screen — including
+ * over the floating backtest window, whose state it never touches. */
 
 import { useQuery } from "@tanstack/react-query";
 import { motion, type PanInfo } from "motion/react";
@@ -37,6 +31,7 @@ import { ERROR_SENTENCE } from "./copy";
 import { LoadingState } from "./DataState";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { instrumentGloss, instrumentSubtitle } from "./gloss";
+import { Z_MODAL } from "./layers";
 import { PayReceive } from "./PayReceive";
 import type { Side } from "./payReceiveModel";
 import { SHEET_SPRING } from "./motion";
@@ -275,7 +270,7 @@ export function EnlargedView({
 
   return (
     <motion.div
-      className="fixed inset-0 z-30 flex items-end justify-center bg-page/70"
+      className={`fixed inset-0 ${Z_MODAL} flex items-end justify-center bg-page/70`}
       onClick={onClose}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

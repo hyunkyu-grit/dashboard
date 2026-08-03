@@ -41,13 +41,33 @@ function Sentence({ children }: { children: React.ReactNode }) {
 // dimensionless ratio carries no unit suffix (§ vol); % and bp keep theirs.
 const UNIT_SUFFIX: Record<Row["unit"], string> = { "%": "%", bp: "bp", ratio: "" };
 
-function Header({ row }: { row: Row }) {
+function Header({
+  row,
+  onEnlarge,
+}: {
+  row: Row;
+  /** opens the enlarged view (?tile) — absent for rows with no history */
+  onEnlarge?: (row: Row) => void;
+}) {
   return (
     <div className="mb-3">
       {/* the 한 줄 fragment that sat opposite the name is gone with the column
           (pass L); the pane's own readouts already carry the 52-week range */}
       <div className="flex items-baseline">
         <span className="text-[17px] font-semibold">{row.label}</span>
+        <span className="flex-1" />
+        {/* the enlarged view's way in (backtest-window session): the CHART
+            click belongs to the backtest [OWNER], so the bigger view gets a
+            named, quiet control instead of a gesture. */}
+        {onEnlarge && (
+          <button
+            type="button"
+            onClick={() => onEnlarge(row)}
+            className="text-[12px] opacity-50 hover:opacity-100"
+          >
+            크게 보기
+          </button>
+        )}
       </div>
       <div className="mt-0.5 flex items-baseline gap-2">
         <AnimatedNumber
@@ -68,12 +88,15 @@ function Header({ row }: { row: Row }) {
 export function PreviewPane({
   row,
   onOpen,
+  onEnlarge,
   width,
   height,
   policy,
 }: {
   row: Row | null;
   onOpen: (row: Row, from?: string) => void;
+  /** opens the enlarged view (?tile) — the 크게 보기 control in the header */
+  onEnlarge: (row: Row) => void;
   width: number;
   /** the pane's measured height; the chart takes what the header leaves */
   height: number;
@@ -115,6 +138,7 @@ export function PreviewPane({
           <PreviewBody
             row={row}
             onOpen={onOpen}
+            onEnlarge={onEnlarge}
             width={width}
             data={data}
             isError={isError}
@@ -133,6 +157,7 @@ export function PreviewPane({
 function PreviewBody({
   row,
   onOpen,
+  onEnlarge,
   width,
   data,
   isError,
@@ -144,6 +169,7 @@ function PreviewBody({
 }: {
   row: Row;
   onOpen: (row: Row, from?: string) => void;
+  onEnlarge: (row: Row) => void;
   width: number;
   height: number;
   policy?: PolicyStep;
@@ -170,7 +196,7 @@ function PreviewBody({
 
   return (
     <>
-      <Header row={row} />
+      <Header row={row} onEnlarge={onEnlarge} />
       {/* stage-2 detail: its own retry, so a failed series fetch does not
           require reloading the page or moving to another row and back
           (stability session, Pass B) */}

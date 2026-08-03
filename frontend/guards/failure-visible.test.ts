@@ -70,7 +70,10 @@ describe("one failing region does not blank the app", () => {
     // the strip; each named region must sit inside its own
     expect(app).toMatch(/region="table"[\s\S]{0,200}<InstrumentTable/);
     expect(app).toMatch(/region="strip"[\s\S]{0,120}<BottomStrip/);
-    expect(app).toMatch(/region="popup"[\s\S]{0,200}<BacktestSheet/);
+    // two popups since the backtest-window session: the enlarged view and
+    // the floating backtest window, each behind its own boundary
+    expect(app).toMatch(/region="popup"[\s\S]{0,200}<EnlargedView/);
+    expect(app).toMatch(/region="popup"[\s\S]{0,600}<BacktestWindow/);
   });
 
   it("the strip's fallback is bar-sized, not a centred block", () => {
@@ -86,7 +89,11 @@ describe("one failing region does not blank the app", () => {
 
 describe("an unknown ?tile= is cleared and said", () => {
   it("the parameter is replaced, and the id survives into the notice", () => {
-    expect(app).toMatch(/router\.replace\(`\/\?missing=\$\{encodeURIComponent\(tileParam\)\}`/);
+    // namespace-preserving since the backtest-window session: only the tile
+    // family is stripped, so an open backtest window survives a stale link
+    expect(app).toMatch(
+      /mergeQuery\(params, \{ tile: null, type: null, missing: tileParam \}\)/,
+    );
     expect(app).toMatch(/missingTile &&/);
   });
 

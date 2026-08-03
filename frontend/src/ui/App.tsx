@@ -22,18 +22,22 @@ import { getTile } from "@/wall/tileRegistry";
 
 import { ChangeLog } from "./ChangeLog";
 
+import type { ChartType } from "@/wall/DetailChart";
+
 import { mintBacktestKey } from "./backtestMemory";
 import { BottomStrip, STRIP_H, useStripCollapsed } from "./BottomStrip";
 import { CurveView } from "./CurveView";
 import { ErrorState, LoadingState } from "./DataState";
+import { EnlargedView } from "./EnlargedView";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { classify } from "./gloss";
 import { diagramSpec } from "./payReceiveModel";
-import { BacktestSheet, BOOKABLE_GROUPS } from "./BacktestSheet";
+import { BacktestWindow, BOOKABLE_GROUPS } from "./BacktestWindow";
 import { InstrumentTable } from "./InstrumentTable";
 import { Z_MODAL } from "./layers";
 import { SHEET_SPRING } from "./motion";
 import { PreviewPane } from "./PreviewPane";
+import { clearBtPatch, mergeQuery } from "./urlState";
 import { PAGE_R, PAGE_X, PAGE_X_PX } from "./pageGutter";
 import { buildRows, type Group, type Row } from "./rows";
 import { useIsWide } from "./useIsWide";
@@ -42,6 +46,17 @@ import { useMeasure } from "./useMeasure";
 // Table pane sizes to its columns (§ layout); the preview takes the rest with a
 // floor. On an ultrawide the chart grows and the table does not stretch sparse.
 const TABLE_W = 880;
+
+/** Resolve a URL target (`series:<id>` or a row id) to its row — the one
+ * grammar `tile` and `bti` share. Null until the row set can answer. */
+function rowForTarget(rows: Row[], target: string | null): Row | null {
+  if (!target) return null;
+  if (target.startsWith("series:")) {
+    const sid = target.slice("series:".length);
+    return rows.find((r) => r.seriesId === sid) ?? null;
+  }
+  return rows.find((r) => r.id === target) ?? null;
+}
 // the preview pane's horizontal padding, subtracted from its measured width
 // to size the chart: the page gutter on the window side, 20px on the divider
 // side (that edge is interior, and the divider already separates the panes)
@@ -52,11 +67,13 @@ const PANE_PAD = PAGE_X_PX + 20;
 function PreviewSheet({
   row,
   onOpen,
+  onEnlarge,
   onClose,
   policy,
 }: {
   row: Row;
   onOpen: (row: Row) => void;
+  onEnlarge: (row: Row) => void;
   onClose: () => void;
   policy?: PolicyStep;
 }) {
@@ -90,6 +107,7 @@ function PreviewSheet({
             <PreviewPane
               row={row}
               onOpen={onOpen}
+              onEnlarge={onEnlarge}
               width={w}
               // the sheet is capped at 85vh; the chart takes a readable slice of it
               height={Math.round(window.innerHeight * 0.5)}
@@ -270,43 +288,77 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [tileParam]);
 
-  /* `from` is the date under the cursor when the chart was clicked [OWNER:
-   * "커서가 가는 곳에서 누르면 그 날부터 스타트해야지"]. It rides in the URL
-   * beside `?tile=` so the opened backtest is linkable at that entry date,
-   * the same property every other view here has.
-   *
-   * `bt` is the popup INSTANCE's session-memory key (pass Q): minted fresh
-   * on each deliberate open, so a history traversal that re-enters this URL
-   * restores the sheet AS LEFT while a new chart click still seeds fresh.
-   * In a pasted link it names a session the recipient does not have, so it
-   * harmlessly seeds fresh there. */
-  const pushedTile = useRef(false);
+  /* THE BACKTEST WINDOW IS PARALLEL, NOT A PAGE (backtest-window session).
+   * Its namespace — `bt` (instance nonce, pass Q), `bti` (seed instrument),
+   * `btf` (the date under the cursor when the chart was clicked [OWNER:
+   * "커서가 가는 곳에서 누르면 그 날부터 스타트해야지"]) — rides the URL so a
+   * shared link restores the window, but open/close REPLACE the current
+   * history entry rather than pushing one: a floating window is not a place
+   * you navigate to, and back/forward should walk tab/tile state UNDER it
+   * without ever closing it or wiping its inputs. Every write goes through
+   * `mergeQuery`, so the `tile` namespace is carried untouched — and vice
+   * versa. This is the structural fix for the back-wipes-the-popup class;
+   * pass Q's nonce + session memory still carry the contents. Opening while
+   * a window is already open REPLACES it (one instance — presence IS the
+   * `bt` param); the new nonce seeds fresh, the position stays where the
+   * reader put it (floatingWindow.ts). */
   const openBacktest = useCallback(
     (row: Row, from?: string) => {
       const target = row.seriesId ? `series:${row.seriesId}` : row.id;
-      const q = `?tile=${encodeURIComponent(target)}${
-        from ? `&from=${from}` : ""
-      }&bt=${mintBacktestKey()}`;
-      pushedTile.current = true;
-      router.push(`/${q}`, { scroll: false });
+      router.replace(
+        `/${mergeQuery(params, {
+          bt: mintBacktestKey(),
+          bti: target,
+          btf: from ?? null,
+        })}`,
+        { scroll: false },
+      );
     },
-    [router],
+    [router, params],
   );
-  /* CLOSE IS BACK (pass Q). Opening pushed one entry, so every in-sheet
-   * close (Esc, backdrop, drag) pops that same entry — one step, one
-   * meaning, and the history collects no popup residue for a later back to
-   * land on emptied. The old shape — push("/") on close — is what filled
-   * the stack with `[/, A, /, B, /]`, where back from the table re-entered
-   * old popups as blank sheets. A COLD link is the one case nothing was
-   * pushed: backing there would leave the site, so it replaces instead. */
   const closeBacktest = useCallback(() => {
+    router.replace(`/${mergeQuery(params, clearBtPatch())}`, { scroll: false });
+  }, [router, params]);
+
+  /* The ENLARGED VIEW (?tile) is a page-like modal again — the backtest no
+   * longer squats on its slot. Open PUSHES (a view you navigate into), so
+   * CLOSE IS BACK (pass Q's rule, unchanged): one step, one meaning, no
+   * popup residue in the stack. A cold link replaces instead of backing out
+   * of the site. `type` (선/주봉/월봉) rides beside it; both writes preserve
+   * the bt namespace through `mergeQuery`, so navigating the enlarged view
+   * never touches the backtest window. */
+  const pushedTile = useRef(false);
+  const openEnlarged = useCallback(
+    (row: Row) => {
+      const target = row.seriesId ? `series:${row.seriesId}` : row.id;
+      pushedTile.current = true;
+      router.push(`/${mergeQuery(params, { tile: target })}`, { scroll: false });
+    },
+    [router, params],
+  );
+  const closeEnlarged = useCallback(() => {
     if (pushedTile.current) {
       pushedTile.current = false;
       router.back();
     } else {
-      router.replace("/", { scroll: false });
+      router.replace(`/${mergeQuery(params, { tile: null, type: null })}`, {
+        scroll: false,
+      });
     }
-  }, [router]);
+  }, [router, params]);
+
+  const typeParam = params.get("type");
+  const chartType: ChartType =
+    typeParam === "w" || typeParam === "m" ? typeParam : "line";
+  const onChartType = useCallback(
+    (t: ChartType) => {
+      router.replace(
+        `/${mergeQuery(params, { type: t === "line" ? null : t })}`,
+        { scroll: false },
+      );
+    },
+    [router, params],
+  );
 
   /* An unknown `?tile=` used to render the ordinary screen with the bogus
    * parameter still in the URL, no sheet and no message (Pass A finding).
@@ -315,14 +367,33 @@ export function App() {
    * what the compiler lint rejects, and the URL is the honest home for it. */
   const missingTile = params.get("missing");
 
-  const enlargedRow = useMemo(() => {
-    if (!tileParam) return null;
-    if (tileParam.startsWith("series:")) {
-      const sid = tileParam.slice("series:".length);
-      return rows.find((r) => r.seriesId === sid) ?? null;
-    }
-    return rows.find((r) => r.id === tileParam) ?? null;
-  }, [tileParam, rows]);
+  const enlargedRow = useMemo(
+    () => rowForTarget(rows, tileParam),
+    [tileParam, rows],
+  );
+
+  /* The backtest window: presence IS the `bt` nonce; `bti` names its seed
+   * instrument in the same target grammar `tile` uses. */
+  const btKey = params.get("bt");
+  const btiParam = params.get("bti");
+  const btRow = useMemo(
+    () => (btKey ? rowForTarget(rows, btiParam) : null),
+    [btKey, btiParam, rows],
+  );
+
+  /* A `bt` whose seed instrument names nothing (a stale link) is cleared and
+   * said — the tile-missing rule, applied to the other namespace. Waits for
+   * the COMPLETE row set for the same reason. */
+  useEffect(() => {
+    if (!btKey || !rowsComplete || btRow) return;
+    router.replace(
+      `/${mergeQuery(params, {
+        ...clearBtPatch(),
+        missing: btiParam ?? btKey,
+      })}`,
+      { scroll: false },
+    );
+  }, [btKey, btiParam, rowsComplete, btRow, router, params]);
 
   /* Clear a `?tile=` that names nothing — but only once the row set is
    * COMPLETE.
@@ -336,10 +407,13 @@ export function App() {
    * cold landed on `?missing=` every time. */
   useEffect(() => {
     if (!tileParam || !rowsComplete || enlargedRow) return;
-    router.replace(`/?missing=${encodeURIComponent(tileParam)}`, {
-      scroll: false,
-    });
-  }, [tileParam, rowsComplete, enlargedRow, router]);
+    // strip ONLY the tile namespace — an open backtest window survives a
+    // stale tile link (mergeQuery carries `bt` and friends forward)
+    router.replace(
+      `/${mergeQuery(params, { tile: null, type: null, missing: tileParam })}`,
+      { scroll: false },
+    );
+  }, [tileParam, rowsComplete, enlargedRow, router, params]);
 
   const scrollTo = useCallback((el: HTMLElement) => {
     el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -461,6 +535,7 @@ export function App() {
                       <PreviewPane
                         row={previewRow}
                         onOpen={openBacktest}
+                        onEnlarge={openEnlarged}
                         width={paneW - PANE_PAD}
                         height={Math.max(360, paneH - PANE_PAD)}
                         policy={summary.policy}
@@ -498,37 +573,55 @@ export function App() {
           <PreviewSheet
             row={pinned}
             onOpen={openBacktest}
+            onEnlarge={openEnlarged}
             onClose={() => setPinned(null)}
             policy={summary.policy}
           />
         )}
       </AnimatePresence>
 
+      {/* the enlarged view (?tile) — a modal over everything, including the
+          floating window; closing it leaves the window exactly as it was */}
       <AnimatePresence>
         {enlargedRow && summary && (
-          /* The sheet boundaries its own body; this covers the shell, so a
-             throw in the controls leaves the table behind it alive and the
-             sheet closable. */
           <ErrorBoundary
-            key="backtest"
+            key="enlarged"
+            region="popup"
+            fallback="큰 화면을 그리지 못했어요"
+          >
+            <EnlargedView
+              row={enlargedRow}
+              summary={summary}
+              chartType={chartType}
+              onChartType={onChartType}
+              onClose={closeEnlarged}
+            />
+          </ErrorBoundary>
+        )}
+      </AnimatePresence>
+
+      {/* the floating backtest window (?bt) — parallel to everything above:
+          tabs, pins and the enlarged view all keep working underneath it.
+          Keyed by the instance nonce so REPLACING (a new chart click while
+          one is open) remounts and re-seeds; the window boundaries its own
+          body, this covers the shell. */}
+      <AnimatePresence>
+        {btKey && btRow && summary && (
+          <ErrorBoundary
+            key={btKey}
             region="popup"
             fallback="백테스트 화면을 그리지 못했어요"
           >
-            <BacktestSheet
-              row={enlargedRow}
+            <BacktestWindow
+              row={btRow}
               rows={rows}
               asOf={summary.asof}
-              entryFrom={params.get("from") ?? undefined}
-              /* the URL's own nonce; a link minted elsewhere (no bt, or an
-                 unknown one) simply finds no memory and seeds fresh */
-              memoryKey={
-                params.get("bt") ??
-                `${tileParam}|${params.get("from") ?? ""}`
-              }
+              entryFrom={params.get("btf") ?? undefined}
+              memoryKey={btKey}
               /* only BOOKABLE pins are captured [V-PASS V5]: a pinned
                  forward or 변동성 row slipped past the dropdown's filter
                  into the book and 422'd two clicks later at 실행. Filtered
-                 at the source — the sheet's capture effect cannot grow a
+                 at the source — the window's capture effect cannot grow a
                  branch around its setState (compiler lint). */
               captured={
                 pinned && BOOKABLE_GROUPS.includes(pinned.group)

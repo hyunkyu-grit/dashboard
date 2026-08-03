@@ -49,8 +49,8 @@ export function windowExtremes(
 /* ——— Visible-range extremes for the ZOOMABLE chart (2026-08-03) ———
  *
  * The preview above has no zoom, so its window IS its `points` prop and
- * `windowExtremes` scans all of it. The detail chart (wall/DetailChart —
- * currently unreachable, see its header ⚠) zooms and pans: there the window
+ * `windowExtremes` scans all of it. The enlarged view's chart
+ * (wall/DetailChart) zooms and pans: there the window
  * is the VISIBLE LOGICAL RANGE, a fractional [from, to] over data indices,
  * and the extremes must follow it — the same view-state category as the
  * date-axis labels and the tooltip's 구간 stats, computed client-side from

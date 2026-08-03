@@ -161,10 +161,10 @@ export function DetailChart({
   /* CD at FULL resolution — this chart's axis is the full history, so the
    * preview's ~150 points would draw a visibly coarser CD than the instrument
    * beside it. Skipped when the instrument IS CD (one line under another).
-   * SHARED-axis units only: this (unreferenced, see the header ⚠) chart has a
-   * single price scale, so the "secondary" mode the preview grew on
-   * 2026-08-03 would put a % rate on a bp scale here. If this component ever
-   * returns, it needs its own second scale before widening this gate. */
+   * SHARED-axis units only: this chart has a single price scale, so the
+   * "secondary" mode the preview grew on 2026-08-03 would put a % rate on a
+   * bp scale here — bp instruments draw NO overlay in the enlarged view
+   * until it grows a second scale [TBD]. */
   const wantsCd = policyAxisMode(unit) === "shared" && id !== CD_SERIES_ID;
   const { data: cdData } = useQuery({
     queryKey: ["series", CD_SERIES_ID, "full"],

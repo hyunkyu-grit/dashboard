@@ -22,5 +22,14 @@ export const Z_TABLE_HEAD = "z-10";
 /** Page chrome that outlives the content: the bottom strip, the command bar. */
 export const Z_CHROME = "z-40";
 
-/** Modals: the backtest sheet, the mobile preview sheet. Above chrome. */
+/** The floating backtest window (backtest-window session): a parallel work
+ * surface the reader positioned, so it rides above chrome — but BELOW modals,
+ * which dim the screen and take the interaction; a window that painted over a
+ * modal would be reachable when it shouldn't be. Chart tooltips live inside
+ * the panes (local z) and are covered only where the window sits, which the
+ * reader can change by dragging — occlusion is never permanent. */
+export const Z_WINDOW = "z-[45]";
+
+/** Modals: the enlarged view, the mobile preview sheet. Above chrome AND
+ * above the floating window. */
 export const Z_MODAL = "z-50";

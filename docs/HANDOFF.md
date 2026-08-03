@@ -98,7 +98,12 @@ cd frontend; pnpm vitest run; pnpm lint; pnpm build
 - `ui/PreviewPane.tsx` / `PreviewChart.tsx` / `CalendarHeatmap.tsx` — hover
   state: series history (blue SVG) + tooltip + calendar heatmap.
 - `ui/EnlargedView.tsx` — the `?tile=…` sheet; **the only place
-  `lightweight-charts` is allowed**.
+  `lightweight-charts` is allowed**. Entered via the pane header's 크게 보기.
+- `ui/BacktestWindow.tsx` — the floating backtest window (one instance,
+  `bt`/`bti`/`btf` URL namespace, header-only drag).
+- `ui/floatingWindow.ts` — its geometry: clamp + session-remembered position.
+- `ui/urlState.ts` — `mergeQuery` + the `bt`↔`tile` namespace split; every
+  URL write goes through it.
 - `ui/tint.ts` — shared grid background-tint scale (forward matrix + heatmap).
 - `ui/useMeasure.ts` — **callback-ref** ResizeObserver width hook (see gotcha).
 - `ui/motion.ts` — shared springs / press-scale / reduced-motion instants.
@@ -179,13 +184,43 @@ rule:
 
 ---
 
-## 6. Current state (as of the 2026-08-03 session)
+## 6. Current state (as of the 2026-08-04 session)
 
-### Latest — visible-range 최고/최저 in the dormant zoom chart (2026-08-03)
+### Latest — the backtest is a floating window; the enlarged view returns (2026-08-04)
+
+The modal backtest sheet became a draggable floating window:
+`ui/BacktestWindow.tsx` (renamed from BacktestSheet), geometry in
+`ui/floatingWindow.ts` — ONE instance (presence IS the `bt` URL param),
+header-only drag with pointer capture, no resize / no minimize,
+session-remembered position clamped so the handle never leaves the viewport,
+opaque surface + `border-edge-live` hairline (no shadow, no backdrop),
+`Z_WINDOW` (z-45) above chrome / below modals. The app underneath stays fully
+interactive. The URL split into orthogonal namespaces (`ui/urlState.ts`):
+`bt`/`bti`/`btf` for the window, `tile`/`type` for the enlarged view; every
+write goes through `mergeQuery` (patches only its own keys), and window
+open/close REPLACE the history entry so back/forward walk tab/tile state
+UNDER the window — the structural fix for the back-wipes-the-popup family
+(pass Q's nonce + session memory still restore contents; its close-is-back
+rule moved to the enlarged view, which pushes). Freeing `?tile=` brought
+**`EnlargedView` + `wall/DetailChart` back LIVE** — entered by the pane
+header's 크게 보기 (chart click still = backtest [OWNER]) — so the
+visible-range 최고/최저 built dark the day before now render, with the
+선/주봉/월봉 selector riding `type` in the URL. bp instruments draw no CD
+overlay there until DetailChart grows a second price scale [TBD]. Guards:
+new `backtest-window.test.ts` (namespace orthogonality, clamp geometry,
+opaque/no-dim markup, single instance, session-only position);
+`backtest-back.test.ts` rewritten to replace-never-push;
+`failure-visible`/`krw-additivity`/`readout-parity` re-anchored. Verified
+live in Chrome: open→실행→drag→크게 보기 over the window→Esc→window intact
+as dragged→close clears only `bt*`. Gates both modes: BE **234 passed / 21
+skipped**, FE **504 passed / 1 skipped**, lint 0, build 0, agreement
+**20/20**.
+
+### Before that — visible-range 최고/최저 in the dormant zoom chart (2026-08-03)
 
 Owner-directed follow-through of Provisional pass O's reserved extension:
-`wall/DetailChart.tsx` (STILL unreferenced — dark until the popup is
-re-wired, the open owner decision) now recomputes 최고/최저 marks from the
+`wall/DetailChart.tsx` (then unreferenced — re-wired LIVE the next session,
+see Latest) now recomputes 최고/최저 marks from the
 visible logical range on every zoom/pan. Pure scan in `ui/extremes.ts`
 (`extremeMarks` + `lineSpans`/`candleSpans`: closes in line mode, wick
 high/low in candle mode — the same data autoscale reads, so marks agree
@@ -350,7 +385,8 @@ and its 120s-TTFB problem does not apply here (backtest 0.6–3.4s vs simulate's
 **Open:** `ui/EnlargedView.tsx` and `wall/DetailChart.tsx` are unreferenced —
 the chart click opens the backtest now. Deleting them costs weekly/monthly
 candles and the six-basis readout, which the owner has not ruled on. They carry
-a ⚠ note.
+a ⚠ note. [RESOLVED 2026-08-04: both live again — the backtest moved to a
+floating window and `?tile=` returned to the enlarged view.]
 
 
 
