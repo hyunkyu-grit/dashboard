@@ -65,6 +65,7 @@ describe("windowExtremes is a function of the window, nothing else", () => {
 });
 
 describe("the rendered chart: marks move with the window; the grid stays behind", () => {
+  const DATES4 = ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08"];
   const render = (points: HistoryPoint[]) =>
     renderToStaticMarkup(
       createElement(PreviewChart, {
@@ -93,6 +94,34 @@ describe("the rendered chart: marks move with the window; the grid stays behind"
     const m = marks(render(SERIES.slice(2)));
     const lo = m.find((d) => d.k === "lo")!;
     expect(lo.cx).toBe(6); // PAD.left — the window's leading edge
+  });
+
+  it("the extremes SAY their value, in the level grammar [OWNER, 2026-08-03]", () => {
+    // "지난 10년간 최고치 최저치를 바로 보일 수 있게" — a dot without its
+    // number answers nothing. The value is data, so it prints through
+    // fmtLevel (4dp for %), never the axis' coarse grammar.
+    const m = render(SERIES);
+    expect(m).toContain(">4.2000<");
+    expect(m).toContain(">2.4000<");
+    // a flat window has ONE value and prints it once, not twice on one spot
+    const flat = render(DATES4.map((t) => ({ t, v: 3, d: 0 })));
+    expect(flat.match(/>3\.0000</g)).toHaveLength(1);
+  });
+
+  it("every horizontal gridline carries its level [OWNER, 2026-08-03]", () => {
+    // before this, a chart without the reference overlay — every outright,
+    // the whole 변동성 tab — had no numbers anywhere on its axis. Three
+    // gridlines, three values, in fmtAxis' coarse grammar; bare on a
+    // single-scale chart (units only disambiguate dual axes, pass M's rule).
+    const texts = [...render(SERIES).matchAll(/<text[^>]*>([^<]*)<\/text>/g)]
+      .map((x) => x[1]);
+    const bare = texts.filter((t) => /^-?\d+\.\d\d$/.test(t));
+    expect(bare.length).toBeGreaterThanOrEqual(3);
+    // and the values orient on the instrument's own domain
+    for (const t of bare) {
+      expect(Number(t)).toBeGreaterThan(2.2);
+      expect(Number(t)).toBeLessThan(4.4);
+    }
   });
 
   it("the grid is the lightest ink and painted BEFORE the series line", () => {

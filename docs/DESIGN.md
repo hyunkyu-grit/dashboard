@@ -266,6 +266,28 @@ not the unreachable `DetailChart`):
   contrast-tuned per theme) and was verified in both themes against the
   series line. This chart is the sanctioned exception to the S14 "no
   vertical gridlines" app-wide default [OWNER, pass O].
+- **Every horizontal gridline carries its value, and the extremes say
+  theirs** [OWNER, 2026-08-03 — "그리드에 해당하는 금리나 레벨 적어주고,
+  동시에 지난 10년간 최고치 최저치를 바로 보일 수 있게", all five tabs].
+  Before this, a chart without the reference overlay — every outright, the
+  whole 변동성 tab — had NO numbers anywhere on its axis. Gridline values
+  print in `fmtAxis`'s coarse orientation grammar, BARE on a single-scale
+  chart; unit suffixes appear only in "secondary" mode where two scales
+  share the plot (left bp, right %) — one scale needs no disambiguation, and
+  this is what keeps pass M's unlabelled-second-axis rule and the
+  single-axis minimalism from contradicting each other. The extreme dots'
+  values are DATA, so they print through `fmtLevel` (high above its dot, low
+  below, clamped inside the plot, end-anchored near the edges); a flat
+  window prints its one value once. `GRID_FRACS` is one list for the lines
+  and their labels, so the two cannot drift.
+  - ⚠ **The low label exposed a served wrong number**: `3Mx3M`'s first ten
+    dates (2016-01-04 → 01-15, exactly the loader's "3M: 10 blank value(s)"
+    rows) are served as **0.0%** — the forward reprice on a blank-3M date
+    emits 0 instead of skipping, so that chart's 최저 honestly reads 0.0000.
+    The only %-unit series affected (bp zeros are real prints). Backend is
+    owner-gated; the fix belongs in `forwards.py` (skip/None the dates whose
+    reprice cannot stand), which is a SCHEMA_VERSION bump + rebuild. [TBD —
+    owner]
 
 ### The backtest [OWNER, 2026-07-31]
 

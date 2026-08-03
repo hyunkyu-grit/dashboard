@@ -10,7 +10,7 @@ import { useState } from "react";
 
 import type { HistoryPoint, PolicyStep, SeriesStats, Unit } from "@/lib/api";
 
-import { fmtAxis } from "@/lib/format";
+import { fmtAxis, fmtLevel } from "@/lib/format";
 
 import { windowExtremes } from "./extremes";
 import {
@@ -35,6 +35,10 @@ import { dateLabels } from "./timeAxis";
 // top pad holds the reference-line legend (§ reference lines), so it is
 // deeper than the 10px the plot alone needed
 const PAD = { top: 16, right: 10, bottom: 18, left: 6 };
+
+/** Where the horizontal gridlines sit, as fractions of the plot height. ONE
+ * list for the lines and their value labels, so the two cannot drift. */
+const GRID_FRACS = [0.25, 0.5, 0.75];
 
 export function PreviewChart({
   points,
@@ -184,11 +188,12 @@ export function PreviewChart({
             lightest ink (`stroke-edge`, the hairline token: ink at 12% light /
             18% dark, already contrast-tuned per theme) and sits UNDER
             everything else. Verticals ride the date labels' own x positions
-            so furniture aligns with furniture; horizontals quarter the plot.
+            so furniture aligns with furniture; horizontals quarter the plot
+            and CARRY THEIR VALUE (the labels render above the series, below).
             This chart is the sanctioned exception to the S14 "no vertical
             gridlines" default [OWNER, pass O]. */}
         <g>
-          {[0.25, 0.5, 0.75].map((f) => (
+          {GRID_FRACS.map((f) => (
             <line
               key={`gh-${f}`}
               x1={PAD.left}
@@ -238,36 +243,42 @@ export function PreviewChart({
             strokeDasharray="3 3"
           />
         ))}
-        {/* Two axes on one plot exist only in "secondary" mode, and BOTH are
-            then labelled with their unit [OWNER, 2026-08-03]: the instrument's
-            bp scale on the left, the references' % scale on the right. An
-            unlabelled second axis is a misreading waiting to happen — a
-            reader has no way to know 2.75 is not 2.75bp. Orientation marks in
-            `fmtAxis`'s coarse grammar (same role as CurveView's y labels),
-            never data. */}
-        {mode === "secondary" &&
-          refDomain &&
-          [0.15, 0.85].map((f) => (
-            <g key={f}>
-              <text
-                x={PAD.left + 2}
-                y={y(yMin + (yMax - yMin) * f) + 4}
-                className="fill-ink"
-                style={{ fontSize: 10, opacity: 0.5 }}
-              >
-                {`${fmtAxis(yMin + (yMax - yMin) * f, unit)}${unit}`}
-              </text>
+        {/* EVERY horizontal gridline carries its value [OWNER, 2026-08-03 —
+            "그리드에 해당하는 금리나 레벨 적어주고"]: before this, a chart
+            without the reference overlay (every outright, and the whole
+            변동성 tab) had no numbers anywhere on its axis. Left = the
+            instrument's own scale, on every chart, in `fmtAxis`'s coarse
+            orientation grammar (same role as CurveView's y labels — the
+            precise numbers live on the extremes and in the tooltip). Units
+            are printed only when TWO scales share the plot ("secondary"
+            mode): there "25.0" alone could be either axis, so the left
+            ticks say bp and the right ticks — the references' own % scale —
+            say %. One scale needs no disambiguating suffix. */}
+        {GRID_FRACS.map((f) => (
+          <g key={`glabel-${f}`}>
+            <text
+              x={PAD.left + 2}
+              y={PAD.top + f * plotH - 3}
+              className="fill-ink"
+              style={{ fontSize: 10, opacity: 0.5 }}
+            >
+              {`${fmtAxis(yMax - f * (yMax - yMin), unit)}${
+                mode === "secondary" && refDomain ? unit : ""
+              }`}
+            </text>
+            {mode === "secondary" && refDomain && (
               <text
                 x={width - PAD.right - 2}
-                y={yRef(refMin + (refMax - refMin) * f) + 4}
+                y={PAD.top + f * plotH - 3}
                 textAnchor="end"
                 className="fill-ink"
                 style={{ fontSize: 10, opacity: 0.5 }}
               >
-                {`${fmtAxis(refMin + (refMax - refMin) * f, "%")}%`}
+                {`${fmtAxis(refMax - f * (refMax - refMin), "%")}%`}
               </text>
-            </g>
-          ))}
+            )}
+          </g>
+        ))}
         <polyline
           points={path}
           fill="none"
@@ -275,26 +286,58 @@ export function PreviewChart({
           strokeWidth={1.6}
           strokeLinejoin="round"
         />
-        {/* The extremes of what is CURRENTLY PLOTTED, marked on the line
-            (pass O). Viewport property: they derive from the same scan the
-            y-domain uses, over the `points` prop — so any windowing (a
-            different slice, a future zoom) moves them by construction.
-            Ties take the first occurrence; a flat window's two marks
-            coincide on its first point (extremes.ts). NOT the 52-week
-            stats: those are a fixed server-side window in the tooltip. */}
+        {/* The extremes of what is CURRENTLY PLOTTED, marked on the line AND
+            SAYING THEIR VALUE (pass O; the value by owner instruction,
+            2026-08-03 — "지난 10년간 최고치 최저치를 바로 보일 수 있게").
+            Viewport property: they derive from the same scan the y-domain
+            uses, over the `points` prop — so any windowing (a different
+            slice, a future zoom) moves them by construction. Ties take the
+            first occurrence; a flat window's two marks coincide on its first
+            point and print their one value ONCE (extremes.ts). NOT the
+            52-week stats: those are a fixed server-side window in the
+            tooltip. The value is DATA, so it prints through `fmtLevel` — the
+            product's level grammar — never the axis' coarse one; the high
+            sits above its dot, the low below, each clamped inside the plot
+            and end-anchored near the edges. */}
         {[
           { k: "hi", i: ext.hi },
           { k: "lo", i: ext.lo },
-        ].map(({ k, i }) => (
-          <circle
-            key={k}
-            data-extreme={k}
-            cx={x(i)}
-            cy={y(points[i].v)}
-            r={2.5}
-            fill="currentColor"
-          />
-        ))}
+        ].map(({ k, i }) => {
+          const px = x(i);
+          const py = y(points[i].v);
+          const anchor =
+            px < PAD.left + plotW * 0.08
+              ? "start"
+              : px > PAD.left + plotW * 0.92
+                ? "end"
+                : "middle";
+          const ty =
+            k === "hi"
+              ? Math.max(PAD.top + 9, py - 6)
+              : Math.min(height - PAD.bottom - 3, py + 14);
+          return (
+            <g key={k}>
+              <circle
+                data-extreme={k}
+                cx={px}
+                cy={py}
+                r={2.5}
+                fill="currentColor"
+              />
+              {(k === "hi" || ext.lo !== ext.hi) && (
+                <text
+                  x={px}
+                  y={ty}
+                  textAnchor={anchor}
+                  className="fill-ink"
+                  style={{ fontSize: 10, opacity: 0.75 }}
+                >
+                  {fmtLevel(points[i].v, unit)}
+                </text>
+              )}
+            </g>
+          );
+        })}
         {legend.map((g, i) => {
           const lx = width - PAD.right - 74 - i * 82;
           return (
