@@ -12,6 +12,7 @@ import type { HistoryPoint, PolicyStep, SeriesStats, Unit } from "@/lib/api";
 
 import { fmtAxis } from "@/lib/format";
 
+import { windowExtremes } from "./extremes";
 import {
   alignSeries,
   policyAxisMode,
@@ -71,13 +72,12 @@ export function PreviewChart({
   const plotH = height - PAD.top - PAD.bottom;
   // y-domain from the PLOTTED points, not from stats: the stats are 52-week
   // (annual-stats session) while the line still shows the full history — a
-  // domain from annual stats would clip the 2020-21 trough.
-  let lo = Infinity;
-  let hi2 = -Infinity;
-  for (const p of points) {
-    if (p.v < lo) lo = p.v;
-    if (p.v > hi2) hi2 = p.v;
-  }
+  // domain from annual stats would clip the 2020-21 trough. The same scan
+  // yields the marked extremes (pass O): domain and dots share one source,
+  // so the dot claiming "high" sits exactly where the domain was stretched.
+  const ext = windowExtremes(points)!; // points.length >= 2, checked above
+  let lo = points[ext.lo].v;
+  let hi2 = points[ext.hi].v;
   /* How the overlay meets this axis is a UNIT question (policyLine.ts):
    *
    *   shared    (%)  — the references are in the instrument's own unit, so the
@@ -180,6 +180,37 @@ export function PreviewChart({
         role="img"
         aria-label="10y history"
       >
+        {/* Background grid (pass O) — furniture, so it takes the palette's
+            lightest ink (`stroke-edge`, the hairline token: ink at 12% light /
+            18% dark, already contrast-tuned per theme) and sits UNDER
+            everything else. Verticals ride the date labels' own x positions
+            so furniture aligns with furniture; horizontals quarter the plot.
+            This chart is the sanctioned exception to the S14 "no vertical
+            gridlines" default [OWNER, pass O]. */}
+        <g>
+          {[0.25, 0.5, 0.75].map((f) => (
+            <line
+              key={`gh-${f}`}
+              x1={PAD.left}
+              x2={width - PAD.right}
+              y1={PAD.top + f * plotH}
+              y2={PAD.top + f * plotH}
+              className="stroke-edge"
+              strokeWidth={1}
+            />
+          ))}
+          {labels.map((l) => (
+            <line
+              key={`gv-${l.text}`}
+              x1={l.px}
+              x2={l.px}
+              y1={PAD.top}
+              y2={PAD.top + plotH}
+              className="stroke-edge"
+              strokeWidth={1}
+            />
+          ))}
+        </g>
         {/* Both references go UNDER the instrument line: they are what the
             instrument is read against, not second subjects. Ink, not hue, and
             told apart by DASH PATTERN so the distinction survives in
@@ -244,6 +275,26 @@ export function PreviewChart({
           strokeWidth={1.6}
           strokeLinejoin="round"
         />
+        {/* The extremes of what is CURRENTLY PLOTTED, marked on the line
+            (pass O). Viewport property: they derive from the same scan the
+            y-domain uses, over the `points` prop — so any windowing (a
+            different slice, a future zoom) moves them by construction.
+            Ties take the first occurrence; a flat window's two marks
+            coincide on its first point (extremes.ts). NOT the 52-week
+            stats: those are a fixed server-side window in the tooltip. */}
+        {[
+          { k: "hi", i: ext.hi },
+          { k: "lo", i: ext.lo },
+        ].map(({ k, i }) => (
+          <circle
+            key={k}
+            data-extreme={k}
+            cx={x(i)}
+            cy={y(points[i].v)}
+            r={2.5}
+            fill="currentColor"
+          />
+        ))}
         {legend.map((g, i) => {
           const lx = width - PAD.right - 74 - i * 82;
           return (

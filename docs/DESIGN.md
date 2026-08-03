@@ -240,6 +240,33 @@ the instruction.
   `calendar.json` (the backend must not read the frontend tree at runtime);
   `test_mpc_dates_match_the_calendar` fails if the copies drift.
 
+### Visible-window extremes and the background grid [pass O, 2026-08-03]
+
+Two additions to the detail chart (`PreviewChart` — since the pane-sizing
+change it IS the product's detail view; see `## Provisional` pass O for why
+not the unreachable `DetailChart`):
+
+- **The high and the low of what is currently plotted are marked as dots on
+  the line** (`ui/extremes.ts::windowExtremes`). A VIEWPORT property, not a
+  series property: they derive from the `points` prop — the plotted slice —
+  in the same scan that builds the y-domain, so the dot claiming "high" sits
+  exactly where the domain was stretched and any windowing (a different
+  slice today, a zoom later) moves them by construction. Deliberately NOT in
+  the payload, and deliberately NOT the 52-week stats (a fixed server-side
+  window, answered in the tooltip). Ties take the FIRST occurrence; a flat
+  window's two marks coincide on its first point. Measured on the longest
+  series (10Y full, 2,614 points): the scan is 4.4µs against the ~0.97ms the
+  chart render already costs per hover — 0.5% of a cost that was already
+  being paid. Pinned by `guards/window-extremes.test.ts`, including a window
+  whose extreme sits exactly on the edge.
+- **A background grid, behind everything** — horizontals at the plot's
+  quarter lines, verticals riding the date labels' own x positions so
+  furniture aligns with furniture. It takes the palette's lightest ink
+  (`stroke-edge`, the hairline token: ink at 12% light / 18% dark, already
+  contrast-tuned per theme) and was verified in both themes against the
+  series line. This chart is the sanctioned exception to the S14 "no
+  vertical gridlines" app-wide default [OWNER, pass O].
+
 ### The backtest [OWNER, 2026-07-31]
 
 **"그때 들어갔으면 지금 얼마였을까."** Clicking the CHART opens it; a row click
@@ -2497,6 +2524,22 @@ evidence that forced it. Referenced from several places above; it did not exist
 as a heading until the hardening session, which is itself worth noting: the
 references pointed at a section that had been absorbed into "Settled decisions"
 and stopped being a live record.
+
+### Pass O (2026-08-03) — "the detail chart" is the pane chart, not the dead popup chart
+
+The brief said "the detail chart" and spoke of zoom and pan. The only chart
+with zoom is `wall/DetailChart.tsx` (lightweight-charts) — which has been
+UNREFERENCED since the backtest took the `?tile=` slot [OWNER, 2026-07-31]:
+no click path reaches it, and HANDOFF carries its deletion as an open owner
+decision. Building the feature there would produce code no reader can see
+and no live check can verify, so the extremes and the grid went to the chart
+that IS the product's detail view since the pane-sizing change — the
+pane-sized, full-resolution `PreviewChart` (which the owner asked to be "더
+자세하고" in that decision). It has no zoom TODAY; the extremes are a pure
+function of the plotted slice, so a future zoom or range control inherits
+them unchanged. **To reverse / extend:** if the enlarged chart ever returns,
+give it the same two features via `windowExtremes` over its visible range —
+the module is chart-agnostic on purpose.
 
 ### Pass N (2026-08-03) — the position track shows a statistic the chips do not use
 
