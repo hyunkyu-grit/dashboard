@@ -434,15 +434,17 @@ function Result({
       </div>
 
       {/* Which position carried it. Numbers, not lines — see the header note.
-          진입 레벨 and 진입 par (pass P): both were computed at backtest time
-          and already in the payload — the level is the instrument's quoted
-          number on the entry date, the par rate is what the swap was struck
-          at from that date's own curve. The row shows less than the server
-          knows otherwise. Levels print through `entryLevelText` (= fmtLevel,
-          the table's grammar); the par rate is a single number only for a
-          one-swap position — a package has one par rate PER LEG, and those
-          are in the fold below, stated per leg rather than averaged into a
-          figure no desk quotes. */}
+          진입 레벨 (pass P): computed at backtest time and already in the
+          payload — the instrument's quoted number on the entry date, printed
+          through `entryLevelText` (= fmtLevel, the table's grammar). The
+          진입 par column that briefly sat beside it is GONE [OWNER,
+          2026-08-03 — "아웃라이트에서는 진입레벨과 진입par가 같은
+          개념일텐데 왜 중복으로 적혀있는거야"]: for a one-swap position the
+          two are the same concept (par ≈ the quoted level, exactly so on a
+          quoted node), and for a package it printed a dash because a package
+          has one par PER LEG. A column that is either a duplicate or a dash
+          earns no width; the struck par rates live in the fold's per-leg
+          table, where they are a fact per swap. */}
       <table className="mt-5 w-full text-[13px] tabular-nums">
         <thead className="text-left text-ink/50">
           <tr>
@@ -450,7 +452,6 @@ function Result({
             <th className="pb-1 font-normal">방향</th>
             <th className="pb-1 pr-4 text-right font-normal">명목</th>
             <th className="pb-1 pr-4 text-right font-normal">진입 레벨</th>
-            <th className="pb-1 pr-4 text-right font-normal">진입 par</th>
             <th className="pb-1 font-normal">기간</th>
             <th className="pb-1 text-right font-normal">손익</th>
           </tr>
@@ -474,16 +475,6 @@ function Result({
                   <span className="ml-0.5 text-[11px] opacity-45">
                     {LEVEL_SUFFIX[unitOf(p.id)]}
                   </span>
-                )}
-              </td>
-              <td className="py-1.5 pr-4 text-right">
-                {p.legs.length === 1 ? (
-                  <>
-                    {entryLevelText(p.legs[0].entryRate, "%")}
-                    <span className="ml-0.5 text-[11px] opacity-45">%</span>
-                  </>
-                ) : (
-                  <span title="다리마다 par가 다릅니다 — 아래 다리별 구성에 있습니다">—</span>
                 )}
               </td>
               <td className="py-1.5 text-[12px] opacity-60">

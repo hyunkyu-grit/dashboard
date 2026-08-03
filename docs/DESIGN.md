@@ -306,17 +306,20 @@ still pins. It took the enlarged chart's slot, because the pane chart is now
 pane-sized and a popup whose job was "the same line, bigger" had nothing left
 to do.
 
-**The entry row states the level and the par rate at entry [pass P,
-2026-08-03].** Both were ALREADY in the payload, computed once at backtest
-time — `entryValue` is the instrument's quoted number on the entry date
-(`_quoted_value`, a table lookup) and `legs[].entryRate` is what each swap
-was struck at from that date's own bootstrap — so this is a display change
-with zero new backend work; the per-row-bootstrap cost the brief warned
-about never arises. Levels print through `entryLevelText` (= `fmtLevel`, the
-main table's grammar; pinned byte-identical by `guards/readout-parity`). The
-par column is a single number only for a one-swap position; a package has
-one par PER LEG (stated in the fold), and averaging them would invent a
-figure no desk quotes. The fold's `entry → exit (Δbp)` line now differences
+**The entry row states the level at entry [pass P, 2026-08-03; par column
+removed same day].** `entryValue` was ALREADY in the payload, computed once
+at backtest time (`_quoted_value`, a table lookup), so this is a display
+change with zero new backend work; the per-row-bootstrap cost the brief
+warned about never arises. Levels print through `entryLevelText`
+(= `fmtLevel`, the main table's grammar; pinned byte-identical by
+`guards/readout-parity`). A 진입 par column shipped beside it for a few
+hours and was removed on sight [OWNER — "아웃라이트에서는 진입레벨과
+진입par가 같은 개념일텐데 왜 중복으로 적혀있는거야"]: for a one-swap
+position par IS the quoted level (exactly so on a quoted node), and for a
+package it printed a dash because a package has one par PER LEG — a column
+that is either a duplicate or a dash earns no width. The struck par rates
+stay in the fold's per-leg table (`legs[].entryRate`), where they are a fact
+per swap. The fold's `entry → exit (Δbp)` line now differences
 the DISPLAYED endpoints, so the sentence agrees with itself at displayed
 precision — the raw form could print `26.5 → 25.3 (−1.3bp)` on the 0.25bp
 quote grid, whose own subtraction says 1.2.
