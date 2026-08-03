@@ -53,15 +53,53 @@ import { Z_MODAL } from "./layers";
 import { SHEET_SPRING } from "./motion";
 import { GROUP_LABEL, type Group, type Row } from "./rows";
 
-/** Money, the way a Korean desk reads it: 억 / 만, never 12 raw digits. */
-export function fmtKrw(v: number): string {
-  const sign = v < 0 ? "−" : "+";
-  const n = Math.abs(Math.round(v));
-  if (n < 10_000) return `${sign}${n.toLocaleString()}원`;
-  const eok = Math.floor(n / 100_000_000);
-  const man = Math.floor((n % 100_000_000) / 10_000);
+/* Money, the way a Korean desk reads it: 억 / 만, never 12 raw digits.
+ *
+ * ROUNDED to the nearest 만원, not floored (2026-08-03 verification). The
+ * floor shipped a visible lie: the real book was 평가 1,091,329,056 + 캐리
+ * 823,973 = 1,092,153,029 to the won, and the screen said 9,132만 + 82만
+ * against a 9,215만 total — off by one 만원, purely from truncating each
+ * figure separately. Rounding alone does not make parts SUM at displayed
+ * precision, though; that is `splitKrw` below, which the 손익 구성 table
+ * must use. Symmetric under negation (sign·round(|v|)), so a payer and its
+ * mirror receiver always print mirror figures. */
+
+/** Nearest 만원, as signed integer units — the arithmetic domain in which
+ * displayed money is additive. */
+export function manUnits(v: number): number {
+  return Math.sign(v) * Math.round(Math.abs(v) / 10_000);
+}
+
+/** Money from signed 만-units. The units-based twin of `fmtKrw`: a table
+ * whose parts must sum at displayed precision does its arithmetic on units
+ * and formats the results through this. */
+export function fmtKrwFromMan(units: number): string {
+  const sign = units < 0 ? "−" : "+";
+  const n = Math.abs(units);
+  const eok = Math.floor(n / 10_000);
+  const man = n % 10_000;
   if (eok > 0) return `${sign}${eok}억${man ? ` ${man.toLocaleString()}만` : ""}원`;
   return `${sign}${man.toLocaleString()}만원`;
+}
+
+export function fmtKrw(v: number): string {
+  const n = Math.abs(Math.round(v));
+  if (n < 10_000) return `${v < 0 ? "−" : "+"}${n.toLocaleString()}원`;
+  return fmtKrwFromMan(manUnits(v));
+}
+
+/** 평가 + 캐리 = 합계, AT DISPLAYED PRECISION, by construction: the total and
+ * the valuation round once each, and the carry IS their difference in
+ * 만-units — the fmtMove precedent (difference the displayed endpoints)
+ * applied to money. Rounding all three independently can miss by a 만원,
+ * which is exactly the defect the old carry & roll block was deleted for. */
+export function splitKrw(
+  pnl: number,
+  valuation: number,
+): { uPnl: number; uVal: number; uCarry: number } {
+  const uPnl = manUnits(pnl);
+  const uVal = manUnits(valuation);
+  return { uPnl, uVal, uCarry: uPnl - uVal };
 }
 
 /** 억 in, raw won out. The input is in 억 because nobody types eleven zeros. */
@@ -483,41 +521,56 @@ function Result({
             <th className="pb-1 text-right font-normal">합계</th>
           </tr>
         </thead>
+        {/* The grid is ADDITIVE AT DISPLAYED PRECISION, by construction
+            (2026-08-03 verification): each row's 캐리 is 합계 − 평가 in
+            만-units (splitKrw), and the 합계 row is the COLUMN SUM of the
+            displayed rows — so every row sums across, every column sums
+            down, and no reader's mental arithmetic can catch the table
+            lying by a 만원. The server relationship is exact to the won
+            (verified: 1,499 points, worst gap 1원); this is purely about
+            what rounding does to three figures printed separately. A
+            sub-만원 figure prints as ±0만원 here — the attribution table
+            keeps one unit so it keeps its arithmetic. */}
         <tbody>
-          {result.positions.map((p, i) => (
-            <tr key={`${p.id}-${i}`} className="border-t border-edge">
-              <td className="py-1.5">{naming.get(p.id)?.label ?? p.id}</td>
-              <td
-                className={`py-1.5 text-right ${
-                  p.valuation >= 0 ? "text-up" : "text-down"
-                }`}
-              >
-                {fmtKrw(p.valuation)}
-              </td>
-              <td
-                className={`py-1.5 text-right ${
-                  p.carry >= 0 ? "text-up" : "text-down"
-                }`}
-              >
-                {fmtKrw(p.carry)}
-              </td>
-              <td className="py-1.5 text-right font-semibold">
-                {fmtKrw(p.pnl)}
-              </td>
-            </tr>
-          ))}
-          {result.positions.length > 1 && (
-            <tr className="border-t-2 border-t-edge font-semibold">
-              <td className="py-1.5">합계</td>
-              <td className="py-1.5 text-right">
-                {fmtKrw(result.positions.reduce((a, p) => a + p.valuation, 0))}
-              </td>
-              <td className="py-1.5 text-right">
-                {fmtKrw(result.positions.reduce((a, p) => a + p.carry, 0))}
-              </td>
-              <td className="py-1.5 text-right">{fmtKrw(result.pnl)}</td>
-            </tr>
-          )}
+          {result.positions.map((p, i) => {
+            const u = splitKrw(p.pnl, p.valuation);
+            return (
+              <tr key={`${p.id}-${i}`} className="border-t border-edge">
+                <td className="py-1.5">{naming.get(p.id)?.label ?? p.id}</td>
+                <td
+                  className={`py-1.5 text-right ${
+                    u.uVal >= 0 ? "text-up" : "text-down"
+                  }`}
+                >
+                  {fmtKrwFromMan(u.uVal)}
+                </td>
+                <td
+                  className={`py-1.5 text-right ${
+                    u.uCarry >= 0 ? "text-up" : "text-down"
+                  }`}
+                >
+                  {fmtKrwFromMan(u.uCarry)}
+                </td>
+                <td className="py-1.5 text-right font-semibold">
+                  {fmtKrwFromMan(u.uPnl)}
+                </td>
+              </tr>
+            );
+          })}
+          {result.positions.length > 1 &&
+            (() => {
+              const rows = result.positions.map((p) => splitKrw(p.pnl, p.valuation));
+              const sum = (f: (u: ReturnType<typeof splitKrw>) => number) =>
+                rows.reduce((a, u) => a + f(u), 0);
+              return (
+                <tr className="border-t-2 border-t-edge font-semibold">
+                  <td className="py-1.5">합계</td>
+                  <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uVal))}</td>
+                  <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uCarry))}</td>
+                  <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uPnl))}</td>
+                </tr>
+              );
+            })()}
         </tbody>
       </table>
       <p className="mt-1.5 text-[12px] opacity-50">

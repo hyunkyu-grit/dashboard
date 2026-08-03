@@ -321,6 +321,29 @@ the DISPLAYED endpoints, so the sentence agrees with itself at displayed
 precision — the raw form could print `26.5 → 25.3 (−1.3bp)` on the 0.25bp
 quote grid, whose own subtraction says 1.2.
 
+**평가/캐리 VERIFIED, and the display made additive [2026-08-03, owner
+ask].** The split was audited through paths the engine does not share:
+identity |손익 − (평가+캐리)| ≤ 1원 across 1,499 revaluation points on 7
+positions; payer/receiver mirror to the won and 2× notional scales by
+exactly 2.000000; entry-day clean NPV is −0.005bp (1Y) to +0.33bp (4Y,
+interpolated) of notional; a matured 1Y ends with |평가| ≈ 0.11bp of
+notional and 손익 ≈ 캐리; an 8-day 10Y window matches DV01×Δ within 3.3%
+(the residual is the non-parallel reshaping revaluation exists to capture);
+and a clean-room carry recomputation (engine schedule DATES only; fixing
+selection F(R)=reset−1 Seoul bd, accruals, signs and the current-period stub
+re-implemented separately against the raw CD series) reproduced the engine's
+캐리 to the won — 0원 difference on 10Y×1y and two matured 1Ys. Carry's sign
+matched avg-fixing-vs-strike in every case. THE SERVER NUMBERS ARE SOUND.
+The defect found was DISPLAY: `fmtKrw` FLOORED to the 만원, so the real
+1,091,329,056 + 823,973 = 1,092,153,029 printed as 9,132만 + 82만 against a
+9,215만 total — the carry-block deletion's defect class, shipped again.
+`fmtKrw` now ROUNDS (symmetrically, so mirror positions print mirror
+figures), and the 손익 구성 table does its arithmetic in 만-units
+(`splitKrw`: 캐리 IS 합계 − 평가; the 합계 row is the column sum of the
+displayed rows), so the grid sums across and down by construction. Pinned by
+`guards/krw-additivity.test.ts`, including the live case now reading
+9,133 + 82 = 9,215.
+
 **BACK RETURNS THE SHEET AS LEFT [pass Q, 2026-08-03].** The rule, stated
 per level: the URL decides WHICH popup is open (`tile` + `from`); the
 popup's CONTENTS (the book, the last run's answer) live in session memory
