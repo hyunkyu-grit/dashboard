@@ -92,7 +92,12 @@ def series_pairs(
     """
     # imported here: forwards imports derive, and a module-level import would
     # close the cycle
-    from .forwards import forward_history, forward_par_rate, parse_forward_id
+    from .forwards import (
+        curve_prices_span,
+        forward_history,
+        forward_par_rate,
+        parse_forward_id,
+    )
 
     if series_id.startswith("vol:"):
         # Volatility history: the relative-ATR ratio for a tenor. Ratio levels
@@ -109,7 +114,12 @@ def series_pairs(
         return [
             (d.isoformat(), round(forward_par_rate(z, start_y, tenor_y) * 100, 4))
             for d, z in zip(dataset.dates, zcs)
-            if z is not None
+            # the SAME skip the lazy path applies inside forward_history —
+            # this fast path bypassed it and kept emitting the ten 0.0% rows
+            # after the fix, and the agreement suite's series sample happens
+            # not to include a span-sensitive forward, so only a direct look
+            # at the emitted file caught it (V-PASS V5)
+            if z is not None and curve_prices_span(z, start_y)
         ], "%"
 
     values = series_values(dataset, series_id)

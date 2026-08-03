@@ -68,6 +68,22 @@ is not exercised here because both columns are present.)
 - **CD91 fixing**: one Seoul business day before the reset date (the ported
   CD-IRS convention; §0).
 
+## Backtest request dates (braveworld-owned, `app/backtest.py`)
+
+A requested **entry** maps to the first close **on or after** it
+(`_index_on_or_after`); a requested **exit** maps to the last close **on or
+before** it (`_index_on_or_before`). This is deliberately **NOT ModFol**:
+both edges roll **into** the requested window, so a weekend/holiday request
+is never charged a day it did not ask to hold. Nothing shifts silently —
+the response's `entry`/`exit` fields report the dates actually used, and
+`test_backtest_edges.py::test_request_dates_roll_conservatively_and_visibly`
+pins both directions. Exit **on** the entry date is a legal degenerate
+(struck and unwound at one close: 0원, both components 0 — V-PASS V5,
+2026-08-03; it used to 422); exit before entry stays refused. ModFol
+remains the convention for **schedule** dates (forward start dates, coupon
+payment adjustment) as documented above — request-date mapping and schedule
+generation are different jobs.
+
 ## What is frozen (`engine_port.py`)
 
 `bootstrap_zero_curve`, `df`, `df_linear_rate`, `zero_rate`,

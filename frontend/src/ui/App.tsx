@@ -29,7 +29,7 @@ import { ErrorState, LoadingState } from "./DataState";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { classify } from "./gloss";
 import { diagramSpec } from "./payReceiveModel";
-import { BacktestSheet } from "./BacktestSheet";
+import { BacktestSheet, BOOKABLE_GROUPS } from "./BacktestSheet";
 import { InstrumentTable } from "./InstrumentTable";
 import { Z_MODAL } from "./layers";
 import { SHEET_SPRING } from "./motion";
@@ -525,7 +525,16 @@ export function App() {
                 params.get("bt") ??
                 `${tileParam}|${params.get("from") ?? ""}`
               }
-              captured={pinned}
+              /* only BOOKABLE pins are captured [V-PASS V5]: a pinned
+                 forward or 변동성 row slipped past the dropdown's filter
+                 into the book and 422'd two clicks later at 실행. Filtered
+                 at the source — the sheet's capture effect cannot grow a
+                 branch around its setState (compiler lint). */
+              captured={
+                pinned && BOOKABLE_GROUPS.includes(pinned.group)
+                  ? pinned
+                  : null
+              }
               onClose={closeBacktest}
             />
           </ErrorBoundary>

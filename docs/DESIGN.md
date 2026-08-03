@@ -290,14 +290,16 @@ not the unreachable `DetailChart`):
   "levels stay ink" (§5), for these two marks only; dot and value carry the
   same hue (fill-up / fill-down, 11px semibold). `GRID_FRACS` is one list
   for the lines and their labels, so the two cannot drift.
-  - ⚠ **The low label exposed a served wrong number**: `3Mx3M`'s first ten
-    dates (2016-01-04 → 01-15, exactly the loader's "3M: 10 blank value(s)"
-    rows) are served as **0.0%** — the forward reprice on a blank-3M date
-    emits 0 instead of skipping, so that chart's 최저 honestly reads 0.0000.
-    The only %-unit series affected (bp zeros are real prints). Backend is
-    owner-gated; the fix belongs in `forwards.py` (skip/None the dates whose
-    reprice cannot stand), which is a SCHEMA_VERSION bump + rebuild. [TBD —
-    owner]
+  - **The low label exposed a served wrong number — FIXED [V-PASS V5,
+    2026-08-03]**: `3Mx3M`'s first ten dates (2016-01-04 → 01-15, exactly
+    the loader's "1D/3M: 10 blank value(s)" rows) were served as **0.0%**.
+    Root cause at the DERIVATION layer: `df()` extrapolates flat left of the
+    curve's first node, so a span starting below it collapses its numerator
+    to exactly 0. `forwards.curve_prices_span` now gates BOTH consumers
+    (`forward_history` and `_cell_history`): a date whose curve cannot
+    support the span is skipped, never approximated. Span-specific, not a
+    date ban — `6Mx3M` keeps those dates. SCHEMA_VERSION 4 → 5; membership
+    pinned from the file's own shape in `test_backtest_edges.py`.
 
 ### The backtest [OWNER, 2026-07-31]
 
@@ -2620,6 +2622,30 @@ evidence that forced it. Referenced from several places above; it did not exist
 as a heading until the hardening session, which is itself worth noting: the
 references pointed at a section that had been absorbed into "Settled decisions"
 and stopped being a live record.
+
+### V-PASS V5 (2026-08-03) — two decisions taken inside the validation pass
+
+**1. Same-day entry/exit returns zero instead of a 422.** The V-PASS brief
+required PnL exactly 0 for settlement date = entry date; the engine refused
+same-day outright. Struck and unwound at one close is a degenerate question
+with a well-defined trivial answer, so `_span_of` now allows `exit_i ==
+entry_i` (0원, both components 0, one published point, `d` null) and still
+refuses exit BEFORE entry. **To reverse:** restore `<=` at the two span
+checks and drop `test_same_day_entry_and_exit_is_exactly_zero`.
+
+**2. Forwards are out of the backtest dropdown until the engine can book
+them.** Diagnosed in Phase 0, confirmed empirically: `_legs_for` splits on
+`-` and `_validate` refuses every `x` id, so ALL 140 forwards the dropdown
+offered 422'd at 실행 — and a pinned forward captured from behind the sheet
+slipped in the same way. `BOOKABLE_GROUPS` (one list, read by the dropdown
+AND the capture) now names outright/spread/fly only. **The real feature —
+forward-start swap legs — is an OWNER DECISION**: it needs a forward-start
+schedule the ported `VanillaSwap` cannot express (its start is always
+trade+1bd), i.e. either a `maturity_date`-pair replication (pay long spot
+swap + receive short spot swap reproduces the forward's carry only
+approximately) or a genuine start-offset trade object. Until ruled on, the
+server refusal is pinned by `test_forward_positions_are_refused…` so UI and
+engine cannot silently disagree again.
 
 ### Pass O (2026-08-03) — "the detail chart" is the pane chart, not the dead popup chart
 

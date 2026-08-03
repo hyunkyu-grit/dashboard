@@ -72,6 +72,23 @@ def is_live_point(start: float, tenor: float | None) -> bool:
     return _is_live_t(start) and _is_live_t(end)
 
 
+def curve_prices_span(zc: np.ndarray, start: float) -> bool:
+    """Whether this curve can honestly price a forward STARTING at `start`.
+
+    `df()` extrapolates FLAT to the LEFT of the curve's first node (ln DF is
+    held at the node's value), so a span that begins below the first node
+    collapses: df(s) == df(first_node), the forward's numerator df(s) − df(e)
+    degenerates, and a 3Mx3M priced on a curve whose shortest node is 6M
+    comes out exactly 0.0%. Ten dates in early 2016 — the loader's "1D/3M:
+    10 blank value(s)" rows — SERVED that zero as history until 2026-08-03
+    (V-PASS Phase V5). A date whose curve cannot support the span is skipped,
+    never approximated: the value does not exist on that date.
+
+    start ≤ 0 is the spot anchor (df(0) = 1 exactly, no interpolation) and
+    always priceable."""
+    return start <= 0.0 or float(zc[0, 0]) <= start + 1e-9
+
+
 def forward_par_rate(zc: np.ndarray, start: float, tenor: float | None) -> float:
     """Forward par-swap rate in decimal; see module docstring."""
     if tenor is None:  # SPOT column: spot-starting to maturity `start`
@@ -154,6 +171,10 @@ def forward_history(dataset: Dataset, fid: str) -> list[dict]:
             if len(pars) < 2:
                 continue
             zc = bootstrap_zero_curve(pars)
+            # a date whose curve starts above this forward's start cannot
+            # price it — skipped, never served as 0.0% (see curve_prices_span)
+            if not curve_prices_span(zc, start_y):
+                continue
             r = forward_par_rate(zc, start_y, tenor_y)
             out.append({"t": date.isoformat(), "v": round(r * 100, 4)})
         _forward_history_cache[fid] = out
@@ -198,7 +219,11 @@ def _cell_history(dataset: Dataset, start: float,
     puts the 52-week range in the table's last column), so the two pass over
     one list — strictly less work than before, and identical arithmetic."""
     zcs = _historical_curves(dataset)
-    return [forward_par_rate(z, start, tenor) for z in zcs if z is not None]
+    return [
+        forward_par_rate(z, start, tenor)
+        for z in zcs
+        if z is not None and curve_prices_span(z, start)
+    ]
 
 
 def _move_pct(vals: list[float]) -> float | None:

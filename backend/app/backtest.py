@@ -172,9 +172,12 @@ def _span_of(dataset: Dataset, pos: Position) -> tuple[int, int, bool]:
     dates = dataset.dates
     entry_i = _index_on_or_after(dates, pos.entry)
     exit_i = _index_on_or_before(dates, pos.exit) if pos.exit else len(dates) - 1
-    if exit_i <= entry_i:
+    # exit ON the entry date is a legal degenerate: struck and unwound at one
+    # close, worth exactly 0 in both halves — a trivial answer, not an error
+    # [V-PASS V5, 2026-08-03; it used to 422]. Exit BEFORE entry stays refused.
+    if exit_i < entry_i:
         raise BacktestError(
-            f"{pos.series_id}: the exit date must be after the entry date"
+            f"{pos.series_id}: the exit date must not precede the entry date"
         )
     matures = max(
         _maturity_of(dates[entry_i], t) for t, _sign in _legs_for(pos.series_id)
@@ -190,7 +193,7 @@ def _span_of(dataset: Dataset, pos: Position) -> tuple[int, int, bool]:
     matured = matures <= dates[-1] and _index_on_or_before(dates, matures) <= exit_i
     if matured:
         exit_i = _index_on_or_before(dates, matures)
-        if exit_i <= entry_i:
+        if exit_i < entry_i:
             raise BacktestError(
                 f"{pos.series_id}: matures on {matures}, before it could be held"
             )

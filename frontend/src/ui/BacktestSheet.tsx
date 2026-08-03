@@ -109,6 +109,20 @@ const EOK = 100_000_000;
  * each extra row is another full daily revaluation pass on the server. */
 const MAX_POSITIONS = 12;
 
+/** What can actually be BOOKED — one list, read by the dropdown AND (in
+ * App.tsx) the click-behind capture, so the two entrances cannot disagree
+ * about what the engine accepts [V-PASS V5, 2026-08-03]. A volatility ratio
+ * is not a position anyone can put on; FORWARDS are out because the engine
+ * has no forward-leg construction (`_legs_for` splits on '-', `_validate`
+ * refuses every 'x' id) and each one the dropdown offered 422'd at 실행 —
+ * offering what the server refuses is the claim-vs-behaviour defect class.
+ * Real forward-start legs are an owner decision (DESIGN ## Provisional);
+ * pinned server-side by
+ * test_backtest_edges::test_forward_positions_are_refused…. The capture
+ * filter lives at the SOURCE (App passes only bookable pins) because the
+ * compiler lint forbids adding branches around this effect's setState. */
+export const BOOKABLE_GROUPS: Group[] = ["outright", "spread", "fly"];
+
 /** The hover card's fixed width, so the caller can clamp it inside the plot. */
 const CARD_W = 150;
 
@@ -766,9 +780,9 @@ export function BacktestSheet({
   onClose: () => void;
 }) {
   const choices = useMemo(() => {
-    // a volatility ratio is not a position anyone can put on
-    const order: Group[] = ["outright", "spread", "fly", "forward"];
-    return order
+    // BOOKABLE_GROUPS, not a local list — see its note: the dropdown and the
+    // click-behind capture must read one definition of what the engine takes
+    return BOOKABLE_GROUPS
       .map((g) => ({
         group: g as string,
         label: GROUP_LABEL[g],

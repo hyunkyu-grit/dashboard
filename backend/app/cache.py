@@ -35,7 +35,12 @@ DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache"
 #     re-picked (3Mx3M/9Mx3M in, 2Yx2Y/3Yx3Y out) — both change the cached
 #     forwards payload's shape and content, and a v3 cache would be served
 #     with the old keys still in it.
-SCHEMA_VERSION = 4
+# v5 (2026-08-03, V-PASS V5): forward derivation SKIPS dates whose curve
+# cannot price the span (curve_prices_span) — 3Mx3M loses its ten served-0.0%
+# rows from early 2016, and short-start cells' movePct/range histories shrink
+# by the same dates. Same xlsx bytes, different derived content: without the
+# bump a v4 cache would keep serving the zeros.
+SCHEMA_VERSION = 5
 
 
 def data_hash(path: Path) -> str:

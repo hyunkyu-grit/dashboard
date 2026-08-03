@@ -44,7 +44,13 @@ PUBLIC = REPO / "frontend" / "public"
 # A sample, not the whole set: one of each id shape, because the shapes are
 # what differ (outright / spread / fly / forward / volatility), and one of each
 # resolution. 984 round trips would take minutes and prove the same thing.
-SAMPLE_SERIES = ["10Y", "1.5Y", "1Y-10Y", "2Y-5Y-10Y", "2Yx1Y", "6Mx3M", "vol:10Y"]
+# 3Mx3M added in V-PASS V5: the ONE span-sensitive forward (its start sits
+# below the early-2016 curves' first node). The static build prices forwards
+# on a fast path that bypasses forward_history, and this sample previously
+# contained no series that could tell the two paths apart — the fast path
+# kept emitting the ten 0.0% rows after the lazy path was fixed, and every
+# agreement run stayed green.
+SAMPLE_SERIES = ["10Y", "1.5Y", "1Y-10Y", "2Y-5Y-10Y", "2Yx1Y", "3Mx3M", "6Mx3M", "vol:10Y"]
 
 
 def _backend_up() -> bool:
