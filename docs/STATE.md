@@ -1,6 +1,7 @@
 # Sauron — state of the project
 
-Updated at the end of the closing session, part 2 (Passes A–F). Three sections;
+Updated 2026-08-03 (V-PASS closeout); previously at the end of the closing
+session, part 2 (Passes A–F). Three sections;
 the **middle one is the honest boundary** — what a trader must know before
 putting weight on any number on screen. A fourth short section records **known
 and accepted** limitations (settled — neither verified-good nor open).
@@ -14,6 +15,41 @@ Head at writing: the closing-session-2 Pass F commit on `master`, mirrored to
 
 Automated gates (**BE 68 pass / 1 skip / 1 xfail, FE 54, lint 0, build+tsc
 clean**) plus, where noted, live browser checks.
+
+**Backtest PnL decomposition — VALIDATED 2026-08-03 (V-PASS; durable in
+`tests/test_backtest_validation.py`, `_theta.py`, `_neutrality.py`,
+`_magnitude.py`, `_edges.py`):**
+- **Additivity & path additivity**: 손익 = 평가 + 캐리 to ≤1원 at every
+  point, AND both components telescope independently across mid-life cuts —
+  payment/fixing dates ±1일 swept from the trade's own schedule; the cash
+  partition is exact.
+- **Theta isolation (frozen curve)**: everything reported is time — 평가
+  drifts −0.066bp of notional/calendar-day, smooth through weekends and
+  holidays, anchored at the stub-free 0.5y horizon to an independent
+  (par − K)·annuity − clean₀ prediction within 0.347bp (budget 0.5bp).
+  **Roll-down lives INSIDE 평가손익 in this two-term scheme** — a frozen
+  curve with nonzero 평가 is correct behaviour, by design.
+- **Forward-realization neutrality (capstone)**: a 1Y par swap held to
+  maturity on the path its own curve implies ends at **0.0158bp of
+  notional** (budget 0.5bp) — bootstrap, forwards, discounting, fixing
+  selection, accrual and the decomposition in one assertion.
+- **Historical magnitude**: 평가/DV01 reproduces realized Δy under a
+  self-calibrating theta allowance; the residual shrinks an order of
+  magnitude as windows shrink (106M → 6.3M → 1.2M KRW) — shape, not bias.
+- **Edges**: same-day entry/exit = exact 0; request dates roll
+  conservatively and visibly (not ModFol — CONVENTIONS.md); exit on the
+  swap start = carry exactly 0; carry sign in both directions vs the
+  realized fixing average; mirror/linearity/entry-par/maturity-convergence
+  and the clean-room carry recomputation, all durable.
+- **3Mx3M early-2016 0.0% — FIXED**: `curve_prices_span` skips dates whose
+  curve cannot price the span, in all THREE paths (lazy history, cell
+  history, and the static fast path that had silently diverged); all seven
+  3M-start forwards were mispriced on those ten dates, not just the visible
+  zero. SCHEMA v5; 3Mx3M added to the agreement sample.
+- Displayed money: fmtKrw rounds (not floors) with negative symmetry; the
+  손익 구성 grid is additive at displayed precision, and the printed 캐리
+  is pinned within one 만원 of the raw engine field
+  (`guards/krw-additivity.test.ts`, de-vacuumed in V6).
 
 **Numerics — internal consistency (`tests/test_validation.py`):**
 - Forward-annuity identity exact to **2.8e-17** → every forward, spread, fly,
@@ -61,7 +97,10 @@ cue. Own-history cache: cold boot 17s → warm 2s.
 
 ## 2. Works but is UNVERIFIED — the honest boundary
 
-- **Correctness against the desk's own numbers has never been tested.** The
+- **Correctness against the desk's own numbers has never been tested — still
+  the TOP unvalidated boundary after the V-PASS (2026-08-03), which by
+  construction could not close it: every check above is internal
+  consistency, however deep.** The
   checks above prove the curve is *self-consistent*, not that it matches the
   owner's forward-matrix sheet. Pass A2's harness is built and **skipping** —
   drop `data/reference/forward_matrix_YYYY-MM-DD.xlsx` in and it runs. Until

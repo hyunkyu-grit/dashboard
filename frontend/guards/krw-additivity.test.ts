@@ -27,27 +27,50 @@ import {
   splitKrw,
 } from "../src/ui/BacktestSheet";
 
-describe("the verified live case that exposed the floor", () => {
-  it("평가 + 캐리 now reads 9,133만 + 82만 = 9,215만 — and it sums", () => {
-    const u = splitKrw(1_092_153_029, 1_091_329_056);
+/* The ENGINE-LEVEL identity — |손익 − (평가 + 캐리)| ≤ 1원 — lives where the
+ * engine does: backend test_carry_and_valuation_sum_to_the_pnl and the V1
+ * telescoping sweep assert it on live runs. What THIS guard owns is the
+ * boundary the frontend can actually break: the displayed split must stay
+ * TIED TO THE RAW FIELDS the server sent. The first version of this file
+ * asserted uVal + uCarry === uPnl where uCarry was DEFINED as uPnl − uVal —
+ * vacuous by construction, it could never fail (V-PASS Phase 0 finding).
+ * The non-vacuous statement: GIVEN a triple satisfying the server identity,
+ * the derived display carry sits within ONE 만원 of the raw carry rounded
+ * on its own — so the residual trick can never drift the printed 캐리 away
+ * from what the engine computed, and re-deriving it any other way (the old
+ * floor, an independent rounding) breaks this pin. */
+describe("the displayed split stays tied to the raw engine fields", () => {
+  it("the verified live triple: 9,133 + 82 = 9,215, and 82 IS the raw carry", () => {
+    // raw fields from the audited run: val + carry == pnl to the won
+    const pnl = 1_092_153_029;
+    const val = 1_091_329_056;
+    const carry = 823_973;
+    expect(Math.abs(pnl - (val + carry))).toBeLessThanOrEqual(1);
+    const u = splitKrw(pnl, val);
     expect(fmtKrwFromMan(u.uVal)).toBe("+10억 9,133만원");
     expect(fmtKrwFromMan(u.uCarry)).toBe("+82만원");
     expect(fmtKrwFromMan(u.uPnl)).toBe("+10억 9,215만원");
-    expect(u.uVal + u.uCarry).toBe(u.uPnl);
+    // the tie: the residual-derived carry equals the raw carry's own units
+    expect(Math.abs(u.uCarry - manUnits(carry))).toBeLessThanOrEqual(1);
+    expect(u.uCarry).toBe(manUnits(carry)); // exactly, on this triple
   });
-});
 
-describe("splitKrw is additive by construction, for any inputs", () => {
-  it("uVal + uCarry === uPnl across a deterministic sweep", () => {
-    // a pseudo-random-ish sweep over signs and magnitudes, incl. the
-    // half-만원 boundaries where independent rounding goes wrong
+  it("the tie holds across a deterministic sweep of identity-true triples", () => {
+    // raw (val, carry) pairs over signs, magnitudes and half-만원 edges;
+    // pnl reconstructed WITH the server's ±1원 rounding slack, so the sweep
+    // exercises exactly the inputs the API contract permits
     for (let k = 0; k < 500; k++) {
-      const pnl = (k * 7_919_777 - 1_987_654_321) % 2_000_000_000;
       const val = (k * 104_729_331 - 999_999_999) % 2_000_000_000;
+      const carry = (k * 7_919_777 - 87_654_321) % 50_000_000;
+      const eps = (k % 3) - 1; // −1, 0, +1원 — the server's rounding slack
+      const pnl = val + carry + eps;
       const u = splitKrw(pnl, val);
-      expect(u.uVal + u.uCarry).toBe(u.uPnl);
       expect(u.uPnl).toBe(manUnits(pnl));
       expect(u.uVal).toBe(manUnits(val));
+      expect(
+        Math.abs(u.uCarry - manUnits(carry)),
+        `raw carry ${carry} drifted from displayed at k=${k}`,
+      ).toBeLessThanOrEqual(1);
     }
   });
 });
@@ -79,13 +102,23 @@ describe("fmtKrw rounds to the nearest 만원 and mirrors under negation", () =>
 
 describe("the 손익 구성 table actually uses the additive path", () => {
   it("rows and the 합계 row format units, never independent fmtKrw calls", () => {
+    // `code()` — comments stripped so this file's own prose (which names the
+    // banned calls) cannot trip the scan; the anchors are the table's OWN
+    // header text and the fold that follows it, asserted present rather
+    // than trusted, so a rename fails loudly instead of degrading the slice
     const src = code("ui/BacktestSheet.tsx");
-    const table = src.slice(src.indexOf("손익 구성"), src.indexOf("자세히"));
+    const from = src.indexOf("손익 구성");
+    const to = src.indexOf("자세히");
+    expect(from, "구성 table header not found — re-anchor this guard").toBeGreaterThan(-1);
+    expect(to, "fold summary not found — re-anchor this guard").toBeGreaterThan(from);
+    const table = src.slice(from, to);
     expect(table).toContain("splitKrw(");
     expect(table).toContain("fmtKrwFromMan(");
-    // an independent rounding of carry inside this table is the regression
+    // an independent rounding of any of the three figures inside this table
+    // is the regression — the floor era, back under a new name
     expect(table).not.toMatch(/fmtKrw\(\s*p\.carry/);
     expect(table).not.toMatch(/fmtKrw\(\s*p\.valuation/);
     expect(table).not.toMatch(/fmtKrw\(\s*result\.pnl/);
+    expect(table).not.toMatch(/toFixed/);
   });
 });

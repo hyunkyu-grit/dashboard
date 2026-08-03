@@ -181,6 +181,24 @@ rule:
 
 ## 6. Current state (as of the 2026-08-03 session)
 
+### Latest — the V-PASS (backtest validation, 2026-08-03, HEAD after V6)
+
+Six phases, committed per phase, gated both modes each time. Everything is
+recorded in `docs/STATE.md` (the validated/unvalidated boundary moved) and
+`docs/DESIGN.md ## Provisional` (V5's two in-pass decisions). Headlines:
+**forward-realization neutrality 0.0158bp of notional** (1Y held to
+maturity on its own implied path); frozen-curve theta smooth at −0.066bp/
+calendar-day with roll-down asserted INSIDE 평가손익; path additivity with
+the cash partition exact at every payment/fixing-date cut; 3Mx3M's ten
+served-0.0% dates fixed at the derivation layer (`curve_prices_span`, in
+all THREE paths — the static fast path had silently diverged from the fixed
+lazy path and the agreement sample couldn't see it; 3Mx3M now IS in the
+sample). SCHEMA v4 → 5, tree rebuilt. Same-day backtests return exact zero
+instead of 422; forwards are OUT of the backtest dropdown (the engine
+refuses every 'x' id — real forward legs are an owner decision, see
+Provisional). ⚠ origin push still owner's: `git push origin main`.
+
+
 ### Latest — passes M–Q batch 2 (2026-08-03, HEAD `406d163`)
 
 Gates after every pass, both modes: BE **214 passed / 19 skipped / 1
