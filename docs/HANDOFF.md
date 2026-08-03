@@ -181,7 +181,23 @@ rule:
 
 ## 6. Current state (as of the 2026-08-03 session)
 
-### Latest — the V-PASS (backtest validation, 2026-08-03, HEAD after V6)
+### Latest — table column alignment audit (2026-08-03, HEAD `c2eb62e`)
+
+An owner report of header/number right-edge misalignment across the tabs did
+NOT reproduce: measured 0.00px on every tab (sorted and unsorted) and the
+overview, computed templates byte-identical — the visible effect is sub-pixel
+glyph side bearing amplified by screenshot downscaling. Full evidence and
+method in `docs/diagnostics/table-column-alignment.md`. What the audit DID
+find and fix (`c2eb62e`): `OverviewColumns` had `text-[13px]` on its two
+ch-track grid containers (the 63.3-vs-70.4 drift pattern, latent because the
+value matched the inherited size) — moved to the wrapper both grids inherit
+from, and `guards/table-grid.test.ts` gained a rendered-markup describe that
+asserts one outer template per surface AND bans font-size utilities on any
+element carrying a ch-derived `grid-template-columns` style (verified red on
+the pre-fix code). Ladder thresholds unchanged. FE **472 passed / 1 skipped
+(38 files)**, lint 0, build 0; backend untouched.
+
+### Before that — the V-PASS (backtest validation, 2026-08-03, HEAD after V6)
 
 Six phases, committed per phase, gated both modes each time. Everything is
 recorded in `docs/STATE.md` (the validated/unvalidated boundary moved) and
