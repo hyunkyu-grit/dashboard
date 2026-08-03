@@ -346,7 +346,13 @@ export function PreviewChart({
                   className={hue}
                   style={{ fontSize: 11, fontWeight: 600 }}
                 >
-                  {fmtLevel(points[i].v, unit)}
+                  {/* named, not just valued — the Toss reference prints a
+                      range's endpoints beside a label, and 최고/최저 is the
+                      readout card's own vocabulary. A flat window prints its
+                      one value bare: it is neither a high nor a low. */}
+                  {ext.lo !== ext.hi
+                    ? `${k === "hi" ? "최고" : "최저"} ${fmtLevel(points[i].v, unit)}`
+                    : fmtLevel(points[i].v, unit)}
                 </text>
               )}
             </g>

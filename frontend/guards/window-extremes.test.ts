@@ -100,12 +100,17 @@ describe("the rendered chart: marks move with the window; the grid stays behind"
     // "지난 10년간 최고치 최저치를 바로 보일 수 있게" — a dot without its
     // number answers nothing. The value is data, so it prints through
     // fmtLevel (4dp for %), never the axis' coarse grammar.
+    // NAMED, not just valued — the Toss reference prints a range's endpoints
+    // beside a label, and 최고/최저 is the readout card's own vocabulary
     const m = render(SERIES);
-    expect(m).toContain(">4.2000<");
-    expect(m).toContain(">2.4000<");
-    // a flat window has ONE value and prints it once, not twice on one spot
+    expect(m).toContain(">최고 4.2000<");
+    expect(m).toContain(">최저 2.4000<");
+    // a flat window has ONE value and prints it once, BARE — a level that is
+    // the whole window is neither a high nor a low
     const flat = render(DATES4.map((t) => ({ t, v: 3, d: 0 })));
     expect(flat.match(/>3\.0000</g)).toHaveLength(1);
+    expect(flat).not.toContain("최고");
+    expect(flat).not.toContain("최저");
   });
 
   it("the high is RED, the low is BLUE — dot and value both [OWNER, 2026-08-03]", () => {
@@ -116,8 +121,8 @@ describe("the rendered chart: marks move with the window; the grid stays behind"
     const m = render(SERIES);
     expect(m).toMatch(/data-extreme="hi"[^>]*class="fill-up"/);
     expect(m).toMatch(/data-extreme="lo"[^>]*class="fill-down"/);
-    expect(m).toMatch(/class="fill-up"[^>]*>4\.2000</);
-    expect(m).toMatch(/class="fill-down"[^>]*>2\.4000</);
+    expect(m).toMatch(/class="fill-up"[^>]*>최고 4\.2000</);
+    expect(m).toMatch(/class="fill-down"[^>]*>최저 2\.4000</);
   });
 
   it("levels read on the LEFT axis, rates on the RIGHT [OWNER, 2026-08-03]", () => {

@@ -280,8 +280,11 @@ not the unreachable `DetailChart`):
   is what keeps pass M's unlabelled-second-axis rule and the single-axis
   minimalism from contradicting each other). The extreme dots' values are
   DATA, so they print through `fmtLevel` (high above its dot, low below,
-  clamped inside the plot, end-anchored near the edges); a flat window
-  prints its one value once. **The HIGH is red, the LOW is blue** [OWNER,
+  clamped inside the plot, end-anchored near the edges), and each is NAMED —
+  `최고 4.2625` / `최저 2.3200` — the Toss reference prints a range's
+  endpoints beside a label, and 최고/최저 is the readout card's own
+  vocabulary; a flat window prints its one value once, bare (it is neither a
+  high nor a low). **The HIGH is red, the LOW is blue** [OWNER,
   2026-08-03 — "확실하게 눈에 띄게"]: the product's own up/down pair (§9)
   landing on the ends it already means — an owner-sanctioned exception to
   "levels stay ink" (§5), for these two marks only; dot and value carry the
