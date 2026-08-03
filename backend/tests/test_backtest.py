@@ -184,11 +184,22 @@ def test_a_steepener_makes_money_when_the_curve_steepened(ds):
 
 def test_a_dv01_neutral_spread_barely_moves_on_a_parallel_shift(ds):
     """The other half of the weighting's promise, and the sharper test of it.
-    Over 2026 the 3Y and 10Y both moved exactly +86.5bp; a DV01-neutral 3s10s
-    is by construction insensitive to that, so its P&L must be small against
-    what the same notional would have made outright."""
-    spread = one(ds, "3Y-10Y", +1, N, dt.date(2026, 1, 2), None)
-    outright = one(ds, "10Y", +1, N, dt.date(2026, 1, 2), None)
+    From 2025-08-14 to 2026-07-24 the quoted 3s10s is 24.5bp at BOTH ends
+    while the 10Y itself moved +167bp; a DV01-neutral 3s10s is by construction
+    insensitive to a shift that leaves the spread unchanged, so its P&L must
+    be small against what the same notional would have made outright.
+
+    BOTH window edges are PINNED, strictly inside the dataset. The first
+    version used exit=None, so "the parallel window" rode on the file's last
+    row and the 2026-08-03 refresh broke the premise twice over: the window
+    grew (the two tenors ended 1.25bp apart) AND the refresh REVISED
+    2026-07-30's closes, so even the pinned old window stopped being parallel.
+    Same failure family as the dv01 percentage bound — a data-dependent
+    premise must be a fact about fixed dates, not about wherever the file
+    currently ends."""
+    window = (dt.date(2025, 8, 14), dt.date(2026, 7, 24))
+    spread = one(ds, "3Y-10Y", +1, N, *window)
+    outright = one(ds, "10Y", +1, N, *window)
     assert spread["entryValue"] == spread["exitValue"]  # the parallel window
     assert abs(spread["pnl"]) < abs(outright["pnl"]) * 0.25
 
