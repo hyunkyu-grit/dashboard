@@ -1711,6 +1711,59 @@ Replay of rule (c) over the last 500 business days: median 1, p90 2, max 12,
 empty on 153/500 days — a log that can be empty, unlike the prior rule
 (empty 1/500).
 
+### 라고 할 때 살걸 — the log, priced in hindsight [OWNER, 2026-08-04]
+
+**"그때 변화 떴을 때 따라갔으면 지금 얼마."** A section at the bottom of the
+change-log popover: each log line of the last 20 business days, priced as if
+the reader had followed it — the event's own direction, the next business
+day's close, a flat 100억 — and valued to the as-of date by the backtest
+engine itself. The signed answer stays signed: a negative line ("안 따라가길
+잘했다") is the same information as a positive one, and a list that dropped
+them would be a highlight reel.
+
+Every convention is a stated choice (`backend/app/regret.py` docstring is
+the reference):
+
+- **The replay is the daily rule, not a second rule.** What the list claims
+  the log said on day j is `detect_event_clusters` re-run on the history
+  truncated at j — same percentile windows, same collapse, same leader.
+  Pinned by `test_regret.py::test_replay_matches_the_daily_rule…` against a
+  truncated dataset.
+- **Leading series per cluster only** — the line the reader actually saw;
+  pricing the related members would multiply each cluster into
+  near-duplicate positions.
+- **Entry is the NEXT business row after the event date.** The event is
+  computed from that day's close; entering on the same close would trade on
+  a print the reader had not seen. (The backtest's own "entry is the date
+  you clicked" still holds there — a click points at a day, a log line IS
+  that day's close.)
+- **Direction follows the move** (sign of `deltaBp`): the joke is 따라갈걸,
+  not 받아칠걸. Δ=0 lines (pure window-shift transitions) have no direction
+  and are skipped; so are yesterday's lines (entry would be today, held zero
+  days) and anything led by 1D (matures the next day — 0원 noise; excluded
+  BEFORE the collapse so its cluster falls to the next member).
+- **The P&L is the backtest's answer to the won** — `_run_one`, full
+  revaluation, DV01-neutral legs, maturity cap, carry; never a second
+  pricing path (pinned by `test_regret.py::test_pnl_is_the_backtest_answer…`).
+- **One vocabulary.** The popover prints the direction through
+  `BacktestWindow.directionLabel` and the money through its `fmtKrw`,
+  imported — `guards/regret-list.test.ts` checks the render byte-for-byte
+  against both and bans a local re-implementation (§16 also holds: the
+  browser formats, never computes).
+- **Precomputed and baked** (§16, §21): the list depends on no reader input,
+  so it rides in the wall summary and the static tree carries it. Cached by
+  data hash next to forwards (~1.4s to rebuild). The line click is the log's
+  click — focus the instrument.
+
+Files: `backend/app/regret.py`, `events.replay_leading_events`,
+`ui/ChangeLog.tsx` (RegretLine), `tests/test_regret.py`,
+`guards/regret-list.test.ts`.
+
+[TBD — owner]: the 20-day lookback and the flat 100억 are first guesses; a
+"이 살걸을 백테스트로 열기" affordance (seeding `bti`/`btf` from the line)
+is a natural extension but adds a second backtest entrance beside the
+owner's chart-click rule, so it waits for the owner.
+
 ## 13. Explicitly out of scope for v2
 
 - Strategy tooling in the enlarged view (the reserved empty region stays empty).

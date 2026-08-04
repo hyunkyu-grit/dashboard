@@ -40,7 +40,7 @@ def _iso_bases(bases: dict[str, dt.date | None]) -> dict[str, str | None]:
 
 
 def wall_summary(dataset: Dataset, bases: dict, events: list,
-                 policy: dict) -> dict:
+                 policy: dict, regret: list) -> dict:
     outrights = [
         summarize(dataset, t, outright_label(t), "outright", bases)
         for t in dataset.tenor_order
@@ -68,6 +68,8 @@ def wall_summary(dataset: Dataset, bases: dict, events: list,
         "policy": policy,
         # Change-log EVENTS (D-1 fixed, collapsed) — DESIGN §12 rule (c).
         "events": events,
+        # 라고 할 때 살걸 — past log lines priced in hindsight (regret.py).
+        "regret": regret,
     }
 
 

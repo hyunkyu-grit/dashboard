@@ -160,9 +160,9 @@ rule:
   with the theme so a filled pill is legible both ways. Orange (`#F58220`) and
   navy (`#043B72`) are defined but **unreferenced** and blocked by the §9 colour
   guard. Levels stay ink. **Exception [OWNER, 2026-08-04]: the two reference
-  hues** — CD teal (`ref-cd`) and 기준금리 amber (`ref-policy`), reference
-  lines + legend only, dash pattern still the encoding. All values live only
-  in `theme/tokens.css`.
+  tokens** — CD solid grey (`ref-cd`) and 기준금리 solid translucent red
+  (`ref-policy`), reference lines + legend only. All values live only in
+  `theme/tokens.css`.
 - **No elevation / no floating cards** (S13). Depth = surface steps + hairlines.
   The single sanctioned drop-shadow is the chart tooltip overlay.
 - **Volatility is built** [Session 14] — relative ATR (mean ATR 5 / mean ATR
@@ -189,7 +189,32 @@ rule:
 
 ## 6. Current state (as of the 2026-08-04 session)
 
-### Latest — the pane chart zooms in place; the references get their hues (2026-08-04, later)
+### Latest — 라고 할 때 살걸: the change log priced in hindsight (2026-08-04, regret session)
+
+The change-log popover grew a bottom section: each log line of the last 20
+business days, priced as if followed — the event's own direction (sign of
+deltaBp), entry at the NEXT business day's close, flat 100억, valued to
+as-of by the backtest's own `_run_one`. Signed answers stay signed.
+
+- `events.replay_leading_events` — rule (c) re-run as of each past day
+  (truncated history, same collapse, LEADING member only, 1D excluded
+  before the collapse); `app/regret.py` — the pricing + conventions (its
+  docstring is the reference); rides in `wall_summary` as `regret`, so the
+  static tree carries it; cached by data hash next to forwards (~1.4s).
+- FE: `RegretEntry` in api.ts, `RegretLine` in `ui/ChangeLog.tsx` — two-line
+  row (log grammar on top, 방향어 + `fmtKrw` money below), click = focus.
+  Vocabulary is IMPORTED from BacktestWindow (`directionLabel`, `fmtKrw`),
+  pinned byte-for-byte by `guards/regret-list.test.ts`.
+- Tests: `tests/test_regret.py` (rule-identity on a truncated dataset;
+  P&L == run_backtest to the won; window/exclusion properties).
+- Gotcha: the replay range is business-day INDEX arithmetic — the first
+  version quietly replayed 21 days (`range(n-2, n-2-lookback-1, -1)`), and
+  only the window-property test caught it.
+- [TBD — owner]: 20-day lookback, flat 100억, and whether a regret line may
+  seed the backtest window (second entrance beside the chart-click rule).
+  See DESIGN §12 "라고 할 때 살걸".
+
+### Before that — the pane chart zooms in place; the references get their hues (2026-08-04, later)
 
 Two owner asks in one pass. **Zoom** [OWNER: "크게보기 버튼을 안 눌러도 이
 창에서 그냥 확대하고 축소하고"]: the preview/pane chart zooms with the wheel
@@ -201,11 +226,13 @@ follow for free. Wheel listener is NATIVE non-passive (React's root wheel is
 passive; preventDefault there is a no-op); a drag >3px suppresses the click
 that follows so a pan never opens the backtest; a clean click still does.
 **Color** [OWNER: "CD랑 기준금리에 톤 안 깨면서 색" — asked 08-03, lost when
-that session died uncommitted]: `--bw-ref-cd` deep teal (light `#0f766e` /
-dark `#45b8ac`), `--bw-ref-policy` deep amber (light `#a16207` / dark
-`#d9a441`), used on the CD/기준금리 reference lines + legend ONLY — dash
-pattern stays the grayscale encoding (§5), partial opacity keeps the tone;
-both clear 3:1 per theme (band-hue-contrast extended). Wired everywhere the
+that session died uncommitted; REVISED same day: "회색 실선 / 빨간색인데
+투명도 좀 올려서 실선"]: `--bw-ref-cd` grey (light `#6b7280` / dark
+`#9ca3af`), `--bw-ref-policy` red = the up-red's values (light `#d92d3c` /
+dark `#f16e77`) at stroke-opacity ~0.35, BOTH SOLID — the dash encoding was
+retired by that instruction; used on the CD/기준금리 reference lines +
+legend ONLY; both clear 3:1 per theme (band-hue-contrast extended). Canvas
+gets the translucency via `withAlpha` (bridge). Wired everywhere the
 references draw: PreviewChart (SVG classes), CurveView's 기준금리 hairline,
 DetailChart (canvas via new `resolveRefCd`/`resolveRefPolicy` in the theme
 bridge). This is a SANCTIONED palette extension recorded in DESIGN §Color —

@@ -99,6 +99,24 @@ export interface EventCluster {
   count: number;
 }
 
+/** 라고 할 때 살걸 — one past change-log line, priced in hindsight: the
+ * event's own direction followed the NEXT business day with 100억, valued to
+ * the as-of date by the backtest engine (backend/app/regret.py — every
+ * convention is stated there). */
+export interface RegretEntry {
+  date: string; // the day the log line fired (its close is the signal)
+  id: string;
+  label: string;
+  kind: "outright" | "spread" | "fly";
+  unit: "%" | "bp";
+  deltaBp: number;
+  reasons: ("transition" | "move")[];
+  direction: 1 | -1; // sign of deltaBp — the follow trade
+  entry: string; // the next business day, when the follow trade strikes
+  matured: boolean;
+  pnl: number; // KRW, signed; served rounded, never differenced here (§16)
+}
+
 /** The BOK base rate as a STEP, drawn on every %-unit AND bp-unit chart —
  * CD and the base rate are always drawn together [OWNER, 2026-07-31], and the
  * 3M node IS CD91. On a bp chart (spread, butterfly) the pair keeps its OWN
@@ -137,6 +155,7 @@ export interface WallSummary {
   outrights: SeriesSummary[];
   derived: SeriesSummary[];
   events: EventCluster[];
+  regret: RegretEntry[];
   policy: PolicyStep;
 }
 

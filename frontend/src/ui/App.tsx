@@ -9,7 +9,7 @@ import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { EventCluster, PolicyStep } from "@/lib/api";
+import type { EventCluster, PolicyStep, RegretEntry } from "@/lib/api";
 import {
   fetchForwards,
   fetchHealth,
@@ -168,9 +168,11 @@ function DataFreshness() {
 
 function Header({
   events,
+  regret,
   onFocus,
 }: {
   events: EventCluster[];
+  regret: RegretEntry[];
   onFocus: (id: string) => void;
 }) {
   const theme = useUiStore((s) => s.theme);
@@ -185,7 +187,7 @@ function Header({
       <span className="text-[17px] font-bold text-ink">Sauron</span>
       <span className="text-[13px] opacity-45">KRW IRS</span>
       <span className="flex-1" />
-      <ChangeLog events={events} onFocus={onFocus} />
+      <ChangeLog events={events} regret={regret} onFocus={onFocus} />
       <DataFreshness />
       <button
         type="button"
@@ -466,7 +468,11 @@ export function App() {
       className="flex h-screen flex-col overflow-hidden bg-tile"
       style={{ paddingBottom: stripCollapsed ? STRIP_H.collapsed : STRIP_H.open }}
     >
-        <Header events={summary?.events ?? []} onFocus={focusFromChangeLog} />
+        <Header
+          events={summary?.events ?? []}
+          regret={summary?.regret ?? []}
+          onFocus={focusFromChangeLog}
+        />
 
         {/* A failure must LOOK different from a wait, and carry a way out
             (stability session, Pass B). Before this, both rendered the same

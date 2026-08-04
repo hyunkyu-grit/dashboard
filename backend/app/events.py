@@ -125,6 +125,64 @@ def _strength(e: dict) -> tuple:
     )
 
 
+REPLAY_LOOKBACK = 20  # business days of past log lines the regret list replays
+
+
+def replay_leading_events(
+    dataset: Dataset, lookback: int = REPLAY_LOOKBACK
+) -> list[dict]:
+    """Rule (c), re-run AS OF each of the last `lookback` business days
+    before today, collapsed the same way, LEADING series per cluster only.
+
+    This is the regret feature's event source (regret.py): "the log said so on
+    day j" must mean exactly what the log WOULD have said on day j, so the
+    detection is the daily rule on the history truncated at j — same
+    percentile windows, same collapse, same ranking — never a new rule. Only
+    the leading series is kept because that is the line the reader actually
+    saw; pricing every related member would multiply each cluster into
+    near-duplicate positions.
+
+    1D (call) is excluded at the source: a swap that matures the next
+    business day prices the follow-trade at ~0원, so its lines are noise —
+    and excluding it BEFORE the collapse lets a cluster it would have led
+    fall to its strongest priceable member instead of vanishing.
+
+    Returns [{dateIndex, id, label, kind, unit, deltaBp, reasons}], newest
+    day first, strongest cluster first within a day.
+    """
+    meta = [m for m in _series_meta(dataset) if m[0] != "1D"]
+    n = len(dataset.dates)
+    out: list[dict] = []
+    for j in range(n - 2, max(n - 2 - lookback, 0), -1):
+        firing: list[dict] = []
+        for sid, values, kind, scale, legs, label in meta:
+            sig = _series_event(values[: j + 1], scale)
+            if sig is None:
+                continue
+            firing.append({
+                "id": sid,
+                "label": label,
+                "kind": kind,
+                "unit": "%" if kind == "outright" else "bp",
+                "legs": legs,
+                **sig,
+            })
+        leads = []
+        for comp in _collapse(firing):
+            comp.sort(key=_strength, reverse=True)
+            leads.append(comp[0])
+        leads.sort(key=_strength, reverse=True)
+        out.extend(
+            {
+                "dateIndex": j,
+                **{k: e[k] for k in
+                   ("id", "label", "kind", "unit", "deltaBp", "reasons")},
+            }
+            for e in leads
+        )
+    return out
+
+
 def detect_event_clusters(dataset: Dataset) -> list[dict]:
     """Collapsed change-log clusters, most significant first. Each cluster is
     {leading, related:[...], count} where every entry is individually

@@ -27,6 +27,7 @@ from .dv01 import build_dv01_table
 from .events import detect_event_clusters
 from .forwards import forwards_payload
 from .policy import load_base_rate, policy_step
+from .regret import regret_payload
 from .staleness import dataset_freshness
 from .volatility import volatility_payload
 
@@ -69,6 +70,10 @@ _dv01_table = build_dv01_table(_curves["now"], derived_ids)
 # when the data changes (loudly logged).
 _data_hash = data_hash(DATA_PATH)
 _forwards = cached("forwards", _data_hash, lambda: forwards_payload(_dataset, _curves))
+# 라고 할 때 살걸: a 20-day event replay plus ~2 valuations per line — a
+# couple of seconds over a file that changes once a day, so it caches the
+# same way forwards does.
+_regret = cached("regret", _data_hash, lambda: regret_payload(_dataset))
 # Two things that used to sit here are gone, both from this region of the
 # popup: the curve heatmap (its 어제-column question was answered faster by
 # the table, and daily resolution over ten years was noise) and carry & roll
@@ -91,7 +96,7 @@ def health() -> dict:
 
 @app.get("/api/wall/summary")
 def wall_summary() -> dict:
-    return payloads.wall_summary(_dataset, _bases, _events, _policy)
+    return payloads.wall_summary(_dataset, _bases, _events, _policy, _regret)
 
 
 @app.get("/api/series/{series_id}")

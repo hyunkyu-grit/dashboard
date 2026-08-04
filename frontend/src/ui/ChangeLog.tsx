@@ -14,8 +14,9 @@
 
 import { useEffect, useState } from "react";
 
-import type { ChangeEvent, EventCluster } from "@/lib/api";
+import type { ChangeEvent, EventCluster, RegretEntry } from "@/lib/api";
 import { dirClass, fmtBp } from "@/lib/format";
+import { directionLabel, fmtKrw } from "./BacktestWindow";
 
 const REASON_LABEL: Record<"transition" | "move", string> = {
   transition: "구간 전환", // crossed into/out of the extreme percentile band
@@ -85,11 +86,65 @@ function Cluster({
   );
 }
 
+/** "M.D" from an ISO date — the regret list is a recent-memory list, so the
+ * year is noise (the lookback is 20 business days by construction). */
+function shortDate(iso: string): string {
+  const [, m, d] = iso.split("-");
+  return `${Number(m)}.${Number(d)}`;
+}
+
+/* 라고 할 때 살걸 — one past log line, priced. Line 1 is the log's own
+ * grammar (date, label, Δbp); line 2 is what following it meant (the
+ * backtest's direction words — imported from BacktestWindow so the two
+ * surfaces cannot drift into two vocabularies) and what it is worth now.
+ * The click is the log's click: focus the instrument.
+ * Exported for guards/regret-list.test.ts. */
+export function RegretLine({
+  r,
+  onFocus,
+}: {
+  r: RegretEntry;
+  onFocus: (id: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onFocus(r.id)}
+      className="w-full rounded-[6px] px-2 py-1 text-left hover:bg-page"
+      title={`${r.date} ${r.label} — ${r.entry}에 ${directionLabel(r.id, r.direction)}, 100억`}
+    >
+      <span className="flex items-baseline gap-2">
+        <span className="shrink-0 text-[12px] tabular-nums opacity-45">
+          {shortDate(r.date)}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[13px]">{r.label}</span>
+        <span
+          className={`shrink-0 text-[12px] tabular-nums ${dirClass(r.deltaBp)}`}
+        >
+          {fmtBp(r.deltaBp)}
+        </span>
+      </span>
+      <span className="flex items-baseline gap-2 pl-[34px]">
+        <span className="min-w-0 flex-1 truncate text-[12px] opacity-55">
+          {directionLabel(r.id, r.direction)}
+        </span>
+        <span
+          className={`shrink-0 text-[13px] tabular-nums ${dirClass(r.pnl)}`}
+        >
+          {fmtKrw(r.pnl)}
+        </span>
+      </span>
+    </button>
+  );
+}
+
 export function ChangeLog({
   events,
+  regret,
   onFocus,
 }: {
   events: EventCluster[];
+  regret: RegretEntry[];
   onFocus: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -134,6 +189,20 @@ export function ChangeLog({
                 <Cluster key={`${c.leading.id}-${i}`} c={c} onFocus={focus} />
               ))
             )}
+            <div className="mt-2 border-t border-edge pt-1">
+              <div className="px-2 pb-1 text-[11px] opacity-45">
+                라고 할 때 살걸 · 다음 영업일에 방향대로 100억, 현재까지
+              </div>
+              {regret.length === 0 ? (
+                <p className="px-2 py-3 text-[13px] opacity-55">
+                  지난 20영업일에 기록된 변화가 없습니다.
+                </p>
+              ) : (
+                regret.map((r, i) => (
+                  <RegretLine key={`${r.date}-${r.id}-${i}`} r={r} onFocus={focus} />
+                ))
+              )}
+            </div>
           </div>
         </>
       )}

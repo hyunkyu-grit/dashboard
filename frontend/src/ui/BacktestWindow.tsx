@@ -175,7 +175,7 @@ const CARD_W = 150;
  * ::test_a_butterfly_weights_the_belly_against_both_wings — a label that
  * silently disagreed with the trade would be worse than no label.
  */
-function directionLabel(id: string, direction: number): string {
+export function directionLabel(id: string, direction: number): string {
   const legs = id.split("-");
   const pay = direction > 0 ? "페이" : "리시브";
   const rec = direction > 0 ? "리시브" : "페이";
