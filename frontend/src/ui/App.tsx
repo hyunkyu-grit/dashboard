@@ -9,7 +9,7 @@ import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { EventCluster, PolicyStep, RegretEntry } from "@/lib/api";
+import type { EventCluster, PolicyStep } from "@/lib/api";
 import {
   fetchForwards,
   fetchHealth,
@@ -33,13 +33,13 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { classify } from "./gloss";
 import { diagramSpec } from "./payReceiveModel";
 import { BacktestWindow, BOOKABLE_GROUPS } from "./BacktestWindow";
-import { InstrumentTable } from "./InstrumentTable";
+import { InstrumentTable, type TabId } from "./InstrumentTable";
 import { Z_MODAL } from "./layers";
 import { SHEET_SPRING } from "./motion";
 import { PreviewPane } from "./PreviewPane";
 import { clearBtPatch, mergeQuery } from "./urlState";
 import { PAGE_R, PAGE_X, PAGE_X_PX } from "./pageGutter";
-import { buildRows, type Group, type Row } from "./rows";
+import { buildRows, type Row } from "./rows";
 import { useIsWide } from "./useIsWide";
 import { useMeasure } from "./useMeasure";
 
@@ -168,11 +168,9 @@ function DataFreshness() {
 
 function Header({
   events,
-  regret,
   onFocus,
 }: {
   events: EventCluster[];
-  regret: RegretEntry[];
   onFocus: (id: string) => void;
 }) {
   const theme = useUiStore((s) => s.theme);
@@ -187,7 +185,7 @@ function Header({
       <span className="text-[17px] font-bold text-ink">Sauron</span>
       <span className="text-[13px] opacity-45">KRW IRS</span>
       <span className="flex-1" />
-      <ChangeLog events={events} regret={regret} onFocus={onFocus} />
+      <ChangeLog events={events} onFocus={onFocus} />
       <DataFreshness />
       <button
         type="button"
@@ -240,7 +238,7 @@ export function App() {
   const [hovered, setHovered] = useState<Row | null>(null);
   const [pinned, setPinned] = useState<Row | null>(null);
   const [stripCollapsed, setStripCollapsed] = useStripCollapsed();
-  const [tab, setTab] = useState<Group | "all">("all");
+  const [tab, setTab] = useState<TabId>("all");
   const [matrixOpenRaw, setMatrixOpenRaw] = useState(false);
   const active = hovered ?? pinned;
   // the 표로 보기 matrix is a full-width MODE, only on the forward tab (§F)
@@ -269,7 +267,7 @@ export function App() {
   // Clear the pin on a tab change (§I): a pinned row from another tab shown
   // silently in the preview is the defect; dropping it is the simplest cure
   // (recorded under DESIGN ## Provisional).
-  const onTab = useCallback((t: Group | "all") => {
+  const onTab = useCallback((t: TabId) => {
     setTab(t);
     setPinned(null);
     setHovered(null);
@@ -468,11 +466,7 @@ export function App() {
       className="flex h-screen flex-col overflow-hidden bg-tile"
       style={{ paddingBottom: stripCollapsed ? STRIP_H.collapsed : STRIP_H.open }}
     >
-        <Header
-          events={summary?.events ?? []}
-          regret={summary?.regret ?? []}
-          onFocus={focusFromChangeLog}
-        />
+        <Header events={summary?.events ?? []} onFocus={focusFromChangeLog} />
 
         {/* A failure must LOOK different from a wait, and carry a way out
             (stability session, Pass B). Before this, both rendered the same
@@ -524,6 +518,8 @@ export function App() {
                   matrixOpen={matrixOpen}
                   onToggleMatrix={() => setMatrixOpenRaw((v) => !v)}
                   policy={summary.policy}
+                  regret={summary.regret ?? []}
+                  onLabFocus={focusFromChangeLog}
                 />
               </ErrorBoundary>
             </div>

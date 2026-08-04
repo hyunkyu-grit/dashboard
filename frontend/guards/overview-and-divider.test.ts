@@ -248,7 +248,9 @@ describe("the 전체 overview", () => {
 describe("the tab set", () => {
   it("butterfly is its own tab, between 스프레드 and 포워드", () => {
     expect(GROUP_LABEL.fly).toBe("버터플라이");
-    const order = ["all", "outright", "spread", "fly", "forward", "vol"];
+    // 연구실 rides at the FAR RIGHT [OWNER, 2026-08-04] — the incubation
+    // surface; its last-place position is pinned by guards/regret-list.
+    const order = ["all", "outright", "spread", "fly", "forward", "vol", "lab"];
     const found = [...table.matchAll(/\{ id: "(\w+)", label:/g)].map((m) => m[1]);
     expect(found).toEqual(order);
   });

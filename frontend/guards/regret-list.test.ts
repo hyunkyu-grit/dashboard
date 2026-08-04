@@ -20,11 +20,11 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { identifiers } from "./_source";
+import { code, identifiers } from "./_source";
 
 import type { RegretEntry } from "../src/lib/api";
 import { directionLabel, fmtKrw } from "../src/ui/BacktestWindow";
-import { RegretLine } from "../src/ui/ChangeLog";
+import { RegretLine } from "../src/ui/RegretLab";
 
 const entry = (over: Partial<RegretEntry> = {}): RegretEntry => ({
   date: "2026-07-27",
@@ -66,8 +66,8 @@ describe("라고 할 때 살걸 — one vocabulary", () => {
 });
 
 describe("라고 할 때 살걸 — served, not derived (§16)", () => {
-  it("ChangeLog imports the shared vocabulary instead of re-implementing it", () => {
-    const src = identifiers("ui/ChangeLog.tsx");
+  it("RegretLab imports the shared vocabulary instead of re-implementing it", () => {
+    const src = identifiers("ui/RegretLab.tsx");
     expect(src).toMatch(/import\s*\{[^}]*directionLabel[^}]*\}\s*from/);
     expect(src).toMatch(/import\s*\{[^}]*fmtKrw[^}]*\}\s*from/);
   });
@@ -75,9 +75,23 @@ describe("라고 할 때 살걸 — served, not derived (§16)", () => {
   it("the component does no P&L arithmetic of its own", () => {
     // The one place a number is computed from a number in this file must not
     // exist: no dv01/notional math, no deltaBp sign→direction mapping.
-    const src = identifiers("ui/ChangeLog.tsx");
+    const src = identifiers("ui/RegretLab.tsx");
     expect(src).not.toMatch(/deltaBp\s*[<>]/);
     expect(src).not.toMatch(/pnl\s*[-+*/]/);
     expect(src).not.toMatch(/dv01/i);
+  });
+});
+
+describe("연구실 — the incubation tab stays FAR RIGHT", () => {
+  it("lab is the LAST entry of the tab strip [OWNER, 2026-08-04]", () => {
+    // Tab order is the product's order of confidence: experiments enter at
+    // the right edge and GRADUATE leftward on trader feedback. A lab tab
+    // that drifted left without that feedback is the violation.
+    const arr = code("ui/InstrumentTable.tsx").match(
+      /const FILTERS[\s\S]*?\];/,
+    )![0];
+    const ids = [...arr.matchAll(/id:\s*"([^"]+)"/g)].map((m) => m[1]);
+    expect(ids.length).toBeGreaterThan(1);
+    expect(ids[ids.length - 1]).toBe("lab");
   });
 });

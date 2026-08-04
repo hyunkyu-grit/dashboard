@@ -21,6 +21,9 @@ Every convention here is a choice, so each is stated:
 - **Notional is a flat 100억 on the reference leg** — a scale for reading the
   figure, not a recommendation. The legs beyond it are DV01-neutral exactly
   as the backtest builds any position.
+- **주요 instruments only** [OWNER, 2026-08-04]: the universe is
+  `derive.is_key` — the 주요 아웃라이트/스프레드/플라이 sets that draw each
+  tab's divider — applied in the replay BEFORE the collapse (events.py).
 - **Yesterday's lines are skipped**: their entry would be today, held zero
   days, and a guaranteed 0원 line says nothing.
 - The signed P&L is served as it comes: a negative figure is the honest

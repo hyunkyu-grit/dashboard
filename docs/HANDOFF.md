@@ -189,30 +189,44 @@ rule:
 
 ## 6. Current state (as of the 2026-08-04 session)
 
-### Latest — 라고 할 때 살걸: the change log priced in hindsight (2026-08-04, regret session)
+### Latest — 연구실 tab + 라고 할 때 살걸 (2026-08-04, regret session, two passes)
 
-The change-log popover grew a bottom section: each log line of the last 20
-business days, priced as if followed — the event's own direction (sign of
-deltaBp), entry at the NEXT business day's close, flat 100억, valued to
-as-of by the backtest's own `_run_one`. Signed answers stay signed.
+New FAR-RIGHT tab **연구실** — the incubation surface [OWNER: experiments
+enter at the right edge, graduate LEFTWARD on trader feedback]. First
+resident: **라고 할 때 살걸** — each 주요-instrument log line of the last 20
+business days, priced as if followed: direction = sign of deltaBp, entry at
+the NEXT business day's close, flat 100억, valued to as-of by the backtest's
+own `_run_one`. Signed answers stay signed. (Pass 1 shipped it inside the
+change-log popover; the owner moved it out the same day — "변화 칸이 아니라,
+그냥 하나 따로 빼보기" — and restricted it to 주요: "대표적인 아웃라이트,
+스프레드, 버터플라이만".)
 
-- `events.replay_leading_events` — rule (c) re-run as of each past day
-  (truncated history, same collapse, LEADING member only, 1D excluded
-  before the collapse); `app/regret.py` — the pricing + conventions (its
-  docstring is the reference); rides in `wall_summary` as `regret`, so the
-  static tree carries it; cached by data hash next to forwards (~1.4s).
-- FE: `RegretEntry` in api.ts, `RegretLine` in `ui/ChangeLog.tsx` — two-line
-  row (log grammar on top, 방향어 + `fmtKrw` money below), click = focus.
-  Vocabulary is IMPORTED from BacktestWindow (`directionLabel`, `fmtKrw`),
-  pinned byte-for-byte by `guards/regret-list.test.ts`.
-- Tests: `tests/test_regret.py` (rule-identity on a truncated dataset;
-  P&L == run_backtest to the won; window/exclusion properties).
-- Gotcha: the replay range is business-day INDEX arithmetic — the first
-  version quietly replayed 21 days (`range(n-2, n-2-lookback-1, -1)`), and
-  only the window-property test caught it.
-- [TBD — owner]: 20-day lookback, flat 100억, and whether a regret line may
-  seed the backtest window (second entrance beside the chart-click rule).
-  See DESIGN §12 "라고 할 때 살걸".
+- BE: `events.replay_leading_events` — daily rule re-run on truncated
+  history per day, **filtered to `derive.is_key` BEFORE the collapse** (so a
+  cluster a non-주요 series would have led falls to its strongest 주요
+  member), LEADING member only, 1D excluded; `app/regret.py` — pricing +
+  conventions (docstring is the reference); rides in `wall_summary` as
+  `regret` → static tree carries it; cached by data hash,
+  **SCHEMA_VERSION 5→6** (same xlsx, different cached content — v5 trap).
+- FE: `ui/RegretLab.tsx` (연구실 body + `RegretLine`; vocabulary IMPORTED
+  from BacktestWindow — `directionLabel` now exported — pinned
+  byte-for-byte by `guards/regret-list.test.ts`, which also pins 연구실 as
+  the LAST tab); `TabId = Group | "all" | "lab"` in InstrumentTable, lab
+  branch in the shared shell (sort/screeners/dividers hidden), right pane
+  keeps the idle curve; ChangeLog reverted to events-only.
+- Tests: `tests/test_regret.py` (per-series rule-identity on a truncated
+  dataset — cluster LEADERS may differ from the full log after the 주요
+  filter, so the reference is the daily FIRING membership; P&L ==
+  run_backtest to the won; window/exclusion/주요 properties);
+  `guards/overview-and-divider.test.ts` tab-set pin now includes `lab`.
+- Gotchas: the replay range is business-day INDEX arithmetic — the first
+  version quietly replayed 21 days, caught only by the window-property
+  test; a **stale :8100 uvicorn** made `test_static_agreement` fail (live
+  summary lacked `regret`) — restart it after any payload change.
+- [TBD — owner]: 20-day lookback, flat 100억, graduation criteria for
+  연구실 residents, and whether a 살걸 line may seed the backtest window
+  (second entrance beside the chart-click rule). See DESIGN §12 연구실 +
+  "라고 할 때 살걸".
 
 ### Before that — the pane chart zooms in place; the references get their hues (2026-08-04, later)
 

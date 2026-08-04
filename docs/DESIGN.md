@@ -1714,24 +1714,48 @@ Replay of rule (c) over the last 500 business days: median 1, p90 2, max 12,
 empty on 153/500 days — a log that can be empty, unlike the prior rule
 (empty 1/500).
 
+### 연구실 — the incubation tab, far right [OWNER, 2026-08-04]
+
+A new tab at the FAR RIGHT of the tab strip ["연구실 항목을 따로 맨 우측에
+만들어서 거기에 반영해서 트레이더 피드백 나오면 이제 왼쪽으로 옮기는거로"].
+Experimental, statistics-flavoured surfaces enter the product HERE, not in
+the main tabs and not in the header chrome: tab order is the product's order
+of confidence, so an experiment that earns trader feedback GRADUATES
+leftward into the main tabs, and one that does not is dropped without ever
+having touched the product proper. The shell is shared (same tab strip, same
+scroll container); the row machinery — sort, screeners, dividers — hides,
+because a lab surface is not a row list. The right pane keeps the idle
+curve. Last-place position is pinned by `guards/regret-list.test.ts`; the
+tab-set order by `guards/overview-and-divider.test.ts`.
+
 ### 라고 할 때 살걸 — the log, priced in hindsight [OWNER, 2026-08-04]
 
-**"그때 변화 떴을 때 따라갔으면 지금 얼마."** A section at the bottom of the
-change-log popover: each log line of the last 20 business days, priced as if
-the reader had followed it — the event's own direction, the next business
-day's close, a flat 100억 — and valued to the as-of date by the backtest
-engine itself. The signed answer stays signed: a negative line ("안 따라가길
-잘했다") is the same information as a positive one, and a list that dropped
-them would be a highlight reel.
+**"그때 변화 떴을 때 따라갔으면 지금 얼마."** The 연구실 tab's first
+resident (it shipped for a few hours as a change-log popover section and was
+moved the same day ["변화 칸이 아니라, 그냥 하나 따로 빼보기"] — the log
+records what moved; this list is a statistical experiment and lives where
+experiments live). Each 주요-instrument log line of the last 20 business
+days, priced as if the reader had followed it — the event's own direction,
+the next business day's close, a flat 100억 — and valued to the as-of date
+by the backtest engine itself. The signed answer stays signed: a negative
+line ("안 따라가길 잘했다") is the same information as a positive one, and a
+list that dropped them would be a highlight reel.
 
 Every convention is a stated choice (`backend/app/regret.py` docstring is
 the reference):
 
 - **The replay is the daily rule, not a second rule.** What the list claims
-  the log said on day j is `detect_event_clusters` re-run on the history
-  truncated at j — same percentile windows, same collapse, same leader.
-  Pinned by `test_regret.py::test_replay_matches_the_daily_rule…` against a
-  truncated dataset.
+  the log said on day j is the daily detection re-run on the history
+  truncated at j — same percentile windows, same signal. Pinned by
+  `test_regret.py::test_replay_matches_the_daily_rule…` against a truncated
+  dataset.
+- **주요 instruments only** ["대표적인 아웃라이트, 스프레드, 버터플라이만"]:
+  the universe is `derive.is_key` — the same membership that draws each
+  tab's 주요/전체 divider, so this list and the table cannot disagree about
+  what 대표 means. Filtered BEFORE the collapse, so a cluster a non-주요
+  series would have led falls to its strongest 주요 member instead of
+  vanishing (the collapse can therefore split differently from the full
+  daily log's — that is the restriction working, not a drift).
 - **Leading series per cluster only** — the line the reader actually saw;
   pricing the related members would multiply each cluster into
   near-duplicate positions.
@@ -1748,18 +1772,20 @@ the reference):
 - **The P&L is the backtest's answer to the won** — `_run_one`, full
   revaluation, DV01-neutral legs, maturity cap, carry; never a second
   pricing path (pinned by `test_regret.py::test_pnl_is_the_backtest_answer…`).
-- **One vocabulary.** The popover prints the direction through
+- **One vocabulary.** The line prints the direction through
   `BacktestWindow.directionLabel` and the money through its `fmtKrw`,
   imported — `guards/regret-list.test.ts` checks the render byte-for-byte
   against both and bans a local re-implementation (§16 also holds: the
   browser formats, never computes).
 - **Precomputed and baked** (§16, §21): the list depends on no reader input,
   so it rides in the wall summary and the static tree carries it. Cached by
-  data hash next to forwards (~1.4s to rebuild). The line click is the log's
-  click — focus the instrument.
+  data hash next to forwards; SCHEMA_VERSION v6 was the 주요 restriction
+  (same xlsx bytes, different cached content — the v5 trap class). The line
+  click is the change log's click — focus the instrument.
 
 Files: `backend/app/regret.py`, `events.replay_leading_events`,
-`ui/ChangeLog.tsx` (RegretLine), `tests/test_regret.py`,
+`ui/RegretLab.tsx` (연구실 body + RegretLine), the `lab` branch in
+`ui/InstrumentTable.tsx`, `tests/test_regret.py`,
 `guards/regret-list.test.ts`.
 
 [TBD — owner]: the 20-day lookback and the flat 100억 are first guesses; a

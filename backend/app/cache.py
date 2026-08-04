@@ -40,7 +40,10 @@ DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache"
 # rows from early 2016, and short-start cells' movePct/range histories shrink
 # by the same dates. Same xlsx bytes, different derived content: without the
 # bump a v4 cache would keep serving the zeros.
-SCHEMA_VERSION = 5
+# v6 (2026-08-04): the regret replay restricts to the 주요 sets [OWNER] —
+# same xlsx bytes, different cached `regret` content (44 → 29 lines); a v5
+# cache would keep serving the non-주요 lines.
+SCHEMA_VERSION = 6
 
 
 def data_hash(path: Path) -> str:

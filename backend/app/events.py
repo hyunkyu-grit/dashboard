@@ -22,7 +22,7 @@ from bisect import bisect_left
 import numpy as np
 
 from .dataset import Dataset
-from .derive import ANNUAL_OBS, derived_ids, series_values
+from .derive import ANNUAL_OBS, derived_ids, is_key, series_values
 
 OUTLIER_PCT = 95
 MIN_CHANGE_HISTORY = 20  # need enough own-Δ history to trust the percentile
@@ -135,22 +135,33 @@ def replay_leading_events(
     before today, collapsed the same way, LEADING series per cluster only.
 
     This is the regret feature's event source (regret.py): "the log said so on
-    day j" must mean exactly what the log WOULD have said on day j, so the
+    day j" must mean what the log WOULD have said on day j, so the per-series
     detection is the daily rule on the history truncated at j — same
-    percentile windows, same collapse, same ranking — never a new rule. Only
-    the leading series is kept because that is the line the reader actually
-    saw; pricing every related member would multiply each cluster into
-    near-duplicate positions.
+    percentile windows, same signal — never a new rule. Only the leading
+    series of each cluster is kept because that is the line the reader
+    actually saw; pricing every related member would multiply each cluster
+    into near-duplicate positions.
 
-    1D (call) is excluded at the source: a swap that matures the next
-    business day prices the follow-trade at ~0원, so its lines are noise —
-    and excluding it BEFORE the collapse lets a cluster it would have led
-    fall to its strongest priceable member instead of vanishing.
+    The universe is the 주요 sets only [OWNER, 2026-08-04: "대표적인
+    아웃라이트, 스프레드, 버터플라이만"] — `derive.is_key`, the same
+    membership that draws each tab's 주요/전체 divider, so this list and the
+    table can never disagree about what "대표" means. The filter runs BEFORE
+    the collapse, so a cluster a non-주요 series would have led falls to its
+    strongest 주요 member instead of vanishing. (Collapse among fewer members
+    can therefore split differently from the full daily log's — that is the
+    point of the restriction, not a drift from the rule.)
+
+    1D (call) is excluded the same way even though it is a quoted node: a
+    swap that matures the next business day prices the follow-trade at ~0원,
+    so its lines are noise.
 
     Returns [{dateIndex, id, label, kind, unit, deltaBp, reasons}], newest
     day first, strongest cluster first within a day.
     """
-    meta = [m for m in _series_meta(dataset) if m[0] != "1D"]
+    meta = [
+        m for m in _series_meta(dataset)
+        if m[0] != "1D" and is_key(m[0], m[2])
+    ]
     n = len(dataset.dates)
     out: list[dict] = []
     for j in range(n - 2, max(n - 2 - lookback, 0), -1):

@@ -15,6 +15,7 @@ import type {
   CurveBanner,
   ForwardsPayload,
   PolicyStep,
+  RegretEntry,
 } from "@/lib/api";
 import { dirClass, fmtDelta, levelHeadText, levelHeadTitle } from "@/lib/format";
 import { ForwardMatrix, KeyForwardBlock } from "@/wall/ForwardMatrix";
@@ -32,6 +33,7 @@ import { reorderAnimates, rowShouldFlip, SPRING } from "./motion";
 import { OverviewColumns } from "./OverviewColumns";
 import { PAGE_X } from "./pageGutter";
 import { RangeCells, RangeHeader } from "./RangeCells";
+import { RegretLab } from "./RegretLab";
 import { TintLegend } from "./TintLegend";
 import {
   BASIS_ORDER,
@@ -50,13 +52,20 @@ const RANGE_COL_NAME = "52주 레인지";
 /** The position track's noun for the same note (pass N). */
 const SLIDER_COL_NAME = "52주 내 위치";
 
-const FILTERS: { id: Group | "all"; label: string }[] = [
+/** A tab is a row filter, the overview, or the 연구실 — the incubation
+ * surface pinned to the FAR RIGHT [OWNER, 2026-08-04]. Tab order is the
+ * product's order of confidence: an experiment that earns trader feedback
+ * graduates leftward into the main tabs. */
+export type TabId = Group | "all" | "lab";
+
+const FILTERS: { id: TabId; label: string }[] = [
   { id: "all", label: "전체" },
   { id: "outright", label: GROUP_LABEL.outright },
   { id: "spread", label: GROUP_LABEL.spread },
   { id: "fly", label: GROUP_LABEL.fly },
   { id: "forward", label: GROUP_LABEL.forward },
   { id: "vol", label: GROUP_LABEL.vol },
+  { id: "lab", label: "연구실" },
 ];
 
 /** Which tabs draw the 주요/전체 divider [OWNER, 2026-07-31]. Generalized from
@@ -188,6 +197,8 @@ export function InstrumentTable({
   matrixOpen,
   onToggleMatrix,
   policy,
+  regret,
+  onLabFocus,
 }: {
   rows: Row[];
   /** The dataset's as-of date — the level column's HEADER (pass M). Comes from
@@ -195,8 +206,12 @@ export function InstrumentTable({
   asOf?: string;
   forwards?: ForwardsPayload;
   curveBanner?: CurveBanner;
-  filter: Group | "all";
-  onFilter: (f: Group | "all") => void;
+  filter: TabId;
+  onFilter: (f: TabId) => void;
+  /** 연구실 residents (§lab). 라고 할 때 살걸 rows + the focus routing the
+   * change log uses (switch tab, pin, scroll). */
+  regret?: RegretEntry[];
+  onLabFocus?: (id: string) => void;
   activeId: string | null;
   pinnedId: string | null;
   onHover: (row: Row | null) => void;
@@ -258,6 +273,9 @@ export function InstrumentTable({
   // tab strip, the freshness banner and the scroll container stay shared; only
   // the body below them changes.
   const isOverview = filter === "all";
+  // 연구실: same shell, its own body; row machinery (sort, screeners,
+  // dividers) has nothing to work on there and stays hidden.
+  const isLab = filter === "lab";
   const divided = DIVIDED.includes(filter as Group);
   const activeScreener = SCREENERS.find((s) => s.id === screener) ?? null;
 
@@ -416,8 +434,9 @@ export function InstrumentTable({
       {/* Screener presets (§D): a second row of chips, a filter on top of the
           active tab — one at a time, click again clears. Not a sidebar.
           Hidden on 전체, which is no longer a list: the chips filter ROWS, and
-          there are no rows there to filter — only three fixed 주요 sets. */}
-      {!isOverview && (
+          there are no rows there to filter — only three fixed 주요 sets. Hidden
+          on 연구실 for the same reason. */}
+      {!isOverview && !isLab && (
       <div className="mt-2 flex flex-wrap gap-1.5">
         {SCREENERS.map((sc) => {
           const on = screener === sc.id;
@@ -441,7 +460,7 @@ export function InstrumentTable({
         })}
       </div>
       )}
-      {activeScreener && !isOverview && (
+      {activeScreener && !isOverview && !isLab && (
         <p className="mt-1.5 text-[12px] opacity-55">{activeScreener.description}</p>
       )}
 
@@ -505,7 +524,9 @@ export function InstrumentTable({
           isOverview ? "flex flex-col" : `${PAGE_X} [scrollbar-gutter:stable]`
         }`}
       >
-        {isOverview ? (
+        {isLab ? (
+          <RegretLab regret={regret ?? []} onFocus={onLabFocus ?? (() => {})} />
+        ) : isOverview ? (
           <OverviewColumns rows={rows} asOf={asOf} policy={policy} />
         ) : isForward && matrixOpen && forwards ? (
           // wrap the 주요 포워드 block below the matrix rather than clipping it

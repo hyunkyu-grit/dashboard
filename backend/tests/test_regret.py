@@ -21,6 +21,7 @@ import pytest
 
 from app.backtest import Position, run_backtest
 from app.dataset import load_dataset
+from app.derive import is_key
 from app.events import REPLAY_LOOKBACK, detect_event_clusters, replay_leading_events
 from app.regret import NOTIONAL, regret_payload
 
@@ -38,8 +39,12 @@ def payload(ds):
 
 
 def test_replay_matches_the_daily_rule_on_a_truncated_dataset(ds):
-    """Rule-identity: replaying day j == running the daily detector on the
-    file as it stood on day j. Checked on the newest replayed day that fired."""
+    """Rule-identity: every replayed line of day j must have FIRED, with the
+    same signal, when the daily detector runs on the file as it stood on day
+    j. The daily log's firing membership (leading + related) is the
+    reference — the replay's collapse runs on the 주요-filtered universe, so
+    its cluster LEADERS may differ from the full log's, but a signal the
+    daily rule would not have fired can never appear here."""
     replay = replay_leading_events(ds)
     assert replay, "no event in the lookback window — widen it for this file"
     j = replay[0]["dateIndex"]
@@ -47,15 +52,16 @@ def test_replay_matches_the_daily_rule_on_a_truncated_dataset(ds):
     truncated = load_dataset(DATA)
     truncated.dates = truncated.dates[: j + 1]
     truncated.series = {k: v[: j + 1] for k, v in truncated.series.items()}
-    daily = [
-        c["leading"] for c in detect_event_clusters(truncated)
-        if c["leading"]["id"] != "1D"
+    fired = [
+        m
+        for c in detect_event_clusters(truncated)
+        for m in (c["leading"], *c["related"])
     ]
 
     replayed_j = [e for e in replay if e["dateIndex"] == j]
-    assert {e["id"] for e in replayed_j} <= {d["id"] for d in daily}
+    assert {e["id"] for e in replayed_j} <= {d["id"] for d in fired}
     for e in replayed_j:
-        d = next(x for x in daily if x["id"] == e["id"])
+        d = next(x for x in fired if x["id"] == e["id"])
         assert e["deltaBp"] == d["deltaBp"]
         assert e["reasons"] == d["reasons"]
 
@@ -66,6 +72,8 @@ def test_replay_window_and_exclusions(ds):
         assert n - 2 - REPLAY_LOOKBACK + 1 <= e["dateIndex"] <= n - 2
         assert e["id"] != "1D"
         assert e["kind"] in ("outright", "spread", "fly")
+        # 주요 only [OWNER, 2026-08-04] — the tab divider's own membership
+        assert is_key(e["id"], e["kind"])
 
 
 def test_pnl_is_the_backtest_answer_to_the_won(ds, payload):
