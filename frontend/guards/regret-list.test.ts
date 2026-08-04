@@ -72,6 +72,16 @@ describe("라고 할 때 살걸 — served, not derived (§16)", () => {
     expect(src).toMatch(/import\s*\{[^}]*fmtKrw[^}]*\}\s*from/);
   });
 
+  it("nothing in the lab panel truncates [OWNER, 2026-08-04: '한글 잘림 꺼라']", () => {
+    // A clipped 방향어 hides which trade the figure belongs to. Long lines
+    // WRAP; `truncate` (and its raw equivalents) may not return. `code`
+    // keeps string literals, where a class name lives — a string occurrence
+    // IS the violation.
+    const src = code("ui/RegretLab.tsx");
+    expect(src).not.toMatch(/\btruncate\b/);
+    expect(src).not.toMatch(/text-ellipsis|text-clip/);
+  });
+
   it("the component does no P&L arithmetic of its own", () => {
     // The one place a number is computed from a number in this file must not
     // exist: no dv01/notional math, no deltaBp sign→direction mapping.

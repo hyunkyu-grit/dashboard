@@ -51,7 +51,9 @@ export function RegretLine({
         <span className="shrink-0 text-[12px] tabular-nums opacity-45">
           {shortDate(r.date)}
         </span>
-        <span className="min-w-0 flex-1 truncate text-[13px]">{r.label}</span>
+        {/* no truncate anywhere in this panel [OWNER, 2026-08-04: "한글
+            잘림 꺼라"] — a clipped 방향어 hides the trade; long lines WRAP. */}
+        <span className="min-w-0 flex-1 break-keep text-[13px]">{r.label}</span>
         <span
           className={`shrink-0 text-[12px] tabular-nums ${dirClass(r.deltaBp)}`}
         >
@@ -59,7 +61,7 @@ export function RegretLine({
         </span>
       </span>
       <span className="flex items-baseline gap-2 pl-[34px]">
-        <span className="min-w-0 flex-1 truncate text-[12px] opacity-55">
+        <span className="min-w-0 flex-1 break-keep text-[12px] opacity-55">
           {directionLabel(r.id, r.direction)}
         </span>
         <span
