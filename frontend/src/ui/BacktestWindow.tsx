@@ -1415,15 +1415,17 @@ export function BacktestWindow({
                 ])
               }
               disabled={book.length >= MAX_POSITIONS}
-              className="rounded-[10px] border border-edge px-3 py-2 text-[13px] disabled:opacity-40"
+              className="rounded-[10px] border border-edge px-3 py-2 text-[13px] hover:bg-page disabled:opacity-40 disabled:hover:bg-transparent"
             >
               + 포지션 추가
             </button>
+            {/* min-width holds through the 실행 ↔ 계산 중… swap — a primary
+                button that changes size mid-action shoves the hint beside it */}
             <button
               type="button"
               onClick={() => run.mutate()}
               disabled={!ready || run.isPending}
-              className="rounded-[10px] bg-ink px-5 py-2 text-[14px] font-semibold text-page disabled:opacity-40"
+              className="min-w-[6.75rem] rounded-[10px] bg-ink px-5 py-2 text-center text-[14px] font-semibold text-page hover:opacity-90 disabled:opacity-40"
             >
               {run.isPending ? "계산 중…" : "실행"}
             </button>
