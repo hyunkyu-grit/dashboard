@@ -44,8 +44,12 @@ import {
 import { dateLabels } from "./timeAxis";
 
 // top pad holds the reference-line legend (§ reference lines), so it is
-// deeper than the 10px the plot alone needed
-const PAD = { top: 16, right: 10, bottom: 18, left: 6 };
+// deeper than the 10px the plot alone needed. EXPORTED because the backtest's
+// LinkedPnlChart must share left/right EXACTLY — vertical alignment between
+// the two stacked charts is this object plus one x formula, and a copied
+// constant is a drift waiting to happen.
+export const CHART_PAD = { top: 16, right: 10, bottom: 18, left: 6 };
+const PAD = CHART_PAD;
 
 /** A dated mark on the chart [OWNER feedback, 2026-08-04 — the backtest
  * window's context chart]. The vertical hairline names a DATE; with `level`
@@ -67,35 +71,14 @@ export interface ChartMark {
   level?: boolean;
 }
 
-/** A signed series OVERLAID on the chart on its own zero-anchored scale
- * [OWNER, 2026-08-04 — "PnL이 밑에 그려지고 있는데 내 말은 겹쳐서
- * 그려져야 한다"]. The backtest's cumulative P&L, drawn over the instrument
- * it was earned on so the two can be read against each other.
- *
- * Its unit is MONEY, which shares an axis with nothing here, so it gets its
- * own scale — zero always in frame (the win/lose boundary, the PnlChart
- * rule) — and prints NO axis numbers: a money tick beside bp and % ticks is
- * the ambiguity the dual-axis rule exists to prevent, and the figures live
- * in the headline and the caller's hover readout. The area fill closes on
- * the overlay's own zero, so "which side of breakeven" stays readable with
- * no third axis drawn.
- *
- * INK, deliberately: the direction hues are unavailable — the down-blue IS
- * the instrument line's blue (tokens.css: a line has no sign), so a losing
- * P&L coloured by sign would vanish into the line it annotates, and the red
- * already belongs to the 기준금리 reference. Ink at weight 2 over the
- * instrument's 1.6 reads as "the answer drawn on the market", and sign is
- * carried by geometry (side of the fill's zero edge), which survives
- * grayscale (§5).
- *
- * Aligned by DATE like every reference (the server thins the P&L line;
- * pairing by position would be the zip defect) and BOUNDED: null before its
- * first date and after its last — a book closed in June does not draw a
- * fabricated flat P&L to the axis end. */
-export interface ChartOverlay {
-  points: { t: string; v: number }[];
-  label: string;
-}
+/* A P&L OVERLAY briefly lived here (2026-08-04, one owner pass) and was
+ * replaced the same day by the LINKED PANEL [OWNER 재피드백: "겹치는 거보다
+ * PL은 밑에 그려지되 … 완전히 수직적으로 얼라인"]: the money series now
+ * draws in `LinkedPnlChart` (BacktestWindow.tsx) directly below this chart,
+ * sharing CHART_PAD and the index→x formula so the two are pixel-aligned by
+ * construction. What this chart contributes to that pairing is `still`
+ * (alignment forbids a zoom the sibling cannot follow) and `hoverDate` (one
+ * crosshair driven from either half). */
 
 /** Where the horizontal gridlines sit, as fractions of the plot height. ONE
  * list for the lines and their value labels, so the two cannot drift. */
@@ -111,7 +94,8 @@ export function PreviewChart({
   cd,
   onHoverDate,
   marks,
-  overlay,
+  still,
+  hoverDate,
 }: {
   points: HistoryPoint[];
   stats: SeriesStats | null; // range min/max/avg, precomputed server-side (§16)
@@ -132,8 +116,16 @@ export function PreviewChart({
   onHoverDate?: (iso: string | null) => void;
   /** 진입/청산 annotations for the backtest's context chart — see ChartMark. */
   marks?: ChartMark[];
-  /** the backtest P&L drawn OVER the instrument — see ChartOverlay. */
-  overlay?: ChartOverlay;
+  /** No wheel zoom, no pan — the linked-panel mode [OWNER: "시계열을
+   * 여기서는 확대 및 축소할 필요는 없으나"]. Alignment with the P&L chart
+   * below is the whole point there, and a zoom the sibling cannot follow
+   * would silently break it. */
+  still?: boolean;
+  /** An EXTERNAL crosshair date — the linked P&L chart below reports its own
+   * hover through the shared parent, and this chart shows its readout at
+   * that date as if the cursor were here. The pointer's own hover wins when
+   * both exist (they only disagree for a frame). */
+  hoverDate?: string | null;
 }) {
   const [hi, setHi] = useState<number | null>(null);
   /* The visible slice, or null = the full span (chartZoom.ts). Series
@@ -157,7 +149,7 @@ export function PreviewChart({
    * setView keeps the closure free of the current view. */
   useEffect(() => {
     const el = svgRef.current;
-    if (!el || len < 2) return;
+    if (!el || len < 2 || still) return; // still: zoom is off, see the prop
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const rect = el.getBoundingClientRect();
@@ -166,7 +158,7 @@ export function PreviewChart({
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [plotW, len]);
+  }, [plotW, len, still]);
 
   if (points.length < 2 || !stats) return null;
 
@@ -238,49 +230,6 @@ export function PreviewChart({
       : y;
   const path = pts.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
 
-  /* The overlay, aligned to the plotted slice by DATE and bounded to its own
-   * span (see ChartOverlay). Contiguous non-null stretches become runs; the
-   * scale is the overlay's alone, zero-anchored, derived from the VISIBLE
-   * values so the zoomed chart re-derives it exactly as it does its own
-   * domain. */
-  const ovVals: (number | null)[] = [];
-  if (overlay && overlay.points.length) {
-    const ov = overlay.points;
-    const firstT = ov[0].t;
-    const lastT = ov[ov.length - 1].t;
-    let j = 0;
-    for (const p of pts) {
-      if (p.t < firstT || p.t > lastT) {
-        ovVals.push(null);
-        continue;
-      }
-      while (j + 1 < ov.length && ov[j + 1].t <= p.t) j++;
-      ovVals.push(ov[j].t <= p.t ? ov[j].v : null);
-    }
-  }
-  const ovExt = seriesExtent(ovVals);
-  let yOv: ((v: number) => number) | null = null;
-  if (ovExt) {
-    const oLo = Math.min(0, ovExt.min); // zero always in frame — the
-    const oHi = Math.max(0, ovExt.max); // win/lose boundary (PnlChart rule)
-    const oPad = (oHi - oLo) * 0.08 || 1;
-    const oMin = oLo - oPad;
-    const oMax = oHi + oPad;
-    yOv = (v: number) => PAD.top + (1 - (v - oMin) / (oMax - oMin)) * plotH;
-  }
-  const ovRuns: [number, number][] = [];
-  if (yOv) {
-    let s = -1;
-    for (let i = 0; i <= ovVals.length; i++) {
-      if (i < ovVals.length && ovVals[i] != null) {
-        if (s < 0) s = i;
-      } else if (s >= 0) {
-        if (i - s > 1) ovRuns.push([s, i - 1]);
-        s = -1;
-      }
-    }
-  }
-
   const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const px = e.clientX - rect.left;
@@ -326,9 +275,21 @@ export function PreviewChart({
     }
   };
 
+  /* the EXTERNAL crosshair (`hoverDate`, linked-panel mode): the sibling
+   * chart's hovered date mapped into this slice — on-or-after, the snap
+   * every date lookup here uses; outside the slice nothing draws. The
+   * pointer's own hover wins when both exist. */
+  const extIdx =
+    hoverDate != null &&
+    pts.length > 0 &&
+    hoverDate >= pts[0].t &&
+    hoverDate <= pts[pts.length - 1].t
+      ? pts.findIndex((p) => p.t >= hoverDate)
+      : null;
   // a hover index left over from a different slice (zoom just changed) is
   // stale until the next mouse move — render nothing rather than a wrong date
-  const hIdx = hi != null && hi < pts.length ? hi : null;
+  const hIdx =
+    hi != null && hi < pts.length ? hi : extIdx != null && extIdx >= 0 ? extIdx : null;
   const hp = hIdx != null ? pts[hIdx] : null;
   // daily change arrives precomputed per point (§16) — no client differencing.
   const dailyChange = hp ? hp.d : null;
@@ -372,13 +333,6 @@ export function PreviewChart({
       op: 0.35,
       stroke: "stroke-ref-policy",
       fill: "fill-ref-policy",
-    });
-  if (ovRuns.length && overlay)
-    legend.push({
-      label: overlay.label,
-      op: 0.9,
-      stroke: "stroke-ink",
-      fill: "fill-ink",
     });
 
   return (
@@ -518,38 +472,6 @@ export function PreviewChart({
           strokeWidth={1.6}
           strokeLinejoin="round"
         />
-        {/* The P&L overlay (ChartOverlay) — over the instrument line (it is
-            the answer drawn on the market), under the marks and crosshair.
-            Each run's area closes on the OVERLAY's zero, so the fill reads
-            as distance from breakeven with no third axis drawn. */}
-        {yOv &&
-          ovRuns.map(([a, b]) => {
-            const run: string[] = [];
-            for (let i = a; i <= b; i++) {
-              run.push(`${x(i).toFixed(1)},${yOv(ovVals[i]!).toFixed(1)}`);
-            }
-            const line = run.join(" ");
-            const area = `${line} ${x(b).toFixed(1)},${yOv(0).toFixed(1)} ${x(a).toFixed(1)},${yOv(0).toFixed(1)}`;
-            return (
-              <g key={`ov-${a}`} className="text-ink">
-                <polygon
-                  points={area}
-                  fill="currentColor"
-                  fillOpacity={0.07}
-                  stroke="none"
-                />
-                <polyline
-                  data-overlay=""
-                  points={line}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  strokeOpacity={0.9}
-                  strokeLinejoin="round"
-                />
-              </g>
-            );
-          })}
         {/* Dated marks (ChartMark) — drawn over the line so a 진입 dot is
             never buried under it, under the extremes/crosshair so the marks
             annotate rather than compete. Snap and skip rules live in the
@@ -703,7 +625,10 @@ export function PreviewChart({
         ))}
         {hIdx != null && hp && (
           <>
+            {/* data-crosshair anchors the alignment guard: the linked P&L
+                chart's crosshair at the same date must land on the same x */}
             <line
+              data-crosshair=""
               x1={x(hIdx)}
               x2={x(hIdx)}
               y1={PAD.top}

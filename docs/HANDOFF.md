@@ -222,19 +222,21 @@ Two owner feedbacks, one mechanism [OWNER: ① 싱글/개별 백테스트에서�
 - Verified live (:3100): 10Y pre-run readout 3.1650% == post-run server
   entryValue; 3s10s dual-axis chart with −5.0bp readout; 청산일 → 청산 mark;
   second instrument added → chart hides; run result renders below the chart.
-- **Second pass [OWNER: "PnL이 밑에 그려지고 있는데 내 말은 겹쳐서 그려져야
-  한다"]**: the run's cumulative P&L now rides ON the context chart
-  (`ChartOverlay` on PreviewChart — own zero-anchored money scale, NO axis
-  numbers, area closes on its own zero, INK stroke because down-blue == line
-  blue and red == the 기준금리 reference; date-aligned AND bounded to its
-  span) and the standalone 누적 손익 chart is dropped in that case (kept for
-  multi-instrument books and for stale results whose positions no longer
-  match the chart's instrument — `chartOverlaid` gate in BacktestWindow).
-  Money on hover moved to a strip UNDER the chart (fmtKrw, server 누적/당일)
-  — the shared ReadoutCard keeps its level-only grammar. Overlay tests added
-  to `guards/backtest-context.test.ts`. Verified live: 5Y run → 손익 line +
-  fill over the instrument, legend entry, hover strip, no chart below the
-  headline.
+- **Second pass** shipped an overlaid P&L; **third pass replaced it same day
+  [OWNER 재피드백: "겹치는 거보다 PL은 밑에 그려지되 … far left가 진입일,
+  far right가 청산일 … 완전히 수직적으로 얼라인 … 위에는 기존 그래프의
+  정보가, 밑에는 PL의 당일 변화량 및 누적 PL"]** → the LINKED PAIR: after a
+  matching run the context chart windows to exactly [result.from, result.to]
+  and goes `still` (new PreviewChart prop — no wheel zoom while linked);
+  `LinkedPnlChart` (exported from BacktestWindow.tsx) draws the P&L directly
+  below, pixel-aligned by construction (same pts slice + shared `CHART_PAD`,
+  now exported from PreviewChart + same index→x formula); ONE crosshair
+  drives both via the shared parent (`hoverDate` prop on PreviewChart for
+  the external date; both crosshair lines carry `data-crosshair`, and the
+  guard pins byte-equal x for one date). Bottom card = server 누적/당일
+  (fmtKrw). Result's standalone PnlChart drops when `chartLinked` (renamed
+  from chartOverlaid; same every-position stale gate). `ChartOverlay` was
+  DELETED from PreviewChart — the marks (`ChartMark`) stay.
 
 ### Before that — 연구실 tab + 라고 할 때 살걸 (2026-08-04, regret session, two passes)
 

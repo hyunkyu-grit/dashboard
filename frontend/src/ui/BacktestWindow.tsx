@@ -75,7 +75,7 @@ import {
 } from "./floatingWindow";
 import { Z_WINDOW } from "./layers";
 import { instant } from "./motion";
-import { type ChartMark, PreviewChart } from "./PreviewChart";
+import { CHART_PAD, type ChartMark, PreviewChart } from "./PreviewChart";
 import { GROUP_LABEL, type Group, type Row } from "./rows";
 import { useCdReference } from "./useCdReference";
 
@@ -482,10 +482,9 @@ function BookContextChart({
   policy?: PolicyStep;
   /** the last run's answer, ONLY when it prices this same instrument — the
    * caller gates it, so a result left over from a different book cannot be
-   * drawn over the wrong line. When present the cumulative P&L rides ON the
-   * chart [OWNER, 2026-08-04 — "겹쳐서 그려져야"] and the money figures live
-   * in the hover strip below (fmtKrw — never on the shared readout card,
-   * which owns the LEVEL grammar). */
+   * paired with the wrong line. When present the chart is WINDOWED to the
+   * run (entry → exit), goes `still`, and the LinkedPnlChart below shares
+   * its x axis and crosshair [OWNER 재피드백, 2026-08-04]. */
   result?: BacktestResult | null;
 }) {
   const id = book[0]?.id;
@@ -497,16 +496,38 @@ function BookContextChart({
   if (!series || series.points.length < 2 || !series.stats) return null;
 
   const points = series.points;
-  const first = book
-    .map((b) => b.entry)
-    .filter(Boolean)
-    .sort()[0];
-  let start = 0;
-  if (first) {
-    let sIdx = points.findIndex((p) => p.t >= first);
-    if (sIdx < 0) sIdx = points.length - 1;
-    start = Math.max(0, sIdx - Math.max(20, Math.round((points.length - 1 - sIdx) * 0.25)));
+
+  /* THE WINDOW. With a result, far left IS the entry and far right IS the
+   * exit [OWNER 재피드백, 2026-08-04]: the slice is exactly
+   * [result.from, result.to], so the P&L chart below can share this x axis
+   * point for point. Without a result there is nothing to align with yet,
+   * and the slice leads in ahead of the earliest entry (a quarter of the
+   * tested span, at least 20 business days) so the entry mark sits in
+   * context rather than on the left edge. */
+  let pts: typeof points;
+  if (result) {
+    let sIdx = points.findIndex((p) => p.t >= result.from);
+    if (sIdx < 0) sIdx = 0;
+    let eIdx = points.length - 1;
+    while (eIdx > sIdx && points[eIdx].t > result.to) eIdx--;
+    pts = points.slice(sIdx, eIdx + 1);
+  } else {
+    const first = book
+      .map((b) => b.entry)
+      .filter(Boolean)
+      .sort()[0];
+    let start = 0;
+    if (first) {
+      let sIdx = points.findIndex((p) => p.t >= first);
+      if (sIdx < 0) sIdx = points.length - 1;
+      start = Math.max(
+        0,
+        sIdx - Math.max(20, Math.round((points.length - 1 - sIdx) * 0.25)),
+      );
+    }
+    pts = points.slice(start);
   }
+  if (pts.length < 2) return null; // a one-day window cannot draw a line
 
   const marks: ChartMark[] = [];
   const seen = new Set<string>();
@@ -523,19 +544,20 @@ function BookContextChart({
     }
   }
 
-  /* the hovered date's money, from the SERVER's own points (§16 — cumulative
-   * and one-day change both served, never differenced here): the most recent
-   * point on or before the crosshair, nothing when the cursor is before the
-   * book's first day */
-  const hovered =
-    result && hoverIso
-      ? [...result.points].reverse().find((p) => p.t <= hoverIso) ?? null
-      : null;
-
   return (
     <div className="mt-5">
+      {/* One crosshair, two readouts [OWNER 재피드백: "그 좌우로 움직이면
+          위에는 기존 그래프의 정보가 뜨고 밑에는 PL의 당일 변화량 및 누적
+          PL"]: each chart reports its hover here, and each renders the
+          shared date — the instrument chart via `hoverDate`, the P&L chart
+          via `hoverIso`. `still` while linked: a zoom the sibling cannot
+          follow would silently break the alignment that is the point. */}
       <PreviewChart
-        points={points.slice(start)}
+        /* remount on mode change: a zoom `view` left from the free (pre-run)
+           chart would otherwise index into the NEW run-window slice — a
+           plausible-looking wrong crop the `still` flag alone cannot clear */
+        key={result ? "linked" : "free"}
+        points={pts}
         stats={series.stats}
         unit={unit}
         width={880}
@@ -543,33 +565,202 @@ function BookContextChart({
         policy={policy}
         cd={cd}
         marks={marks}
-        overlay={
-          result
-            ? {
-                points: result.points.map((p) => ({ t: p.t, v: p.pnl })),
-                label: "손익",
-              }
-            : undefined
-        }
-        onHoverDate={result ? setHoverIso : undefined}
+        still={!!result}
+        hoverDate={hoverIso}
+        onHoverDate={setHoverIso}
       />
-      {hovered && (
-        <p className="mt-1 text-[12px] tabular-nums opacity-80">
-          <span className="opacity-60">{hovered.t} · 누적 </span>
-          <span
-            className={`font-semibold ${hovered.pnl >= 0 ? "text-up" : "text-down"}`}
-          >
-            {fmtKrw(hovered.pnl)}
-          </span>
-          <span className="opacity-60"> · 당일 </span>
-          {hovered.d == null ? (
-            <span className="opacity-40">—</span>
-          ) : (
-            <span className={hovered.d >= 0 ? "text-up" : "text-down"}>
-              {fmtKrw(hovered.d)}
+      {result && (
+        <div className="mt-1">
+          <LinkedPnlChart
+            pts={pts}
+            result={result}
+            width={880}
+            height={140}
+            hoverIso={hoverIso}
+            onHover={setHoverIso}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The P&L, drawn UNDER the instrument it was earned on and PIXEL-ALIGNED
+ * with it [OWNER 재피드백, 2026-08-04 — "PL은 밑에 그려지되 … far left가
+ * 진입일, far right가 청산일로 해서 … 완전히 수직적으로 얼라인"].
+ *
+ * Alignment is CONSTRUCTED, not tuned: this chart takes the SAME `pts` slice
+ * the instrument chart plots (entry → exit), shares `CHART_PAD`'s left/right,
+ * and uses the same index→x formula — a date's x here equals its x above to
+ * the pixel, which is what lets one crosshair serve both. The money at each
+ * date is the SERVER's cumulative P&L at the most recent published point on
+ * or before it (§16: the line is thinned server-side; 누적 and 당일 are both
+ * served, never differenced here).
+ *
+ * PnlChart's rules carry over — the zero line always in frame (the win/lose
+ * boundary), the area closed on zero, the hue the run's final sign, and the
+ * hover card the same money card (fmtKrw; the shared ReadoutCard stays
+ * level-only, see PnlChart's note). What it deliberately does NOT have:
+ * its own x labels (the instrument chart's date labels sit between the two
+ * charts and serve both) and any zoom (`still` above, same reason). */
+export function LinkedPnlChart({
+  pts,
+  result,
+  width,
+  height,
+  hoverIso,
+  onHover,
+}: {
+  pts: HistoryPoint[];
+  result: BacktestResult;
+  width: number;
+  height: number;
+  hoverIso: string | null;
+  onHover: (iso: string | null) => void;
+}) {
+  const PAD = {
+    top: 8,
+    right: CHART_PAD.right,
+    bottom: 6,
+    left: CHART_PAD.left,
+  };
+  const plotW = width - PAD.left - PAD.right;
+  const plotH = height - PAD.top - PAD.bottom;
+
+  /* cumulative P&L per plotted date — a forward walk, both series sorted */
+  const vals: number[] = [];
+  {
+    let j = -1;
+    for (const p of pts) {
+      while (j + 1 < result.points.length && result.points[j + 1].t <= p.t) j++;
+      vals.push(j >= 0 ? result.points[j].pnl : 0);
+    }
+  }
+  let lo = 0; // zero always in frame — the win/lose boundary
+  let hi = 0;
+  for (const v of vals) {
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  const pad = (hi - lo) * 0.08 || 1;
+  const yMin = lo - pad;
+  const yMax = hi + pad;
+  const x = (i: number) => PAD.left + (i / (pts.length - 1)) * plotW;
+  const y = (v: number) => PAD.top + (1 - (v - yMin) / (yMax - yMin)) * plotH;
+
+  const line = vals
+    .map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`)
+    .join(" ");
+  // closed on ZERO, so the fill reads as distance from breakeven
+  const area = `${line} ${x(vals.length - 1).toFixed(1)},${y(0).toFixed(1)} ${x(0).toFixed(1)},${y(0).toFixed(1)}`;
+  const up = result.pnl >= 0;
+
+  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const i = Math.round(
+      ((e.clientX - rect.left - PAD.left) / plotW) * (pts.length - 1),
+    );
+    onHover(pts[Math.max(0, Math.min(pts.length - 1, i))].t);
+  };
+
+  /* the crosshair index from the SHARED date — same on-or-after mapping the
+   * instrument chart uses for its external hover, so the two verticals land
+   * on the same x for the same date */
+  const hIdx =
+    hoverIso != null && hoverIso >= pts[0].t && hoverIso <= pts[pts.length - 1].t
+      ? Math.max(0, pts.findIndex((p) => p.t >= hoverIso))
+      : null;
+  const hp =
+    hIdx != null
+      ? ([...result.points].reverse().find((p) => p.t <= pts[hIdx].t) ?? null)
+      : null;
+  const tipLeft =
+    hIdx != null ? Math.min(width - CARD_W - 8, Math.max(0, x(hIdx) + 10)) : 0;
+
+  return (
+    <div className="relative" style={{ width, height }}>
+      <svg
+        width={width}
+        height={height}
+        role="img"
+        aria-label="누적 손익"
+        className="select-none"
+        onMouseMove={onMove}
+        onMouseLeave={() => onHover(null)}
+      >
+        <g className={up ? "text-up" : "text-down"}>
+          <polygon
+            points={area}
+            fill="currentColor"
+            fillOpacity={0.08}
+            stroke="none"
+          />
+          <polyline
+            data-linked-pnl=""
+            points={line}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.6}
+            strokeLinejoin="round"
+          />
+        </g>
+        <line
+          x1={PAD.left}
+          x2={width - PAD.right}
+          y1={y(0)}
+          y2={y(0)}
+          className="stroke-ink"
+          strokeWidth={1}
+          strokeOpacity={0.25}
+        />
+        {hIdx != null && (
+          <>
+            <line
+              data-crosshair=""
+              x1={x(hIdx)}
+              x2={x(hIdx)}
+              y1={PAD.top}
+              y2={PAD.top + plotH}
+              className="stroke-ink"
+              strokeWidth={1}
+              strokeOpacity={0.25}
+            />
+            <circle
+              cx={x(hIdx)}
+              cy={y(vals[hIdx])}
+              r={3}
+              className={up ? "fill-up" : "fill-down"}
+            />
+          </>
+        )}
+      </svg>
+      {hp && hIdx != null && (
+        <div
+          className="pointer-events-none absolute top-1 rounded-[10px] bg-popover px-2.5 py-2 text-[12px] shadow-lg"
+          style={{ left: tipLeft, width: CARD_W }}
+        >
+          <div className="tabular-nums opacity-50">{hp.t}</div>
+          <div className="mt-1 flex justify-between gap-2">
+            <span className="opacity-50">누적</span>
+            <span
+              className={`font-semibold tabular-nums ${
+                hp.pnl >= 0 ? "text-up" : "text-down"
+              }`}
+            >
+              {fmtKrw(hp.pnl)}
             </span>
-          )}
-        </p>
+          </div>
+          <div className="mt-0.5 flex justify-between gap-2">
+            <span className="opacity-50">당일</span>
+            <span
+              className={`tabular-nums ${
+                hp.d == null ? "opacity-40" : hp.d >= 0 ? "text-up" : "text-down"
+              }`}
+            >
+              {hp.d == null ? "—" : fmtKrw(hp.d)}
+            </span>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -594,7 +785,7 @@ function fmtMove(
 function Result({
   result,
   naming,
-  chartOverlaid,
+  chartLinked,
 }: {
   result: BacktestResult;
   /** id → how the rest of the product names it AND its unit. The server
@@ -603,11 +794,11 @@ function Result({
    * it is two products. The unit rides along so entry levels print in the
    * row's own grammar, not one inferred from the id. */
   naming: Map<string, { label: string; group: string; unit: Unit }>;
-  /** true when the P&L already rides ON the context chart above [OWNER,
-   * 2026-08-04 — "겹쳐서"]. The standalone line below would then be the same
-   * series drawn twice, so it is dropped; a multi-instrument book (no
-   * context chart) keeps it as the book's one chart. */
-  chartOverlaid?: boolean;
+  /** true when the P&L is already drawn in the LINKED chart pair above
+   * [OWNER 재피드백, 2026-08-04]. The standalone line here would then be the
+   * same series twice, so it is dropped; a multi-instrument book (no context
+   * chart) keeps it as the book's one chart. */
+  chartLinked?: boolean;
 }) {
   const up = result.pnl >= 0;
   const unitOf = (id: string): Unit => naming.get(id)?.unit ?? unitFromShape(id);
@@ -624,7 +815,7 @@ function Result({
         {fmtKrw(result.pnl)}
       </p>
 
-      {!chartOverlaid && (
+      {!chartLinked && (
         <div className="mt-4">
           <PnlChart result={result} width={880} height={200} />
         </div>
@@ -1132,13 +1323,13 @@ export function BacktestWindow({
     book.length > 0 && book.every((b) => b.id === book[0].id) && book[0].id
       ? book[0].id
       : null;
-  /* Does the last answer belong ON the context chart? Only when every priced
-   * position is the chart's own instrument — the book can be edited AFTER a
-   * run (the result deliberately stays), and a 10Y P&L overlaid on the 3s10s
-   * line the reader just switched to would be a wrong chart that looks
-   * plausible. When it does, the standalone P&L chart below is REDUNDANT and
-   * is dropped [OWNER, 2026-08-04 — "겹쳐서"]. */
-  const chartOverlaid =
+  /* Does the last answer belong WITH the context chart (the linked pair)?
+   * Only when every priced position is the chart's own instrument — the book
+   * can be edited AFTER a run (the result deliberately stays), and a 10Y P&L
+   * paired under the 3s10s line the reader just switched to would be a wrong
+   * chart that looks plausible. When it does, the Result's standalone P&L
+   * chart is REDUNDANT and is dropped [OWNER 재피드백, 2026-08-04]. */
+  const chartLinked =
     !!soleId &&
     !!shownResult &&
     shownResult.positions.every((p) => p.id === soleId);
@@ -1233,13 +1424,15 @@ export function BacktestWindow({
           {/* the instrument's own chart, THERE BEFORE 실행 — with the entry
               marks and the level readouts above, the question "where in the
               market am I getting in" is answered before the server is ever
-              asked "and what did it pay" */}
+              asked "and what did it pay". After a matching run it becomes
+              the top half of the linked pair (entry→exit window, P&L
+              beneath, one crosshair). */}
           {soleId && (
             <BookContextChart
               book={book}
               unit={unitOf(soleId)}
               policy={policy}
-              result={chartOverlaid ? shownResult : null}
+              result={chartLinked ? shownResult : null}
             />
           )}
 
@@ -1263,7 +1456,7 @@ export function BacktestWindow({
             <Result
               result={shownResult}
               naming={naming}
-              chartOverlaid={chartOverlaid}
+              chartLinked={chartLinked}
             />
           )}
           {!shownResult && !run.error && !run.isPending && (

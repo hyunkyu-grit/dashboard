@@ -549,28 +549,35 @@ that already existed is drawn.
   retired dashes as the REFERENCE-line encoding — this is annotation, not a
   reference. Pinned by `guards/backtest-context.test.ts` (snap parity,
   pre-run readout, one renderer, marks never move the chart).
-- **The P&L rides ON the context chart [OWNER, 2026-08-04 second pass —
-  "PnL이 밑에 그려지고 있는데 내 말은 겹쳐서 그려져야 한다"]**: after a run
-  whose every position is the chart's instrument, the cumulative P&L is
-  drawn OVER the instrument line (`ChartOverlay` on PreviewChart) and the
-  standalone 누적 손익 chart below is dropped — the same series twice earns
-  no height. A multi-instrument book (no context chart) keeps the standalone
-  chart; a result left over from an EDITED book (instrument switched after
-  실행) fails the every-position gate and keeps it too, because a 10Y P&L
-  overlaid on the 3s10s line would be a plausible-looking wrong chart.
-  Overlay mechanics, each a rule: its unit is MONEY, so it gets its OWN
-  zero-anchored scale (zero in frame = the win/lose boundary, the PnlChart
-  rule) and prints NO axis numbers — a money tick beside bp/% ticks is the
-  ambiguity the dual-axis rule exists to prevent; the area fill closes on
-  its own zero so breakeven reads geometrically. INK, deliberately: the
-  down-blue IS the line blue (tokens: a line has no sign), so a losing P&L
-  coloured by sign would vanish into the line it annotates, and red belongs
-  to the 기준금리 reference — ink at weight 2 is "the answer drawn on the
-  market", grayscale-safe (§5). Aligned by DATE (the server thins the P&L
-  line) and BOUNDED to its span — a book closed in June draws no fabricated
-  flat P&L to the axis end. The money figures live in the headline and in a
-  hover strip UNDER the chart (`fmtKrw`, server-served 누적/당일 — never on
-  the shared ReadoutCard, which owns the LEVEL grammar). Same guard file.
+- **The LINKED PAIR [OWNER 재피드백, 2026-08-04 — "겹치는 거보다 PL은 밑에
+  그려지되 … far left가 진입일, far right가 청산일로 해서 … 완전히
+  수직적으로 얼라인 … 좌우로 움직이면 위에는 기존 그래프의 정보가, 밑에는
+  PL의 당일 변화량 및 누적 PL"]**. (An overlaid-P&L form shipped for a few
+  hours between the two feedbacks and was replaced by this.) After a run
+  whose every position is the chart's instrument:
+  - the context chart is WINDOWED to the run — far left IS the entry, far
+    right IS the exit (`result.from`/`result.to`) — and goes `still` (no
+    wheel zoom: a zoom the sibling cannot follow silently breaks the
+    alignment that is the point);
+  - `LinkedPnlChart` (BacktestWindow.tsx) draws the cumulative P&L DIRECTLY
+    BELOW, pixel-aligned by construction: the same `pts` slice, the shared
+    `CHART_PAD` left/right (exported from PreviewChart precisely so it
+    cannot be a copied constant), the same index→x formula. Money per date
+    is the server's cumulative P&L at the most recent published point on or
+    before it (§16 — 누적 AND 당일 are served, never differenced).
+    PnlChart's rules carry over: zero in frame, area closed on zero, hue =
+    the run's final sign, the same money hover card. No x labels of its own
+    — the top chart's date labels sit between the two and serve both;
+  - ONE crosshair serves both: each chart reports its hover to the shared
+    parent; the top renders the external date via the new `hoverDate` prop
+    (its usual readout card), the bottom prints 누적/당일. Moving along
+    either chart lights both.
+  - Result's standalone 누적 손익 chart is dropped in this state (same
+    series twice); a multi-instrument book, or a result left over from an
+    EDITED book (fails the every-position gate — a 10Y P&L under the 3s10s
+    line would be a plausible-looking wrong chart), keeps it.
+  Pinned by `guards/backtest-context.test.ts`, including byte-equality of
+  the two crosshairs' x for one date.
 - Toss-style is a constraint on the NUMBERS as much as the paint: one big
   figure in plain Korean, controls that read as a sentence, and everything that
   is machinery (per-leg notionals, DV01, settled cash) under a fold.

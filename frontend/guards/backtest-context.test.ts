@@ -29,9 +29,13 @@ import { describe, expect, it } from "vitest";
 
 import { code } from "./_source";
 
-import type { HistoryPoint } from "../src/lib/api";
+import type { BacktestResult, HistoryPoint } from "../src/lib/api";
 import { mintBacktestKey } from "../src/ui/backtestMemory";
-import { BacktestWindow, pointOnOrAfter } from "../src/ui/BacktestWindow";
+import {
+  BacktestWindow,
+  LinkedPnlChart,
+  pointOnOrAfter,
+} from "../src/ui/BacktestWindow";
 import { type ChartMark, PreviewChart } from "../src/ui/PreviewChart";
 import type { Row } from "../src/ui/rows";
 
@@ -169,62 +173,95 @@ describe("PreviewChart marks", () => {
   });
 });
 
-/* ── the P&L overlay rides ON the chart ─────────────────────────────────── */
+/* ── the linked P&L panel ───────────────────────────────────────────────── */
 
-describe("the P&L overlay [OWNER: 겹쳐서]", () => {
-  const instrumentLine = (m: string) =>
-    [...m.matchAll(/<polyline([^>]*)>/g)].find((x) =>
-      x[1].includes('stroke-width="1.6"'),
-    )?.[1];
-  const overlayLine = (m: string) =>
-    [...m.matchAll(/<polyline([^>]*)>/g)].find((x) =>
-      x[1].includes("data-overlay"),
-    )?.[1];
+describe("the linked P&L panel [OWNER 재피드백: 밑에, 완전히 수직 얼라인]", () => {
+  // the run window IS the slice both charts plot: far left = entry
+  // (2026-01-06), far right = exit (2026-01-12)
+  const pts = PTS.slice(1);
+  const result: BacktestResult = {
+    positions: [],
+    from: "2026-01-06",
+    to: "2026-01-12",
+    points: [
+      { t: "2026-01-06", pnl: 0, d: null },
+      { t: "2026-01-09", pnl: 5_000_000, d: 5_000_000 },
+      { t: "2026-01-12", pnl: 3_000_000, d: -2_000_000 },
+    ],
+    complete: true,
+    pnl: 3_000_000,
+    maxProfit: 5_000_000,
+    maxLoss: 0,
+  };
 
-  function withOverlay(points: { t: string; v: number }[]): string {
-    return renderToStaticMarkup(
-      createElement(PreviewChart, {
-        points: PTS,
-        stats: { min: 3.1, max: 3.4, avg: 3.25 },
-        unit: "%",
+  const crosshairX = (m: string) =>
+    /<line[^>]*data-crosshair[^>]*x1="([\d.]+)"/.exec(m)?.[1];
+
+  const top = renderToStaticMarkup(
+    createElement(PreviewChart, {
+      points: pts,
+      stats: { min: 3.1, max: 3.4, avg: 3.25 },
+      unit: "%",
+      width: W,
+      height: H,
+      still: true,
+      hoverDate: "2026-01-09",
+    }),
+  );
+  const bottom = renderToStaticMarkup(
+    createElement(LinkedPnlChart, {
+      pts,
+      result,
+      width: W,
+      height: 140,
+      hoverIso: "2026-01-09",
+      onHover: () => {},
+    }),
+  );
+
+  it("one date, one x: the two crosshairs land on the same pixel column", () => {
+    // this IS the alignment property — same slice, shared CHART_PAD, same
+    // index→x formula. A drift in any of the three breaks this byte equality.
+    expect(crosshairX(top)).toBeTruthy();
+    expect(crosshairX(top)).toBe(crosshairX(bottom));
+  });
+
+  it("the external hoverDate shows the instrument readout without a mouse", () => {
+    // the sibling P&L chart drives the top chart's crosshair through the
+    // shared parent — the readout card renders at that date
+    expect(top).toContain("2026-01-09");
+    expect(top).toContain("레벨");
+  });
+
+  it("the panel prints the SERVER's 누적/당일 at the hovered date", () => {
+    expect(bottom).toContain("누적");
+    expect(bottom).toContain("당일");
+    // fmtKrw(5,000,000) — served figures, never differenced here
+    expect(bottom).toContain("+500만원");
+  });
+
+  it("zero stays in frame with an all-positive run — the win/lose boundary", () => {
+    // the area polygon closes on the zero line's y: its last two points sit
+    // at the same y, which only holds when zero is inside the domain
+    const poly = /<polygon[^>]*points="([^"]*)"/.exec(bottom)?.[1] ?? "";
+    const ys = poly.split(" ").map((p) => Number(p.split(",")[1]));
+    expect(ys.length).toBeGreaterThan(3);
+    expect(ys[ys.length - 1]).toBe(ys[ys.length - 2]);
+    expect(Math.max(...ys)).toBeLessThanOrEqual(140);
+  });
+
+  it("a hover outside the window draws no crosshair in the panel", () => {
+    const m = renderToStaticMarkup(
+      createElement(LinkedPnlChart, {
+        pts,
+        result,
         width: W,
-        height: H,
-        overlay: { points, label: "손익" },
+        height: 140,
+        hoverIso: "2025-01-01",
+        onHover: () => {},
       }),
     );
-  }
-
-  const m = withOverlay([
-    { t: "2026-01-06", v: 0 },
-    { t: "2026-01-09", v: 5_000_000 },
-  ]);
-
-  it("draws the overlay run, named in the legend", () => {
-    expect(overlayLine(m)).toBeTruthy();
-    expect(m).toContain("손익");
-  });
-
-  it("never moves the instrument's own line — the overlay scale is its own", () => {
-    expect(instrumentLine(m)).toBe(instrumentLine(withOverlay([])));
-  });
-
-  it("is BOUNDED to its span — no fabricated flat P&L to the axis end", () => {
-    // the overlay covers 01-06..01-09 of a chart running 01-05..01-12: the
-    // run must hold exactly those two dates' points, not carry the last
-    // value forward to the edge
-    const pts = /points="([^"]*)"/.exec(overlayLine(m)!)![1];
-    expect(pts.split(" ").filter(Boolean).length).toBe(2);
-  });
-
-  it("prints no money axis — the figures live in the headline and hover strip", () => {
-    // a money tick beside bp/% ticks is the ambiguity the dual-axis rule
-    // exists to prevent
-    expect(m).not.toContain("만원");
-    expect(m).not.toContain("5,000,000");
-  });
-
-  it("an overlay outside the plotted dates draws nothing", () => {
-    expect(overlayLine(withOverlay([{ t: "2025-06-01", v: 1 }, { t: "2025-07-01", v: 2 }]))).toBeUndefined();
+    expect(crosshairX(m)).toBeUndefined();
   });
 });
 
@@ -253,11 +290,22 @@ describe("the context chart reuses the one renderer", () => {
     expect(win).toMatch(/queryKey: \["series", id, "full"\]/);
   });
 
-  it("the overlay is gated on the result pricing THIS instrument, and the standalone P&L chart yields to it", () => {
-    // a result left over from an edited book must never be drawn over a
+  it("the linked pair is gated on the result pricing THIS instrument, and Result's own P&L chart yields to it", () => {
+    // a result left over from an edited book must never be paired with a
     // different instrument's line
     expect(win).toMatch(/shownResult\.positions\.every\(\(p\) => p\.id === soleId\)/);
-    // overlaid → the line below would be the same series twice
-    expect(win).toMatch(/\{!chartOverlaid && \(/);
+    // linked → the standalone line would be the same series twice
+    expect(win).toMatch(/\{!chartLinked && \(/);
+  });
+
+  it("alignment is constructed, not tuned", () => {
+    // the panel borrows the instrument chart's own horizontal pad — a copied
+    // constant is the drift this pin exists to catch
+    expect(win).toMatch(/right: CHART_PAD\.right/);
+    expect(win).toMatch(/left: CHART_PAD\.left/);
+    // the top chart is windowed to the run and holds still while linked —
+    // a zoom the sibling cannot follow would silently break the alignment
+    expect(win).toMatch(/points\.findIndex\(\(p\) => p\.t >= result\.from\)/);
+    expect(win).toMatch(/still=\{!!result\}/);
   });
 });
