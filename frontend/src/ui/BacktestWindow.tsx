@@ -475,16 +475,25 @@ function BookContextChart({
   book,
   unit,
   policy,
+  result,
 }: {
   book: PositionInput[];
   unit: Unit;
   policy?: PolicyStep;
+  /** the last run's answer, ONLY when it prices this same instrument — the
+   * caller gates it, so a result left over from a different book cannot be
+   * drawn over the wrong line. When present the cumulative P&L rides ON the
+   * chart [OWNER, 2026-08-04 — "겹쳐서 그려져야"] and the money figures live
+   * in the hover strip below (fmtKrw — never on the shared readout card,
+   * which owns the LEVEL grammar). */
+  result?: BacktestResult | null;
 }) {
   const id = book[0]?.id;
   const series = useSeriesFull(id);
   // the ONE CD hook (useCdReference) — it already knows CD itself takes no
   // overlay, so a 3M book simply draws without the CD line
   const cd = useCdReference(unit, id);
+  const [hoverIso, setHoverIso] = useState<string | null>(null);
   if (!series || series.points.length < 2 || !series.stats) return null;
 
   const points = series.points;
@@ -514,6 +523,15 @@ function BookContextChart({
     }
   }
 
+  /* the hovered date's money, from the SERVER's own points (§16 — cumulative
+   * and one-day change both served, never differenced here): the most recent
+   * point on or before the crosshair, nothing when the cursor is before the
+   * book's first day */
+  const hovered =
+    result && hoverIso
+      ? [...result.points].reverse().find((p) => p.t <= hoverIso) ?? null
+      : null;
+
   return (
     <div className="mt-5">
       <PreviewChart
@@ -525,7 +543,34 @@ function BookContextChart({
         policy={policy}
         cd={cd}
         marks={marks}
+        overlay={
+          result
+            ? {
+                points: result.points.map((p) => ({ t: p.t, v: p.pnl })),
+                label: "손익",
+              }
+            : undefined
+        }
+        onHoverDate={result ? setHoverIso : undefined}
       />
+      {hovered && (
+        <p className="mt-1 text-[12px] tabular-nums opacity-80">
+          <span className="opacity-60">{hovered.t} · 누적 </span>
+          <span
+            className={`font-semibold ${hovered.pnl >= 0 ? "text-up" : "text-down"}`}
+          >
+            {fmtKrw(hovered.pnl)}
+          </span>
+          <span className="opacity-60"> · 당일 </span>
+          {hovered.d == null ? (
+            <span className="opacity-40">—</span>
+          ) : (
+            <span className={hovered.d >= 0 ? "text-up" : "text-down"}>
+              {fmtKrw(hovered.d)}
+            </span>
+          )}
+        </p>
+      )}
     </div>
   );
 }
@@ -549,6 +594,7 @@ function fmtMove(
 function Result({
   result,
   naming,
+  chartOverlaid,
 }: {
   result: BacktestResult;
   /** id → how the rest of the product names it AND its unit. The server
@@ -557,6 +603,11 @@ function Result({
    * it is two products. The unit rides along so entry levels print in the
    * row's own grammar, not one inferred from the id. */
   naming: Map<string, { label: string; group: string; unit: Unit }>;
+  /** true when the P&L already rides ON the context chart above [OWNER,
+   * 2026-08-04 — "겹쳐서"]. The standalone line below would then be the same
+   * series drawn twice, so it is dropped; a multi-instrument book (no
+   * context chart) keeps it as the book's one chart. */
+  chartOverlaid?: boolean;
 }) {
   const up = result.pnl >= 0;
   const unitOf = (id: string): Unit => naming.get(id)?.unit ?? unitFromShape(id);
@@ -573,9 +624,11 @@ function Result({
         {fmtKrw(result.pnl)}
       </p>
 
-      <div className="mt-4">
-        <PnlChart result={result} width={880} height={200} />
-      </div>
+      {!chartOverlaid && (
+        <div className="mt-4">
+          <PnlChart result={result} width={880} height={200} />
+        </div>
+      )}
 
       <div className="mt-3 flex gap-6 text-[13px] tabular-nums">
         <span>
@@ -1079,6 +1132,16 @@ export function BacktestWindow({
     book.length > 0 && book.every((b) => b.id === book[0].id) && book[0].id
       ? book[0].id
       : null;
+  /* Does the last answer belong ON the context chart? Only when every priced
+   * position is the chart's own instrument — the book can be edited AFTER a
+   * run (the result deliberately stays), and a 10Y P&L overlaid on the 3s10s
+   * line the reader just switched to would be a wrong chart that looks
+   * plausible. When it does, the standalone P&L chart below is REDUNDANT and
+   * is dropped [OWNER, 2026-08-04 — "겹쳐서"]. */
+  const chartOverlaid =
+    !!soleId &&
+    !!shownResult &&
+    shownResult.positions.every((p) => p.id === soleId);
 
   return (
     <motion.div
@@ -1172,7 +1235,12 @@ export function BacktestWindow({
               market am I getting in" is answered before the server is ever
               asked "and what did it pay" */}
           {soleId && (
-            <BookContextChart book={book} unit={unitOf(soleId)} policy={policy} />
+            <BookContextChart
+              book={book}
+              unit={unitOf(soleId)}
+              policy={policy}
+              result={chartOverlaid ? shownResult : null}
+            />
           )}
 
           {unavailable && (
@@ -1191,7 +1259,13 @@ export function BacktestWindow({
           {run.error && !unavailable && (
             <p className="mt-6 text-[13px] text-up">{run.error.message}</p>
           )}
-          {shownResult && <Result result={shownResult} naming={naming} />}
+          {shownResult && (
+            <Result
+              result={shownResult}
+              naming={naming}
+              chartOverlaid={chartOverlaid}
+            />
+          )}
           {!shownResult && !run.error && !run.isPending && (
             <p className="mt-8 text-center text-[14px] opacity-45">
               조건을 정하고 실행을 눌러 주세요

@@ -169,6 +169,65 @@ describe("PreviewChart marks", () => {
   });
 });
 
+/* ── the P&L overlay rides ON the chart ─────────────────────────────────── */
+
+describe("the P&L overlay [OWNER: 겹쳐서]", () => {
+  const instrumentLine = (m: string) =>
+    [...m.matchAll(/<polyline([^>]*)>/g)].find((x) =>
+      x[1].includes('stroke-width="1.6"'),
+    )?.[1];
+  const overlayLine = (m: string) =>
+    [...m.matchAll(/<polyline([^>]*)>/g)].find((x) =>
+      x[1].includes("data-overlay"),
+    )?.[1];
+
+  function withOverlay(points: { t: string; v: number }[]): string {
+    return renderToStaticMarkup(
+      createElement(PreviewChart, {
+        points: PTS,
+        stats: { min: 3.1, max: 3.4, avg: 3.25 },
+        unit: "%",
+        width: W,
+        height: H,
+        overlay: { points, label: "손익" },
+      }),
+    );
+  }
+
+  const m = withOverlay([
+    { t: "2026-01-06", v: 0 },
+    { t: "2026-01-09", v: 5_000_000 },
+  ]);
+
+  it("draws the overlay run, named in the legend", () => {
+    expect(overlayLine(m)).toBeTruthy();
+    expect(m).toContain("손익");
+  });
+
+  it("never moves the instrument's own line — the overlay scale is its own", () => {
+    expect(instrumentLine(m)).toBe(instrumentLine(withOverlay([])));
+  });
+
+  it("is BOUNDED to its span — no fabricated flat P&L to the axis end", () => {
+    // the overlay covers 01-06..01-09 of a chart running 01-05..01-12: the
+    // run must hold exactly those two dates' points, not carry the last
+    // value forward to the edge
+    const pts = /points="([^"]*)"/.exec(overlayLine(m)!)![1];
+    expect(pts.split(" ").filter(Boolean).length).toBe(2);
+  });
+
+  it("prints no money axis — the figures live in the headline and hover strip", () => {
+    // a money tick beside bp/% ticks is the ambiguity the dual-axis rule
+    // exists to prevent
+    expect(m).not.toContain("만원");
+    expect(m).not.toContain("5,000,000");
+  });
+
+  it("an overlay outside the plotted dates draws nothing", () => {
+    expect(overlayLine(withOverlay([{ t: "2025-06-01", v: 1 }, { t: "2025-07-01", v: 2 }]))).toBeUndefined();
+  });
+});
+
 /* ── one implementation, pinned in source ───────────────────────────────── */
 
 describe("the context chart reuses the one renderer", () => {
@@ -192,5 +251,13 @@ describe("the context chart reuses the one renderer", () => {
     // level printed confidently; and the key must match PreviewPane's so the
     // pane's cache is a hit
     expect(win).toMatch(/queryKey: \["series", id, "full"\]/);
+  });
+
+  it("the overlay is gated on the result pricing THIS instrument, and the standalone P&L chart yields to it", () => {
+    // a result left over from an edited book must never be drawn over a
+    // different instrument's line
+    expect(win).toMatch(/shownResult\.positions\.every\(\(p\) => p\.id === soleId\)/);
+    // overlaid → the line below would be the same series twice
+    expect(win).toMatch(/\{!chartOverlaid && \(/);
   });
 });

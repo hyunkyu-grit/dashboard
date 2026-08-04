@@ -549,6 +549,28 @@ that already existed is drawn.
   retired dashes as the REFERENCE-line encoding — this is annotation, not a
   reference. Pinned by `guards/backtest-context.test.ts` (snap parity,
   pre-run readout, one renderer, marks never move the chart).
+- **The P&L rides ON the context chart [OWNER, 2026-08-04 second pass —
+  "PnL이 밑에 그려지고 있는데 내 말은 겹쳐서 그려져야 한다"]**: after a run
+  whose every position is the chart's instrument, the cumulative P&L is
+  drawn OVER the instrument line (`ChartOverlay` on PreviewChart) and the
+  standalone 누적 손익 chart below is dropped — the same series twice earns
+  no height. A multi-instrument book (no context chart) keeps the standalone
+  chart; a result left over from an EDITED book (instrument switched after
+  실행) fails the every-position gate and keeps it too, because a 10Y P&L
+  overlaid on the 3s10s line would be a plausible-looking wrong chart.
+  Overlay mechanics, each a rule: its unit is MONEY, so it gets its OWN
+  zero-anchored scale (zero in frame = the win/lose boundary, the PnlChart
+  rule) and prints NO axis numbers — a money tick beside bp/% ticks is the
+  ambiguity the dual-axis rule exists to prevent; the area fill closes on
+  its own zero so breakeven reads geometrically. INK, deliberately: the
+  down-blue IS the line blue (tokens: a line has no sign), so a losing P&L
+  coloured by sign would vanish into the line it annotates, and red belongs
+  to the 기준금리 reference — ink at weight 2 is "the answer drawn on the
+  market", grayscale-safe (§5). Aligned by DATE (the server thins the P&L
+  line) and BOUNDED to its span — a book closed in June draws no fabricated
+  flat P&L to the axis end. The money figures live in the headline and in a
+  hover strip UNDER the chart (`fmtKrw`, server-served 누적/당일 — never on
+  the shared ReadoutCard, which owns the LEVEL grammar). Same guard file.
 - Toss-style is a constraint on the NUMBERS as much as the paint: one big
   figure in plain Korean, controls that read as a sentence, and everything that
   is machinery (per-leg notionals, DV01, settled cash) under a fold.
