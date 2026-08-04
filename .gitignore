@@ -8,3 +8,6 @@ backend/.cache/
 # It appeared as an untracked file during a data refresh and a `git add -A`
 # would have committed it. It is not data and it disappears when Excel closes.
 ~$*.xls*
+
+.vercel
+.env*
