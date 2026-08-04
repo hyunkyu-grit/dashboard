@@ -248,6 +248,20 @@ Two owner feedbacks, one mechanism [OWNER: ① 싱글/개별 백테스트에서�
   guard updated), LinkedPnlChart gained a 누적 손익 caption (an unlabelled
   second chart read as a mystery). `조건을 정하고…` kept as-is (pinned by
   backtest-back, already light).
+- **Motion pass [OWNER, 2026-08-05: "임페커블 활용해서 모션을 더 추가"]**:
+  DESIGN §14 "Backtest window motion". `ARRIVE`/`ARRIVE_STAGGER` in
+  motion.ts — the answer arrives (P&L panel + result fade/rise 8px 250ms
+  ease-out quint, money 60ms after the chart, keyed by run identity);
+  window entrance gains scale 0.985→1; book rows stagger IN only (index
+  keys — an exit would fade the wrong row); 진입 레벨 through
+  AnimatedNumber; 계산 중 = motion-safe:animate-pulse. Chart-geometry ban
+  intact (containers move, paths never). Every authored transition routes
+  through instant() — new pin in backtest-context guard (count of
+  `transition={` === count of `transition={instant(`). Two old
+  backtest-window pins retuned without losing intent: backdrop check is now
+  `fixed inset-0` (bare inset-0 appears in AnimatedNumber's cross-fade
+  span), and the reduced-motion pin checks the instant() ROUTE rather than
+  the transition's exact shape.
 
 ### Before that — 연구실 tab + 라고 할 때 살걸 (2026-08-04, regret session, two passes)
 

@@ -129,8 +129,10 @@ describe("the rendered window", () => {
     expect(root).toContain("bg-popover");
     expect(root).toContain("border-edge-live");
     expect(root).not.toContain("shadow");
-    // a floating window has no full-screen dim behind it
-    expect(markup).not.toContain("inset-0");
+    // a floating window has no full-screen dim behind it — a backdrop is a
+    // FIXED full-viewport layer ("fixed inset-0"); bare "inset-0" also
+    // appears inside AnimatedNumber's cross-fade span and is not a backdrop
+    expect(markup).not.toContain("fixed inset-0");
     expect(markup).not.toContain("bg-page/70");
   });
 
@@ -163,8 +165,12 @@ describe("mechanics, pinned in source", () => {
   });
 
   it("reduced motion renders without a transition (instant)", () => {
+    // the shape of the transition grew an ease (motion pass); what this pins
+    // is the ROUTE — reduced motion goes through instant(). The companion
+    // pin in backtest-context.test.ts asserts EVERY transition= does.
     expect(win).toMatch(/useReducedMotion/);
-    expect(win).toMatch(/instant\(\{ duration: [\d.]+ \}, reduced === true\)/);
+    expect(win).toMatch(/transition=\{instant\(/);
+    expect(win).toMatch(/reduced === true/);
   });
 
   it("position is session memory, never persisted storage", () => {

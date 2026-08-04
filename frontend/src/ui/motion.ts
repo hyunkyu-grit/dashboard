@@ -22,6 +22,17 @@ export const STAGGER_STEP = 0.04; // 40ms between briefing/log rows
 export const PRESS_SCALE = 0.98;
 export const NUMBER_FADE = 0.18; // cross-fade on a changed number
 
+/* ── Content arrival (backtest answer; motion pass 2026-08-05) ────────────
+ * A short fade + rise for a block the reader just asked for — the state
+ * change it conveys is "the answer is here", nothing else animates it.
+ * Ease-out quint: decelerating into place, no overshoot (a spring would
+ * wobble a table of money). The chart-geometry ban stands: the CONTAINER
+ * rises; no chart path ever animates. */
+export const ARRIVE: Transition = { duration: 0.25, ease: [0.22, 1, 0.36, 1] };
+/** the answer's two halves arrive as one gesture — chart pair first, the
+ * money below it a beat later */
+export const ARRIVE_STAGGER = 0.06;
+
 /** The reduced-motion rule: any transition collapses to instant (duration 0).
  * MotionConfig applies this globally; this is its testable form. */
 export function instant(base: Transition, reduced: boolean): Transition {

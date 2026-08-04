@@ -64,6 +64,7 @@ import {
 } from "@/lib/api";
 import { fmtDelta, fmtLevel } from "@/lib/format";
 
+import { AnimatedNumber } from "./AnimatedNumber";
 import { loadBacktestMemory, saveBacktestMemory } from "./backtestMemory";
 import { ErrorBoundary } from "./ErrorBoundary";
 import {
@@ -74,7 +75,7 @@ import {
   type WinPos,
 } from "./floatingWindow";
 import { Z_WINDOW } from "./layers";
-import { instant } from "./motion";
+import { ARRIVE, ARRIVE_STAGGER, instant, STAGGER_STEP } from "./motion";
 import { CHART_PAD, type ChartMark, PreviewChart } from "./PreviewChart";
 import { GROUP_LABEL, type Group, type Row } from "./rows";
 import { useCdReference } from "./useCdReference";
@@ -493,6 +494,7 @@ function BookContextChart({
   // overlay, so a 3M book simply draws without the CD line
   const cd = useCdReference(unit, id);
   const [hoverIso, setHoverIso] = useState<string | null>(null);
+  const reduced = useReducedMotion();
   if (!series || series.points.length < 2 || !series.stats) return null;
 
   const points = series.points;
@@ -569,8 +571,16 @@ function BookContextChart({
         hoverDate={hoverIso}
         onHoverDate={setHoverIso}
       />
+      {/* the chart pair's lower half arrives with the answer (§14 arrival);
+          the CONTAINER rises — the P&L path inside never animates */}
       {result && (
-        <div className="mt-1">
+        <motion.div
+          key={`p-${result.from}|${result.to}|${result.pnl}`}
+          className="mt-1"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={instant(ARRIVE, reduced === true)}
+        >
           <LinkedPnlChart
             pts={pts}
             result={result}
@@ -579,7 +589,7 @@ function BookContextChart({
             hoverIso={hoverIso}
             onHover={setHoverIso}
           />
-        </div>
+        </motion.div>
       )}
     </div>
   );
@@ -1131,7 +1141,10 @@ function PositionRow({
           className="px-1 py-2 text-[14px] tabular-nums"
           title={struck ? `${struck.t} 종가 기준` : undefined}
         >
-          {entryLevelText(struck?.v ?? null, unit)}
+          {/* NUMBER_FADE (§14): the level swaps as the date is typed, and a
+              cross-fade is what separates "the number changed" from a
+              flicker */}
+          <AnimatedNumber value={entryLevelText(struck?.v ?? null, unit)} />
           {struck && (
             <span className="ml-0.5 text-[11px] opacity-45">
               {LEVEL_SUFFIX[unit]}
@@ -1357,10 +1370,13 @@ export function BacktestWindow({
          behind stays fully interactive. */
       className={`fixed ${Z_WINDOW} flex max-h-[88vh] flex-col overflow-hidden rounded-[16px] border border-edge-live bg-popover`}
       style={{ left: pos.left, top: pos.top, width: WINDOW_W, maxWidth: "96vw" }}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
+      /* a window MATERIALIZES — the slight scale gives it a surface arriving
+         rather than a div blinking on; exit is the faster twin (§14: exits
+         run shorter than entrances) */
+      initial={{ opacity: 0, scale: 0.985 }}
+      animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0 }}
-      transition={instant({ duration: 0.15 }, reduced === true)}
+      transition={instant({ duration: 0.15, ease: ARRIVE.ease }, reduced === true)}
     >
       {/* the drag handle — the ONLY draggable surface, and the strip the
           clamp keeps on-screen. The close button opts out of starting a
@@ -1389,19 +1405,39 @@ export function BacktestWindow({
       <div className="min-h-[420px] flex-1 overflow-y-auto p-6 pt-4">
         <ErrorBoundary fallback="백테스트 화면을 그리지 못했어요">
           <div className="mt-0">
+            {/* Rows ENTER only (fade + rise, briefing-stagger cadence) — no
+                exit animation on purpose: the keys are indices, so on a
+                removal React reuses nodes and an exit would fade the WRONG
+                row. Enter is safe: an append mounts a fresh index, and a
+                window open staggers the restored book in. */}
             {book.map((b, i) => (
-              <PositionRow
+              <motion.div
                 key={i}
-                value={b}
-                choices={choices}
-                asOf={asOf}
-                unit={unitOf(b.id)}
-                removable={book.length > 1}
-                onChange={(next) =>
-                  setBook((prev) => prev.map((p, j) => (j === i ? next : p)))
-                }
-                onRemove={() => setBook((prev) => prev.filter((_, j) => j !== i))}
-              />
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={instant(
+                  {
+                    ...ARRIVE,
+                    duration: 0.2,
+                    delay: Math.min(i, 8) * STAGGER_STEP,
+                  },
+                  reduced === true,
+                )}
+              >
+                <PositionRow
+                  value={b}
+                  choices={choices}
+                  asOf={asOf}
+                  unit={unitOf(b.id)}
+                  removable={book.length > 1}
+                  onChange={(next) =>
+                    setBook((prev) => prev.map((p, j) => (j === i ? next : p)))
+                  }
+                  onRemove={() =>
+                    setBook((prev) => prev.filter((_, j) => j !== i))
+                  }
+                />
+              </motion.div>
             ))}
           </div>
 
@@ -1425,7 +1461,11 @@ export function BacktestWindow({
               type="button"
               onClick={() => run.mutate()}
               disabled={!ready || run.isPending}
-              className="min-w-[6.75rem] rounded-[10px] bg-ink px-5 py-2 text-center text-[14px] font-semibold text-page hover:opacity-90 disabled:opacity-40"
+              className={`min-w-[6.75rem] rounded-[10px] bg-ink px-5 py-2 text-center text-[14px] font-semibold text-page hover:opacity-90 disabled:opacity-40 ${
+                // a full revaluation takes a beat — the pulse says the server
+                // is working; motion-safe so reduced motion sees a still label
+                run.isPending ? "motion-safe:animate-pulse" : ""
+              }`}
             >
               {run.isPending ? "계산 중…" : "실행"}
             </button>
@@ -1470,12 +1510,26 @@ export function BacktestWindow({
           {run.error && !unavailable && (
             <p className="mt-6 text-[13px] text-up">{run.error.message}</p>
           )}
+          {/* THE ANSWER ARRIVES (§14 arrival): keyed by the run's identity so
+              every fresh answer rises in — a re-run with the same result is
+              the same answer and stays put. One beat after the chart pair
+              (ARRIVE_STAGGER): chart first, money second, one gesture. */}
           {shownResult && (
-            <Result
-              result={shownResult}
-              naming={naming}
-              chartLinked={chartLinked}
-            />
+            <motion.div
+              key={`r-${shownResult.from}|${shownResult.to}|${shownResult.pnl}|${shownResult.positions.length}`}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={instant(
+                { ...ARRIVE, delay: ARRIVE_STAGGER },
+                reduced === true,
+              )}
+            >
+              <Result
+                result={shownResult}
+                naming={naming}
+                chartLinked={chartLinked}
+              />
+            </motion.div>
           )}
           {!shownResult && !run.error && !run.isPending && (
             <p className="mt-8 text-center text-[14px] opacity-45">

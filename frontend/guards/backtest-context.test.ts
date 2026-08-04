@@ -301,6 +301,15 @@ describe("the context chart reuses the one renderer", () => {
     expect(win).toMatch(/\{!chartLinked && \(/);
   });
 
+  it("every authored transition collapses under reduced motion (instant)", () => {
+    // §14: reduced motion is an instant state change, not a shorter one.
+    // Any transition= in the window that skips instant() is a regression.
+    const transitions = (win.match(/transition=\{/g) ?? []).length;
+    const instants = (win.match(/transition=\{instant\(/g) ?? []).length;
+    expect(transitions).toBeGreaterThan(0);
+    expect(transitions).toBe(instants);
+  });
+
   it("alignment is constructed, not tuned", () => {
     // the panel borrows the instrument chart's own horizontal pad — a copied
     // constant is the drift this pin exists to catch

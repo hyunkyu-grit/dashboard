@@ -2023,6 +2023,32 @@ plain `onPin={setPinned}`, corner label present).
 - `prefers-reduced-motion` collapses every animation to instant (asserted by a
   test).
 
+### Backtest window motion [motion pass, 2026-08-05]
+
+The window's motion vocabulary, all through `instant()` (pinned by
+`guards/backtest-context.test.ts` — every authored `transition=` in the file
+must route through it; §14's chart-geometry ban holds — containers move,
+paths never):
+
+- **Arrival (`ARRIVE`, motion.ts)** — the signature moment is the ANSWER
+  arriving: on 실행 the linked chart pair's P&L half and the result block
+  fade + rise (8px, 250ms, ease-out quint — no spring: a table of money must
+  not wobble), the money one beat (`ARRIVE_STAGGER`, 60ms) after the chart.
+  Keyed by run identity, so every fresh answer re-fires and an identical
+  re-run stays put. A restored result (history traversal) arrives the same
+  way — it is arriving.
+- **Window materializes** — entrance adds scale 0.985→1 to the fade; exit
+  stays the faster plain fade.
+- **Rows enter, never exit** — the book's rows stagger in
+  (briefing-cadence `STAGGER_STEP`, capped at 8 steps). No exit animation ON
+  PURPOSE: row keys are indices, React reuses nodes on removal, and an exit
+  would fade the wrong row.
+- **진입 레벨 cross-fades** (`AnimatedNumber`, NUMBER_FADE) as the entry
+  date is typed — "the number changed", not a flicker.
+- **계산 중 pulses** (`motion-safe:animate-pulse`) — a full revaluation
+  takes a beat and the button says the server is working; reduced motion
+  sees a still label.
+
 ## 15. Voice & copy [rewritten Session 15]
 
 This is a desk tool, not a consumer app. 해요체 came from the casual-app pivot
