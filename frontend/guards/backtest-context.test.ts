@@ -132,12 +132,15 @@ function chart(marks: ChartMark[]): string {
 }
 
 describe("PreviewChart marks", () => {
-  it("an entry mark pins date AND level — dot, level hairline, valued label", () => {
-    // 01-07 is not a trading day: the mark must snap ON OR AFTER, to 01-09,
-    // and say 01-09's level — the same rule the readout and the server use
+  it("an entry mark pins date AND level — dot and level hairline, label WITHOUT digits", () => {
+    // 01-07 is not a trading day: the mark must snap ON OR AFTER, to 01-09
+    // — the same rule the readout and the server use. The label carries no
+    // value [lighten pass]: the figure lives in the readouts, and digits
+    // made the label collide with the 최고 extreme in the same top band.
     const m = chart([{ date: "2026-01-07", label: "진입", level: true }]);
     expect(m).toContain('data-mark="level"');
-    expect(m).toContain("진입 3.3000");
+    expect(m).toContain("진입");
+    expect(m).not.toContain("진입 3.3000");
     // the dot sits ON the line: same ink class the selection language uses
     expect(m).toMatch(/<circle[^>]*class="fill-ink"/);
   });

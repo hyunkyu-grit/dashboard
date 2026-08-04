@@ -237,6 +237,17 @@ Two owner feedbacks, one mechanism [OWNER: ① 싱글/개별 백테스트에서�
   (fmtKrw). Result's standalone PnlChart drops when `chartLinked` (renamed
   from chartOverlaid; same every-position stale gate). `ChartOverlay` was
   DELETED from PreviewChart — the marks (`ChartMark`) stay.
+- **Lighten pass [OWNER, 2026-08-05: "말들을 좀 더 가볍게 하고 전반적인
+  UI를 다듬는걸"]**: window copy trimmed by cutting words, register kept
+  합니다체 (rule recorded in DESIGN §15 "Lighter, not softer") — 손익 구성
+  explainer and the fold's mechanics paragraph now one sentence per fact
+  (`A = B` fragments), controls hint and 백엔드-필요 panel shortened, fold
+  title 다리별 구성·정산. UI: chart marks print the label WITHOUT digits
+  (the value collided with the 최고 extreme in the shared top band; the
+  figure lives in the readouts, dot + level hairline carry it on-chart —
+  guard updated), LinkedPnlChart gained a 누적 손익 caption (an unlabelled
+  second chart read as a mystery). `조건을 정하고…` kept as-is (pinned by
+  backtest-back, already light).
 
 ### Before that — 연구실 tab + 라고 할 때 살걸 (2026-08-04, regret session, two passes)
 

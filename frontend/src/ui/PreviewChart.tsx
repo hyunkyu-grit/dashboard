@@ -53,18 +53,23 @@ const PAD = CHART_PAD;
 
 /** A dated mark on the chart [OWNER feedback, 2026-08-04 — the backtest
  * window's context chart]. The vertical hairline names a DATE; with `level`
- * set the mark also pins the LEVEL there — a dot on the line, a horizontal
- * hairline at its height, and the value appended to the label — so the eye
- * can track where the line sits against where it was entered. The level is
- * never passed in: it IS the series' value at the snapped date, read from the
- * same points the line is drawn from, so the dot cannot sit off the line.
- * Snapping is ON OR AFTER the date — the same rule the backtest server
- * strikes entries with (`_span_of`) — and a mark whose date falls before the
- * visible slice (zoomed past) or after its end draws nothing rather than
- * pinning itself to an edge it does not belong to. Dashed on purpose: the
- * solid ink hairline is the hover crosshair, and a marker that looked
- * identical would read as a stuck cursor. (The owner retired dashes as the
- * REFERENCE-line encoding; this is not a reference, it is annotation.) */
+ * set the mark also pins the LEVEL there — a dot on the line and a
+ * horizontal hairline at its height — so the eye can track where the line
+ * sits against where it was entered. The label prints WITHOUT the value
+ * [lighten pass, 2026-08-05]: the figure already sits in the 진입 레벨
+ * readout and the result table, and the digits made the label wide enough
+ * to collide with the 최고 extreme whenever the high fell near the entry —
+ * both live in the same top band, so width is the collision budget. The
+ * level is never passed in: it IS the series' value at the snapped date,
+ * read from the same points the line is drawn from, so the dot cannot sit
+ * off the line. Snapping is ON OR AFTER the date — the same rule the
+ * backtest server strikes entries with (`_span_of`) — and a mark whose date
+ * falls before the visible slice (zoomed past) or after its end draws
+ * nothing rather than pinning itself to an edge it does not belong to.
+ * Dashed on purpose: the solid ink hairline is the hover crosshair, and a
+ * marker that looked identical would read as a stuck cursor. (The owner
+ * retired dashes as the REFERENCE-line encoding; this is not a reference,
+ * it is annotation.) */
 export interface ChartMark {
   date: string;
   label: string;
@@ -523,9 +528,9 @@ export function PreviewChart({
                 className="fill-ink"
                 style={{ fontSize: 10, fontWeight: 600, opacity: 0.7 }}
               >
-                {/* the level is DATA, so it prints through fmtLevel — the
-                    same grammar the extremes and the readout card use */}
-                {m.level ? `${m.label} ${fmtLevel(pts[i].v, unit)}` : m.label}
+                {/* label only — the value lives in the readouts, and the
+                    dot + level hairline carry it here (see ChartMark) */}
+                {m.label}
               </text>
             </g>
           );

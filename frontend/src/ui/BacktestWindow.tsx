@@ -688,6 +688,17 @@ export function LinkedPnlChart({
         onMouseMove={onMove}
         onMouseLeave={() => onHover(null)}
       >
+        {/* the panel says what it is — the top chart carries a legend for
+            its references, and an unlabelled second chart one gap below
+            would make the reader infer "this is the money" */}
+        <text
+          x={PAD.left + 2}
+          y={PAD.top + 8}
+          className="fill-ink"
+          style={{ fontSize: 10, opacity: 0.45 }}
+        >
+          누적 손익
+        </text>
         <g className={up ? "text-up" : "text-down"}>
           <polygon
             points={area}
@@ -964,13 +975,13 @@ function Result({
         </tbody>
       </table>
       <p className="mt-1.5 text-[12px] opacity-50">
-        평가손익은 금리가 움직이고 잔존만기가 줄면서 생긴 평가 변화,
-        캐리손익은 실제로 주고받은 이자입니다. 둘을 더하면 손익이 됩니다.
+        평가손익 = 금리·잔존만기 변화, 캐리손익 = 실제 주고받은 이자. 둘의
+        합이 손익입니다.
       </p>
 
       <details className="mt-5">
         <summary className="cursor-pointer text-[13px] opacity-50 hover:opacity-80">
-          자세히 — 다리별 구성과 정산
+          자세히 — 다리별 구성·정산
         </summary>
         {result.positions.map((p, i) => (
           <div key={`${p.id}-${i}`} className="mt-3">
@@ -1010,12 +1021,13 @@ function Result({
             </p>
           </div>
         ))}
+        {/* the mechanics, one sentence per fact — the four-sentence essay
+            this replaces said the same things with connective tissue nobody
+            reads twice [OWNER, 2026-08-05 lighten pass] */}
         <p className="mt-3 text-[12px] leading-relaxed opacity-55">
-          매일 그날의 커브로 다시 평가하고, 그동안 실제로 정산된 현금을 더한
-          값입니다. 금리 변동분만 곱한 근사치가 아니라 잔존만기가 줄어드는
-          효과(롤다운)와 캐리가 들어 있습니다. 다리가 둘 이상이면 진입일 DV01
-          중립 비율로 명목을 잡았습니다. 청산한 포지션은 청산일 손익에서 멈추고,
-          그 값은 합계에 계속 남습니다.
+          매일 그날 커브로 재평가한 값 + 정산 현금입니다. Δ금리×DV01 근사가
+          아니라 롤다운·캐리가 들어 있습니다. 다리 둘 이상이면 진입일 DV01
+          중립 비율. 청산 포지션은 청산일 손익으로 합계에 남습니다.
         </p>
       </details>
     </div>
@@ -1415,9 +1427,13 @@ export function BacktestWindow({
             >
               {run.isPending ? "계산 중…" : "실행"}
             </button>
+            {/* the two facts a reader needs at the controls, as fragments —
+                §15 keeps hints 합니다체/noun-final, and lighter here means
+                FEWER words, not a softer register [OWNER, 2026-08-05:
+                "말들을 좀 더 가볍게"] */}
             <span className="text-[12px] opacity-45">
-              청산일을 비우면 {asOf ?? "마지막 영업일"}까지 · 뒤 표에서 종목을
-              눌러도 추가됩니다
+              청산일 비우면 {asOf ?? "마지막 영업일"}까지 · 뒤 표를 누르면
+              추가됩니다
             </span>
           </div>
 
@@ -1440,8 +1456,8 @@ export function BacktestWindow({
             <div className="mt-6 rounded-[12px] bg-page p-4 text-[13px] leading-relaxed">
               <p className="font-semibold">백엔드가 필요한 화면이에요</p>
               <p className="mt-1 opacity-60">
-                다른 화면은 미리 만들어 둔 파일을 읽지만, 백테스트는 입력한
-                조건마다 답이 달라져서 미리 구워둘 수 없습니다. 백엔드를 띄우고
+                백테스트는 입력마다 답이 달라 미리 구워둘 수 없습니다.
+                백엔드를 띄우고
                 <code className="mx-1 rounded bg-tile px-1">
                   NEXT_PUBLIC_API_BASE
                 </code>

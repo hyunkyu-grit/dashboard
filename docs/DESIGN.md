@@ -540,15 +540,19 @@ that already existed is drawn.
   instruments would answer for none — a multi-instrument book keeps the P&L
   line as its only chart (the book-total rule above).
 - **`ChartMark` (PreviewChart)**: dated annotations — a dashed ink vertical
-  at the snapped date; with `level` set, a dot ON the line, a level hairline,
-  and the value appended to the label (진입 marks; 청산 marks name the date
-  alone). The level is never passed in — it is the plotted point's own value,
-  so the dot cannot sit off the line. A mark outside the visible slice
-  (zoomed past) draws nothing rather than pinning to an edge. Dashed on
-  purpose: the solid ink hairline is the hover crosshair; and the owner
-  retired dashes as the REFERENCE-line encoding — this is annotation, not a
-  reference. Pinned by `guards/backtest-context.test.ts` (snap parity,
-  pre-run readout, one renderer, marks never move the chart).
+  at the snapped date; with `level` set, a dot ON the line and a level
+  hairline (진입 marks; 청산 marks name the date alone). The label prints
+  WITHOUT the value [lighten pass, 2026-08-05]: the figure already lives in
+  the 진입 레벨 readout and the result table, and the digits made the label
+  wide enough to collide with the 최고 extreme whenever the high fell near
+  the entry — both live in the same top band. The level is never passed in —
+  it is the plotted point's own value, so the dot cannot sit off the line. A
+  mark outside the visible slice (zoomed past) draws nothing rather than
+  pinning to an edge. Dashed on purpose: the solid ink hairline is the hover
+  crosshair; and the owner retired dashes as the REFERENCE-line encoding —
+  this is annotation, not a reference. Pinned by
+  `guards/backtest-context.test.ts` (snap parity, pre-run readout, one
+  renderer, marks never move the chart).
 - **The LINKED PAIR [OWNER 재피드백, 2026-08-04 — "겹치는 거보다 PL은 밑에
   그려지되 … far left가 진입일, far right가 청산일로 해서 … 완전히
   수직적으로 얼라인 … 좌우로 움직이면 위에는 기존 그래프의 정보가, 밑에는
@@ -2045,6 +2049,13 @@ Before → after:
 | command empty | 찾는 종목이 없어요 | 찾는 종목이 없습니다 |
 | **error (survivor)** | 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요 | *(kept)* |
 
+- **Lighter, not softer [OWNER, 2026-08-05 — "말들을 좀 더 가볍게"]:**
+  weight is trimmed by CUTTING WORDS, never by softening the register.
+  Explanatory copy runs one sentence per fact; `A = B` fragments are
+  legitimate for definitions (평가손익 = 금리·잔존만기 변화); connective
+  tissue ("~지만", "~해서", restating the subject) goes first. A hint states
+  its two facts and stops. 해요체 stays where §15 already allows it (error
+  states) and nowhere new.
 - The `한 줄` column is a compact fragment, not a sentence: `일간 변동 상위 3%`,
   `백분위 99`, `단독 상승` (§2 ladder).
 - **Never translate instrument nomenclature.** `1.5Y`, `3s10s`, `2s5s10s`,
