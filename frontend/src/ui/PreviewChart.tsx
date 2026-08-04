@@ -4,14 +4,25 @@
  * simple and lightweight-charts stays confined to the enlarged view (§11).
  * Blue line (--bw-line, §9 palette cut). Hovering shows a floating card near
  * the cursor:
- * 날짜 · 레벨 · 구간 최고 · 구간 최저 · 구간 평균 · 당일 변화. */
+ * 날짜 · 레벨 · 구간 최고 · 구간 최저 · 구간 평균 · 당일 변화.
+ *
+ * ZOOMS IN PLACE (zoom-and-color session) [OWNER: "크게보기 버튼을 안 눌러도
+ * 이 창에서 그냥 확대하고 축소하고"]: wheel zooms about the cursor, dragging
+ * pans, 전체 기간 (and zooming all the way out) restores the full span. The
+ * whole feature is choosing a slice of `points` — every read below (y-domain,
+ * extremes, overlays, date labels, crosshair) was already a pure function of
+ * the plotted slice (pass O), so the zoomed chart is the same chart over
+ * fewer points. A drag is NOT a click: the backtest still opens on a clean
+ * click [OWNER], and a pointer that panned suppresses the click that follows
+ * it. */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { HistoryPoint, PolicyStep, SeriesStats, Unit } from "@/lib/api";
 
 import { fmtAxis, fmtLevel } from "@/lib/format";
 
+import { panRange, zoomRange, type ViewRange } from "./chartZoom";
 import { windowExtremes } from "./extremes";
 import {
   alignSeries,
@@ -69,19 +80,57 @@ export function PreviewChart({
   onHoverDate?: (iso: string | null) => void;
 }) {
   const [hi, setHi] = useState<number | null>(null);
+  /* The visible slice, or null = the full span (chartZoom.ts). Series
+   * changes remount this component (the pane keys on seriesId), so the view
+   * resets with the data it indexed. */
+  const [view, setView] = useState<ViewRange | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  /* pan gesture — event-time snapshot of where the drag started and what it
+   * started from; `moved` is what separates a pan from the backtest click */
+  const drag = useRef<{ px: number; base: ViewRange; moved: boolean } | null>(
+    null,
+  );
+  const justDragged = useRef(false);
+
+  const plotW = width - PAD.left - PAD.right;
+  const len = points.length;
+
+  /* Wheel = zoom about the cursor. A native non-passive listener, because the
+   * page must not scroll under a chart being zoomed and React's root-attached
+   * wheel handler is passive (preventDefault is a no-op there). Functional
+   * setView keeps the closure free of the current view. */
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el || len < 2) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const frac = (e.clientX - rect.left - PAD.left) / plotW;
+      setView((v) => zoomRange(v, len, frac, e.deltaY > 0 ? 1.25 : 0.8));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [plotW, len]);
 
   if (points.length < 2 || !stats) return null;
 
-  const plotW = width - PAD.left - PAD.right;
+  /* the slice everything below plots; a view left over from longer data
+   * (a refetch) falls back to the full span rather than indexing off the end */
+  const pts =
+    view && view.i1 < points.length
+      ? points.slice(view.i0, view.i1 + 1)
+      : points;
+
   const plotH = height - PAD.top - PAD.bottom;
   // y-domain from the PLOTTED points, not from stats: the stats are 52-week
-  // (annual-stats session) while the line still shows the full history — a
+  // (annual-stats session) while the line shows the visible slice — a
   // domain from annual stats would clip the 2020-21 trough. The same scan
   // yields the marked extremes (pass O): domain and dots share one source,
-  // so the dot claiming "high" sits exactly where the domain was stretched.
-  const ext = windowExtremes(points)!; // points.length >= 2, checked above
-  let lo = points[ext.lo].v;
-  let hi2 = points[ext.hi].v;
+  // so the dot claiming "high" sits exactly where the domain was stretched —
+  // and both re-derive from the slice as the reader zooms.
+  const ext = windowExtremes(pts)!; // pts.length >= 2, checked above
+  let lo = pts[ext.lo].v;
+  let hi2 = pts[ext.hi].v;
   /* How the overlay meets this axis is a UNIT question (policyLine.ts):
    *
    *   shared    (%)  — the references are in the instrument's own unit, so the
@@ -96,8 +145,8 @@ export function PreviewChart({
    *                    the overlay exists to read the spread against the
    *                    policy LEVEL, and an index rebase destroys the level. */
   const mode = policyAxisMode(unit);
-  const segments = mode ? policySegments(points, policy) : [];
-  const cdVals = mode ? alignSeries(points, cd) : [];
+  const segments = mode ? policySegments(pts, policy) : [];
+  const cdVals = mode ? alignSeries(pts, cd) : [];
   if (mode === "shared") {
     for (const e of [policyExtent(segments), seriesExtent(cdVals)]) {
       if (!e) continue;
@@ -108,7 +157,7 @@ export function PreviewChart({
   const pad = (hi2 - lo) * 0.06 || 0.01;
   const yMin = lo - pad;
   const yMax = hi2 + pad;
-  const x = (i: number) => PAD.left + (i / (points.length - 1)) * plotW;
+  const x = (i: number) => PAD.left + (i / (pts.length - 1)) * plotW;
   const y = (v: number) => PAD.top + (1 - (v - yMin) / (yMax - yMin)) * plotH;
 
   /* The secondary % scale, derived from the references alone. `yRef` is the
@@ -131,56 +180,111 @@ export function PreviewChart({
     mode === "secondary" && refDomain
       ? (v: number) => PAD.top + (1 - (v - refMin) / (refMax - refMin)) * plotH
       : y;
-  const path = points.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
+  const path = pts.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
 
   const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const px = e.clientX - rect.left;
-    const i = Math.round(((px - PAD.left) / plotW) * (points.length - 1));
-    const idx = Math.max(0, Math.min(points.length - 1, i));
+    const i = Math.round(((px - PAD.left) / plotW) * (pts.length - 1));
+    const idx = Math.max(0, Math.min(pts.length - 1, i));
     setHi(idx);
-    onHoverDate?.(points[idx].t);
+    onHoverDate?.(pts[idx].t);
   };
   const onLeave = () => {
     setHi(null);
     onHoverDate?.(null);
   };
 
-  const hp = hi != null ? points[hi] : null;
+  /* Pan: drag slides the window (chartZoom.panRange), from an event-time
+   * snapshot of the drag's origin. Only a zoomed chart pans — at full span
+   * there is nowhere to go and the pointer should stay a click. The `moved`
+   * flag survives to the click event that follows pointerup, where it
+   * suppresses the backtest open bubbling to the pane (a pan is not a
+   * click); `justDragged` carries it across the pointerup→click boundary. */
+  const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    justDragged.current = false;
+    if (e.button !== 0 || !view) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { px: e.clientX, base: view, moved: false };
+  };
+  const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    const dx = e.clientX - d.px;
+    if (Math.abs(dx) > 3) d.moved = true;
+    const span = d.base.i1 - d.base.i0 + 1;
+    setView(panRange(d.base, len, (-dx / plotW) * (span - 1)));
+  };
+  const onPointerUp = () => {
+    justDragged.current = drag.current?.moved ?? false;
+    drag.current = null;
+  };
+  const onClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (justDragged.current) {
+      justDragged.current = false;
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
+  // a hover index left over from a different slice (zoom just changed) is
+  // stale until the next mouse move — render nothing rather than a wrong date
+  const hIdx = hi != null && hi < pts.length ? hi : null;
+  const hp = hIdx != null ? pts[hIdx] : null;
   // daily change arrives precomputed per point (§16) — no client differencing.
   const dailyChange = hp ? hp.d : null;
   const tipLeft =
-    hi != null
-      ? Math.min(width - READOUT_CARD_W - 10, Math.max(0, x(hi) + 10))
+    hIdx != null
+      ? Math.min(width - READOUT_CARD_W - 10, Math.max(0, x(hIdx) + 10))
       : 0;
 
   // date labels (dates session, Pass B): sparse orientation marks in the
-  // bottom pad — no ticks, no rule. The preview has no zoom, so the span is
-  // the full fetched history; x = the first point on/after the boundary.
-  const labels = dateLabels(points[0].t, points[points.length - 1].t)
+  // bottom pad — no ticks, no rule. The span is the VISIBLE slice (zoom
+  // narrows it); x = the first point on/after the boundary.
+  const labels = dateLabels(pts[0].t, pts[pts.length - 1].t)
     .map((l) => {
-      let i = points.findIndex((p) => p.t >= l.iso);
-      if (i < 0) i = points.length - 1;
+      let i = pts.findIndex((p) => p.t >= l.iso);
+      if (i < 0) i = pts.length - 1;
       return { text: l.text, px: x(i) };
     })
     .filter((l) => l.px >= PAD.left && l.px <= width - PAD.right);
 
-  /* What the two ink lines ARE, named on the chart (§ reference lines). Both
-   * are the same ink at similar weights and differ only by dash pattern, so
-   * without this the reader has to infer which is which from the shape — and
-   * "the flat one is policy" stops being true the moment CD is flat too. */
-  const legend: { label: string; dash: string }[] = [];
-  if (cdVals.some((v) => v != null)) legend.push({ label: "CD 91일", dash: "1 2" });
-  if (segments.length) legend.push({ label: "기준금리", dash: "3 3" });
+  /* What the two reference lines ARE, named on the chart (§ reference
+   * lines). The DASH PATTERN is still the encoding — CD fine-dotted, base
+   * rate long-dashed — so the distinction survives in grayscale (§5); the
+   * quiet hue [OWNER, 2026-08-04] is a layer on top, and the legend swatch
+   * and label carry the same hue so line and name connect without tracing. */
+  const legend: { label: string; dash: string; stroke: string; fill: string }[] =
+    [];
+  if (cdVals.some((v) => v != null))
+    legend.push({
+      label: "CD 91일",
+      dash: "1 2",
+      stroke: "stroke-ref-cd",
+      fill: "fill-ref-cd",
+    });
+  if (segments.length)
+    legend.push({
+      label: "기준금리",
+      dash: "3 3",
+      stroke: "stroke-ref-policy",
+      fill: "fill-ref-policy",
+    });
 
   return (
     <div className="relative" style={{ width, height }}>
       <svg
+        ref={svgRef}
         width={width}
         height={height}
-        className="text-line"
+        className="text-line touch-none"
+        style={view ? { cursor: "grab" } : undefined}
         onMouseMove={onMove}
         onMouseLeave={onLeave}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onClick={onClick}
         role="img"
         aria-label="10y history"
       >
@@ -217,18 +321,19 @@ export function PreviewChart({
           ))}
         </g>
         {/* Both references go UNDER the instrument line: they are what the
-            instrument is read against, not second subjects. Ink, not hue, and
-            told apart by DASH PATTERN so the distinction survives in
-            grayscale (§5): CD is a fine dotted line, the base rate a longer
-            dash. The opacity is a layer on top of that, never the encoding. */}
+            instrument is read against, not second subjects. Told apart by
+            DASH PATTERN so the distinction survives in grayscale (§5): CD is
+            a fine dotted line, the base rate a longer dash. The muted hue
+            [OWNER, 2026-08-04 — "톤 안 깨면서 색"] and the partial opacity
+            are layers on top of that, never the encoding. */}
         {seriesPath(cdVals, x, yRef).map((run) => (
           <polyline
             key={`cd-${run.slice(0, 24)}`}
             points={run}
             fill="none"
-            className="stroke-ink"
+            className="stroke-ref-cd"
             strokeWidth={1}
-            strokeOpacity={0.4}
+            strokeOpacity={0.6}
             strokeDasharray="1 2"
           />
         ))}
@@ -237,9 +342,9 @@ export function PreviewChart({
             key={run.slice(0, 24)}
             points={run}
             fill="none"
-            className="stroke-ink"
+            className="stroke-ref-policy"
             strokeWidth={1}
-            strokeOpacity={0.35}
+            strokeOpacity={0.55}
             strokeDasharray="3 3"
           />
         ))}
@@ -309,8 +414,8 @@ export function PreviewChart({
             up/down pair (§9), landing on the ends it already means; an
             owner-sanctioned exception to "levels stay ink", recorded in
             DESIGN. Viewport property: they derive from the same scan the
-            y-domain uses, over the `points` prop — so any windowing (a
-            different slice, a future zoom) moves them by construction. Ties
+            y-domain uses, over the VISIBLE slice — so the in-place zoom
+            (this session) moves them by construction. Ties
             take the first occurrence; a flat window's two marks coincide on
             its first point and print their one value ONCE (extremes.ts).
             NOT the 52-week stats: those are a fixed server-side window in
@@ -323,7 +428,7 @@ export function PreviewChart({
           { k: "lo", i: ext.lo },
         ].map(({ k, i }) => {
           const px = x(i);
-          const py = y(points[i].v);
+          const py = y(pts[i].v);
           const anchor =
             px < PAD.left + plotW * 0.08
               ? "start"
@@ -351,8 +456,8 @@ export function PreviewChart({
                       readout card's own vocabulary. A flat window prints its
                       one value bare: it is neither a high nor a low. */}
                   {ext.lo !== ext.hi
-                    ? `${k === "hi" ? "최고" : "최저"} ${fmtLevel(points[i].v, unit)}`
-                    : fmtLevel(points[i].v, unit)}
+                    ? `${k === "hi" ? "최고" : "최저"} ${fmtLevel(pts[i].v, unit)}`
+                    : fmtLevel(pts[i].v, unit)}
                 </text>
               )}
             </g>
@@ -367,16 +472,16 @@ export function PreviewChart({
                 x2={lx + 14}
                 y1={PAD.top - 4}
                 y2={PAD.top - 4}
-                className="stroke-ink"
+                className={g.stroke}
                 strokeWidth={1}
-                strokeOpacity={0.45}
+                strokeOpacity={0.7}
                 strokeDasharray={g.dash}
               />
               <text
                 x={lx + 18}
                 y={PAD.top - 1}
-                className="fill-ink"
-                style={{ fontSize: 9, opacity: 0.45 }}
+                className={g.fill}
+                style={{ fontSize: 9, opacity: 0.75 }}
               >
                 {g.label}
               </text>
@@ -395,22 +500,37 @@ export function PreviewChart({
             {l.text}
           </text>
         ))}
-        {hi != null && hp && (
+        {hIdx != null && hp && (
           <>
             <line
-              x1={x(hi)}
-              x2={x(hi)}
+              x1={x(hIdx)}
+              x2={x(hIdx)}
               y1={PAD.top}
               y2={PAD.top + plotH}
               className="stroke-ink"
               strokeWidth={1}
               strokeOpacity={0.25}
             />
-            <circle cx={x(hi)} cy={y(hp.v)} r={3} fill="currentColor" />
+            <circle cx={x(hIdx)} cy={y(hp.v)} r={3} fill="currentColor" />
           </>
         )}
       </svg>
-      {hi != null && hp && (
+      {/* the way back out, only there when there is somewhere to come back
+          from. Its clicks are its own — never the backtest's. */}
+      {view && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setView(null);
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="absolute left-1 top-0 cursor-pointer rounded-[8px] border border-edge bg-tile px-2 py-0.5 text-[11px] opacity-70 hover:opacity-100"
+        >
+          전체 기간
+        </button>
+      )}
+      {hIdx != null && hp && (
         // the shared card (pass N) — the idle curve's tooltip is the same
         // component, so the two cannot drift into two grammars for one quantity
         <ReadoutCard title={hp.t} left={tipLeft}>

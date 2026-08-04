@@ -58,6 +58,18 @@ describe("chart stroke clears the 3:1 graphical floor (§9)", () => {
     expect(contrast(hex(lightBlock, "--bw-line"), lightTile)).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
     expect(contrast(hex(darkBlock, "--bw-line"), darkTile)).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
   });
+
+  // the reference hues [OWNER, 2026-08-04]: strokes only, so the 3:1 floor —
+  // but they are drawn at partial opacity over the tile, so the SOLID token
+  // must clear the floor with room, per theme, on both light surfaces
+  for (const token of ["--bw-ref-cd", "--bw-ref-policy"]) {
+    it(`${token} clears the stroke floor in both themes`, () => {
+      expect(contrast(hex(lightBlock, token), lightTile)).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
+      expect(contrast(hex(lightBlock, token), lightPage)).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
+      expect(contrast(hex(darkBlock, token), darkTile)).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
+      expect(contrast(hex(darkBlock, token), darkPage)).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
+    });
+  }
 });
 
 describe("direction colours clear the 4.5:1 TEXT floor on every surface they sit on", () => {

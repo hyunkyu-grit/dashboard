@@ -18,6 +18,9 @@
   --color-up: var(--bw-up);
   --color-down: var(--bw-down);
   --color-line: var(--bw-line);
+  /* reference-line hues [OWNER, 2026-08-04] — CD / 기준금리 overlays only */
+  --color-ref-cd: var(--bw-ref-cd);
+  --color-ref-policy: var(--bw-ref-policy);
   --radius-card: 16px;
   --radius-sheet: 20px;
   --font-sans: "Pretendard Variable", Pretendard, sans-serif;

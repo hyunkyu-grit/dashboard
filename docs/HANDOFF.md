@@ -159,7 +159,10 @@ rule:
   marker, product lockup, Pay/Receive accent) is **ink/grey** — `bg-ink` inverts
   with the theme so a filled pill is legible both ways. Orange (`#F58220`) and
   navy (`#043B72`) are defined but **unreferenced** and blocked by the §9 colour
-  guard. Levels stay ink. All values live only in `theme/tokens.css`.
+  guard. Levels stay ink. **Exception [OWNER, 2026-08-04]: the two reference
+  hues** — CD teal (`ref-cd`) and 기준금리 amber (`ref-policy`), reference
+  lines + legend only, dash pattern still the encoding. All values live only
+  in `theme/tokens.css`.
 - **No elevation / no floating cards** (S13). Depth = surface steps + hairlines.
   The single sanctioned drop-shadow is the chart tooltip overlay.
 - **Volatility is built** [Session 14] — relative ATR (mean ATR 5 / mean ATR
@@ -186,7 +189,32 @@ rule:
 
 ## 6. Current state (as of the 2026-08-04 session)
 
-### Latest — the backtest is a floating window; the enlarged view returns (2026-08-04)
+### Latest — the pane chart zooms in place; the references get their hues (2026-08-04, later)
+
+Two owner asks in one pass. **Zoom** [OWNER: "크게보기 버튼을 안 눌러도 이
+창에서 그냥 확대하고 축소하고"]: the preview/pane chart zooms with the wheel
+(anchored at the cursor), pans by drag, resets via `전체 기간` or by zooming
+all the way out. `ui/chartZoom.ts` = the pure range arithmetic (null = full
+span, MIN_SPAN 10); the component just slices `points` — extremes, y-domain,
+overlays, date labels and crosshair were already slice-pure (pass O) and
+follow for free. Wheel listener is NATIVE non-passive (React's root wheel is
+passive; preventDefault there is a no-op); a drag >3px suppresses the click
+that follows so a pan never opens the backtest; a clean click still does.
+**Color** [OWNER: "CD랑 기준금리에 톤 안 깨면서 색" — asked 08-03, lost when
+that session died uncommitted]: `--bw-ref-cd` deep teal (light `#0f766e` /
+dark `#45b8ac`), `--bw-ref-policy` deep amber (light `#a16207` / dark
+`#d9a441`), used on the CD/기준금리 reference lines + legend ONLY — dash
+pattern stays the grayscale encoding (§5), partial opacity keeps the tone;
+both clear 3:1 per theme (band-hue-contrast extended). Wired everywhere the
+references draw: PreviewChart (SVG classes), CurveView's 기준금리 hairline,
+DetailChart (canvas via new `resolveRefCd`/`resolveRefPolicy` in the theme
+bridge). This is a SANCTIONED palette extension recorded in DESIGN §Color —
+orange/navy stay banned (`palette.test.ts` header updated). New guard
+`chart-zoom.test.ts` (range arithmetic + wiring pins + ref-token usage).
+Verified live: wheel zoom both directions, drag pan (no backtest opened),
+전체 기간 reset, clean click still opens the backtest, both themes.
+
+### Before that — the backtest is a floating window; the enlarged view returns (2026-08-04)
 
 The modal backtest sheet became a draggable floating window:
 `ui/BacktestWindow.tsx` (renamed from BacktestSheet), geometry in

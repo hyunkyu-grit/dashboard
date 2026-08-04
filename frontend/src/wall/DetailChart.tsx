@@ -52,6 +52,8 @@ import {
   resolveDirection,
   resolveInk,
   resolveLine,
+  resolveRefCd,
+  resolveRefPolicy,
   resolveTheme,
 } from "@/theme/bridge";
 import { assertDomainRendered } from "@/theme/domainGuard";
@@ -264,10 +266,12 @@ export function DetailChart({
     if (wantsCd) {
       /* CD 91d — a plain line (no `WithSteps`: it is a daily fixing, not a
        * policy decision), dotted so it is told from the base rate's longer
-       * dash by PATTERN and not by colour (§5). Added before the base rate so
-       * the two references stack under the instrument. */
+       * dash by PATTERN first (§5 — grayscale still reads); the muted teal
+       * [OWNER, 2026-08-04] rides on top, the same hue the preview uses.
+       * Added before the base rate so the two references stack under the
+       * instrument. */
       const copts = {
-        color: resolveInk(),
+        color: resolveRefCd(),
         lineWidth: 1 as const,
         lineStyle: LineStyle.Dotted,
         priceLineVisible: false,
@@ -282,7 +286,8 @@ export function DetailChart({
 
     if (policyAxisMode(unit) === "shared" && policy && policy.steps.length) {
       const popts = {
-        color: resolveInk(),
+        // muted amber [OWNER, 2026-08-04], dash pattern still the encoding
+        color: resolveRefPolicy(),
         lineWidth: 1 as const,
         lineType: LineType.WithSteps,
         lineStyle: LineStyle.Dashed,

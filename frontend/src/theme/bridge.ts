@@ -72,12 +72,22 @@ export function resolveDirection(up: boolean): string {
   return resolveVar(up ? "--bw-up" : "--bw-down");
 }
 
-/** Resolve the ink (foreground) colour for canvas. The policy-rate overlay
- * draws in ink rather than a hue on purpose (§5): it is a REFERENCE the
- * instrument is read against, and the dash pattern — not a colour — is what
- * distinguishes it, so the encoding survives in grayscale. */
+/** Resolve the ink (foreground) colour for canvas. */
 export function resolveInk(): string {
   return resolveVar("--bw-ink");
+}
+
+/** Resolve a reference-line hue for canvas [OWNER, 2026-08-04 — "CD랑
+ * 기준금리에 톤 안 깨면서 색"]. The dash pattern stays the encoding (§5 —
+ * grayscale still reads); the muted hue is a layer that lets the eye tell
+ * the two references apart, and apart from the blue instrument line,
+ * without the legend. One resolver per reference so a call site cannot
+ * swap them silently. */
+export function resolveRefCd(): string {
+  return resolveVar("--bw-ref-cd");
+}
+export function resolveRefPolicy(): string {
+  return resolveVar("--bw-ref-policy");
 }
 
 /** Notify `cb` whenever the root data-theme attribute changes. */

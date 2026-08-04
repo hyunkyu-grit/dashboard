@@ -197,10 +197,13 @@ reasoning that the 3M node IS CD91 so CD was already on screen where it
 mattered — true of exactly one chart out of twenty, and the wrong reading of
 the instruction.
 
-- Told apart by **DASH PATTERN, not colour** (§5): CD dotted (`1 2`), the base
-  rate a longer dash (`3 3`), both in ink under the instrument's blue line. A
-  **legend names them on the chart** — they are the same ink at the same weight,
-  and "the flat one is policy" stops being true the moment CD is flat too.
+- Told apart by **DASH PATTERN first** (§5): CD dotted (`1 2`), the base
+  rate a longer dash (`3 3`), under the instrument's blue line — the encoding
+  still reads in grayscale. Since 2026-08-04 each also carries a **muted hue**
+  [OWNER: "톤 안 깨면서 색"] — CD `ref-cd` (deep teal), base rate `ref-policy`
+  (deep amber) — as a layer over the dash, at partial opacity, so the tone
+  holds. A **legend names them on the chart** in the same hues, so line and
+  name connect without tracing.
 - **CD is skipped on the 3M chart itself**, where the reference is the subject.
   `useCdReference` owns that decision so every caller answers it the same way.
 - **CD is aligned BY DATE, never by position** (`alignSeries`). Two ~150-point
@@ -223,10 +226,10 @@ the instruction.
   compare two rates in the SAME unit at two different scales. On a bp chart
   the units differ, so the references get the secondary % scale above — the
   same reasoning, landing on the other side.
-- **Ink, dashed, under the instrument line** — the dash pattern carries it in
-  grayscale, the reduced opacity is a layer (§5). It is the reference the
-  instrument is read against, not a second subject, and it is excluded from
-  the crosshair.
+- **Dashed, muted, under the instrument line** — the dash pattern carries it
+  in grayscale; the quiet hue (2026-08-04) and the reduced opacity are layers
+  (§5). It is the reference the instrument is read against, not a second
+  subject, and it is excluded from the crosshair.
 - **Carrying it forward is a claim, and it is bounded.** The payload's
   `through` is the last date the backend can vouch for: if a Board meeting
   falls between the workbook's last date and the dataset's as-of date, the step
@@ -1491,6 +1494,17 @@ orange to selection/focus/action; the Pay/Receive diagram took orange as an
 accent) and are now removed in one sweep. See the reversed entries in
 `## Provisional`.
 
+**One sanctioned extension [OWNER, 2026-08-04 — "CD랑 기준금리에 톤 안
+깨면서 색"]: the two REFERENCE hues.** CD 91d wears a deep teal
+(`--bw-ref-cd`, light `#0f766e` / dark `#45b8ac`) and the base rate a deep
+amber (`--bw-ref-policy`, light `#a16207` / dark `#d9a441`) — on their
+reference lines and legend entries ONLY, nowhere else. Both are deliberately
+low-chroma and drawn at partial opacity so the achromatic tone holds; the
+dash pattern remains the encoding (§5 — grayscale still reads); both clear
+the 3:1 stroke floor per theme (`band-hue-contrast.test.ts`). This is not
+orange/navy returning: those were interaction/brand colours on controls, and
+the ban on them stands (`palette.test.ts`).
+
 #### Direction (red up / blue down)
 
 Semantic direction marks, not a brand palette. Korean market convention
@@ -2700,6 +2714,37 @@ approximately) or a genuine start-offset trade object. Until ruled on, the
 server refusal is pinned by `test_forward_positions_are_refused…` so UI and
 engine cannot silently disagree again.
 
+### Zoom-and-color (2026-08-04) — the pane chart zooms in place
+
+**The preview chart zooms without leaving** [OWNER: "크게보기 버튼을 안
+눌러도 이 창에서 그냥 확대하고 축소하고"]. Wheel zooms about the cursor
+(the date under the cursor stays under it), drag pans, `전체 기간` — and
+zooming all the way back out — restores the full span. The state is one
+value (`ui/chartZoom.ts`: a visible index range, or null = full), and the
+whole feature is choosing a slice of `points`: pass O had already made the
+y-domain, the marked extremes, the overlay alignment, the date labels and
+the crosshair pure functions of the plotted slice, so they all follow the
+zoom by construction. Facts that keep the gesture safe, pinned in
+`guards/chart-zoom.test.ts`:
+
+- **The page must not scroll under a zooming chart** — the wheel listener is
+  attached natively with `passive: false` (React's root wheel handler is
+  passive, so `preventDefault` there is a no-op).
+- **A pan is not a click** [the chart click opens the backtest, OWNER]: a
+  pointer that moved >3px suppresses the click that follows it, or panning
+  would book a backtest per drag. A clean click still opens the backtest at
+  the cursor date — including on a zoomed chart.
+- **Panning exists only when zoomed** — at the full span the pointer is a
+  click and nothing else. `zoomRange` floors at MIN_SPAN 10 points and
+  returns null at the full span, so "fully zoomed out" and "never zoomed"
+  are one state.
+- The 52-week stats in the tooltip stay the fixed server-side window; the
+  최고/최저 marks are the VISIBLE slice's (the same divergence the enlarged
+  chart already states).
+
+The enlarged view keeps its place — candles, six-basis readout, LWC zoom —
+this removes the *round trip* for the common case, not the destination.
+
 ### Pass O (2026-08-03) — "the detail chart" is the pane chart, not the dead popup chart
 
 The brief said "the detail chart" and spoke of zoom and pan. The only chart
@@ -2710,9 +2755,10 @@ decision. Building the feature there would produce code no reader can see
 and no live check can verify, so the extremes and the grid went to the chart
 that IS the product's detail view since the pane-sizing change — the
 pane-sized, full-resolution `PreviewChart` (which the owner asked to be "더
-자세하고" in that decision). It has no zoom TODAY; the extremes are a pure
+자세하고" in that decision). It had no zoom then; the extremes are a pure
 function of the plotted slice, so a future zoom or range control inherits
-them unchanged. **To reverse / extend:** if the enlarged chart ever returns,
+them unchanged — which is exactly what happened when it grew one
+(Zoom-and-color, 2026-08-04). **To reverse / extend:** if the enlarged chart ever returns,
 give it the same two features via `windowExtremes` over its visible range —
 the module is chart-agnostic on purpose. [It DID return, two sessions later:
 the visible-range extremes were built into `DetailChart` on 2026-08-03 and

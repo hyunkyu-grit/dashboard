@@ -149,9 +149,11 @@ function NodeLine({
             {axisLabel(v)}
           </text>
         ))}
-        {/* the base rate: a dashed hairline in ink, UNDER both curves and
-            named at the right edge. Dash + label carry it in grayscale (§5);
-            it is the reference the curve is read against, not a third curve. */}
+        {/* the base rate: a dashed hairline UNDER both curves and named at
+            the right edge. Dash + label carry it in grayscale (§5); the
+            muted amber [OWNER, 2026-08-04] is a layer on top, the same hue
+            this line wears on every chart — it is the reference the curve
+            is read against, not a third curve. */}
         {baseRate != null && (
           <>
             <line
@@ -159,17 +161,17 @@ function NodeLine({
               x2={width - PAD.right}
               y1={y(baseRate)}
               y2={y(baseRate)}
-              className="stroke-ink"
+              className="stroke-ref-policy"
               strokeWidth={1}
-              strokeOpacity={0.35}
+              strokeOpacity={0.55}
               strokeDasharray="3 3"
             />
             <text
               x={width - PAD.right}
               y={y(baseRate) - 4}
               textAnchor="end"
-              className="fill-ink"
-              style={{ fontSize: 10, opacity: 0.5 }}
+              className="fill-ref-policy"
+              style={{ fontSize: 10, opacity: 0.75 }}
             >
               기준금리 {baseRate.toFixed(2)}
             </text>
