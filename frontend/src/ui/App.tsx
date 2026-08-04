@@ -630,6 +630,7 @@ export function App() {
                   ? pinned
                   : null
               }
+              policy={summary.policy}
               onClose={closeBacktest}
             />
           </ErrorBoundary>

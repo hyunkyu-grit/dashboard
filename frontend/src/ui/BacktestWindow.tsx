@@ -46,7 +46,7 @@
  * configured the sheet says that plainly instead of drawing an empty chart.
  */
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -55,7 +55,11 @@ import {
   type BacktestResult,
   BacktestUnavailable,
   fetchBacktest,
+  fetchSeries,
+  type HistoryPoint,
+  type PolicyStep,
   type PositionInput,
+  type SeriesDetail,
   type Unit,
 } from "@/lib/api";
 import { fmtDelta, fmtLevel } from "@/lib/format";
@@ -71,7 +75,9 @@ import {
 } from "./floatingWindow";
 import { Z_WINDOW } from "./layers";
 import { instant } from "./motion";
+import { type ChartMark, PreviewChart } from "./PreviewChart";
 import { GROUP_LABEL, type Group, type Row } from "./rows";
+import { useCdReference } from "./useCdReference";
 
 /* Money, the way a Korean desk reads it: 억 / 만, never 12 raw digits.
  *
@@ -409,6 +415,121 @@ function unitFromShape(id: string): Unit {
   return !id.includes("-") ? "%" : "bp";
 }
 
+/* ── The book, priced BEFORE 실행 [OWNER feedback, 2026-08-04] ──────────────
+ *
+ * Two asks, one mechanism. ① "진입 레벨은 실행 전에도 보여야" — each position
+ * row states the level its entry date would strike, as the reader types the
+ * date, not two clicks later in the result table. ② A single-instrument test
+ * should show "원래 그래프랑 CD, Base Rate가 함께" — the instrument's own
+ * chart with both reference lines, the same picture every pane already draws,
+ * so the trade can be TRACKED against the market it sat in.
+ *
+ * Both read the instrument's own series file — the same static JSON every
+ * other chart reads — so neither needs the live backend the run itself needs.
+ * "IT DOES NOT RUN ON ITS OWN" holds: nothing here revalues anything; the
+ * level is a table lookup and the chart is history that already existed. */
+
+/** The dataset point an entry DATE strikes: the first ON OR AFTER it. Exactly
+ * the server's `_index_on_or_after` (backtest.py `_span_of`), so the level
+ * shown before 실행 is the level the run then prices — two snap rules would
+ * put two 진입 레벨 on screen for one date. Null past the data's end. */
+export function pointOnOrAfter(
+  points: HistoryPoint[] | undefined,
+  iso: string,
+): HistoryPoint | null {
+  if (!points || !iso) return null;
+  for (const p of points) if (p.t >= iso) return p;
+  return null;
+}
+
+/** The instrument's daily history, at FULL resolution — the ~150-point
+ * preview snaps an entry date to the nearest ~3.5 weeks, which is a wrong
+ * level printed confidently. Same query key as PreviewPane's chart, so the
+ * pane the reader just clicked is a cache hit, not a second fetch. */
+function useSeriesFull(id: string | undefined): SeriesDetail | undefined {
+  const { data } = useQuery({
+    queryKey: ["series", id, "full"],
+    queryFn: () => fetchSeries(id!, "full"),
+    enabled: !!id,
+    staleTime: 30_000,
+  });
+  return data;
+}
+
+/** The context chart: the instrument's OWN line over the tested window, with
+ * the CD + 기준금리 references, 진입 marks pinning date AND level, 청산 marks
+ * the date alone. Rendered only when the book is ONE instrument — with the
+ * whole point being "track THE trade against THE market", a chart that had to
+ * pick one of three instruments would answer for none of them; a multi-
+ * instrument book keeps the P&L line as its one chart (§backtest: the chart
+ * draws the book total only).
+ *
+ * REUSES PreviewChart wholesale: references, dual bp/% axis, in-place zoom,
+ * tooltip, extremes all come from the one implementation — a second chart
+ * that draws the references its own way is the two-displays defect class
+ * (§ reference lines has ONE owner ruling, it must have one renderer). The
+ * slice leads in ahead of the earliest entry (a quarter of the tested span,
+ * at least 20 business days) so the entry mark sits in context, not on the
+ * left edge. */
+function BookContextChart({
+  book,
+  unit,
+  policy,
+}: {
+  book: PositionInput[];
+  unit: Unit;
+  policy?: PolicyStep;
+}) {
+  const id = book[0]?.id;
+  const series = useSeriesFull(id);
+  // the ONE CD hook (useCdReference) — it already knows CD itself takes no
+  // overlay, so a 3M book simply draws without the CD line
+  const cd = useCdReference(unit, id);
+  if (!series || series.points.length < 2 || !series.stats) return null;
+
+  const points = series.points;
+  const first = book
+    .map((b) => b.entry)
+    .filter(Boolean)
+    .sort()[0];
+  let start = 0;
+  if (first) {
+    let sIdx = points.findIndex((p) => p.t >= first);
+    if (sIdx < 0) sIdx = points.length - 1;
+    start = Math.max(0, sIdx - Math.max(20, Math.round((points.length - 1 - sIdx) * 0.25)));
+  }
+
+  const marks: ChartMark[] = [];
+  const seen = new Set<string>();
+  for (const b of book) {
+    // two rows entering the same day are one mark — the annotation names the
+    // date, and printing it twice at one x is noise
+    if (b.entry && !seen.has(`e${b.entry}`)) {
+      seen.add(`e${b.entry}`);
+      marks.push({ date: b.entry, label: "진입", level: true });
+    }
+    if (b.exit && !seen.has(`x${b.exit}`)) {
+      seen.add(`x${b.exit}`);
+      marks.push({ date: b.exit, label: "청산" });
+    }
+  }
+
+  return (
+    <div className="mt-5">
+      <PreviewChart
+        points={points.slice(start)}
+        stats={series.stats}
+        unit={unit}
+        width={880}
+        height={200}
+        policy={policy}
+        cd={cd}
+        marks={marks}
+      />
+    </div>
+  );
+}
+
 function fmtMove(
   p: { entryValue: number | null; exitValue: number | null; id: string },
   unit: Unit,
@@ -662,6 +783,7 @@ function PositionRow({
   value,
   choices,
   asOf,
+  unit,
   onChange,
   onRemove,
   removable,
@@ -670,11 +792,23 @@ function PositionRow({
   /** grouped for the dropdown — see the optgroup note at the call site */
   choices: { group: string; label: string; items: { id: string; label: string }[] }[];
   asOf?: string;
+  /** the instrument's own unit, from the row model — the level readout's grammar */
+  unit: Unit;
   onChange: (next: PositionInput) => void;
   onRemove: () => void;
   removable: boolean;
 }) {
   const set = (patch: Partial<PositionInput>) => onChange({ ...value, ...patch });
+
+  /* 진입 레벨, BEFORE 실행 [OWNER feedback, 2026-08-04]. The level the typed
+   * entry date strikes, looked up in the instrument's own series file as the
+   * date is typed — the result table's column answered this only after a
+   * server round-trip the reader had no reason to spend on "where would I be
+   * getting in". Same on-or-after snap as the server (`pointOnOrAfter`), same
+   * grammar as everywhere (`entryLevelText` = fmtLevel); the title names the
+   * business day actually struck, which matters when the typed date is a
+   * weekend. Em dash while the series loads or past the data's end. */
+  const struck = pointOnOrAfter(useSeriesFull(value.id)?.points, value.entry);
 
   return (
     <div className="flex flex-wrap items-end gap-2 border-b border-edge py-2.5">
@@ -734,6 +868,21 @@ function PositionRow({
           className={INPUT}
         />
       </Field>
+      <Field label="진입 레벨">
+        {/* a readout, not an input — same vertical rhythm as its neighbours
+            so the sentence still reads left to right */}
+        <span
+          className="px-1 py-2 text-[14px] tabular-nums"
+          title={struck ? `${struck.t} 종가 기준` : undefined}
+        >
+          {entryLevelText(struck?.v ?? null, unit)}
+          {struck && (
+            <span className="ml-0.5 text-[11px] opacity-45">
+              {LEVEL_SUFFIX[unit]}
+            </span>
+          )}
+        </span>
+      </Field>
       <Field label="청산일">
         <input
           type="date"
@@ -779,6 +928,7 @@ export function BacktestWindow({
   entryFrom,
   memoryKey,
   captured,
+  policy,
   onClose,
 }: {
   row: Row;
@@ -797,6 +947,8 @@ export function BacktestWindow({
   memoryKey: string;
   /** an instrument clicked in the table BEHIND the window, to be appended */
   captured?: Row | null;
+  /** the BOK step, for the context chart's reference pair (§ reference lines) */
+  policy?: PolicyStep;
   onClose: () => void;
 }) {
   const choices = useMemo(() => {
@@ -918,6 +1070,16 @@ export function BacktestWindow({
   const unavailable = run.error instanceof BacktestUnavailable;
   const ready = book.length > 0 && book.every((b) => b.entry);
 
+  /** the row model's unit for a booked id — Result derives the same way */
+  const unitOf = (id: string): Unit => naming.get(id)?.unit ?? unitFromShape(id);
+  /* the context chart's gate: a book of ONE instrument (however many rows leg
+   * in and out of it) — see BookContextChart's note for why not the first of
+   * several */
+  const soleId =
+    book.length > 0 && book.every((b) => b.id === book[0].id) && book[0].id
+      ? book[0].id
+      : null;
+
   return (
     <motion.div
       role="dialog"
@@ -967,6 +1129,7 @@ export function BacktestWindow({
                 value={b}
                 choices={choices}
                 asOf={asOf}
+                unit={unitOf(b.id)}
                 removable={book.length > 1}
                 onChange={(next) =>
                   setBook((prev) => prev.map((p, j) => (j === i ? next : p)))
@@ -1003,6 +1166,14 @@ export function BacktestWindow({
               눌러도 추가됩니다
             </span>
           </div>
+
+          {/* the instrument's own chart, THERE BEFORE 실행 — with the entry
+              marks and the level readouts above, the question "where in the
+              market am I getting in" is answered before the server is ever
+              asked "and what did it pay" */}
+          {soleId && (
+            <BookContextChart book={book} unit={unitOf(soleId)} policy={policy} />
+          )}
 
           {unavailable && (
             <div className="mt-6 rounded-[12px] bg-page p-4 text-[13px] leading-relaxed">

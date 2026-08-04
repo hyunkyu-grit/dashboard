@@ -510,6 +510,45 @@ and each row is another full daily revaluation pass.
 - **It does not run on its own.** The reader presses 실행. A backtest is a
   question someone asks, not something that happens while they are still typing
   the date, and each run is a full daily revaluation.
+
+**THE ENTRY IS PRICED BEFORE 실행 [OWNER feedback, 2026-08-04].** Two asks,
+one mechanism — both read the instrument's own series file (the same static
+JSON every chart reads), so neither needs the live backend and "it does not
+run on its own" holds: nothing is revalued, a level is looked up and history
+that already existed is drawn.
+
+- **진입 레벨 beside 진입일, live as the date is typed** ["실제로 백테스트
+  실행 전에도 진입레벨이 보여야"]. The readout snaps a typed date to the first
+  dataset point ON OR AFTER it (`pointOnOrAfter`) — exactly the server's
+  `_index_on_or_after` in `_span_of`, so the pre-run figure is the figure the
+  run then prices; two snap rules would put two 진입 레벨 on screen for one
+  date. Printed through `entryLevelText` (= `fmtLevel`), em dash while the
+  series loads or past the data's end; the title names the business day
+  actually struck. The series is fetched at FULL resolution under
+  PreviewPane's own query key (the ~150-point preview snaps a date to the
+  nearest ~3.5 weeks — a wrong level printed confidently).
+- **A single-instrument book draws the instrument's OWN chart in the window**
+  ["원래 그래프랑 CD, Base Rate가 함께 그려져서 추적할 수 있는 거 처럼"],
+  above the result and there before any run. It IS `PreviewChart` — the
+  references, the bp/% dual axis, in-place zoom, tooltip and extremes all come
+  from the one renderer the reference-line ruling already has (a second
+  implementation is the two-displays defect class). The slice leads in ahead
+  of the earliest entry (a quarter of the tested span, at least 20 business
+  days) so the entry sits in context, not on the left edge. Gated on ONE
+  instrument, however many rows leg in and out of it: the point is "track THE
+  trade against THE market", and a chart that had to pick one of three
+  instruments would answer for none — a multi-instrument book keeps the P&L
+  line as its only chart (the book-total rule above).
+- **`ChartMark` (PreviewChart)**: dated annotations — a dashed ink vertical
+  at the snapped date; with `level` set, a dot ON the line, a level hairline,
+  and the value appended to the label (진입 marks; 청산 marks name the date
+  alone). The level is never passed in — it is the plotted point's own value,
+  so the dot cannot sit off the line. A mark outside the visible slice
+  (zoomed past) draws nothing rather than pinning to an edge. Dashed on
+  purpose: the solid ink hairline is the hover crosshair; and the owner
+  retired dashes as the REFERENCE-line encoding — this is annotation, not a
+  reference. Pinned by `guards/backtest-context.test.ts` (snap parity,
+  pre-run readout, one renderer, marks never move the chart).
 - Toss-style is a constraint on the NUMBERS as much as the paint: one big
   figure in plain Korean, controls that read as a sentence, and everything that
   is machinery (per-leg notionals, DV01, settled cash) under a fold.

@@ -47,6 +47,26 @@ import { dateLabels } from "./timeAxis";
 // deeper than the 10px the plot alone needed
 const PAD = { top: 16, right: 10, bottom: 18, left: 6 };
 
+/** A dated mark on the chart [OWNER feedback, 2026-08-04 — the backtest
+ * window's context chart]. The vertical hairline names a DATE; with `level`
+ * set the mark also pins the LEVEL there — a dot on the line, a horizontal
+ * hairline at its height, and the value appended to the label — so the eye
+ * can track where the line sits against where it was entered. The level is
+ * never passed in: it IS the series' value at the snapped date, read from the
+ * same points the line is drawn from, so the dot cannot sit off the line.
+ * Snapping is ON OR AFTER the date — the same rule the backtest server
+ * strikes entries with (`_span_of`) — and a mark whose date falls before the
+ * visible slice (zoomed past) or after its end draws nothing rather than
+ * pinning itself to an edge it does not belong to. Dashed on purpose: the
+ * solid ink hairline is the hover crosshair, and a marker that looked
+ * identical would read as a stuck cursor. (The owner retired dashes as the
+ * REFERENCE-line encoding; this is not a reference, it is annotation.) */
+export interface ChartMark {
+  date: string;
+  label: string;
+  level?: boolean;
+}
+
 /** Where the horizontal gridlines sit, as fractions of the plot height. ONE
  * list for the lines and their value labels, so the two cannot drift. */
 const GRID_FRACS = [0.25, 0.5, 0.75];
@@ -60,6 +80,7 @@ export function PreviewChart({
   policy,
   cd,
   onHoverDate,
+  marks,
 }: {
   points: HistoryPoint[];
   stats: SeriesStats | null; // range min/max/avg, precomputed server-side (§16)
@@ -78,6 +99,8 @@ export function PreviewChart({
    * 스타트해야지"], and the crosshair is the only thing that knows which day
    * the reader is pointing at. */
   onHoverDate?: (iso: string | null) => void;
+  /** 진입/청산 annotations for the backtest's context chart — see ChartMark. */
+  marks?: ChartMark[];
 }) {
   const [hi, setHi] = useState<number | null>(null);
   /* The visible slice, or null = the full span (chartZoom.ts). Series
@@ -412,6 +435,64 @@ export function PreviewChart({
           strokeWidth={1.6}
           strokeLinejoin="round"
         />
+        {/* Dated marks (ChartMark) — drawn over the line so a 진입 dot is
+            never buried under it, under the extremes/crosshair so the marks
+            annotate rather than compete. Snap and skip rules live in the
+            type's comment; the skip below is the zoom case, where the
+            snapped point has left the visible slice. */}
+        {(marks ?? []).map((m) => {
+          if (m.date < pts[0].t || m.date > pts[pts.length - 1].t) return null;
+          let i = pts.findIndex((p) => p.t >= m.date);
+          if (i < 0) i = pts.length - 1;
+          const px = x(i);
+          const py = y(pts[i].v);
+          const anchor =
+            px < PAD.left + plotW * 0.08
+              ? "start"
+              : px > PAD.left + plotW * 0.92
+                ? "end"
+                : "middle";
+          return (
+            <g key={`mark-${m.label}-${m.date}`} data-mark={m.level ? "level" : "date"}>
+              <line
+                x1={px}
+                x2={px}
+                y1={PAD.top}
+                y2={PAD.top + plotH}
+                className="stroke-ink"
+                strokeWidth={1}
+                strokeOpacity={0.3}
+                strokeDasharray="3 3"
+              />
+              {m.level && (
+                <>
+                  <line
+                    x1={PAD.left}
+                    x2={width - PAD.right}
+                    y1={py}
+                    y2={py}
+                    className="stroke-ink"
+                    strokeWidth={1}
+                    strokeOpacity={0.18}
+                    strokeDasharray="3 3"
+                  />
+                  <circle cx={px} cy={py} r={3} className="fill-ink" />
+                </>
+              )}
+              <text
+                x={px}
+                y={PAD.top + 10}
+                textAnchor={anchor}
+                className="fill-ink"
+                style={{ fontSize: 10, fontWeight: 600, opacity: 0.7 }}
+              >
+                {/* the level is DATA, so it prints through fmtLevel — the
+                    same grammar the extremes and the readout card use */}
+                {m.level ? `${m.label} ${fmtLevel(pts[i].v, unit)}` : m.label}
+              </text>
+            </g>
+          );
+        })}
         {/* The extremes of what is CURRENTLY PLOTTED, marked on the line AND
             SAYING THEIR VALUE (pass O; the value and the hue by owner
             instruction, 2026-08-03 — "지난 10년간 최고치 최저치를 바로 보일

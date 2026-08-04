@@ -189,7 +189,41 @@ rule:
 
 ## 6. Current state (as of the 2026-08-04 session)
 
-### Latest — 연구실 tab + 라고 할 때 살걸 (2026-08-04, regret session, two passes)
+### Latest — the backtest prices the entry before 실행 (2026-08-04, backtest-context session)
+
+Two owner feedbacks, one mechanism [OWNER: ① 싱글/개별 백테스트에서는 "원래
+그래프랑 CD, Base Rate가 함께 그려져서 추적할 수 있는 거 처럼"; ② "진입
+레벨이 실행 전에도 보여야"]. Both read the instrument's own series file
+(static tree — no live backend needed; "it does not run on its own" holds).
+
+- **진입 레벨 readout** in every position row, beside 진입일, live as the
+  date is typed: `pointOnOrAfter` (exported from BacktestWindow) = the
+  server's on-or-after snap (`_index_on_or_after` in `_span_of`), printed via
+  `entryLevelText`; em dash while loading / past data end; title names the
+  struck business day. Series fetched FULL resolution under PreviewPane's
+  query key (`["series", id, "full"]` — cache hit off the pane; preview
+  resolution would snap ~3.5 weeks off).
+- **Context chart** (`BookContextChart` in BacktestWindow.tsx): when the book
+  is ONE instrument (any number of rows), the window draws the instrument's
+  own line ABOVE the result, pre-run too — literally `PreviewChart`
+  (references, bp/% dual axis, zoom, tooltip, extremes from the one
+  renderer), sliced with a lead-in of max(20bd, 25% of tested span) before
+  the earliest entry. Multi-instrument book → no chart (the P&L line stays
+  the book's only chart). `policy` now flows into BacktestWindow from App.
+- **`ChartMark`** on PreviewChart (new optional prop): dashed ink vertical at
+  the snapped date; `level: true` adds a dot ON the line + level hairline +
+  the value in the label (진입 marks; 청산 = date only). Level is read from
+  the plotted points, never passed in; marks outside the visible slice draw
+  nothing; marks never move the y-domain (guarded byte-identical).
+- Guard: `guards/backtest-context.test.ts` (snap parity incl. holiday-snaps-
+  FORWARD, pre-run readout renders, marks render/skip/don't-move-the-chart,
+  source pins: one renderer + one CD hook + full-resolution key). DESIGN
+  §backtest gained "THE ENTRY IS PRICED BEFORE 실행".
+- Verified live (:3100): 10Y pre-run readout 3.1650% == post-run server
+  entryValue; 3s10s dual-axis chart with −5.0bp readout; 청산일 → 청산 mark;
+  second instrument added → chart hides; run result renders below the chart.
+
+### Before that — 연구실 tab + 라고 할 때 살걸 (2026-08-04, regret session, two passes)
 
 New FAR-RIGHT tab **연구실** — the incubation surface [OWNER: experiments
 enter at the right edge, graduate LEFTWARD on trader feedback]. First
