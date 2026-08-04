@@ -124,9 +124,9 @@ describe("reference hues ride the tokens, not ink (zoom-and-color session)", () 
     expect(curve).toContain("stroke-ref-policy");
     expect(curve).toContain("fill-ref-policy");
   });
-  it("the enlarged chart resolves the same tokens for canvas", () => {
+  it("the enlarged chart resolves the same tokens for canvas, with the SVG charts' translucency", () => {
     const detail = code("wall/DetailChart.tsx");
-    expect(detail).toMatch(/color: resolveRefCd\(\)/);
-    expect(detail).toMatch(/color: resolveRefPolicy\(\)/);
+    expect(detail).toMatch(/color: withAlpha\(resolveRefCd\(\), 0\.\d+\)/);
+    expect(detail).toMatch(/color: withAlpha\(resolveRefPolicy\(\), 0\.\d+\)/);
   });
 });

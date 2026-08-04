@@ -52,17 +52,17 @@
    * white (clears the 3:1 stroke floor). */
   --bw-line: #0064ff;
 
-  /* Reference-line hues [OWNER, 2026-08-04 — "CD랑 기준금리에 톤 안 깨면서
-   * 색"]. The two references KEEP their dash patterns — that stays the
-   * encoding, so grayscale still works (§5) — and each gains a quiet,
-   * low-chroma hue so the eye can tell them apart and from the blue
-   * instrument line without reading the legend. Deliberately muted (deep
-   * teal / deep amber, nowhere near the saturated direction pair) and drawn
-   * at partial opacity, so the tone holds: they are furniture the instrument
-   * is read against, not second subjects. Both clear the 3:1 stroke floor
-   * per theme (guarded in band-hue-contrast). */
-  --bw-ref-cd: #0f766e;
-  --bw-ref-policy: #a16207;
+  /* Reference-line colours [OWNER, 2026-08-04, revised same day — "한 개는
+   * 회색 실선으로, 한 개는 빨간색인데 투명도 좀 올려서 실선으로"]. Both
+   * references are SOLID lines now: CD 91d grey, the base rate red drawn
+   * extra-translucent so it stays furniture. The dash-pattern encoding was
+   * retired by that instruction — told apart by lightness/hue plus the
+   * legend. The red equals the up-red on purpose (there is one red in this
+   * product); its heavy transparency is what keeps a horizontal reference
+   * from reading as a directional mark. Both tokens clear the 3:1 stroke
+   * floor per theme (guarded in band-hue-contrast). */
+  --bw-ref-cd: #6b7280;
+  --bw-ref-policy: #d92d3c;
 
   /* Sub-palette — DEFINED BUT UNREFERENCED (Session 12); RETIRED with the
    * palette cut. Kept only so the history is legible; no component references
@@ -97,9 +97,10 @@
   /* line = blue on dark too (§9 Pass E); #4c93ff is 5.37:1 on the dark tile. */
   --bw-line: #4c93ff;
 
-  /* Reference hues, lifted for the dark tile (the light pair sit ~2:1 there). */
-  --bw-ref-cd: #45b8ac;
-  --bw-ref-policy: #d9a441;
+  /* Reference colours, lifted for the dark tile (the light pair sit ~2:1
+   * there). Same rule as the direction pair: grey lightened, red = dark up-red. */
+  --bw-ref-cd: #9ca3af;
+  --bw-ref-policy: #f16e77;
 
   /* Dark-mode band substitutes (sub-palette, unreferenced). */
   --bw-hue-curve: #8dc8e8;

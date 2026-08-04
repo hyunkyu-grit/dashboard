@@ -141,10 +141,13 @@ function polylines(m: string): { attrs: string; ys: number[] }[] {
 
 const instrumentLine = (m: string) =>
   polylines(m).find((p) => p.attrs.includes('stroke-width="1.6"'));
+// the references are found by their semantic colour class (solid since the
+// 2026-08-04 owner revision — the dash patterns that anchored this before
+// are gone)
 const cdLine = (m: string) =>
-  polylines(m).find((p) => p.attrs.includes('stroke-dasharray="1 2"'));
+  polylines(m).find((p) => p.attrs.includes("stroke-ref-cd"));
 const policyLine = (m: string) =>
-  polylines(m).find((p) => p.attrs.includes('stroke-dasharray="3 3"'));
+  polylines(m).find((p) => p.attrs.includes("stroke-ref-policy"));
 
 describe("a spread chart with the overlay on (secondary mode)", () => {
   const bare = markup("bp", spreadPts, false);

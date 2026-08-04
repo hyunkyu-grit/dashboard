@@ -250,23 +250,27 @@ export function PreviewChart({
     .filter((l) => l.px >= PAD.left && l.px <= width - PAD.right);
 
   /* What the two reference lines ARE, named on the chart (§ reference
-   * lines). The DASH PATTERN is still the encoding — CD fine-dotted, base
-   * rate long-dashed — so the distinction survives in grayscale (§5); the
-   * quiet hue [OWNER, 2026-08-04] is a layer on top, and the legend swatch
-   * and label carry the same hue so line and name connect without tracing. */
-  const legend: { label: string; dash: string; stroke: string; fill: string }[] =
-    [];
+   * lines). Both are solid [OWNER, 2026-08-04 revision], so the legend is
+   * what tells them apart beyond grey-vs-translucent-red: swatch and label
+   * carry each line's own colour, and the swatch repeats the line's opacity
+   * so the sample looks like the thing it names. */
+  const legend: {
+    label: string;
+    op: number;
+    stroke: string;
+    fill: string;
+  }[] = [];
   if (cdVals.some((v) => v != null))
     legend.push({
       label: "CD 91일",
-      dash: "1 2",
+      op: 0.55,
       stroke: "stroke-ref-cd",
       fill: "fill-ref-cd",
     });
   if (segments.length)
     legend.push({
       label: "기준금리",
-      dash: "3 3",
+      op: 0.35,
       stroke: "stroke-ref-policy",
       fill: "fill-ref-policy",
     });
@@ -277,7 +281,9 @@ export function PreviewChart({
         ref={svgRef}
         width={width}
         height={height}
-        className="text-line touch-none"
+        // select-none: a pan drag must move the window, not select the
+        // extreme/axis labels it sweeps across
+        className="text-line touch-none select-none"
         style={view ? { cursor: "grab" } : undefined}
         onMouseMove={onMove}
         onMouseLeave={onLeave}
@@ -321,11 +327,13 @@ export function PreviewChart({
           ))}
         </g>
         {/* Both references go UNDER the instrument line: they are what the
-            instrument is read against, not second subjects. Told apart by
-            DASH PATTERN so the distinction survives in grayscale (§5): CD is
-            a fine dotted line, the base rate a longer dash. The muted hue
-            [OWNER, 2026-08-04 — "톤 안 깨면서 색"] and the partial opacity
-            are layers on top of that, never the encoding. */}
+            instrument is read against, not second subjects. SOLID, per
+            [OWNER, 2026-08-04 revision — "회색 실선 / 빨간색인데 투명도 좀
+            올려서 실선"]: CD a grey line, the base rate the product's red
+            drawn extra-translucent — the transparency is what keeps a red
+            reference from shouting direction. Told apart by lightness/hue
+            and the legend (the dash encoding was retired by that owner
+            call). */}
         {seriesPath(cdVals, x, yRef).map((run) => (
           <polyline
             key={`cd-${run.slice(0, 24)}`}
@@ -333,8 +341,7 @@ export function PreviewChart({
             fill="none"
             className="stroke-ref-cd"
             strokeWidth={1}
-            strokeOpacity={0.6}
-            strokeDasharray="1 2"
+            strokeOpacity={0.55}
           />
         ))}
         {policyPath(segments, x, yRef).map((run) => (
@@ -344,8 +351,7 @@ export function PreviewChart({
             fill="none"
             className="stroke-ref-policy"
             strokeWidth={1}
-            strokeOpacity={0.55}
-            strokeDasharray="3 3"
+            strokeOpacity={0.35}
           />
         ))}
         {/* EVERY horizontal gridline carries its value [OWNER, 2026-08-03 —
@@ -474,8 +480,7 @@ export function PreviewChart({
                 y2={PAD.top - 4}
                 className={g.stroke}
                 strokeWidth={1}
-                strokeOpacity={0.7}
-                strokeDasharray={g.dash}
+                strokeOpacity={g.op}
               />
               <text
                 x={lx + 18}

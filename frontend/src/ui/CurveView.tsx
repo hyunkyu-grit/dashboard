@@ -149,10 +149,10 @@ function NodeLine({
             {axisLabel(v)}
           </text>
         ))}
-        {/* the base rate: a dashed hairline UNDER both curves and named at
-            the right edge. Dash + label carry it in grayscale (§5); the
-            muted amber [OWNER, 2026-08-04] is a layer on top, the same hue
-            this line wears on every chart — it is the reference the curve
+        {/* the base rate: a translucent red hairline UNDER both curves and
+            named at the right edge [OWNER, 2026-08-04 revision — solid, red,
+            extra-transparent]. The same colour + opacity this line wears on
+            every chart; the label names it — it is the reference the curve
             is read against, not a third curve. */}
         {baseRate != null && (
           <>
@@ -163,8 +163,7 @@ function NodeLine({
               y2={y(baseRate)}
               className="stroke-ref-policy"
               strokeWidth={1}
-              strokeOpacity={0.55}
-              strokeDasharray="3 3"
+              strokeOpacity={0.35}
             />
             <text
               x={width - PAD.right}

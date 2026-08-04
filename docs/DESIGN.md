@@ -197,13 +197,14 @@ reasoning that the 3M node IS CD91 so CD was already on screen where it
 mattered — true of exactly one chart out of twenty, and the wrong reading of
 the instruction.
 
-- Told apart by **DASH PATTERN first** (§5): CD dotted (`1 2`), the base
-  rate a longer dash (`3 3`), under the instrument's blue line — the encoding
-  still reads in grayscale. Since 2026-08-04 each also carries a **muted hue**
-  [OWNER: "톤 안 깨면서 색"] — CD `ref-cd` (deep teal), base rate `ref-policy`
-  (deep amber) — as a layer over the dash, at partial opacity, so the tone
-  holds. A **legend names them on the chart** in the same hues, so line and
-  name connect without tracing.
+- **Both SOLID [OWNER, 2026-08-04 revision — "회색 실선 / 빨간색인데 투명도
+  좀 올려서 실선"]**: CD a grey line (`ref-cd`), the base rate the product's
+  red drawn extra-translucent (`ref-policy`, stroke-opacity ~0.35) — the
+  heavy transparency is what keeps a red reference from reading as a
+  directional mark. The dash-pattern encoding was retired by that
+  instruction; the two are told apart by lightness/hue and the **legend**,
+  which names them in each line's own colour and opacity. (First take that
+  morning was dashed teal/amber; superseded within the day.)
 - **CD is skipped on the 3M chart itself**, where the reference is the subject.
   `useCdReference` owns that decision so every caller answers it the same way.
 - **CD is aligned BY DATE, never by position** (`alignSeries`). Two ~150-point
@@ -226,10 +227,9 @@ the instruction.
   compare two rates in the SAME unit at two different scales. On a bp chart
   the units differ, so the references get the secondary % scale above — the
   same reasoning, landing on the other side.
-- **Dashed, muted, under the instrument line** — the dash pattern carries it
-  in grayscale; the quiet hue (2026-08-04) and the reduced opacity are layers
-  (§5). It is the reference the instrument is read against, not a second
-  subject, and it is excluded from the crosshair.
+- **Quiet, under the instrument line** — solid, muted, translucent
+  (2026-08-04 revision). It is the reference the instrument is read against,
+  not a second subject, and it is excluded from the crosshair.
 - **Carrying it forward is a claim, and it is bounded.** The payload's
   `through` is the last date the backend can vouch for: if a Board meeting
   falls between the workbook's last date and the dataset's as-of date, the step
@@ -1494,16 +1494,19 @@ orange to selection/focus/action; the Pay/Receive diagram took orange as an
 accent) and are now removed in one sweep. See the reversed entries in
 `## Provisional`.
 
-**One sanctioned extension [OWNER, 2026-08-04 — "CD랑 기준금리에 톤 안
-깨면서 색"]: the two REFERENCE hues.** CD 91d wears a deep teal
-(`--bw-ref-cd`, light `#0f766e` / dark `#45b8ac`) and the base rate a deep
-amber (`--bw-ref-policy`, light `#a16207` / dark `#d9a441`) — on their
-reference lines and legend entries ONLY, nowhere else. Both are deliberately
-low-chroma and drawn at partial opacity so the achromatic tone holds; the
-dash pattern remains the encoding (§5 — grayscale still reads); both clear
-the 3:1 stroke floor per theme (`band-hue-contrast.test.ts`). This is not
-orange/navy returning: those were interaction/brand colours on controls, and
-the ban on them stands (`palette.test.ts`).
+**One sanctioned extension [OWNER, 2026-08-04, revised same day]: the two
+REFERENCE tokens.** CD 91d is a solid grey line (`--bw-ref-cd`, light
+`#6b7280` / dark `#9ca3af`) and the base rate a solid red drawn
+extra-translucent (`--bw-ref-policy`, light `#d92d3c` / dark `#f16e77` —
+the up-red's values, at stroke-opacity ~0.35 so a horizontal reference
+never reads as a directional mark) — on their reference lines and legend
+entries ONLY, nowhere else. The first take (dashed muted teal/amber,
+"톤 안 깨면서 색") was revised the same day to "회색 실선 / 빨간색인데
+투명도 좀 올려서 실선"; the dash encoding went with it, and the legend +
+lightness carry the distinction. Both tokens clear the 3:1 stroke floor per
+theme (`band-hue-contrast.test.ts`). This is not orange/navy returning:
+those were interaction/brand colours on controls, and the ban on them
+stands (`palette.test.ts`).
 
 #### Direction (red up / blue down)
 

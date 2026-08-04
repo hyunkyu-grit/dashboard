@@ -22,7 +22,6 @@ import {
   createChart,
   createSeriesMarkers,
   LineSeries,
-  LineStyle,
   LineType,
   type IChartApi,
   type ISeriesApi,
@@ -55,6 +54,7 @@ import {
   resolveRefCd,
   resolveRefPolicy,
   resolveTheme,
+  withAlpha,
 } from "@/theme/bridge";
 import { assertDomainRendered } from "@/theme/domainGuard";
 import { candleSpans, extremeMarks, lineSpans, type Span } from "@/ui/extremes";
@@ -265,15 +265,13 @@ export function DetailChart({
      * which is the instrument's series and not this one. */
     if (wantsCd) {
       /* CD 91d — a plain line (no `WithSteps`: it is a daily fixing, not a
-       * policy decision), dotted so it is told from the base rate's longer
-       * dash by PATTERN first (§5 — grayscale still reads); the muted teal
-       * [OWNER, 2026-08-04] rides on top, the same hue the preview uses.
-       * Added before the base rate so the two references stack under the
-       * instrument. */
+       * policy decision). SOLID grey [OWNER, 2026-08-04 revision], the same
+       * colour + translucency the preview carries (canvas has no
+       * stroke-opacity, so the alpha rides in the colour). Added before the
+       * base rate so the two references stack under the instrument. */
       const copts = {
-        color: resolveRefCd(),
+        color: withAlpha(resolveRefCd(), 0.55),
         lineWidth: 1 as const,
-        lineStyle: LineStyle.Dotted,
         priceLineVisible: false,
         lastValueVisible: false,
         crosshairMarkerVisible: false,
@@ -286,11 +284,11 @@ export function DetailChart({
 
     if (policyAxisMode(unit) === "shared" && policy && policy.steps.length) {
       const popts = {
-        // muted amber [OWNER, 2026-08-04], dash pattern still the encoding
-        color: resolveRefPolicy(),
+        // translucent red, solid [OWNER, 2026-08-04 revision] — the heavy
+        // alpha is what keeps a red reference from reading as a direction
+        color: withAlpha(resolveRefPolicy(), 0.35),
         lineWidth: 1 as const,
         lineType: LineType.WithSteps,
-        lineStyle: LineStyle.Dashed,
         priceLineVisible: false,
         lastValueVisible: false,
         crosshairMarkerVisible: false,

@@ -77,17 +77,24 @@ export function resolveInk(): string {
   return resolveVar("--bw-ink");
 }
 
-/** Resolve a reference-line hue for canvas [OWNER, 2026-08-04 — "CD랑
- * 기준금리에 톤 안 깨면서 색"]. The dash pattern stays the encoding (§5 —
- * grayscale still reads); the muted hue is a layer that lets the eye tell
- * the two references apart, and apart from the blue instrument line,
- * without the legend. One resolver per reference so a call site cannot
- * swap them silently. */
+/** Resolve a reference-line colour for canvas [OWNER, 2026-08-04 — grey
+ * solid for CD, translucent red solid for the base rate]. One resolver per
+ * reference so a call site cannot swap them silently. Canvas has no
+ * stroke-opacity, so callers pass the resolved colour through `withAlpha`
+ * to get the same translucency the SVG charts carry. */
 export function resolveRefCd(): string {
   return resolveVar("--bw-ref-cd");
 }
 export function resolveRefPolicy(): string {
   return resolveVar("--bw-ref-policy");
+}
+
+/** A resolved `rgb(...)` colour with an alpha applied, for canvas options.
+ * The DOM probe returns `rgb(r, g, b)` for opaque tokens; anything already
+ * carrying alpha is passed through unchanged rather than double-faded. */
+export function withAlpha(color: string, alpha: number): string {
+  const m = /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/.exec(color);
+  return m ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${alpha})` : color;
 }
 
 /** Notify `cb` whenever the root data-theme attribute changes. */

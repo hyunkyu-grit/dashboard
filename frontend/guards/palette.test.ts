@@ -1,8 +1,8 @@
 /* Guard: the palette is RED / BLUE / GREY (§9, palette cut) plus the two
- * SANCTIONED reference hues [OWNER, 2026-08-04]: muted teal (`ref-cd`) and
- * muted amber (`ref-policy`), used ONLY for the CD / 기준금리 reference lines
- * — their dash patterns stay the grayscale encoding (§5). Red = up, blue =
- * down, blue = the (signless) chart stroke; everything else is ink/grey.
+ * SANCTIONED reference tokens [OWNER, 2026-08-04, revised same day]: grey
+ * (`ref-cd`) and translucent red (`ref-policy`), solid lines, used ONLY for
+ * the CD / 기준금리 references and their legend. Red = up, blue = down,
+ * blue = the (signless) chart stroke; everything else is ink/grey.
  * Orange and navy were each reintroduced twice, so a written rule is not
  * enough — this fails any COMPONENT that references a RETIRED hue token
  * (interactive / brand / on-interactive / the hue-* sub-palette), whether as a
