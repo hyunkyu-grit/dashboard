@@ -29,7 +29,10 @@ export const RAMP_OPACITY: Record<"light" | "dark", Record<TimeBasis, number>> =
  * paid per element (SVG paints hundreds of gridlines/markers). */
 export const EDGE_OPACITY: Record<"light" | "dark", { base: number; live: number }> = {
   light: { base: 0.12, live: 0.4 },
-  dark: { base: 0.18, live: 0.55 },
+  // dark softened 0.18/0.55 -> 0.16/0.50 with the surface pass (2026-08-05):
+  // the page/card step went 2.99 -> 6.13 L*, so the hairline no longer carries
+  // the boundary by itself. Mirrors tokens.css; ramp-sync fails on drift.
+  dark: { base: 0.16, live: 0.5 },
 };
 
 /** Levels 1–2 draw only two lines (--bw-line since the palette cut): Now at

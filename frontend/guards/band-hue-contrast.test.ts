@@ -10,8 +10,8 @@
  *   --bw-line  : chart stroke only        → graphical, 3:1
  *   --bw-up    : change-number TEXT        → text, 4.5:1
  *   --bw-down  : change-number TEXT        → text, 4.5:1
- * The direction colours are text on the tile (normal rows) and on the page
- * (the active/hover row background), so both light surfaces are checked. */
+ * The direction colours are text on all three surfaces — see SURFACES below
+ * for the enumeration and why each one is in the list. */
 
 import { describe, expect, it } from "vitest";
 
@@ -53,6 +53,23 @@ const lightPage = hex(lightBlock, "--bw-page");
 const darkTile = hex(darkBlock, "--bw-tile");
 const darkPage = hex(darkBlock, "--bw-page");
 
+/* Every surface a direction figure is ever painted on, enumerated both ways
+ * (consumers of bg-*, then consumers of text-up/text-down) in the 2026-08-05
+ * surface pass. --bw-popover was MISSING from this guard while the backtest
+ * window rendered text-up/text-down on it — the gap is why it is named here.
+ *
+ *   tile     : the app root (App.tsx) — every table row at rest, the header
+ *              band, the bottom strip, both preview panes
+ *   page     : the active/hover row (InstrumentTable, OverviewColumns) AND
+ *              the hover fill of three chrome buttons that carry a Δ figure —
+ *              BottomStrip Anchor, ChangeLog EventLine, RegretLab RegretLine
+ *   popover  : the backtest window and both bottom sheets
+ *
+ * --bw-page therefore stays on the TEXT floor. A 2026-08-05 proposal to
+ * reclassify it to GRAPHIC (3:1) was rejected on this evidence: direction
+ * TEXT genuinely renders on it in five places, not zero. */
+const SURFACES = ["--bw-tile", "--bw-page", "--bw-popover"] as const;
+
 describe("chart stroke clears the 3:1 graphical floor (§9)", () => {
   it("chart-line blue is not washed out on either surface", () => {
     expect(contrast(hex(lightBlock, "--bw-line"), lightTile)).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
@@ -73,7 +90,6 @@ describe("chart stroke clears the 3:1 graphical floor (§9)", () => {
 });
 
 describe("direction colours clear the 4.5:1 TEXT floor on every surface they sit on", () => {
-  // change-number text lands on the tile (rows) and the page (active/hover row)
   const cases: [string, string, string][] = [
     ["up", "--bw-up", "light"],
     ["down", "--bw-down", "light"],
@@ -82,12 +98,12 @@ describe("direction colours clear the 4.5:1 TEXT floor on every surface they sit
   ];
   for (const [name, token, theme] of cases) {
     const block = theme === "light" ? lightBlock : darkBlock;
-    const surfaces = theme === "light"
-      ? { tile: lightTile, page: lightPage }
-      : { tile: darkTile, page: darkPage };
-    it(`${theme} ${name} is legible as text`, () => {
-      expect(contrast(hex(block, token), surfaces.tile)).toBeGreaterThanOrEqual(TEXT_FLOOR);
-      expect(contrast(hex(block, token), surfaces.page)).toBeGreaterThanOrEqual(TEXT_FLOOR);
-    });
+    for (const surface of SURFACES) {
+      it(`${theme} ${name} is legible as text on ${surface}`, () => {
+        expect(
+          contrast(hex(block, token), hex(block, surface)),
+        ).toBeGreaterThanOrEqual(TEXT_FLOOR);
+      });
+    }
   }
 });

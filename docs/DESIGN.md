@@ -1542,12 +1542,47 @@ The table is for exact value reading; the tiles are for shape. Both exist.
 
 | Role          | Light    | Dark     |
 |---------------|----------|----------|
-| Page          | #FAFAFA  | #1A1A1A  |
-| Card / tile   | #FFFFFF  | #202020  |
-| Sheet         | #FFFFFF  | #262626  |
-| Ink           | #1A1A1A  | #EDEDED  |
-| Border        | ink 12%  | ink 18%  | tables + live-quote marker ONLY |
-| Live border   | ink 40%  | ink 55%  |
+| Page          | #F9FAFB  | #101113  |
+| Card / tile   | #FFFFFF  | #1C1E21  |
+| Sheet         | #FFFFFF  | #25282C  |
+| Ink           | #191F28  | #F2F4F6  |
+| Border        | ink 12%  | ink 16%  | tables + live-quote marker ONLY |
+| Live border   | ink 40%  | ink 50%  |
+
+#### The surface pass — why light moved in temperature and dark in depth [OWNER, 2026-08-05]
+
+Values above are the result of a measured pass against the Toss surface
+treatment. The two themes were given **different** treatments, and the reason
+is a constraint, not a preference.
+
+**Light has no headroom.** `--bw-page` is what sits behind the change numbers
+(the active row is `bg-page`), and `--bw-up` #D92D3C clears the 4.5:1 text
+floor there by **0.082** at the old #FAFAFA. Measured room before
+`band-hue-contrast` breaks: **0.69 L\***. The reference page grey #F2F4F6 is
+2.18 L\* past it. Buying card separation in light therefore costs a direction
+hue, and **the hues are frozen** [OWNER]. So light moves in temperature only —
+#F9FAFB is the same luminance cooled (b\* −0.59), spending none of the
+headroom (up 4.582 → 4.577). Page→card separation stays 1.73 → 1.78 L\*.
+
+**Dark has room, so dark takes the whole move.** On a dark surface the
+constraint inverts: the ceiling is the *lightest* surface still holding
+up/down at 4.5:1, measured at #2D2D2D (L\* 18.47), and the sheet sat 3.31 L\*
+under it. The stack spreads downward instead — page drops, card rises away.
+Separation page→card **2.99 → 6.13 L\***, card→sheet **2.91 → 4.79 L\*** —
+more than the light half could have bought even by spending a hue.
+
+Hairlines soften in dark only (18/55 → 16/50): with 6.13 L\* between page and
+card the border no longer carries the boundary alone, and live-border at 55%
+was reading as a rule rather than a hairline (5.31:1 on the page → 4.91:1).
+Light keeps 12/40 — its page is still near-white, so the hairline is still the
+boundary. **The dark percentages are mirrored in `theme/ramp.ts`
+`EDGE_OPACITY`** for the SVG layer; `ramp-sync` fails on drift.
+
+Ink is the highest-leverage token in the file (61 references: text, both
+hairlines, the focus ring, `::selection`). Cooling it is what actually reads
+as the reference — the light hairline already composited to ~#E4E4E4, the
+right *weight* and the wrong *temperature*; it is now #E3E4E5, cool at the
+same weight.
 
 - **Cards and tiles have no borders.** Separation comes from the surface step
   plus spacing. Hairlines survive only inside tables and as the live-quote
@@ -1594,6 +1629,13 @@ mosaic of floating cards. Sauron matches it.
 
 [OWNER: default theme = LIGHT; dark = neutral dark-gray #1A1A1A family, not
 pure black, not blue-gray. Theme is user-switchable.]
+
+[REVISED OWNER, 2026-08-05 — the surface pass supersedes the "#1A1A1A family,
+not blue-gray" half of the line above. Dark surfaces are now #101113 / #1C1E21
+/ #25282C and carry a deliberate slight cool cast (b\* −1.26 to −3.08). This is
+a *cast*, not a blue-gray: at ≤3 b\* units it reads as temperature, not as a
+hue, and every encoding still survives in grayscale per §5. Default LIGHT and
+user-switchable are unchanged.]
 
 Implementation: every color goes through semantic CSS custom properties with
 light/dark pairs; zero raw hex in component code (enforce with a lint guard).
@@ -2946,6 +2988,45 @@ evidence that forced it. Referenced from several places above; it did not exist
 as a heading until the hardening session, which is itself worth noting: the
 references pointed at a section that had been absorbed into "Settled decisions"
 and stopped being a live record.
+
+### Surface pass (2026-08-05) — the four choices taken inside it
+
+The values, the split between themes, and the guard change were all owner
+decisions (§9). These four were not:
+
+- **`--bw-row-active` was proposed and then NOT created.** The plan assumed
+  the light page would darken to #F2F4F6, which required decoupling the
+  active-row surface from `--bw-page` so direction text kept its floor. The
+  gate that preceded the change enumerated every site where direction text
+  renders on a page surface and found **five, not one**: the two list rows
+  (`InstrumentTable`, `OverviewColumns`) plus three chrome buttons whose
+  `hover:bg-page` carries a Δ figure — `BottomStrip` Anchor, `ChangeLog`
+  EventLine, `RegretLab` RegretLine. A one-token decouple would have fixed two
+  of five and shipped a hover-only regression in the other three. The owner
+  chose the variant that moves light in temperature only, which needs no
+  decouple at all — so the token does not exist and **no component file was
+  touched**. If light separation is ever revisited, the token must be named
+  for the *raised surface*, not the active row, and cover all five sites (plus
+  `DataState:61` and `BacktestWindow:1614`, which use `hover:bg-page` without
+  direction text and would otherwise be the only hovers left on the old grey).
+- **Light hairline percentages stay 12/40.** The full-move variant proposed
+  10/34; that softening was justified by a much darker page carrying the
+  boundary, which light did not get. Only dark softened.
+- **`--bw-page` KEEPS the 4.5:1 TEXT floor.** A reclassification to the 3:1
+  graphic floor was authorised *conditionally* — only if the gate showed no
+  direction text on it. The gate showed five places, so the condition failed
+  and the floor stands. The evidence is quoted in the guard file so the
+  question is not reopened from memory.
+- **`band-hue-contrast` now loops a `SURFACES` list** rather than asserting
+  two surfaces inline. Adding `--bw-popover` (an owner-directed fix for a real
+  gap — the backtest window renders `text-up`/`text-down` on it and nothing
+  checked it) would otherwise have meant a third copy of the same assertion.
+  Thresholds are untouched: TEXT_FLOOR 4.5, GRAPHIC_FLOOR 3.
+
+Not addressed, logged: `--bw-page` is doing two unrelated jobs — the canvas
+*and* a recessed fill inside white cards (`BacktestWindow` inputs and the
+backend-required note, the forward-tab `select`). Those read as more recessed
+in dark now. Splitting that is a separate token decision.
 
 ### Visible-range extremes (2026-08-03) — the dormant zoom chart gets live 최고/최저
 

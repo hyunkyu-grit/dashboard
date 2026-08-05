@@ -13,11 +13,26 @@
    * chrome on every native surface, worst on Windows. */
   color-scheme: light;
 
-  /* Surfaces (light) */
-  --bw-page: #fafafa;
+  /* Surfaces (light) — Toss-style surface pass [OWNER, 2026-08-05].
+   *
+   * The light half moves in TEMPERATURE, not in separation. The reference has
+   * a grey page under white cards, but the page is what sits behind the
+   * change numbers (the active row is bg-page), and --bw-up #d92d3c clears the
+   * 4.5:1 text floor there by only 0.082 at #fafafa. Measured headroom before
+   * the guard breaks: 0.69 L*. The reference grey (#f2f4f6) is 2.18 L* past
+   * it, so buying separation here would cost a direction hue, and the hues are
+   * frozen. #f9fafb is the same luminance cooled (b* -0.59), which spends none
+   * of that headroom: up 4.582 -> 4.577. Separation stays 1.73 -> 1.78 L*.
+   * The DARK half takes the full move instead — that is where the room is. */
+  --bw-page: #f9fafb;
   --bw-tile: #ffffff;
   --bw-popover: #ffffff;
-  --bw-ink: #1a1a1a;
+  /* Ink carries the whole chrome: text, BOTH hairlines (color-mix below), the
+   * focus ring and ::selection — 61 references, the highest-leverage token in
+   * the file. Cooling it is what actually reads as the reference, since the
+   * light hairline already composites to ~#e4e4e4, the right weight and the
+   * wrong temperature. Now #e3e4e5, cool at the same weight. */
+  --bw-ink: #191f28;
   --bw-border: color-mix(in srgb, var(--bw-ink) 12%, transparent);
   --bw-border-live: color-mix(in srgb, var(--bw-ink) 40%, transparent);
 
@@ -83,12 +98,25 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --bw-page: #1a1a1a;
-  --bw-tile: #202020;
-  --bw-popover: #262626;
-  --bw-ink: #ededed;
-  --bw-border: color-mix(in srgb, var(--bw-ink) 18%, transparent);
-  --bw-border-live: color-mix(in srgb, var(--bw-ink) 55%, transparent);
+  /* Surfaces (dark) — the full Toss-style move [OWNER, 2026-08-05], because
+   * this is the half with headroom. Direction text on dark is LIGHT text on a
+   * dark surface, so the constraint runs the other way: the ceiling is the
+   * LIGHTEST surface that still holds up/down at 4.5:1, measured at #2d2d2d
+   * (L* 18.47). The popover was 3.31 L* under it, so the stack can spread
+   * downward freely — the page drops, the card rises away from it. Separation
+   * page->tile 2.99 -> 6.13 L*, tile->popover 2.91 -> 4.79 L*: more than the
+   * light half could have bought even by spending a hue. Cooled to match. */
+  --bw-page: #101113;
+  --bw-tile: #1c1e21;
+  --bw-popover: #25282c;
+  --bw-ink: #f2f4f6;
+  /* Hairlines soften as the surfaces separate: with 6.13 L* between page and
+   * card the border no longer has to carry the boundary alone, and border-live
+   * at 55% was reading as a rule rather than a hairline (5.31:1 on the page).
+   * 16/50 lands it at 4.91:1. MIRRORED in theme/ramp.ts EDGE_OPACITY — the SVG
+   * layer reads the numbers, not the vars, and ramp-sync fails on drift. */
+  --bw-border: color-mix(in srgb, var(--bw-ink) 16%, transparent);
+  --bw-border-live: color-mix(in srgb, var(--bw-ink) 50%, transparent);
 
   --bw-ramp-now: 1;
   --bw-ramp-d1: 0.74;
@@ -99,10 +127,10 @@
   --bw-brand: #8dc8e8;
 
   /* Direction — lighter red/blue clear 4.5:1 on the dark tile (#0064ff is
-   * only ~3.9:1 there). */
+   * only ~3.4:1 there, on the surfaces as of the 2026-08-05 pass). */
   --bw-up: #f16e77;
   --bw-down: #4c93ff;
-  /* line = blue on dark too (§9 Pass E); #4c93ff is 5.37:1 on the dark tile. */
+  /* line = blue on dark too (§9 Pass E); #4c93ff is 5.51:1 on the dark tile. */
   --bw-line: #4c93ff;
 
   /* Reference colours, lifted for the dark tile (the light pair sit ~2:1
