@@ -35,6 +35,7 @@ import {
   BacktestWindow,
   LinkedPnlChart,
   pointOnOrAfter,
+  policyRateOn,
 } from "../src/ui/BacktestWindow";
 import { LinkedLegsChart } from "../src/ui/LinkedLegsChart";
 import { type ChartMark, PreviewChart } from "../src/ui/PreviewChart";
@@ -111,6 +112,47 @@ describe("the window prices the entry before 실행", () => {
     // the series has not loaded in a static render: the placeholder is the
     // em dash — never blank, never 0.00 (§ vol's null rule)
     expect(markup).toContain("—");
+  });
+
+  it("renders the per-position component line pre-run [OWNER 재피드백, 2026-08-05]", () => {
+    // 진입 레벨 alone is not enough: each component's own entry level shows
+    // in the row, before 실행. An outright's line carries the references
+    // (its own level IS the 진입 레벨 beside it); em dashes while loading.
+    expect(markup).toContain("data-entry-components");
+    expect(markup).toContain("CD 91일");
+    expect(markup).toContain("기준금리");
+  });
+});
+
+/* ── the base rate in force at a date ───────────────────────────────────── */
+
+describe("policyRateOn follows the step's own rules", () => {
+  const policy = {
+    unit: "%" as const,
+    asof: "2026-01-12",
+    through: "2026-01-09",
+    steps: [
+      { date: "2025-01-01", rate: 3.0 },
+      { date: "2026-01-06", rate: 2.75 },
+    ],
+    latest: 2.75,
+    warnings: [],
+  };
+
+  it("the last decision on or before the date is the rate in force", () => {
+    expect(policyRateOn(policy, "2026-01-05")).toBe(3.0);
+    expect(policyRateOn(policy, "2026-01-06")).toBe(2.75);
+    expect(policyRateOn(policy, "2026-01-09")).toBe(2.75);
+  });
+
+  it("NEVER past `through` — an unverified carry prints nothing, not the old rate", () => {
+    expect(policyRateOn(policy, "2026-01-10")).toBeNull();
+  });
+
+  it("before the first decision, and without inputs, there is no rate", () => {
+    expect(policyRateOn(policy, "2024-12-31")).toBeNull();
+    expect(policyRateOn(undefined, "2026-01-06")).toBeNull();
+    expect(policyRateOn(policy, null)).toBeNull();
   });
 });
 

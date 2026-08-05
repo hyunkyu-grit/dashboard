@@ -582,6 +582,21 @@ that already existed is drawn.
     line would be a plausible-looking wrong chart), keeps it.
   Pinned by `guards/backtest-context.test.ts`, including byte-equality of
   the two crosshairs' x for one date.
+- **The component line in every position row [OWNER 재피드백, 2026-08-05 —
+  "실행 누르기 전에도, 실행 위에 진입 레벨만 나오는게 아니라 각각
+  나와줘야"].** The combined 진입 레벨 answers "where is the PACKAGE getting
+  in"; the desk also legs the trade, so the row carries a second line under
+  its fields — each component tenor's own rate at the SAME struck business
+  day, plus CD 91d and the base rate — live as the date is typed, before any
+  run. Same snap (`pointOnOrAfter`), same full-resolution series files (the
+  구성 금리 panel below already fetched them — cache hits), same level
+  grammar (`entryLevelText`), em dash while loading. An outright's own level
+  IS the 진입 레벨 beside it, so its line carries the references alone; CD's
+  row skips the CD reference (itself). The base rate is a STEP lookup
+  (`policyRateOn`, exported): last decision on or before the struck day,
+  NEVER past `through` — silent rather than carrying an unverified rate.
+  Pinned by `guards/backtest-context.test.ts` (pre-run line renders,
+  policyRateOn's three rules).
 - **The 구성 금리 panel [OWNER, 2026-08-05 — "진입레벨 뿐만 아니라, 그
   구성요건들과 CD, Base도 보여야 함 … 안 겹치게 잘 배치"].** A spread or
   butterfly is a POSITION in two or three outright rates, but its own chart

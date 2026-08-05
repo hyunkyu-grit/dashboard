@@ -54,6 +54,7 @@ import {
   type BacktestLeg,
   type BacktestResult,
   BacktestUnavailable,
+  CD_SERIES_ID,
   fetchBacktest,
   fetchSeries,
   type HistoryPoint,
@@ -442,6 +443,25 @@ export function pointOnOrAfter(
   if (!points || !iso) return null;
   for (const p of points) if (p.t >= iso) return p;
   return null;
+}
+
+/** The base rate IN FORCE on a date, or null. The step's own rules apply
+ * (policyLine's founding ones): the last decision on or before the date is
+ * the rate in force; NEVER past `through` — the backend stops the step short
+ * when the workbook has not been refreshed through a Board meeting, and a
+ * readout that carried the last rate forward anyway would print exactly the
+ * unverified number that bound exists to withhold. */
+export function policyRateOn(
+  policy: PolicyStep | undefined,
+  iso: string | null | undefined,
+): number | null {
+  if (!policy || !iso || iso > policy.through) return null;
+  let rate: number | null = null;
+  for (const s of policy.steps) {
+    if (s.date > iso) break;
+    rate = s.rate;
+  }
+  return rate;
 }
 
 /** The instrument's daily history, at FULL resolution — the ~150-point
@@ -1091,6 +1111,7 @@ function PositionRow({
   choices,
   asOf,
   unit,
+  policy,
   onChange,
   onRemove,
   removable,
@@ -1101,6 +1122,8 @@ function PositionRow({
   asOf?: string;
   /** the instrument's own unit, from the row model — the level readout's grammar */
   unit: Unit;
+  /** the base-rate step, for the component line's 기준금리 figure */
+  policy?: PolicyStep;
   onChange: (next: PositionInput) => void;
   onRemove: () => void;
   removable: boolean;
@@ -1116,6 +1139,43 @@ function PositionRow({
    * business day actually struck, which matters when the typed date is a
    * weekend. Em dash while the series loads or past the data's end. */
   const struck = pointOnOrAfter(useSeriesFull(value.id)?.points, value.entry);
+
+  /* THE COMPONENTS, EACH AT ITS OWN ENTRY LEVEL [OWNER 재피드백, 2026-08-05
+   * — "실행 위에 진입 레벨만 나오는게 아니라 각각 나와줘야"]. A package's
+   * combined figure answers "where is the SPREAD/FLY getting in"; the desk
+   * also legs the trade, so each component tenor's own rate at the same
+   * struck day has to be readable BEFORE 실행 — plus CD and the base rate,
+   * the two references every rate is read against. Same snap
+   * (`pointOnOrAfter`), same full-resolution files (the chart below already
+   * fetched them — cache hits), same level grammar. THREE FIXED leg slots +
+   * one CD slot: the hook count must not move when the dropdown swaps a fly
+   * for an outright. The base rate is a STEP lookup (`policyRateOn`) at the
+   * struck business day, silent past `through`. An outright's own level is
+   * the 진입 레벨 beside it, so its line carries the references alone. */
+  const legIds = value.id.includes("-") ? value.id.split("-") : [];
+  const legSeries = [
+    useSeriesFull(legIds[0]),
+    useSeriesFull(legIds[1]),
+    useSeriesFull(legIds[2]),
+  ];
+  const cdFull = useSeriesFull(value.id === CD_SERIES_ID ? undefined : CD_SERIES_ID);
+  const parts: { label: string; v: number | null; t?: string }[] = value.entry
+    ? [
+        ...legIds.map((legId, k) => {
+          const p = pointOnOrAfter(legSeries[k]?.points, value.entry);
+          return { label: legId, v: p?.v ?? null, t: p?.t };
+        }),
+        ...(value.id === CD_SERIES_ID
+          ? []
+          : [
+              {
+                label: "CD 91일",
+                v: pointOnOrAfter(cdFull?.points, value.entry)?.v ?? null,
+              },
+            ]),
+        { label: "기준금리", v: policyRateOn(policy, struck?.t ?? value.entry) },
+      ]
+    : [];
 
   return (
     <div className="flex flex-wrap items-end gap-2 border-b border-edge py-2.5">
@@ -1211,6 +1271,25 @@ function PositionRow({
       >
         ×
       </button>
+      {/* the component line — w-full wraps it under the fields, still inside
+          the row's border so it reads as THIS position's facts. Levels in %,
+          the one grammar; em dash while a series loads (never blank, never
+          0.00). The title names the struck day once for the whole line. */}
+      {parts.length > 0 && (
+        <div
+          data-entry-components=""
+          className="w-full pb-0.5 text-[12px] tabular-nums"
+          title={struck ? `${struck.t} 종가 기준` : undefined}
+        >
+          {parts.map((p, i) => (
+            <span key={p.label}>
+              {i > 0 && <span className="mx-1.5 opacity-25">·</span>}
+              <span className="opacity-50">{p.label}</span>{" "}
+              <AnimatedNumber value={entryLevelText(p.v, "%")} />
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1470,6 +1549,7 @@ export function BacktestWindow({
                   choices={choices}
                   asOf={asOf}
                   unit={unitOf(b.id)}
+                  policy={policy}
                   removable={book.length > 1}
                   onChange={(next) =>
                     setBook((prev) => prev.map((p, j) => (j === i ? next : p)))

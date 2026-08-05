@@ -212,6 +212,12 @@ choice before building:
    CurveView is now all 14 nodes (3M=CD91, …, 4Y, 6Y–9Y included); labels
    all print at ≥32px/node track spacing. The spread/fly universe
    (`DISPLAY_TENORS`) deliberately untouched [OWNER choice — 커브 화면만].
+3a. **Component line in the position row (DESIGN §backtest) [재피드백,
+   same day: "실행 위에 진입 레벨만 나오는게 아니라 각각 나와줘야"].** A
+   second line under each row's fields: every leg's own rate at the struck
+   day + CD 91일 + 기준금리, pre-run, live as the date is typed. Fixed
+   hook slots (3 legs + CD) in PositionRow; `policyRateOn` (exported) =
+   step lookup, never past `through`. Outright rows carry references only.
 3. **구성 금리 panel (DESIGN §backtest).** `ui/LinkedLegsChart.tsx` — the
    linked stack's third member between the instrument chart and the P&L:
    each leg's par rate + CD + 기준금리, all %, one axis, for a derived sole
