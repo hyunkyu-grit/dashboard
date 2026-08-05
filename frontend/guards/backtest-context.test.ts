@@ -455,6 +455,18 @@ describe("the context chart reuses the one renderer", () => {
     expect(win).toMatch(/\{!chartLinked && \(/);
   });
 
+  it("the window's exit cannot leave a click-eating ghost [close-button fix, 2026-08-05]", () => {
+    // The failure: a nested AnimatePresence (AnimatedNumber) with
+    // mode="popLayout" whose exit was in flight when the WINDOW's exit
+    // started blocked AnimatePresence from removing the window — it faded
+    // to opacity 0 and stayed mounted, an invisible surface eating every
+    // click over its area. Two pins, root cause and belt:
+    const num = code("ui/AnimatedNumber.tsx");
+    expect(num).not.toMatch(/popLayout/);
+    // a node that somehow survives its exit stops painting AND hit-testing
+    expect(win).toMatch(/transitionEnd: \{ display: "none" \}/);
+  });
+
   it("every authored transition collapses under reduced motion (instant)", () => {
     // §14: reduced motion is an instant state change, not a shorter one.
     // Any transition= in the window that skips instant() is a regression.

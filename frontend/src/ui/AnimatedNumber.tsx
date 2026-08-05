@@ -19,7 +19,15 @@ export function AnimatedNumber({
     <span className={`relative inline-block ${className ?? ""}`}>
       {/* keep layout width stable while the two copies cross-fade */}
       <span className="invisible">{value}</span>
-      <AnimatePresence initial={false} mode="popLayout">
+      {/* DEFAULT mode, deliberately NOT popLayout [close-button fix,
+          2026-08-05]. The copies are absolute (out of flow) so popLayout's
+          layout-popping bought nothing — and a nested popLayout presence
+          whose exit is in flight when an ANCESTOR presence starts ITS exit
+          can block the ancestor's removal: the backtest window faded to
+          opacity 0 and then STAYED MOUNTED, an invisible surface eating
+          every click over its area ("닫기 버튼이 안 먹어요"). Guarded by
+          backtest-context (no popLayout here). */}
+      <AnimatePresence initial={false}>
         <motion.span
           key={value}
           className="absolute inset-0"

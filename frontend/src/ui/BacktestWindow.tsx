@@ -1492,10 +1492,17 @@ export function BacktestWindow({
       style={{ left: pos.left, top: pos.top, width: WINDOW_W, maxWidth: "96vw" }}
       /* a window MATERIALIZES — the slight scale gives it a surface arriving
          rather than a div blinking on; exit is the faster twin (§14: exits
-         run shorter than entrances) */
+         run shorter than entrances). `transitionEnd: display none` is the
+         close-button fix's second belt [2026-08-05]: the failure was the
+         window fading to opacity 0 and then STAYING MOUNTED (a nested
+         presence blocked AnimatePresence's removal), which left an
+         invisible surface eating every click over its area. The root cause
+         is fixed in AnimatedNumber (no popLayout); this line makes the
+         failure CLASS harmless — a node that somehow survives its exit
+         stops painting AND stops hit-testing. */
       initial={{ opacity: 0, scale: 0.985 }}
       animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0 }}
+      exit={{ opacity: 0, transitionEnd: { display: "none" } }}
       transition={instant({ duration: 0.15, ease: ARRIVE.ease }, reduced === true)}
     >
       {/* the drag handle — the ONLY draggable surface, and the strip the

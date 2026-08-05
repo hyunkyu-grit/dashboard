@@ -2076,6 +2076,19 @@ plain `onPin={setPinned}`, corner label present).
 
 ### Backtest window motion [motion pass, 2026-08-05]
 
+**`popLayout` is banned in nested presences [close-button fix, 2026-08-05].**
+AnimatedNumber's cross-fade ran `AnimatePresence mode="popLayout"`; its
+copies are absolute (out of flow), so popLayout's layout-popping bought
+nothing — and a nested popLayout exit in flight when the WINDOW's own exit
+began blocked AnimatePresence from removing the window. The window faded to
+opacity 0 and STAYED MOUNTED: an invisible surface eating every click over
+its area, reported as "닫기 버튼이 작동을 안 해요" and intermittent (it
+needed a cross-fade in flight at close). Root cause: AnimatedNumber uses the
+default presence mode. Belt: the window's exit ends in
+`transitionEnd: { display: "none" }`, so a node that somehow survives its
+exit stops painting AND stops hit-testing — the failure class, not just the
+instance. Both pinned in `guards/backtest-context.test.ts`.
+
 The window's motion vocabulary, all through `instant()` (pinned by
 `guards/backtest-context.test.ts` — every authored `transition=` in the file
 must route through it; §14's chart-geometry ban holds — containers move,

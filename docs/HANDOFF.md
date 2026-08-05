@@ -228,6 +228,18 @@ choice before building:
    policyLine helpers + ref tokens — a sanctioned second reference surface,
    recorded in the guard.
 
+**Close-button fix, same day** [owner report: "창을 닫는 버튼이 작동을 안
+해요" — intermittent]: AnimatedNumber's nested `AnimatePresence
+mode="popLayout"` blocked the WINDOW's exit removal whenever a cross-fade
+was in flight at close — the window faded to opacity 0 and stayed mounted,
+invisibly eating clicks. Fixed at root (default presence mode; the copies
+are absolute so popLayout bought nothing) + belt (window exit ends in
+`transitionEnd: {display: "none"}`); both pinned in backtest-context.
+Reproduced and verified via in-page synthetic pointer sequences (run→hover→
+close and quick-close-while-loading — the Chrome extension's CDP input
+delivery died mid-session, so physical tool clicks were unusable; DESIGN
+§14 records the ban).
+
 Guards: `backtest-context.test.ts` gained the 구성 금리 describe (legs +
 references render, outright → no panel, three-way crosshair x parity, ink
 legs) and re-anchored its one-implementation pins; `freshness.test.ts` and
