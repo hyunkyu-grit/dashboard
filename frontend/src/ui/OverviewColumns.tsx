@@ -125,6 +125,14 @@ function OverviewRow({
     <div
       role="row"
       onClick={() => onSelect(row)}
+      /* keyboard parity with the click affordance (the table row's rule) */
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(row);
+        }
+      }}
       style={{ gridTemplateColumns: TEMPLATE }}
       className={`grid h-11 cursor-pointer items-center border-b border-edge ${
         selected ? "bg-page" : "hover:bg-page/50"

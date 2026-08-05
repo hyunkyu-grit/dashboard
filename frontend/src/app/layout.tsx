@@ -17,7 +17,7 @@ export default function RootLayout({
 }>) {
   return (
     // suppressHydrationWarning: THEME_INIT stamps data-theme pre-hydration
-    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
+    <html lang="ko" className="h-full antialiased" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>

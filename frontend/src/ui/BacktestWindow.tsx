@@ -1455,6 +1455,36 @@ export function BacktestWindow({
     dragRef.current = null;
   };
 
+  /* Dialog keyboard convention: Escape closes the window (the × was the only
+   * way out). One press peels ONE layer: this handler yields while the
+   * enlarged view (`tile`) is up — that modal closes itself on Escape — and
+   * App's unpin handler yields while `bt` is in the URL. The command bar
+   * stops its own Escape from reaching either. The URL is read AT THE EVENT
+   * (the two namespaces compose, so props here cannot see `tile`). */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (new URLSearchParams(window.location.search).has("tile")) return;
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  /* Focus follows the dialog: into the window on open (Tab starts on its
+   * controls, not back at the top of the page), back to the opener on close.
+   * tabIndex={-1} makes the container programmatically focusable without
+   * joining the tab order; a programmatic focus does not match
+   * :focus-visible, so no ring is drawn. */
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const opener = document.activeElement;
+    rootRef.current?.focus();
+    return () => {
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+    };
+  }, []);
+
   const reduced = useReducedMotion();
   const unavailable = run.error instanceof BacktestUnavailable;
   const ready = book.length > 0 && book.every((b) => b.entry);
@@ -1483,6 +1513,8 @@ export function BacktestWindow({
     <motion.div
       role="dialog"
       aria-label="백테스트"
+      ref={rootRef}
+      tabIndex={-1}
       /* Opaque surface + the STRONG hairline: depth by surface step + border
          (§9), no shadow. In light theme popover and tile are both white, so
          the hairline carries the boundary alone — border-edge-live (40% ink)

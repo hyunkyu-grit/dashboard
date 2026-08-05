@@ -60,7 +60,12 @@ export function CommandBar({ onJump }: { onJump: (el: HTMLElement) => void }) {
           placeholder="종목 이름을 입력하면 그 위치로 이동합니다 — 5y, 3s10s, 1yf"
           className="w-full border-b border-edge bg-transparent px-3 py-2 text-[14px] outline-none placeholder:opacity-40"
           onKeyDown={(e) => {
-            if (e.key === "Escape") setOpen(false);
+            if (e.key === "Escape") {
+              // this Escape means "close the bar" only — stop it before the
+              // window-level listeners (backtest close, unpin) also act on it
+              e.stopPropagation();
+              setOpen(false);
+            }
           }}
         />
         <Command.List className="max-h-[40vh] overflow-y-auto p-1">

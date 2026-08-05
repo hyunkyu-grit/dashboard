@@ -7,6 +7,12 @@
  */
 
 :root {
+  /* Tells the browser which theme its OWN widgets should wear — the select
+   * dropdown, the date-picker calendar, and the internal scrollbars (the page
+   * never scrolls; the table does). Without this, dark theme gets light UA
+   * chrome on every native surface, worst on Windows. */
+  color-scheme: light;
+
   /* Surfaces (light) */
   --bw-page: #fafafa;
   --bw-tile: #ffffff;
@@ -75,6 +81,8 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
+
   --bw-page: #1a1a1a;
   --bw-tile: #202020;
   --bw-popover: #262626;

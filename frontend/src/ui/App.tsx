@@ -279,14 +279,17 @@ export function App() {
     syncUiFromDom();
   }, []);
 
-  // Esc unpins (and the enlarged view closes itself on Esc).
+  // Esc unpins — but only as the LAST layer: the enlarged view and the
+  // backtest window each close themselves on Esc, and one press must peel
+  // one layer, not the popup and the pin together.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !tileParam) setPinned(null);
+      if (e.key === "Escape" && !tileParam && !params.get("bt"))
+        setPinned(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tileParam]);
+  }, [tileParam, params]);
 
   /* THE BACKTEST WINDOW IS PARALLEL, NOT A PAGE (backtest-window session).
    * Its namespace — `bt` (instance nonce, pass Q), `bti` (seed instrument),

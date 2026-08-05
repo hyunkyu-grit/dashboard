@@ -129,6 +129,18 @@ function TableRow({
       onMouseEnter={() => onHover(row)}
       onMouseLeave={() => onHover(null)}
       onClick={() => onPin(row)}
+      /* keyboard parity with the pointer affordances: Tab reaches a row and
+         previews it (focus = hover), Enter/Space pins it (key = click). The
+         global :focus-visible ink outline is the affordance. */
+      tabIndex={0}
+      onFocus={() => onHover(row)}
+      onBlur={() => onHover(null)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onPin(row);
+        }
+      }}
       style={{ gridTemplateColumns: template }}
       className={`grid h-12 cursor-pointer items-center border-b border-edge ${
         active ? "bg-page" : "hover:bg-page/50"
