@@ -12,8 +12,11 @@
  * same classification also drives the Pay/Receive mode diagram, so `classify`
  * has two consumers, not one.
  *
- * Register: 합니다체, standard market terminology (§15, Pass H). Do not
- * paraphrase into everyday words. */
+ * Register: 해요체, one fact per sentence [OWNER, 2026-08-05 — reverses the
+ * Session 15 합니다체 migration]. VOCABULARY DID NOT MOVE WITH IT: standard
+ * market terminology only, never paraphrased into everyday words (§15 용어 —
+ * 나비 / 양옆 / 싼지 비싼지 stay banned). Register is the only axis that
+ * changed. */
 
 import type { Row } from "./rows";
 
@@ -92,26 +95,34 @@ export function instrumentSubtitle(row: Row): string {
   }
 }
 
-/** Two or three sentences (합니다체) — what it is, how it is built, what a
- * rising value means. Keyed to kind; legs interpolated from the classification.
- * The wording is fixed (§ Pass C1) — do not paraphrase; gloss.test.ts pins it. */
+/** Short sentences (해요체) — what it is, how it is built, what a rising value
+ * means. Keyed to kind; legs interpolated from the classification.
+ *
+ * ONE FACT PER SENTENCE [OWNER, 2026-08-05]. Every gloss used to pack three
+ * facts into one 86–120자 string; they are now split. The 확대/축소 pair is
+ * treated as ONE fact — it is a single sign convention, and splitting it into
+ * two sentences reads as pedantry to someone who already knows the term.
+ *
+ * VOCABULARY IS UNCHANGED. Only the register moved. 버터플라이 / 벨리 / 윙 /
+ * 스티프닝 / 플래트닝 / 파 금리 / 내재 선도금리 stay verbatim — see §15
+ * 용어. The wording is pinned by gloss.test.ts. */
 export function instrumentGloss(row: Row): string {
   const c = classify(row);
   switch (c.kind) {
     case "call":
-      return "익일물 콜 금리입니다. 국내 단기자금시장의 기준이 되는 초단기 금리이며, IRS 커브의 단기 앵커로 쓰입니다.";
+      return "익일물 콜 금리예요. 국내 단기자금시장의 기준 금리예요. IRS 커브의 단기 앵커로 써요.";
     case "outright":
-      return `${tenorKo(c.tenor)} 만기 KRW IRS 파 금리입니다. CD 91일물을 변동금리로 교환하는 조건이며, 국내 IRS 시장의 표준 호가입니다.`;
+      return `${tenorKo(c.tenor)} 만기 KRW IRS 파 금리예요. CD 91일물을 변동금리로 교환하는 조건이에요. 국내 IRS 시장의 표준 호가예요.`;
     case "spread":
-      return `${c.short}·${c.long} 커브 스프레드. ${c.long}에서 ${c.short}를 뺀 값입니다. 확대는 스티프닝, 축소는 플래트닝을 뜻합니다.`;
+      return `${c.short}·${c.long} 커브 스프레드예요. ${c.long}에서 ${c.short}를 뺀 값이에요. 확대는 스티프닝, 축소는 플래트닝이에요.`;
     case "butterfly":
-      return `${c.short}·${c.belly}·${c.long} 버터플라이. ${c.belly} 금리의 두 배에서 ${c.short}와 ${c.long}를 뺀 값입니다. 확대되면 벨리가 윙 대비 약세, 축소되면 강세입니다.`;
+      return `${c.short}·${c.belly}·${c.long} 버터플라이예요. ${c.belly} 금리의 두 배에서 ${c.short}와 ${c.long}를 뺀 값이에요. 확대되면 벨리가 윙 대비 약세, 축소되면 강세예요.`;
     case "forward":
       return c.tenor === "SPOT"
-        ? `현재 커브에서 도출한 ${tenorKo(c.start)} 현물 파 금리입니다. 해당 만기 구간에 대한 시장의 기대 금리를 나타냅니다.`
-        : `${tenorKo(c.start)} 후 시작하는 ${tenorKo(c.tenor)} 내재 선도금리입니다. 현재 커브에서 도출되며, 해당 구간에 대한 시장의 기대 금리를 나타냅니다.`;
+        ? `${tenorKo(c.start)} 현물 파 금리예요. 현재 커브에서 도출해요. 해당 구간에 대한 시장의 기대 금리를 나타내요.`
+        : `${tenorKo(c.start)} 후 시작하는 ${tenorKo(c.tenor)} 내재 선도금리예요. 현재 커브에서 도출해요. 해당 구간에 대한 시장의 기대 금리를 나타내요.`;
     case "volatility":
-      return "최근 5일 평균 변동폭을 60일 평균으로 나눈 상대 변동성 지표입니다. 1을 넘으면 단기 변동성이 장기 평균보다 확대된 상태입니다.";
+      return "최근 5일 평균 변동폭을 60일 평균으로 나눈 상대 변동성 지표예요. 1을 넘으면 단기 변동성이 장기 평균보다 확대된 상태예요.";
     default:
       return "";
   }

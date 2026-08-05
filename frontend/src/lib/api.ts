@@ -320,7 +320,7 @@ export async function fetchDv01(id: string): Promise<Dv01Payload> {
 
 export class BacktestUnavailable extends Error {
   constructor() {
-    super("백테스트는 실행 중인 백엔드가 필요합니다");
+    super("백테스트는 실행 중인 백엔드가 필요해요");
     this.name = "BacktestUnavailable";
   }
 }

@@ -145,7 +145,7 @@ function DataFreshness() {
         title={title}
         className="rounded-[8px] border border-up px-2 py-0.5 text-[12px] font-semibold text-up"
       >
-        데이터 {f.ageBusinessDays}영업일 지연 — 최신 커브가 아닐 수 있습니다 · {f.asOf}
+        데이터 {f.ageBusinessDays}영업일 지연 — 최신 커브가 아닐 수 있어요 · {f.asOf}
       </span>
     );
   }

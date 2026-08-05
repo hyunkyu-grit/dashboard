@@ -132,7 +132,7 @@ function LegWeights({ seriesId }: { seriesId: string }) {
       <div className="text-[12px] opacity-45">DV01 중립 비중</div>
       <div className="mt-0.5 text-[15px] tabular-nums">{ratio}</div>
       <p className="mt-1 text-[12px] opacity-45">
-        현재 커브 기준 지표이며, 커브가 움직이면 함께 변합니다.
+        현재 커브 기준 지표예요. 커브가 움직이면 함께 변해요.
       </p>
     </div>
   );
@@ -141,7 +141,7 @@ function LegWeights({ seriesId }: { seriesId: string }) {
 function StrategyRegion() {
   return (
     <div className="mt-6 flex h-40 items-center justify-center rounded-[16px] border border-dashed border-edge text-[13px] opacity-40">
-      전략 도구가 이 자리에 들어올 예정입니다
+      전략 도구가 이 자리에 들어올 예정이에요
     </div>
   );
 }
@@ -202,7 +202,7 @@ function Body({
     // this stays only as a defensive fallback.
     return (
       <p className="p-10 text-center text-[15px] opacity-55">
-        과거 흐름을 볼 수 없습니다
+        과거 흐름을 볼 수 없어요
       </p>
     );
   }

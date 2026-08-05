@@ -200,7 +200,7 @@ function ColumnChart({
     return (
       <div className="flex items-center justify-center text-[13px] opacity-45"
         style={{ height: CHART_H }}>
-        종목을 누르면 흐름이 나옵니다
+        종목을 누르면 흐름이 나와요
       </div>
     );
   }
@@ -208,7 +208,7 @@ function ColumnChart({
     return (
       <div className="flex items-center justify-center text-[13px] opacity-45"
         style={{ height: CHART_H }}>
-        과거 흐름을 볼 수 없습니다
+        과거 흐름을 볼 수 없어요
       </div>
     );
   }

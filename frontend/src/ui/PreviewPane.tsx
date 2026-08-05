@@ -118,7 +118,7 @@ export function PreviewPane({
   });
 
   if (!row) {
-    return <Sentence>행에 올려두면 그 종목 흐름이 나옵니다</Sentence>;
+    return <Sentence>행에 올려두면 그 종목 흐름이 나와요</Sentence>;
   }
 
   /* Cross-fade on a series switch (motion session, Pass D): moving between
@@ -189,7 +189,7 @@ function PreviewBody({
     return (
       <>
         <Header row={row} />
-        <Sentence>과거 흐름을 볼 수 없습니다</Sentence>
+        <Sentence>과거 흐름을 볼 수 없어요</Sentence>
       </>
     );
   }
@@ -245,7 +245,7 @@ function PreviewBody({
               no longer opens. The date under the cursor becomes the entry
               date, which is the half worth saying. */}
           <p className="mt-2 text-[12px] opacity-40">
-            누르면 커서 날짜부터 백테스트가 열립니다
+            누르면 커서 날짜부터 백테스트가 열려요
           </p>
         </motion.div>
       )}

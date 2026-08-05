@@ -438,8 +438,8 @@ export function InstrumentTable({
       {curveBanner?.kind && (
         <p className="mt-2 text-[12px] text-up">
           {curveBanner.kind === "curve_high"
-            ? "커브 전 구간이 52주 고점권입니다"
-            : "커브 전 구간이 52주 저점권입니다"}
+            ? "커브 전 구간이 52주 고점권이에요"
+            : "커브 전 구간이 52주 저점권이에요"}
         </p>
       )}
 

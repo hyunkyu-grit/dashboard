@@ -42,7 +42,7 @@ export function TintLegend({ className = "" }: { className?: string }) {
         <span>상승</span>
       </div>
       <p className="text-[11px] opacity-45">
-        칸이 진할수록 그 종목의 10년 일간 변동 대비 오늘 움직임이 큽니다.
+        칸이 진할수록 그 종목의 10년 일간 변동 대비 오늘 움직임이 커요.
       </p>
     </div>
   );

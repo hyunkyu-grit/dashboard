@@ -1047,7 +1047,7 @@ function Result({
       </table>
       <p className="mt-1.5 text-[12px] opacity-50">
         평가손익 = 금리·잔존만기 변화, 캐리손익 = 실제 주고받은 이자. 둘의
-        합이 손익입니다.
+        합이 손익이에요.
       </p>
 
       <details className="mt-5">
@@ -1096,9 +1096,9 @@ function Result({
             this replaces said the same things with connective tissue nobody
             reads twice [OWNER, 2026-08-05 lighten pass] */}
         <p className="mt-3 text-[12px] leading-relaxed opacity-55">
-          매일 그날 커브로 재평가한 값 + 정산 현금입니다. Δ금리×DV01 근사가
-          아니라 롤다운·캐리가 들어 있습니다. 다리 둘 이상이면 진입일 DV01
-          중립 비율. 청산 포지션은 청산일 손익으로 합계에 남습니다.
+          매일 그날 커브로 재평가한 값 + 정산 현금이에요. Δ금리×DV01 근사가
+          아니라 롤다운·캐리가 들어 있어요. 다리 둘 이상이면 진입일 DV01
+          중립 비율이에요. 청산 포지션은 청산일 손익으로 합계에 남아요.
         </p>
       </details>
     </div>
@@ -1634,8 +1634,8 @@ export function BacktestWindow({
                 FEWER words, not a softer register [OWNER, 2026-08-05:
                 "말들을 좀 더 가볍게"] */}
             <span className="text-[12px] opacity-45">
-              청산일 비우면 {asOf ?? "마지막 영업일"}까지 · 뒤 표를 누르면
-              추가됩니다
+              청산일 비우면 {asOf ?? "마지막 영업일"}까지예요 · 뒤 표를 누르면
+              추가돼요
             </span>
           </div>
 
@@ -1658,7 +1658,7 @@ export function BacktestWindow({
             <div className="mt-6 rounded-[12px] bg-page p-4 text-[13px] leading-relaxed">
               <p className="font-semibold">백엔드가 필요한 화면이에요</p>
               <p className="mt-1 opacity-60">
-                백테스트는 입력마다 답이 달라 미리 구워둘 수 없습니다.
+                백테스트는 입력마다 답이 달라 미리 구워둘 수 없어요.
                 백엔드를 띄우고
                 <code className="mx-1 rounded bg-tile px-1">
                   NEXT_PUBLIC_API_BASE

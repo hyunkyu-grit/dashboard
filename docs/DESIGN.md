@@ -844,8 +844,10 @@ Behaviour:
   전체, which has no rows to filter.
   Note 되돌림 now tests three bases rather than five, so it fires on fewer
   rows — the honest consequence of having fewer bases, not a threshold to
-  compensate. a one-line 합니다체 description shows beneath
-  the row when active. Data-driven (`ui/screener.ts` — a predicate per view), so
+  compensate. a one-line 해요체 description shows beneath
+  the row when active (register reversed 2026-08-05, §15). These five
+  descriptions are the shape the rest of the product's prose was rewritten
+  toward: one fact, 26–31자, uniform ending. Data-driven (`ui/screener.ts` — a predicate per view), so
   a new named view is a definition, not a component. Default: no chip.
 - **The column grid is format-derived and frozen [grid session, Pass A].**
   Column widths come from each column's widest possible RENDERING — `1s1.5s10s`
@@ -1142,8 +1144,9 @@ backtest window without touching its state.
   question, and percentile plus carry together is how the choice actually
   gets made — neither is answerable one instrument at a time in a popup. Note
   that the column ladder is already tight (§2 "Columns give way"), so a carry
-  column would be **first to drop** in a narrow window, below 한 줄; it must
-  earn its slot against that.
+  column would be **first to drop** in a narrow window; it must earn its slot
+  against that. (This sentence used to end "below 한 줄" — stale since pass L
+  deleted that column; the ladder's last slot is now the 52주 range.)
   **The freed popup space is deliberately left EMPTY.** Two features have now
   been removed from it; the next one that fills it should be there because it
   belongs, not because there is a hole.
@@ -1306,7 +1309,9 @@ backtest window without touching its state.
   `assertDomainRendered` applies to candles too, and the rendered domain must
   span every supplied bar — a silently dropped bar is worse on a candle chart.
 - A block beneath the chart naming and explaining the instrument (§C1): a
-  subtitle plus two or three 합니다체 sentences keyed to its kind.
+  noun-final subtitle plus short 해요체 sentences keyed to its kind, **one fact
+  each** (register reversed 2026-08-05, §15; `ui/gloss.ts`, pinned by
+  `gloss.test.ts`).
 - **DV01-neutral leg weights [Session 16 §B].** Curve trades are executed
   DV01-neutral, and once weighted so (`N_short·d_short = N_long·d_long`;
   `N_wing·d_wing = ½·N_belly·d_belly`) the quoted value *is* the P&L driver — a
@@ -2155,13 +2160,54 @@ paths never):
   takes a beat and the button says the server is working; reduced motion
   sees a still label.
 
-## 15. Voice & copy [rewritten Session 15]
+## 15. Voice & copy [rewritten Session 15; REGISTER REVERSED 2026-08-05]
+
+> **REVERSAL [OWNER, 2026-08-05]. The register is 해요체. Everything in
+> "Register — 합니다체" below, including its before→after table and the
+> "Lighter, not softer" note, is SUPERSEDED and kept only so the history is
+> legible.** Read `### Register — 해요체 [OWNER, 2026-08-05]` first; it is the
+> live rule. The **Terminology** section below is NOT reversed and stands in
+> full — vocabulary never moved.
+
+### Register — 해요체 [OWNER, 2026-08-05] — THE LIVE RULE
+
+**Register changed; vocabulary did not.**
+
+- Everything declarative is **해요체**. Short sentences. **One fact per
+  sentence** — a three-fact template becomes three sentences, or sheds a fact
+  to the popup or a label.
+- **Labels, headers, buttons and column names stay 명사형.** They are not prose
+  and this rule does not reach them.
+- **Terminology is untouched.** `2s5s10s`, 버터플라이, 벨리, 윙, 스티프닝,
+  플래트닝, 파 금리, 내재 선도금리, bp, 캐리, 롤다운 all stay verbatim. The
+  Terminology section below stands in full; `나비`, `양옆`, `싼지 비싼지`
+  remain banned. Softening the register is not a licence to soften the words.
+
+**Why the reversal.** The reader is a working rates trader and the goal is
+lower reading load at unchanged precision. The 합니다체 migration was argued
+from "desk tool, not consumer app", which is a claim about *vocabulary* — and
+vocabulary is exactly the part that is staying. The load lands hardest on the
+**dynamic** group (curve banner, freshness chip, empty states), which is re-read
+every session; the **static** group (glosses, screener descriptions) is read
+once. Both moved, but the fact-splitting effort went to `ui/gloss.ts`, which was
+7-for-7 at three facts and 86–120자.
+
+Measured before the change: of 30 prose templates, **18 asserted more than one
+fact**. The five screener descriptions were already the target shape — one
+fact, 26–31자, uniform ending — and were used as the model for the rest.
+
+`ui/gloss.ts` is the reference for register + vocabulary, and `gloss.test.ts`
+pins it: the exact strings, one-fact-per-sentence as a length bound, absence of
+합니다체, and the survival of the market terms.
+
+<details>
+<summary>SUPERSEDED — the Session 15 합니다체 rule, kept for history</summary>
 
 This is a desk tool, not a consumer app. 해요체 came from the casual-app pivot
 and made definitional text sound like it was addressing a beginner. Two rules,
 enforced as rules so a later session matches them instead of re-deriving them.
 
-### Register — 합니다체
+#### Register — 합니다체 [SUPERSEDED 2026-08-05]
 
 Everything **declarative** is 합니다체; labels stay noun-final; nothing is
 playful. The only survivor of the softer register is the **error state**.
@@ -2169,7 +2215,10 @@ Interaction hints stay short and human but are now 합니다체 too. Sweep the w
 product, not just new copy — empty states, loading text, tooltips, the change
 log.
 
-Before → after:
+Before → after — **this table now runs BACKWARDS.** The 2026-08-05 reversal
+returns each row to (approximately) its "before" column, deliberately and not
+by drift. The exact new strings are in the code; `gloss.test.ts` pins the
+glosses.
 
 | context | before (해요체) | after (합니다체) |
 |---|---|---|
@@ -2181,21 +2230,34 @@ Before → after:
 | command empty | 찾는 종목이 없어요 | 찾는 종목이 없습니다 |
 | **error (survivor)** | 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요 | *(kept)* |
 
-- **Lighter, not softer [OWNER, 2026-08-05 — "말들을 좀 더 가볍게"]:**
-  weight is trimmed by CUTTING WORDS, never by softening the register.
-  Explanatory copy runs one sentence per fact; `A = B` fragments are
-  legitimate for definitions (평가손익 = 금리·잔존만기 변화); connective
-  tissue ("~지만", "~해서", restating the subject) goes first. A hint states
-  its two facts and stops. 해요체 stays where §15 already allows it (error
-  states) and nowhere new.
-- The `한 줄` column is a compact fragment, not a sentence: `일간 변동 상위 3%`,
-  `백분위 99`, `단독 상승` (§2 ladder).
+The error row is the one that never moved in either direction: it was 해요체
+throughout, as this section's single sanctioned exception, and the rest of the
+product has now joined it.
+
+- **Lighter, not softer [OWNER, 2026-08-05 — "말들을 좀 더 가볍게"] —
+  SUPERSEDED the same day by the register reversal.** Its *fact* rule survives
+  and is now stated in the live section (one sentence per fact; `A = B`
+  fragments legitimate for definitions; connective tissue goes first). Only its
+  register clause is dead — that clause read "weight is trimmed by CUTTING
+  WORDS, never by softening the register… 해요체 stays where §15 already allows
+  it (error states) and nowhere new", and softening the register is now exactly
+  what was chosen. Both levers are in use: 해요체 **and** fewer words.
+- ~~The `한 줄` column is a compact fragment, not a sentence: `일간 변동 상위
+  3%`, `백분위 99`, `단독 상승` (§2 ladder).~~ **STALE — the 한 줄 column was
+  DELETED in pass L**, along with its ladder, its three backend rungs and the
+  `oneLiner` field on every row; `backend/tests/test_wire_format.py` pins its
+  absence. This line outlived it and seeded a false premise into two later
+  briefs before being caught. Nothing in the product emits a 한 줄.
 - **Never translate instrument nomenclature.** `1.5Y`, `3s10s`, `2s5s10s`,
   `1YF`, `SPOT`, `1Yx1Y` stay technical; a sentence may wrap them, never rename
-  them.
-- Numbers keep their units (bp, %) and signs.
+  them. *(Not reversed — still live.)*
+- Numbers keep their units (bp, %) and signs. *(Not reversed — still live.)*
+
+</details>
 
 ### Terminology — the standard desk words, never paraphrased
+
+**NOT reversed by the 2026-08-05 register change. This section stands in full.**
 
 A reader of this product knows what a butterfly is, or is about to learn the
 real word; teaching them "나비" teaches nothing usable. Use the standard terms
@@ -2210,6 +2272,14 @@ directly:
 `얼마나 거친지`, `묶어 보는`. If a phrase would not appear in a desk note, it
 does not go in the product. The instrument glosses (§C1, `ui/gloss.ts`) are the
 reference for the register + vocabulary; `gloss.test.ts` pins their wording.
+
+**The 2026-08-05 register reversal does not touch any of this.** 해요체 endings
+carry standard market terms verbatim — `2Y 금리의 두 배에서 1Y와 10Y를 뺀
+값이에요` is correct; reaching for `나비` or `양옆` because the sentence got
+friendlier is the failure this section exists to prevent. `gloss.test.ts` now
+asserts both halves: no 합니다체 endings, and 버터플라이/벨리/윙/스티프닝/
+플래트닝/내재 선도금리/파 금리 still present, with the banned paraphrases
+absent.
 
 ## 16. The computation boundary [OWNER, Session 14]
 
@@ -2988,6 +3058,34 @@ evidence that forced it. Referenced from several places above; it did not exist
 as a heading until the hardening session, which is itself worth noting: the
 references pointed at a section that had been absorbed into "Settled decisions"
 and stopped being a live record.
+
+### Register reversal (2026-08-05) — the choices taken inside it
+
+The reversal itself, the 해요체 target, one-fact-per-sentence, and the
+vocabulary freeze were owner decisions (§15). These were not:
+
+- **The 확대/축소 pair counts as ONE fact.** `확대는 스티프닝, 축소는
+  플래트닝이에요` is a single sign convention stated symmetrically; splitting it
+  into two sentences reads as pedantry to someone who already knows the term.
+  Applied consistently to the spread and butterfly glosses. Without this, those
+  two would have been four sentences each.
+- **`gloss.test.ts` enforces the fact rule as a LENGTH BOUND (≤45자 per
+  sentence), not a clause count.** A clause counter cannot tell the pair above
+  from two facts. Length can: every rewritten sentence is well under it, and a
+  sentence that regains a second fact goes over.
+- **ChangeLog's empty state SHED a fact rather than splitting.** `오늘 기록된
+  변화가 없습니다 — 조용한 하루입니다` → `오늘 기록된 변화가 없어요.` 조용한
+  하루 was flavour, and the brief allows shedding.
+- **Three DESIGN.md references outside §15 were corrected in the same pass**,
+  since the reversal made them wrong: the screener description register (§2),
+  the popup gloss register (§enlarged view), and one more 한 줄 staleness in
+  the carry-column note. Two historical mentions (the pane-sweep measurement
+  record, the Session 12 build-order entry) were left alone — they are dated
+  records of what was true then.
+
+Not addressed, logged: `lib/api.ts`'s `BacktestUnavailable` message was moved to
+해요체 for consistency, but it is never rendered — the window shows its own
+`백엔드가 필요한 화면이에요` block instead. It is copy with no surface.
 
 ### Surface pass (2026-08-05) — the four choices taken inside it
 

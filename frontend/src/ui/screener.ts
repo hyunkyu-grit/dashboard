@@ -45,7 +45,7 @@ export const SCREENERS: Screener[] = [
   {
     id: "movers",
     label: "오늘 많이 움직인 것",
-    description: "자기 과거 대비 오늘 변동이 큰 종목만 봅니다.",
+    description: "자기 과거 대비 오늘 변동이 큰 종목만 봐요.",
     test: (r) => r.movePct != null && r.movePct >= 90,
   },
   // level chips read the 52-week percentile (annual-stats session): the 10y
@@ -53,19 +53,19 @@ export const SCREENERS: Screener[] = [
   {
     id: "high",
     label: "52주 고점권",
-    description: "52주 레인지에서 상위 10% 안에 있는 레벨만 봅니다.",
+    description: "52주 레인지에서 상위 10% 안에 있는 레벨만 봐요.",
     test: (r) => r.pct != null && r.pct >= 90,
   },
   {
     id: "low",
     label: "52주 저점권",
-    description: "52주 레인지에서 하위 10% 안에 있는 레벨만 봅니다.",
+    description: "52주 레인지에서 하위 10% 안에 있는 레벨만 봐요.",
     test: (r) => r.pct != null && r.pct <= 10,
   },
   {
     id: "retrace",
     label: "되돌림",
-    description: "인접 기준 구간 사이에서 방향이 뒤집힌 종목만 봅니다.",
+    description: "인접 기준 구간 사이에서 방향이 뒤집힌 종목만 봐요.",
     test: (r) => retraced(r.changes),
   },
   /* 호가만 was here and is DELETED [OWNER, 2026-07-31]. Its job — separate
@@ -76,7 +76,7 @@ export const SCREENERS: Screener[] = [
   {
     id: "keyfwd",
     label: "주요 포워드",
-    description: "시장에서 주로 호가되는 여섯 개 포워드만 봅니다.",
+    description: "시장에서 주로 호가되는 여섯 개 포워드만 봐요.",
     test: (r) => r.keyForward === true,
   },
 ];

@@ -127,7 +127,7 @@ export function ChangeLog({
             </div>
             {n === 0 ? (
               <p className="px-2 py-3 text-[13px] opacity-55">
-                오늘 기록된 변화가 없습니다 — 조용한 하루입니다.
+                오늘 기록된 변화가 없어요.
               </p>
             ) : (
               events.map((c, i) => (

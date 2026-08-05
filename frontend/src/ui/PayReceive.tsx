@@ -243,7 +243,7 @@ export function PayReceive({
     return (
       <div className="mt-4">
         <div className="flex h-[180px] w-[340px] items-center justify-center rounded-[10px] border border-dashed border-edge px-6 text-center text-[12px] leading-relaxed opacity-45">
-          변동성은 커브의 모양이 아니라 크기의 비율이라, 페이/리시브 그림으로 나타내지 않습니다.
+          변동성은 커브의 모양이 아니라 크기의 비율이에요. 그래서 페이/리시브 그림으로 나타내지 않아요.
         </div>
       </div>
     );

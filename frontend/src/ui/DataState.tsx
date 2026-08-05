@@ -31,7 +31,7 @@ export function LoadingState({ what, className = "" }: Props) {
   return (
     <div className={`flex items-center justify-center p-10 text-center ${className}`}>
       <p className="text-[15px] opacity-50">
-        {what ? `${what} 불러오는 중입니다` : "불러오는 중입니다"}
+        {what ? `${what} 불러오는 중이에요` : "불러오는 중이에요"}
       </p>
     </div>
   );
