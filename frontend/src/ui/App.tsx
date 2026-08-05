@@ -57,10 +57,22 @@ function rowForTarget(rows: Row[], target: string | null): Row | null {
   }
   return rows.find((r) => r.id === target) ?? null;
 }
-// the preview pane's horizontal padding, subtracted from its measured width
-// to size the chart: the page gutter on the window side, 20px on the divider
-// side (that edge is interior, and the divider already separates the panes)
-const PANE_PAD = PAGE_X_PX + 20;
+/* The preview pane's horizontal padding, subtracted from its measured width to
+ * size the chart: the page gutter on the window side, and the DIVIDER INSET on
+ * the interior side.
+ *
+ * The inset went 20 → 32 in the geometry pass (2026-08-05). A hairline with
+ * content pressed against it reads as a table rule rather than a boundary
+ * between two regions, and this is the shell's only region-to-region divider —
+ * the table side already stands 80px off it (PAGE_X), so 20px on the preview
+ * side was the asymmetric half. Still deliberately smaller than PAGE_X: this
+ * edge is interior, and an interior edge that matched the window gutter would
+ * read as a second page margin.
+ *
+ * Keep in step with the `pl-8` literal on the pane — Tailwind reads source
+ * text, so this number and that class cannot be derived from each other. */
+const PANE_DIVIDER_INSET = 32;
+const PANE_PAD = PAGE_X_PX + PANE_DIVIDER_INSET;
 
 /** Single-column preview: a bottom sheet over the full-width table (§ layout).
  * Opened by a row click (pin), dismissed by Esc / backdrop / downward drag. */
@@ -88,7 +100,7 @@ function PreviewSheet({
       transition={{ duration: 0.2 }}
     >
       <motion.div
-        className="max-h-[85vh] w-full overflow-y-auto rounded-t-[20px] bg-popover p-5"
+        className="max-h-[85vh] w-full overflow-y-auto rounded-t-sheet bg-popover p-5"
         onClick={(e) => e.stopPropagation()}
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
@@ -532,7 +544,7 @@ export function App() {
             {wide && !fullWidth && (
               <div
                 ref={paneRef}
-                className={`relative min-w-[600px] flex-1 overflow-y-auto overflow-x-hidden py-5 pl-5 ${PAGE_R}`}
+                className={`relative min-w-[600px] flex-1 overflow-y-auto overflow-x-hidden py-5 pl-8 ${PAGE_R}`}
               >
                 <ErrorBoundary region="pane" fallback="이 화면을 그리지 못했어요">
                   {paneW > 0 &&

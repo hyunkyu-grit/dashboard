@@ -61,7 +61,7 @@ function Cluster({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border-b border-edge py-1 last:border-0">
+    <div className="border-b border-edge py-1.5 last:border-0">
       <EventLine e={c.leading} onFocus={onFocus} />
       {c.count > 0 && (
         <>
@@ -121,7 +121,7 @@ export function ChangeLog({
         <>
           {/* click-away scrim */}
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-40 mt-1 max-h-[70vh] w-[320px] overflow-y-auto rounded-[12px] border border-edge bg-popover p-2 shadow-lg">
+          <div className="absolute right-0 z-40 mt-1 max-h-[70vh] w-[320px] overflow-y-auto rounded-popover border border-edge bg-popover p-2 shadow-lg">
             <div className="px-2 pb-1 text-[11px] opacity-45">
               어제 대비 변화 · D-1 고정
             </div>

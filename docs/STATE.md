@@ -108,6 +108,32 @@ cue. Own-history cache: cold boot 17s → warm 2s.
   is the single most important open item.
 - **The volatility tab is unreviewed by a user.** 3M reaches a genuine (not
   artefact) 12× relative-ATR; whether the tab is useful is unconfirmed.
+- **NOTHING FROM THE 2026-08-05 TOSS LINE HAS BEEN SEEN ON A SCREEN.** Three
+  passes shipped — surface tokens (`0a8448e`), Korean register (`8a43034`) and
+  geometry (this one) — and every one of them was verified by *computation and
+  source assertion only*: CIELab and WCAG arithmetic for the tokens, character
+  counts and text-metric estimates for the copy, built-CSS inspection for the
+  radius utilities, and guards throughout. That is enough to prove no contrast
+  floor was crossed and no class silently failed to generate. It is **not**
+  enough to say the product looks right.
+
+  Specifically unverified by eye:
+  - **The light theme's surface treatment.** Its whole visible change is a
+    cooled ink and a cooled page that paints under 1% of a light screen; the
+    separation now rests on geometry.
+  - **The Korean register change.** Every prose string in the product moved to
+    해요체 and 18 templates were split into one fact per sentence. Line counts
+    were *estimated* to be unchanged (Hangul ≈ 1.0em, Latin ≈ 0.52em); no
+    container was measured after rendering.
+  - **The geometry pass's own output** — the backtest window's new shadow, the
+    12px command palette, and the 20 → 32px pane-divider inset.
+
+  **Do not attempt to close this with a headless browser.** Screenshots, paint
+  timing and rAF measurement on this repo have burned three sessions, and the
+  instrumentation lies — an occluded renderer fires ResizeObserver and rAF only
+  on forced frames, so the numbers come back plausible and wrong.
+  **Owner eyeball is the verification step for all three passes, and it has not
+  happened.**
 
 ## 2b. Known and accepted (settled — neither open nor a defect)
 

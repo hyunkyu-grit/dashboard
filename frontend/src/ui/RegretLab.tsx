@@ -92,7 +92,7 @@ export function RegretLab({
       <p className="mt-1 text-[11px] opacity-40">
         연구실의 실험 기능이에요. 피드백에 따라 본 탭으로 옮기거나 내려요.
       </p>
-      <div className="mt-3 border-t border-edge pt-2">
+      <div className="mt-3 border-t border-edge pt-3">
         {regret.length === 0 ? (
           <p className="px-2 py-3 text-[13px] opacity-55">
             지난 20영업일에 기록된 변화가 없어요.

@@ -1520,7 +1520,7 @@ export function BacktestWindow({
          the hairline carries the boundary alone — border-edge-live (40% ink)
          is the live-weight one for exactly that job. NO backdrop: the app
          behind stays fully interactive. */
-      className={`fixed ${Z_WINDOW} flex max-h-[88vh] flex-col overflow-hidden rounded-[16px] border border-edge-live bg-popover`}
+      className={`fixed ${Z_WINDOW} flex max-h-[88vh] flex-col overflow-hidden rounded-card border border-edge-live bg-popover shadow-lg`}
       style={{ left: pos.left, top: pos.top, width: WINDOW_W, maxWidth: "96vw" }}
       /* a window MATERIALIZES — the slight scale gives it a surface arriving
          rather than a div blinking on; exit is the faster twin (§14: exits

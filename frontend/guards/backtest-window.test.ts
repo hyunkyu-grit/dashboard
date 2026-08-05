@@ -124,13 +124,21 @@ describe("the rendered window", () => {
     ),
   );
 
-  it("is opaque with a hairline — no backdrop, no translucent chrome", () => {
+  it("is opaque, hairlined and SHADOWED — still no backdrop", () => {
+    /* `not.toContain("shadow")` was asserted here until 2026-08-05, encoding
+     * §9's "no elevation" rule. That rule was corrected in the geometry pass:
+     * it claimed one sanctioned shadow existed while six did, and the honest
+     * rule is that shadows are permitted on FLOATING surfaces and banned on
+     * in-flow chrome. This window was the only floating surface with neither
+     * shadow nor scrim — in light, popover and tile are both #ffffff (ΔL* 0),
+     * so it rested entirely on a 2.47:1 hairline. The shadow is the
+     * consistency fix; the assertion is inverted deliberately, not relaxed. */
     const root = /<div[^>]*role="dialog"[^>]*>/.exec(markup)?.[0] ?? "";
     expect(root).toContain("bg-popover");
     expect(root).toContain("border-edge-live");
-    expect(root).not.toContain("shadow");
-    // a floating window has no full-screen dim behind it — a backdrop is a
-    // FIXED full-viewport layer ("fixed inset-0"); bare "inset-0" also
+    expect(root).toContain("shadow-lg");
+    // a floating window still has no full-screen dim behind it — a backdrop is
+    // a FIXED full-viewport layer ("fixed inset-0"); bare "inset-0" also
     // appears inside AnimatedNumber's cross-fade span and is not a backdrop
     expect(markup).not.toContain("fixed inset-0");
     expect(markup).not.toContain("bg-page/70");

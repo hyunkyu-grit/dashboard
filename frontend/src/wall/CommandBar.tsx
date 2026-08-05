@@ -49,7 +49,7 @@ export function CommandBar({ onJump }: { onJump: (el: HTMLElement) => void }) {
     >
       <Command
         label="명령 바"
-        className="w-[420px] overflow-hidden rounded-sm border border-edge-live bg-popover"
+        className="w-[420px] overflow-hidden rounded-popover border border-edge-live bg-popover"
         onClick={(e) => e.stopPropagation()}
         shouldFilter={false}
       >

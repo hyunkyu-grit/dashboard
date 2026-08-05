@@ -1554,7 +1554,59 @@ The table is for exact value reading; the tiles are for shape. Both exist.
 | Border        | ink 12%  | ink 16%  | tables + live-quote marker ONLY |
 | Live border   | ink 40%  | ink 50%  |
 
+#### Separation is GEOMETRY in light, LIGHTNESS in dark [OWNER, 2026-08-05 — BINDING]
+
+The rule this whole line of work arrived at. Read it before the surface-pass
+subsection below, which it supersedes in premise while leaving its measurements
+intact.
+
+**The reference does not separate light surfaces by lightness.** Its page is
+white; separation comes from geometry — rounded outer edges, hairlines and
+padding. The surface pass assumed tonal separation, spent itself against a
+0.69 L\* ceiling, and produced a light change that paints under 1% of the
+screen (see the corrected shell note below). Geometry spends no contrast at
+all, so that ceiling stops being the binding constraint.
+
+**Axis rule — binding, product-wide:**
+
+| separation | means |
+|---|---|
+| horizontal | a **hairline**, permitted everywhere |
+| vertical | **radius and gap**, never a line |
+
+The vertical half is enforced against both grids by
+`guards/scroll-affordance.test.ts` (regex narrowed to
+`border-l｜border-r｜border-x｜divide-x` so ForwardMatrix's live-quoted CELL cue
+is not a false positive). The forward matrix additionally declines horizontal
+rules — permitted is not mandatory — and that local, stricter choice keeps the
+carry session's pin on the year-boundary rules that had crept in.
+
+**Theme asymmetry — binding. Do not normalise it:**
+
+| | separates by |
+|---|---|
+| light | geometry (radius + hairline + padding) |
+| dark | lightness (page→tile ΔL\* 6.13, landed in 0a8448e) |
+
+Dark gets geometry only where it is structural (radius), never additional
+hairlines. Stacking both in dark would double-state the same boundary.
+
+**What this rule does NOT license: cutting the shell into cards.** Rounding a
+shell panel requires a gap to round into, a gap reveals `--bw-page`, and light
+page is effectively white — so radius + gap would *merge* the two panes rather
+than separate them, and making the gap visible means darkening page, which is
+the same wall the surface pass hit. The shell stays **full-bleed and square**;
+the pane divider (`App.tsx`, `border-r`) stays. Radius applies to **floating
+surfaces only**. This was tried and withdrawn on 2026-08-05 — do not re-derive
+it.
+
 #### The surface pass — why light moved in temperature and dark in depth [OWNER, 2026-08-05]
+
+> **Premise superseded the same day** by the geometry rule above: this pass
+> treated `--bw-page` as a canvas worth repainting in light, and it is not one.
+> The MEASUREMENTS below are correct and still load-bearing — the 0.69 L\*
+> ceiling, the dark stack, the hairline percentages — and the dark half stands
+> unchanged. Only the light half's *reason for existing* was wrong.
 
 Values above are the result of a measured pass against the Toss surface
 treatment. The two themes were given **different** treatments, and the reason
@@ -1592,12 +1644,33 @@ same weight.
 - **Cards and tiles have no borders.** Separation comes from the surface step
   plus spacing. Hairlines survive only inside tables and as the live-quote
   cell marker.
-- **Radius:** card 16, sheet 20 (top corners only). Nothing above 20.
-- **No elevation.** [Session 13, revised from Session 12.] The floating,
-  shadowed card is gone, and with it the `--bw-card-raised` /
-  `--bw-shadow-card` tokens — depth is surface steps + hairlines only, in both
-  themes. The single sanctioned drop-shadow left in the app is the chart
-  tooltip overlay (Tailwind `shadow-lg`), a transient popover, not a surface.
+- **Radius:** popover 12, card 16, sheet 20 (top corners only). Nothing above
+  20. **These are TOKENS and must be used as tokens** — `rounded-popover` /
+  `rounded-card` / `rounded-t-sheet`, from `--radius-*` in `globals.css`. Until
+  the geometry pass (2026-08-05) they were defined-but-unreferenced and every
+  site hardcoded `rounded-[16px]` / `rounded-t-[20px]`, so the scale lived only
+  in the token file and the command palette had silently drifted to
+  `rounded-sm` (2px) on a 420px overlay. Tailwind reads SOURCE TEXT: the class
+  must appear literally, never assembled at runtime, or it names a rule that
+  was never generated — check the built CSS after touching the block.
+- ~~**No elevation.** … The single sanctioned drop-shadow left in the app is
+  the chart tooltip overlay.~~ **CORRECTED 2026-08-05 — the claim was false.**
+  Six `shadow-lg` usages existed when it was written down as one: both bottom
+  sheets, the ChangeLog dropdown, and three tooltips. The rule now matches
+  reality rather than the other way round:
+
+  **Shadows are permitted on FLOATING surfaces and banned on in-flow chrome.**
+  Floating = the backtest window, both sheets, the dropdown, the tooltips.
+  In-flow = the shell, header, panes, table, bottom strip, every row and cell —
+  those separate by hairline, surface step and geometry, never by elevation.
+  The `--bw-card-raised` / `--bw-shadow-card` tokens stay deleted; `shadow-lg`
+  is the one shadow value.
+
+  The backtest window gained its shadow in the same pass. It was the only
+  floating surface with neither shadow nor scrim, and in light `popover` and
+  `tile` are both `#ffffff` (ΔL\* 0.00), so it rested entirely on a 2.47:1
+  hairline. Pinned by `guards/backtest-window.test.ts`, whose
+  `not.toContain("shadow")` was inverted deliberately.
 - **Sticky layers are opaque [Session 15 §G].** Every `position: sticky`
   element (the table header, the matrix's pinned 시작/날짜 columns and header,
   their intersection corner) carries an **opaque** background token so rows
@@ -1614,10 +1687,29 @@ same weight.
 Reference again: the Toss table sits on one uninterrupted white sheet, not a
 mosaic of floating cards. Sauron matches it.
 
-- The whole app is **one surface** (radius 16, no shadow, no border) filling
+- ~~The whole app is **one surface** (radius 16, no shadow, no border) filling
   the viewport minus a thin `p-3` grey margin. Header, tabs, table, and the
   right preview all live *inside* it. Grey (`page`) shows only as that margin
-  and as the row-hover / active tint.
+  and as the row-hover / active tint.~~
+
+  **STALE SINCE SESSION 16 — corrected 2026-08-05, and this was the most
+  expensive stale line in the document.** The shell went **full-bleed**: the
+  root is `flex h-screen flex-col overflow-hidden bg-tile` with **no radius, no
+  border, and no grey margin** (`App.tsx`, whose own comment says "no outer
+  card, no radius, no page-coloured gutter"). The window edge is the boundary;
+  structure comes from the header hairline, the pane divider and the row
+  hairlines.
+
+  **What it cost.** The sentence promised a visible grey margin, so the surface
+  pass (0a8448e) assumed `--bw-page` was a canvas worth repainting and spent
+  itself fighting a 0.69 L\* ceiling to darken it. A render-tree walk in the
+  geometry pass established the truth: **in light, `--bw-page` paints no canvas
+  pixels at all.** Its only visible roles are a recessed control fill (the
+  forward-tab `select`; the backtest window's inputs and its backend-down note)
+  and a transient state tint (hover/active rows, four hover fills, three modal
+  scrims) — together well under 1% of a light screen at rest. That is why the
+  light half of the surface pass was invisible, and it is the reason the
+  geometry correction below replaced it.
 - **The page never scrolls.** The surface is pinned to viewport height
   (`h-screen` → inner `h-full`, `overflow: hidden` on `body`). Scrolling
   happens *inside* the surface: the table body is the scroll container; the
@@ -2821,14 +2913,37 @@ a confirmed entry without a reason; do not let an `[OPEN]` one rot silently.
   today's move vs that series' own 10y daily-change history. (The tint scale
   is a CHANGE percentile and stays on the FULL history on purpose — see the
   LEVEL-window ruling; do not narrow it to 52 weeks.)
-  **No separator rules inside grids [carry session, Pass B].** Cells share
-  edges and form one continuous field — the tint makes the shape; structure
-  comes from the pinned header and left columns. The year-boundary border-t
-  rules that had crept into the matrix are removed and pinned against in
-  `guards/scroll-affordance.test.ts` (no dedicated contiguity guard existed,
-  so the rule lives there with the matrix's other structural pins). The
-  live-quoted CELL border (§8) is a property of one cell, not a rule between
-  cells, and stays. Swatch alphas are
+  **Separator rules inside grids — VERTICAL ONLY [OWNER, 2026-08-05; REVERSAL].**
+  The live rule: **no vertical rule may reach a grid** (the forward matrix or
+  the instrument table). Cells sit flush so the field reads as one continuous
+  plane horizontally; structure comes from the tint plus the pinned header and
+  left column. **Horizontal hairlines are permitted everywhere** under the axis
+  rule (§9). Enforced in `guards/scroll-affordance.test.ts` with the regex
+  narrowed to `border-l｜border-r｜border-x｜divide-x`, so the live-quoted CELL
+  border (§8) — a property of one cell, not a rule between cells — is not a
+  false positive, and so is the matrix's own horizontal ban, retained below.
+
+  <details>
+  <summary>SUPERSEDED — the blanket ban [carry session, Pass B], kept for history</summary>
+
+  > **No separator rules inside grids.** Cells share edges and form one
+  > continuous field — the tint makes the shape; structure comes from the
+  > pinned header and left columns. The year-boundary border-t rules that had
+  > crept into the matrix are removed and pinned against in
+  > `guards/scroll-affordance.test.ts` (no dedicated contiguity guard existed,
+  > so the rule lives there with the matrix's other structural pins). The
+  > live-quoted CELL border (§8) is a property of one cell, not a rule between
+  > cells, and stays.
+
+  **Why it changed.** The ban was written from one defect — year-boundary
+  `border-t` rules in the matrix — and generalised to both axes without the
+  axis ever being the thing under discussion. The 2026-08-05 axis rule makes
+  the distinction explicit: vertical rules break the continuous plane and are
+  banned; horizontal ones are how this product has always separated rows and
+  are permitted. **The matrix keeps the horizontal ban anyway**, as a local and
+  stricter choice justified by that original defect — the guard still asserts
+  it, under its own heading.
+  </details> Swatch alphas are
   the real scale endpoints (`MATRIX_FLOOR..MATRIX_FULL` from `tint.ts`) so the
   key can't drift from the cells; hue flips with the theme via the tokens. The
   SAME component renders under the forward matrix (표로 보기) and under the popup
@@ -3058,6 +3173,56 @@ evidence that forced it. Referenced from several places above; it did not exist
 as a heading until the hardening session, which is itself worth noting: the
 references pointed at a section that had been absorbed into "Settled decisions"
 and stopped being a live record.
+
+### Disposition of the Toss-line entries [OWNER, 2026-08-05 — closeout]
+
+The token / register / geometry line is finished, and its provisional entries
+were reviewed rather than left to accumulate. Promoted entries are **binding**
+and are restated in their own sections; resolved entries are closed with
+nothing outstanding.
+
+| entry | disposition |
+|---|---|
+| 확대/축소 pair counts as ONE fact | **PROMOTED — binding.** General rule for symmetric conventions, not a one-off. §15. |
+| 45자 length bound as the fact proxy | **PROMOTED — binding.** A clause counter cannot tell a symmetric pair from two facts; length can. Enforced in `gloss.test.ts`. §15. |
+| ChangeLog shed a fact | **RESOLVED.** One applied instance of a rule already stated. |
+| `--bw-row-active` proposed, not created | **RESOLVED**, finding retained: direction text renders on a page surface in **five** places (two list rows + `BottomStrip` / `ChangeLog` / `RegretLab` hover fills). That enumeration is why `--bw-page` keeps the 4.5 text floor. |
+| light hairlines stay 12/40 | **PROMOTED — binding**, as the light half of the theme asymmetry (§9). |
+| `--bw-page` keeps the 4.5 TEXT floor | **PROMOTED — binding.** Strengthened by the geometry pass: page is a control/state token, and the floor protects those five sites. |
+| `SURFACES` loop in `band-hue-contrast` | **RESOLVED.** Structural refactor, shipped. |
+| `--bw-page` dual job (canvas + recessed fill) | **STILL OPEN**, and half-answered: it is not a canvas in light at all, so the real question is whether the recessed-control fill deserves its own token. Carried to HANDOFF. |
+
+Entries below this one predate the Toss line (Visible-range extremes,
+Zoom-and-color, Pass O / N / L / G) and are **left open unchanged** — none is
+touched by these three passes.
+
+### Geometry pass (2026-08-05) — the choices taken inside it
+
+The geometry rule, the axis rule, the theme asymmetry, the guard split, the
+window shadow and the B3 withdrawal were owner decisions. These were not:
+
+- **A third radius token, `--radius-popover: 12px`.** The brief asked for
+  `--radius-card` / `--radius-sheet` to be wired and for the command palette to
+  join the family at 12px. 12 was not a token, so the palette and the ChangeLog
+  dropdown would have kept hardcoding it — the exact drift being fixed. Adding
+  it makes the floating scale explicit at 12/16/20 and leaves nothing hardcoded.
+- **The pane divider inset went 20 → 32px** (`PANE_DIVIDER_INSET`, App.tsx).
+  The old 20 was deliberate and documented, so this is a real change of an
+  existing decision: the table side already stands 80px off that hairline
+  (PAGE_X) while the preview side stood 20px, and B4's rationale — a line with
+  content pressed against it reads as a table rule — applies to the asymmetric
+  half. Kept below PAGE_X on purpose: an interior edge matching the window
+  gutter would read as a second page margin.
+- **Two shadow additions were made and then reverted.** The command palette and
+  the preview sheet both got `shadow-lg` before I checked the directive again;
+  both already have a `bg-page/70` scrim, so the addition was decoration rather
+  than the consistency fix that was authorised. Only the backtest window — the
+  one floating surface with neither shadow nor scrim — kept it. **Observation
+  left standing, not fixed:** the two bottom sheets are the same object type
+  and still differ, `EnlargedView` carrying `shadow-lg` and `App`'s preview
+  sheet not. Carried to HANDOFF rather than settled here.
+- **Padding nudges** — `RegretLab` `pt-2 → pt-3`, `ChangeLog` cluster
+  `py-1 → py-1.5`. The two places where a hairline had 4–8px of air.
 
 ### Register reversal (2026-08-05) — the choices taken inside it
 

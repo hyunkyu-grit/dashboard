@@ -190,7 +190,45 @@ rule:
 
 ## 6. Current state (as of the 2026-08-05 session)
 
-### Latest — 전일종가 cutoff + full curve + 구성 금리 panel (2026-08-05)
+### Latest — the Toss line, three passes, CLOSED (2026-08-05)
+
+One line of work in three commits. **It is finished** — DESIGN §9/§15 carry the
+binding rules and §7 below carries what it left open. Do not reopen it without
+the owner; two of its dead ends were re-derived from stale docs already.
+
+1. **Surface tokens `0a8448e`.** Light moved in *temperature* only (page
+   `#f9fafb`, ink `#191f28`) because `--bw-up` clears the 4.5:1 text floor on
+   `--bw-page` by **0.082** — 0.69 L\* of room, and the reference grey is 2.18
+   L\* past it. Dark took the whole move (page `#101113` / tile `#1c1e21` /
+   sheet `#25282c`, hairlines 18/55 → 16/50, separation 2.99 → **6.13 L\***).
+   Dark hairline percentages are mirrored in `theme/ramp.ts EDGE_OPACITY`;
+   `ramp-sync` fails on drift.
+2. **Register `8a43034`.** All Korean prose → **해요체, one fact per sentence**,
+   reversing the Session 15 합니다체 migration. **Vocabulary frozen** — market
+   terms verbatim, 나비/양옆 still banned. 18 of 30 templates had asserted more
+   than one fact. `gloss.test.ts` pins the strings, a ≤45자-per-sentence bound,
+   the absence of 합니다체, and the survival of the terms.
+3. **Geometry (this commit).** The correction the line was missing: **the
+   reference separates light surfaces by GEOMETRY, not lightness** — which is
+   why the light half of pass 1 was invisible. Binding now: the axis rule
+   (horizontal → hairline, vertical → radius and gap), the theme asymmetry
+   (light = geometry, dark = lightness, never both), radius as tokens
+   (12/16/20), and shadows permitted on floating surfaces / banned on in-flow
+   chrome. The grid-divider ban was **reversed to vertical-only**.
+
+**The finding that explains the whole line:** a render-tree walk established
+that in light, `--bw-page` **paints no canvas pixels at all** — the shell has
+been full-bleed `bg-tile` since Session 16. DESIGN had claimed a "thin `p-3`
+grey margin" for two sessions, and that stale sentence is what sent pass 1
+fighting a contrast ceiling over a surface nobody sees. Corrected in place.
+
+**Withdrawn mid-pass:** rounding the shell panels. Radius needs a gap, a gap
+reveals `--bw-page`, and light page is effectively white — so radius + gap
+would merge the two panes rather than separate them. The shell stays
+full-bleed and square; the pane divider stays. Radius is for floating surfaces
+only. Do not re-derive this.
+
+### Before that — 전일종가 cutoff + full curve + 구성 금리 panel (2026-08-05)
 
 Three owner feedbacks in one pass [OWNER, 2026-08-05], each confirmed by
 choice before building:
@@ -1374,6 +1412,47 @@ Korean sentence to three numbers.
 ---
 
 ## 7. Open / provisional (confirm or override with the owner)
+
+### OPEN AFTER THE TOSS LINE (surface `0a8448e` → register `8a43034` → geometry)
+
+The three-pass line is **finished and closed out**; DESIGN §9/§15 carry the
+binding rules. What it did NOT resolve, gathered here so the next session does
+not have to re-derive it:
+
+- **NOTHING IN THE LINE HAS BEEN SEEN ON A SCREEN.** Every pass was verified by
+  arithmetic, source assertion and built-CSS inspection — never by eye. Owner
+  eyeball is the outstanding step for all three. See STATE.md §2 for what
+  specifically is unverified and why headless verification is banned here.
+- **`--bw-page`'s second job.** The geometry pass established it paints **no
+  canvas pixels in light** — it is a recessed control fill (forward-tab
+  `select`, backtest inputs, the backend-down note) plus a transient state tint
+  (hover/active rows, four hover fills, three scrims). Whether the recessed
+  fill deserves its own token, so `page` can mean only "state tint", is open.
+- **The two bottom sheets disagree about elevation.** `EnlargedView`'s sheet
+  carries `shadow-lg`; `App.tsx`'s preview sheet does not. Same object type,
+  both over a scrim. Legal either way under the corrected shadow rule
+  (permitted on floating surfaces), so it is drift rather than a defect —
+  observed in the geometry pass and deliberately not fixed, since the
+  authorised change was the backtest window only.
+- **`lib/api.ts`'s `BacktestUnavailable` message is copy with no surface.** It
+  was moved to 해요체 with the rest, but the window renders its own
+  `백엔드가 필요한 화면이에요` block instead and the message never appears.
+  Either surface it or drop it.
+- **Accessibility SHOULD items from the 2026-08-05 Vercel-guidelines audit**
+  (`02520e0` fixed the MUST items only):
+  - the active **tab is not deep-linked** — `tile` and the whole `bt` namespace
+    ride the URL, but the tab is plain `useState`, so a reload loses it;
+  - **mobile is formally out of spec** — 14px inputs (iOS zooms on focus), no
+    `touch-action: manipulation`, ~28px close target, pinned-viewport shell;
+  - **no `aria-live`** on the backtest result arriving (errors have `role="alert"`);
+  - **`<title>` is static** — it does not follow the enlarged view or the window;
+  - **~200 rows render unvirtualized** on the 전체 tab (the guideline says >50);
+  - no `<meta name="theme-color">`; loading copy lacks the `…` character.
+- **Layout sizing after the register change was ESTIMATED, not measured.** Text
+  metrics (Hangul ≈ 1.0em, Latin ≈ 0.52em) say no container changed line count
+  and none is near a wrap boundary; the only template that grew (+4자) sits in
+  the one fixed-size box, `PayReceive`'s 340×180 volatility note, with ~140px
+  of slack. Confirm by eye, not by rerunning the estimate.
 
 - **MOOT since pass M — forward curve x-axis = start point** (1YF ladder across
   starts), not x = tenor. There is no per-tab idle curve any more, so the choice

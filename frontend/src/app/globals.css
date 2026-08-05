@@ -21,6 +21,19 @@
   /* reference-line hues [OWNER, 2026-08-04] — CD / 기준금리 overlays only */
   --color-ref-cd: var(--bw-ref-cd);
   --color-ref-policy: var(--bw-ref-policy);
+  /* Floating-surface radius scale (§9, geometry pass 2026-08-05). Three steps,
+   * smallest first: popover 12 (dropdown, command palette), card 16 (the
+   * backtest window), sheet 20 (both bottom sheets, top corners only). These
+   * were DEFINED-BUT-UNREFERENCED — every site hardcoded `rounded-[16px]` /
+   * `rounded-t-[20px]`, so the scale existed only in this file and drift was
+   * free. They are wired now.
+   *
+   * TAILWIND READS SOURCE TEXT: `rounded-card` / `rounded-t-sheet` must appear
+   * literally in a component, never assembled at runtime — the same trap
+   * pageGutter.ts documents, where a built class names a rule that was never
+   * generated and the style silently does not exist. The built CSS is checked
+   * for these three radii after every change to this block. */
+  --radius-popover: 12px;
   --radius-card: 16px;
   --radius-sheet: 20px;
   --font-sans: "Pretendard Variable", Pretendard, sans-serif;
