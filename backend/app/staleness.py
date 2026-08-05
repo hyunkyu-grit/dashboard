@@ -55,9 +55,18 @@ def freshness_level(age_business_days: int) -> str:
 def dataset_freshness(asof: date, today: date | None = None) -> dict:
     """Freshness of a dataset whose latest date is `asof`, as of `today`
     (defaults to the server's local date — computed per request, never cached,
-    so the age advances with the wall clock even though the file does not)."""
+    so the age advances with the wall clock even though the file does not).
+
+    전일종가 rule [OWNER, 2026-08-05]: the loader drops today's intraday row,
+    so the freshest a dataset CAN be is asof = the last business day strictly
+    before today. Age therefore counts the completed closes the file is
+    missing — business days after `asof` up to and including YESTERDAY, not
+    today. On Tuesday a Monday close is current (age 0); a Friday close is
+    behind (Monday's close exists and is absent, age 1). Before this rule the
+    same arithmetic ran through today itself, which under the cutoff would
+    have called every dataset permanently behind."""
     today = today or date.today()
-    age = business_days_between(asof, today)
+    age = business_days_between(asof, today - timedelta(days=1))
     return {
         "asOf": asof.isoformat(),
         "today": today.isoformat(),

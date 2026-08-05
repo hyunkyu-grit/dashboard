@@ -282,10 +282,13 @@ def test_the_manifest_reuses_the_existing_hash_scheme(two_builds):
 
     a, _ = two_builds
     m = json.loads((a / "api" / "manifest.json").read_text("utf-8"))
-    assert m["dataHash"] == data_hash(DATA)
-    assert m["dataHash"].endswith(f":v{SCHEMA_VERSION}")
+    ds = load_dataset(DATA)
+    # v7: the key carries the dataset's effective asof too — same bytes read
+    # on different days are different datasets under the 전일종가 cutoff
+    assert m["dataHash"] == data_hash(DATA, ds.asof)
+    assert f":v{SCHEMA_VERSION}:" in m["dataHash"]
     assert m["schemaVersion"] == SCHEMA_VERSION
-    assert m["asof"] == load_dataset(DATA).asof.isoformat()
+    assert m["asof"] == ds.asof.isoformat()
 
 
 # ── the integrity check itself (Pass G) ─────────────────────────────────────

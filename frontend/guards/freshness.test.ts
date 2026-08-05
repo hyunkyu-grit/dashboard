@@ -85,10 +85,20 @@ describe("freshnessFrom counts business days against the reader's clock", () => 
     }
   });
 
-  it("goes behind after one business day, stale after two", () => {
-    expect(freshnessFrom(m, at("2026-07-27")).level).toBe("behind");
-    expect(freshnessFrom(m, at("2026-07-28")).ageBusinessDays).toBe(2);
-    expect(freshnessFrom(m, at("2026-07-28")).level).toBe("stale");
+  it("is current on the NEXT business day too — 전일종가 rule", () => {
+    // Monday: Friday's close IS the correct basis all day; Monday's own
+    // close does not exist until Tuesday. The loader drops today's intraday
+    // row, so counting today (the old `<=`) would read every dataset as
+    // permanently behind.
+    const f = freshnessFrom(m, at("2026-07-27"));
+    expect(f.ageBusinessDays).toBe(0);
+    expect(f.level).toBe("current");
+  });
+
+  it("goes behind once a completed close is missing, stale after two", () => {
+    expect(freshnessFrom(m, at("2026-07-28")).level).toBe("behind"); // Mon's close missing
+    expect(freshnessFrom(m, at("2026-07-29")).ageBusinessDays).toBe(2);
+    expect(freshnessFrom(m, at("2026-07-29")).level).toBe("stale");
   });
 
   it("clamps at the end of the ladder instead of throwing", () => {
@@ -162,24 +172,26 @@ describe("the VERDICT at each boundary instant, not the formatted string", () =>
     return { age: f.ageBusinessDays, level: f.level };
   };
 
-  it("2026-07-29T23:30:00Z → 08:30 KST on the 30th → four days on", () => {
-    // 27, 28, 29 and 30 have all passed in Seoul
-    expect(verdict("2026-07-29T23:30:00Z")).toEqual({ age: 4, level: "stale" });
+  it("2026-07-29T23:30:00Z → 08:30 KST on the 30th → three closes missing", () => {
+    // 27, 28 and 29 have CLOSED in Seoul; the 30th is today, never counted
+    // (전일종가 rule — today's row would be intraday and is dropped)
+    expect(verdict("2026-07-29T23:30:00Z")).toEqual({ age: 3, level: "stale" });
   });
 
-  it("nine and a half hours earlier is still the 29th in Seoul, and one day less", () => {
-    // 14:00Z = 23:00 KST on the 29th, so only 27/28/29 have passed. The pair
-    // with the case above is the point: the SAME reader, an evening apart,
-    // must cross the boundary exactly once.
-    expect(verdict("2026-07-29T14:00:00Z")).toEqual({ age: 3, level: "stale" });
+  it("nine and a half hours earlier is still the 29th in Seoul, and one close less", () => {
+    // 14:00Z = 23:00 KST on the 29th, so only 27/28 are completed closes the
+    // tree is missing. The pair with the case above is the point: the SAME
+    // reader, an evening apart, must cross the boundary exactly once.
+    expect(verdict("2026-07-29T14:00:00Z")).toEqual({ age: 2, level: "stale" });
   });
 
-  it("2026-07-31T14:00:00Z → Friday 23:00 KST → five days on", () => {
-    expect(verdict("2026-07-31T14:00:00Z")).toEqual({ age: 5, level: "stale" });
+  it("2026-07-31T14:00:00Z → Friday 23:00 KST → four closes missing", () => {
+    expect(verdict("2026-07-31T14:00:00Z")).toEqual({ age: 4, level: "stale" });
   });
 
-  it("a Sunday in Seoul that is Saturday in New York rolls no further", () => {
-    // the ladder ends at Friday the 31st; the weekend adds nothing
+  it("the weekend completes Friday's close — Sunday in Seoul counts the 31st", () => {
+    // Saturday in New York, Sunday 00:30 KST in Seoul: the 31st has closed,
+    // so the age advances exactly once more and the weekend adds nothing else
     expect(verdict("2026-08-01T15:30:00Z")).toEqual({ age: 5, level: "stale" });
   });
 
@@ -193,8 +205,9 @@ describe("the VERDICT at each boundary instant, not the formatted string", () =>
     expect(verdict("2026-07-24T22:00:00Z")).toEqual({ age: 0, level: "current" });
   });
 
-  it("one business day on is behind, two is stale", () => {
-    expect(verdict("2026-07-27T06:00:00Z")).toEqual({ age: 1, level: "behind" });
-    expect(verdict("2026-07-28T06:00:00Z")).toEqual({ age: 2, level: "stale" });
+  it("Monday is current; a missing Monday close shows Tuesday; stale Wednesday", () => {
+    expect(verdict("2026-07-27T06:00:00Z")).toEqual({ age: 0, level: "current" });
+    expect(verdict("2026-07-28T06:00:00Z")).toEqual({ age: 1, level: "behind" });
+    expect(verdict("2026-07-29T06:00:00Z")).toEqual({ age: 2, level: "stale" });
   });
 });

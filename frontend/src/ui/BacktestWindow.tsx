@@ -75,6 +75,7 @@ import {
   type WinPos,
 } from "./floatingWindow";
 import { Z_WINDOW } from "./layers";
+import { LinkedLegsChart } from "./LinkedLegsChart";
 import { ARRIVE, ARRIVE_STAGGER, instant, STAGGER_STEP } from "./motion";
 import { CHART_PAD, type ChartMark, PreviewChart } from "./PreviewChart";
 import { GROUP_LABEL, type Group, type Row } from "./rows";
@@ -493,6 +494,19 @@ function BookContextChart({
   // the ONE CD hook (useCdReference) — it already knows CD itself takes no
   // overlay, so a 3M book simply draws without the CD line
   const cd = useCdReference(unit, id);
+  /* The instrument's LEGS, for the 구성 금리 panel [OWNER, 2026-08-05] — a
+   * spread/fly id splits on '-' into its outright tenors (the id grammar
+   * rows.ts and the server's `_legs_for` share). THREE FIXED hook slots, not
+   * a map: the hook count must not change when the dropdown swaps a fly for
+   * a spread or an outright (legIds is then shorter and the spare slots are
+   * simply disabled). Same full-resolution fetch as the instrument's own —
+   * outright series files the panes already cache. */
+  const legIds = id && id.includes("-") ? id.split("-") : [];
+  const legSeries = [
+    useSeriesFull(legIds[0]),
+    useSeriesFull(legIds[1]),
+    useSeriesFull(legIds[2]),
+  ];
   const [hoverIso, setHoverIso] = useState<string | null>(null);
   const reduced = useReducedMotion();
   if (!series || series.points.length < 2 || !series.stats) return null;
@@ -571,6 +585,33 @@ function BookContextChart({
         hoverDate={hoverIso}
         onHoverDate={setHoverIso}
       />
+      {/* 구성 금리 — the legs + CD + 기준금리 in %, the linked stack's third
+          panel [OWNER, 2026-08-05]. Only for a derived instrument (an
+          outright IS its own component, and its chart above already carries
+          both references on the shared % axis). Waits for every leg: a fly
+          drawn with two of three legs would look complete and be wrong.
+          Same pts / CHART_PAD / x-formula as the siblings; the crosshair
+          date is shared through the same `hoverIso`. Pre-run it aligns with
+          the un-zoomed chart above; while linked, `still` holds all three. */}
+      {legIds.length >= 2 &&
+        legSeries.slice(0, legIds.length).every((s) => s && s.points.length >= 2) && (
+          <div className="mt-1">
+            <LinkedLegsChart
+              legs={legIds.map((legId, k) => ({
+                id: legId,
+                points: legSeries[k]!.points,
+              }))}
+              pts={pts}
+              cd={cd}
+              policy={policy}
+              markDates={marks.map((m) => m.date)}
+              width={880}
+              height={150}
+              hoverIso={hoverIso}
+              onHover={setHoverIso}
+            />
+          </div>
+        )}
       {/* the chart pair's lower half arrives with the answer (§14 arrival);
           the CONTAINER rises — the P&L path inside never animates */}
       {result && (

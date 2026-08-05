@@ -68,7 +68,7 @@ _dv01_table = build_dv01_table(_curves["now"], derived_ids)
 # historical curve once and reprice all forwards (~13s) — over a file that
 # changes once a day. Persist them keyed by the data-file hash; recompute only
 # when the data changes (loudly logged).
-_data_hash = data_hash(DATA_PATH)
+_data_hash = data_hash(DATA_PATH, _dataset.asof)
 _forwards = cached("forwards", _data_hash, lambda: forwards_payload(_dataset, _curves))
 # 라고 할 때 살걸: a 20-day event replay plus ~2 valuations per line — a
 # couple of seconds over a file that changes once a day, so it caches the

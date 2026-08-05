@@ -15,8 +15,10 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import re
+from bisect import bisect_left
 from dataclasses import dataclass, field
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import openpyxl
 from openpyxl.utils import get_column_letter
@@ -46,6 +48,18 @@ FIRST_DATA_ROW = 4
 # sign error, and would not fire on any rate this market has printed.
 RATE_MIN_PCT = -5.0
 RATE_MAX_PCT = 25.0
+
+# The market's timezone. "Which day is today" is a question about Seoul —
+# the data is KRW closes — not about wherever this process happens to run.
+# Via the tz database, not a fixed +9, for the same reason freshness.ts
+# gives: facts about the world belong in the platform's tzdata.
+MARKET_TZ = ZoneInfo("Asia/Seoul")
+
+
+def market_today() -> dt.date:
+    """Today's calendar date in Seoul, at this instant."""
+    return dt.datetime.now(MARKET_TZ).date()
+
 
 # Calendar days between consecutive observations before the file is called
 # stale. Four-day weekends and Chuseok/Seollal clusters are ordinary; ten days
@@ -139,7 +153,10 @@ class Dataset:
         return self.series[tenor][-1]
 
 
-def load_dataset(xlsx_path: Path) -> Dataset:
+def load_dataset(xlsx_path: Path, today: dt.date | None = None) -> Dataset:
+    """Load the workbook. `today` (Seoul date, defaulting to the clock) is the
+    전일종가 cutoff — see the drop below; tests inject it to stay date-free."""
+    today = today or market_today()
     wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
     ws = wb[wb.sheetnames[0]]
     rows = ws.iter_rows(values_only=True)
@@ -258,10 +275,41 @@ def load_dataset(xlsx_path: Path) -> Dataset:
 
     warnings: list[str] = []
 
+    # ── 전일종가 rule [OWNER, 2026-08-05] ───────────────────────────────────
+    # A row dated today is NOT a close: the Infomax export refreshed at 11:00
+    # writes 11:00's live quotes into today's row, and they load exactly like
+    # a settled close — every "현재" on screen then quietly means "whenever
+    # the workbook was last saved". Prices for the current Seoul date are
+    # therefore treated as MISSING, whatever the wall clock says: the basis
+    # is always the last completed close (asof = the previous business day,
+    # d1 = the one before it). A future-dated row falls under the same cut.
+    # The cut is HERE, at the single choke point every consumer reads
+    # through, so summary/curve/backtest/forwards/regret all shift together.
+    cut = bisect_left(dates, today)
+    if cut < len(dates):
+        dropped = [d.isoformat() for d in dates[cut:]]
+        dates = dates[:cut]
+        series = {t: vals[:cut] for t, vals in series.items()}
+        warnings.append(
+            f"dropped {len(dropped)} intraday row(s) on/after {today} "
+            f"({', '.join(dropped)}) — 전일종가 rule: today's quotes are "
+            "live, not a close"
+        )
+    if not dates:
+        raise DataFileError(
+            f"no completed closes: every data row is dated on/after {today}"
+        )
+    # Blank counts are re-derived from the KEPT rows — the parse-time tallies
+    # include any dropped intraday rows, and an all-blank column must be
+    # judged on what will actually be served.
+    blanks = {
+        t: sum(v is None for v in vals) for t, vals in series.items()
+    }
+
     # A column of nothing is not a series. Everything downstream would read
     # `None` forever and show an em dash where a rate belongs.
     for tenor, n in blanks.items():
-        if n == len(dates_desc):
+        if n == len(dates):
             raise DataFileError(f"{tenor}: every value is blank")
         if n:
             warnings.append(f"{tenor}: {n} blank value(s)")

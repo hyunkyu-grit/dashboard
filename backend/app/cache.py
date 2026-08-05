@@ -43,14 +43,26 @@ DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache"
 # v6 (2026-08-04): the regret replay restricts to the 주요 sets [OWNER] —
 # same xlsx bytes, different cached `regret` content (44 → 29 lines); a v5
 # cache would keep serving the non-주요 lines.
-SCHEMA_VERSION = 6
+# v7 (2026-08-05): the 전일종가 rule drops today-dated rows at load — the
+# SAME xlsx bytes now produce different dataset content on different days
+# (the intraday row a Tuesday load drops is included by a Wednesday load).
+# The bump clears v6 caches; the `asof` component below is what keeps the
+# key honest ACROSS days from here on.
+SCHEMA_VERSION = 7
 
 
-def data_hash(path: Path) -> str:
-    """SHA-256 of the source file's bytes + the payload schema version —
-    changes iff the data OR the cached payloads' shape changes."""
+def data_hash(path: Path, asof: "object | None" = None) -> str:
+    """SHA-256 of the source file's bytes + the payload schema version, plus
+    the dataset's effective as-of date when given — changes iff the data, the
+    cached payloads' shape, OR the 전일종가 cutoff's effect changes.
+
+    `asof` exists because file bytes stopped determining content (v7): a row
+    dated "today" is dropped at load, so the same file re-read after midnight
+    yields a different dataset. Callers that cache derived payloads MUST pass
+    `dataset.asof`; the bytes-only form remains for content-change checks."""
     digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
-    return f"{digest}:v{SCHEMA_VERSION}"
+    tail = f":{asof.isoformat()}" if asof is not None else ""
+    return f"{digest}:v{SCHEMA_VERSION}{tail}"
 
 
 def cached(

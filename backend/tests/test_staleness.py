@@ -15,23 +15,32 @@ from app.staleness import business_days_between, dataset_freshness, freshness_le
 ASOF = date(2026, 7, 24)  # Friday — the dataset's actual asof
 
 
-def test_same_day_and_weekend_are_current():
-    for today in (date(2026, 7, 24), date(2026, 7, 25), date(2026, 7, 26)):
+def test_same_day_weekend_and_next_business_day_are_current():
+    # 전일종가 rule: a Friday close is the CORRECT basis all weekend AND all
+    # of Monday — Monday's own close does not exist until Tuesday. Monday
+    # going "behind" here was the pre-rule arithmetic.
+    for today in (
+        date(2026, 7, 24),
+        date(2026, 7, 25),
+        date(2026, 7, 26),
+        date(2026, 7, 27),  # Monday — Friday is still the last completed close
+    ):
         f = dataset_freshness(ASOF, today)
         assert f["ageBusinessDays"] == 0
         assert f["level"] == "current"
 
 
-def test_one_business_day_behind_is_visible():
-    f = dataset_freshness(ASOF, date(2026, 7, 27))  # Monday
+def test_one_missing_close_is_visible():
+    # Tuesday: Monday's close exists in the world and the file lacks it.
+    f = dataset_freshness(ASOF, date(2026, 7, 28))
     assert f["ageBusinessDays"] == 1
     assert f["level"] == "behind"
 
 
-def test_two_or_more_business_days_is_stale():
-    assert dataset_freshness(ASOF, date(2026, 7, 28))["level"] == "stale"  # Tue, age 2
-    over = dataset_freshness(ASOF, date(2026, 7, 31))  # Friday, a full week later
-    assert over["ageBusinessDays"] == 5
+def test_two_or_more_missing_closes_is_stale():
+    assert dataset_freshness(ASOF, date(2026, 7, 29))["level"] == "stale"  # Wed, age 2
+    over = dataset_freshness(ASOF, date(2026, 7, 31))  # Friday, a week on
+    assert over["ageBusinessDays"] == 4  # 27/28/29/30 — the 31st is not yet a close
     assert over["level"] == "stale"
 
 

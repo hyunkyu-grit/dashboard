@@ -582,6 +582,32 @@ that already existed is drawn.
     line would be a plausible-looking wrong chart), keeps it.
   Pinned by `guards/backtest-context.test.ts`, including byte-equality of
   the two crosshairs' x for one date.
+- **The 구성 금리 panel [OWNER, 2026-08-05 — "진입레벨 뿐만 아니라, 그
+  구성요건들과 CD, Base도 보여야 함 … 안 겹치게 잘 배치"].** A spread or
+  butterfly is a POSITION in two or three outright rates, but its own chart
+  plots the combination in bp — the legs are invisible there, and stacking
+  three % lines onto the bp plot is exactly the 겹침 the owner warned about.
+  So the components get their OWN panel (`ui/LinkedLegsChart.tsx`), drawn
+  between the instrument chart and the P&L — the linked stack's third
+  member: each leg's par rate, CD 91d and the base-rate step, all %, ONE
+  axis (the "shared" mode's logic — no rebasing, no second scale).
+  - Renders for a DERIVED sole instrument only (≥2 legs, every leg's series
+    loaded — a fly drawn with two of three legs looks complete and is
+    wrong); an outright IS its own component and its chart above already
+    carries both references. There BEFORE 실행 like the chart above; while
+    linked it shares the run window and the one crosshair (`hoverIso` by
+    date), and its readout card prints each leg + CD + 기준금리 AS DRAWN.
+  - Alignment is the LinkedPnlChart construction: same `pts` slice, shared
+    `CHART_PAD` left/right, same index→x formula. The references draw
+    through the SHARED policyLine helpers and the ref tokens — this panel is
+    a sanctioned SECOND reference surface beside PreviewChart; what stays
+    banned is a re-derived projection or a third encoding. Legs are LEVELS,
+    so they stay ink (§5/§9): graded opacity short → long, each line NAMED
+    at its right end (labels nudged apart vertically, inset clear of the %
+    axis column — verified live). 진입/청산 appear as date hairlines only;
+    the labels live on the chart above. Pinned by
+    `guards/backtest-context.test.ts` (legs+references render, outright →
+    no panel, three-way crosshair x byte-equality, ink-only legs).
 - Toss-style is a constraint on the NUMBERS as much as the paint: one big
   figure in plain Korean, controls that read as a sentence, and everything that
   is machinery (per-leg notionals, DV01, settled cash) under a fold.
@@ -994,11 +1020,21 @@ diverge the moment the quarter advances a month.
 ### Right pane — curve (idle) + preview (on hover)
 
 - **Idle state is the IRS par curve, on every tab [OWNER, pass M]** — curve
-  viewing is priority 1 (§1), and "the curve" is the par curve: 9 equal-spaced
+  viewing is priority 1 (§1), and "the curve" is the par curve: equal-spaced
   nodes 3M…10Y. No row hovered → that is what the pane shows, whichever filter
   chip is active. Blue line, two lines only (the data's date + D-1, labelled
   `2026-07-24 · 어제`) — the six-basis ramp is enlarged-view only. Hand-rolled
   SVG (§11).
+  - **EVERY node from 3M to 10Y, none skipped [OWNER, 2026-08-05 — "3m부터
+    10Y까지 빠짐없이"]**: 14 nodes — 3M (= CD91, the export has no IRS 3M
+    column and the backtest prices 3M with the same series), 6M, 9M, 1Y,
+    1.5Y, 2Y, 3Y, 4Y, 5Y, 6Y, 7Y, 8Y, 9Y, 10Y. 4Y and 6Y–9Y are real sheet
+    columns that were previously table-only. 1D stays off the curve (the ask
+    was 3M~10Y; the call anchor is not a traded curve point). Node labels
+    all print when the track spacing holds one (≥32px/node); only below
+    that does the axis thin. The spread/fly universe (`DISPLAY_TENORS`) is
+    deliberately UNTOUCHED — widening it is quadratic/cubic in rows and a
+    separate owner ruling.
   - **Superseded: one idle curve per tab [Session 13/14].** The pane used to
     switch with the filter — the 1YF ladder on forwards, the two-point-spread
     curve on spreads, the relative-ATR curve on volatility. Three faults, one
@@ -2229,6 +2265,35 @@ name box.
 or a blank cell: the file loads, and the reason lands in `Dataset.warnings`
 and the startup log. Refusing to start on an old file would take the product
 down for something the reader can ride out.
+
+**전일종가 rule [OWNER, 2026-08-05 — "당일 데이터가 들어오더라도 이는 결측
+처리하고, 기준은 항상 전일종가로 인식하기"].** A row dated today (Seoul) is
+the Infomax add-in's LIVE quotes at whatever moment the workbook was saved,
+not a close — and it used to load exactly like one, so every 현재 on screen
+quietly meant "when the file was last saved". The loader now DROPS rows dated
+on/after the current Seoul date (tz-database KST, one choke point in
+`load_dataset`, so summary/curve/backtest/forwards/regret all shift
+together): `asof` is always the last COMPLETED close, d1 the one before it —
+on the 5th the screen reads the 4th, and 어제 reads the 3rd, at 11:00 and at
+23:00 alike. Consequences, each deliberate:
+
+- **Freshness measures MISSING CLOSES, not calendar lag.** The freshest
+  possible asof is now yesterday's business day, so age counts business days
+  in `(asof, today−1]` (staleness.py) and the client ladder compares
+  strictly-before-today (freshness.ts). Monday on a Friday close is
+  `current`; Tuesday without Monday's close is `behind`. The old arithmetic
+  would have read every dataset as permanently behind.
+- **File bytes stopped determining content**: the same xlsx re-read after
+  midnight includes the row it dropped yesterday. Cache keys therefore carry
+  the dataset's effective `asof` (`data_hash(path, asof)`, SCHEMA v7) — a
+  bytes-only key would serve yesterday's derived payloads as today's.
+- The refresh flow is unchanged (refresh.ps1 reads asof THROUGH the loader);
+  a morning refresh advances asof to yesterday's now-final close. If nobody
+  refreshes, yesterday's row in the file is itself an intraday snapshot —
+  the loader cannot tell; cross-checking against the terminal stays human.
+- Enforced by `tests/test_dataset_validation.py` (전일종가 cases),
+  `tests/test_staleness.py`, `guards/freshness.test.ts`, and the agreement
+  suite's `asof < today` pin.
 
 **Cache.** Any unreadable `.cache/*.json` — truncated, empty, valid JSON that
 is not an object, binary — recomputes with a warning; that was already true

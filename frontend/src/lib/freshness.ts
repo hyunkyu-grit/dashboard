@@ -71,9 +71,14 @@ export function marketIsoDate(d: Date = new Date()): string {
 export function freshnessFrom(m: Manifest, now: Date = new Date()): Freshness {
   const today = marketIsoDate(now);
   const days = m.businessDaysAfter ?? [];
-  // string compare is safe and total on zero-padded ISO dates
+  /* STRICTLY BEFORE today — the 전일종가 rule [OWNER, 2026-08-05]. The loader
+   * drops today's intraday row, so the freshest possible asof is the last
+   * business day before today; today itself is never a close the file could
+   * hold, and counting it (the old `<=`) would read every dataset as
+   * permanently one day behind. Age = completed closes the tree is missing.
+   * String compare is safe and total on zero-padded ISO dates. */
   let age = 0;
-  while (age < days.length && days[age] <= today) age++;
+  while (age < days.length && days[age] < today) age++;
   const { behind, stale } = m.freshnessThresholds;
   return {
     asOf: m.asof,

@@ -63,8 +63,10 @@ def write_book(path: Path, rows: list[tuple]) -> Path:
 
 
 def good_rows(n: int = 40, end: dt.date | None = None) -> list[tuple]:
-    """`n` consecutive weekdays, most recent first."""
-    end = end or dt.date.today()
+    """`n` consecutive weekdays, most recent first. Ends YESTERDAY by
+    default: a row dated today is dropped by the 전일종가 cutoff (see the
+    dedicated tests below), and these fixtures are about everything else."""
+    end = end or dt.date.today() - dt.timedelta(days=1)
     out: list[tuple] = []
     d = end
     while len(out) < n:
@@ -229,3 +231,47 @@ def test_the_real_data_file_passes_its_own_validation():
     real = Path(__file__).resolve().parents[2] / "data" / "irsdata.xlsx"
     ds = load_dataset(real)
     assert len(ds.dates) > 2000
+
+
+# ── 전일종가 cutoff [OWNER, 2026-08-05] ─────────────────────────────────────
+# A row dated today is the Infomax add-in's LIVE quotes at whatever moment
+# the workbook was saved, not a close. The loader treats it as missing: the
+# basis is always the last completed close. These inject `today` so the
+# tests do not depend on when they run.
+
+
+def test_a_today_dated_row_is_dropped(book):
+    today = dt.date(2026, 8, 5)  # a Wednesday
+    rows = good_rows(10, end=today)
+    ds = load_dataset(book(rows), today=today)
+    assert ds.asof == dt.date(2026, 8, 4)  # the previous weekday's close
+    assert all(d < today for d in ds.dates)
+    assert len(ds.dates) == 9
+    assert any("전일종가" in w for w in ds.warnings)
+
+
+def test_yesterdays_close_is_kept_whole(book):
+    # the cut removes ONLY today's row — every completed close survives, and
+    # the series stay aligned to the shortened date axis
+    today = dt.date(2026, 8, 5)
+    rows = good_rows(10, end=today)
+    ds = load_dataset(book(rows), today=today)
+    assert all(len(v) == len(ds.dates) for v in ds.series.values())
+    assert ds.latest("10Y") == 4.26
+
+
+def test_a_file_without_a_today_row_is_untouched(book):
+    today = dt.date(2026, 8, 5)
+    rows = good_rows(10, end=dt.date(2026, 8, 4))
+    ds = load_dataset(book(rows), today=today)
+    assert ds.asof == dt.date(2026, 8, 4)
+    assert len(ds.dates) == 10
+    assert not any("전일종가" in w for w in ds.warnings)
+
+
+def test_all_rows_on_or_after_today_is_refused(book):
+    # nothing left to serve — same class as an empty sheet
+    rows = good_rows(3, end=dt.date(2026, 8, 7))
+    with pytest.raises(DataFileError) as e:
+        load_dataset(book(rows), today=dt.date(2026, 8, 1))
+    assert "completed closes" in str(e.value)

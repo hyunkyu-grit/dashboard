@@ -114,7 +114,8 @@ cd frontend; pnpm vitest run; pnpm lint; pnpm build
 
 - `main.py` — FastAPI routes: `/api/wall/summary`, `/api/forwards`,
   `/api/series/{id}` (ids containing `x` route to forward history).
-- `dataset.py` — loads the xlsx; `DISPLAY_TENORS = [1Y,1.5Y,2Y,3Y,5Y,10Y]`.
+- `dataset.py` — loads the xlsx; drops today-dated rows (전일종가 rule, §18);
+  `DISPLAY_TENORS` = the 8-tenor spread/fly universe [OWNER, 2026-07-31].
 - `derive.py` — **all** server-side derivation: `basis_dates`, deltas,
   `spread_series`, `fly_series`, `summarize`. The browser never derives a
   series.
@@ -187,9 +188,53 @@ rule:
 
 ---
 
-## 6. Current state (as of the 2026-08-04 session)
+## 6. Current state (as of the 2026-08-05 session)
 
-### Latest — the backtest prices the entry before 실행 (2026-08-04, backtest-context session)
+### Latest — 전일종가 cutoff + full curve + 구성 금리 panel (2026-08-05)
+
+Three owner feedbacks in one pass [OWNER, 2026-08-05], each confirmed by
+choice before building:
+
+1. **전일종가 rule (DESIGN §18).** A today-dated xlsx row is the add-in's
+   LIVE quotes, not a close — `load_dataset` now drops rows dated on/after
+   the current Seoul date (tz-database KST; `today` injectable for tests).
+   asof = the last COMPLETED close always (on 8/5 the screen reads 8/4, 어제
+   reads 8/3). Freshness semantics moved with it: age = missing closes —
+   `business_days_between(asof, today−1)` server-side, ladder compared
+   strictly-before-today in freshness.ts (Monday on a Friday close is
+   `current`). **Cache keys carry the effective asof** (`data_hash(path,
+   asof)`, SCHEMA v6→7): same bytes re-read after midnight are a DIFFERENT
+   dataset, and a bytes-only key would serve yesterday's payloads as
+   today's. Static tree rebuilt: asof 2026-08-04, 2615 obs (the 8/5
+   intraday row dropped). refresh.ps1 needed nothing — it reads asof
+   through the loader.
+2. **IRS 커브 3M~10Y 빠짐없이 (DESIGN §2 right pane).** `CURVE_NODES` in
+   CurveView is now all 14 nodes (3M=CD91, …, 4Y, 6Y–9Y included); labels
+   all print at ≥32px/node track spacing. The spread/fly universe
+   (`DISPLAY_TENORS`) deliberately untouched [OWNER choice — 커브 화면만].
+3. **구성 금리 panel (DESIGN §backtest).** `ui/LinkedLegsChart.tsx` — the
+   linked stack's third member between the instrument chart and the P&L:
+   each leg's par rate + CD + 기준금리, all %, one axis, for a derived sole
+   instrument (≥2 legs, all loaded). Same pts/CHART_PAD/x-formula, one
+   crosshair by date across all THREE panels; legs are ink, graded opacity,
+   named at the right end (labels nudged apart + inset 32px clear of the %
+   axis column — the collision was caught live). References via the shared
+   policyLine helpers + ref tokens — a sanctioned second reference surface,
+   recorded in the guard.
+
+Guards: `backtest-context.test.ts` gained the 구성 금리 describe (legs +
+references render, outright → no panel, three-way crosshair x parity, ink
+legs) and re-anchored its one-implementation pins; `freshness.test.ts` and
+`test_staleness.py` rewritten to missing-closes semantics; 전일종가 loader
+cases in `test_dataset_validation.py` (fixtures now end YESTERDAY by
+default); agreement test pins `asof < today` and hashes with the loaded
+asof. Verified live (:3100): header 2026-08-04 기준 / freshness current;
+14-node curve with 기준금리 hairline; 6M/9M/1Y fly → three-panel stack, one
+crosshair, readout 6M 1.4250 / 9M 1.5450 / 1Y 1.6750 / CD 1.2800 / 기준금리
+1.0000 at 2022-01-10 (all plausible for that date). Gotcha: a stale :3100
+dev server held the port (EADDRINUSE) — kill it like the stale :8100.
+
+### Before that — the backtest prices the entry before 실행 (2026-08-04, backtest-context session)
 
 Two owner feedbacks, one mechanism [OWNER: ① 싱글/개별 백테스트에서는 "원래
 그래프랑 CD, Base Rate가 함께 그려져서 추적할 수 있는 거 처럼"; ② "진입

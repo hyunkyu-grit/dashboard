@@ -29,13 +29,14 @@ import { describe, expect, it } from "vitest";
 
 import { code } from "./_source";
 
-import type { BacktestResult, HistoryPoint } from "../src/lib/api";
+import type { BacktestResult, HistoryPoint, PolicyStep } from "../src/lib/api";
 import { mintBacktestKey } from "../src/ui/backtestMemory";
 import {
   BacktestWindow,
   LinkedPnlChart,
   pointOnOrAfter,
 } from "../src/ui/BacktestWindow";
+import { LinkedLegsChart } from "../src/ui/LinkedLegsChart";
 import { type ChartMark, PreviewChart } from "../src/ui/PreviewChart";
 import type { Row } from "../src/ui/rows";
 
@@ -268,16 +269,127 @@ describe("the linked P&L panel [OWNER 재피드백: 밑에, 완전히 수직 얼
   });
 });
 
+/* ── the 구성 금리 panel [OWNER, 2026-08-05] ─────────────────────────────── */
+
+describe("the component-rates panel: legs + CD + Base, aligned with the stack", () => {
+  // full-resolution leg series over the same trading days as the instrument
+  const legPts = (base: number): HistoryPoint[] =>
+    PTS.map((p, i) => ({ t: p.t, v: base + i * 0.01, d: p.d }));
+  const policy: PolicyStep = {
+    unit: "%",
+    asof: "2026-01-12",
+    through: "2026-01-12",
+    steps: [{ date: "2025-01-01", rate: 2.75 }],
+    latest: 2.75,
+    warnings: [],
+  };
+  const pts = PTS.slice(1); // the run window the whole stack plots
+  const legs = (ids: string[]) =>
+    ids.map((id, k) => ({ id, points: legPts(3.0 + 0.2 * k) }));
+
+  const panel = (over: Partial<Parameters<typeof LinkedLegsChart>[0]> = {}) =>
+    renderToStaticMarkup(
+      createElement(LinkedLegsChart, {
+        legs: legs(["3Y", "5Y", "10Y"]),
+        pts,
+        cd: legPts(2.6),
+        policy,
+        markDates: ["2026-01-06"],
+        width: W,
+        height: 150,
+        hoverIso: "2026-01-09",
+        onHover: () => {},
+        ...over,
+      }),
+    );
+
+  const crosshairX = (m: string) =>
+    /<line[^>]*data-crosshair[^>]*x1="([\d.]+)"/.exec(m)?.[1];
+
+  it("a fly draws its three legs, each named, plus both references", () => {
+    const m = panel();
+    for (const id of ["3Y", "5Y", "10Y"]) expect(m).toContain(`data-leg="${id}"`);
+    // the references wear the owner's ref tokens — the one encoding
+    expect(m).toContain("stroke-ref-cd");
+    expect(m).toContain("stroke-ref-policy");
+    expect(m).toContain("CD 91일");
+    expect(m).toContain("기준금리");
+    expect(m).toContain("구성 금리");
+  });
+
+  it("fewer than two legs is no panel — an outright is its own component", () => {
+    expect(panel({ legs: legs(["10Y"]) })).toBe("");
+  });
+
+  it("one date, one x, across the WHOLE stack — same slice, same pad, same formula", () => {
+    const top = renderToStaticMarkup(
+      createElement(PreviewChart, {
+        points: pts,
+        stats: { min: 3.1, max: 3.4, avg: 3.25 },
+        unit: "%",
+        width: W,
+        height: H,
+        still: true,
+        hoverDate: "2026-01-09",
+      }),
+    );
+    expect(crosshairX(panel())).toBeTruthy();
+    expect(crosshairX(panel())).toBe(crosshairX(top));
+  });
+
+  it("the readout prints every leg, CD and the base rate at the hovered date", () => {
+    const m = panel();
+    expect(m).toContain("2026-01-09");
+    // legVals at 01-09 = base + 2 steps of 0.01; via fmtLevel's 4dp grammar
+    expect(m).toContain("3.0200");
+    expect(m).toContain("2.7500"); // the base rate IN FORCE, from the drawn step
+  });
+
+  it("legs are LEVELS: ink strokes, no direction hue", () => {
+    const m = panel();
+    expect([...m.matchAll(/data-leg=/g)].length).toBeGreaterThan(0);
+    expect(m).not.toMatch(/data-leg[^>]*class="[^"]*(?:up|down)/);
+    for (const x of [...m.matchAll(/<polyline[^>]*data-leg[^>]*class="([^"]*)"/g)])
+      expect(x[1]).toContain("stroke-ink");
+  });
+
+  it("entry hairlines are dates only — the labels live on the chart above", () => {
+    const m = panel();
+    expect(m).toContain('data-mark="date"');
+    expect(m).not.toContain("진입");
+  });
+});
+
 /* ── one implementation, pinned in source ───────────────────────────────── */
 
 describe("the context chart reuses the one renderer", () => {
   const win = code("ui/BacktestWindow.tsx");
 
-  it("draws PreviewChart with the one CD hook — no second chart, no second CD", () => {
+  it("draws PreviewChart with the one CD hook — no second CD, no inline reference machinery", () => {
     expect(win).toMatch(/<PreviewChart/);
     expect(win).toMatch(/useCdReference\(/);
-    // no hand-rolled reference machinery of its own
+    // the window itself hand-rolls no reference projection: the 구성 금리
+    // panel is the sanctioned second reference surface [OWNER, 2026-08-05]
+    // and its machinery lives in LinkedLegsChart.tsx, built ON the shared
+    // policyLine helpers — pinned below, not here
     expect(win).not.toMatch(/policySegments|alignSeries|seriesPath/);
+  });
+
+  it("the 구성 금리 panel: gated on ≥2 legs, complete legs only, shared slice + hover", () => {
+    const legsChart = code("ui/LinkedLegsChart.tsx");
+    // the window renders it only for a derived instrument, with EVERY leg
+    // loaded — a fly drawn with two of three legs looks complete and is wrong
+    expect(win).toMatch(/legIds\.length >= 2/);
+    expect(win).toMatch(/\.every\(\(s\) => s && s\.points\.length >= 2\)/);
+    expect(win).toMatch(/<LinkedLegsChart/);
+    // the panel borrows the stack's own pad and the SHARED policyLine
+    // helpers — a copied constant or a re-derived projection is the drift
+    // class both rulings exist to catch
+    expect(legsChart).toMatch(/right: CHART_PAD\.right/);
+    expect(legsChart).toMatch(/left: CHART_PAD\.left/);
+    expect(legsChart).toMatch(/from "\.\/policyLine"/);
+    expect(legsChart).toMatch(/stroke-ref-cd/);
+    expect(legsChart).toMatch(/stroke-ref-policy/);
   });
 
   it("the readout routes through the snap helper and the one level grammar", () => {

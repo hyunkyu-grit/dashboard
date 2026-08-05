@@ -123,12 +123,24 @@ def test_dv01_agrees(sid):
 
 def test_the_static_tree_is_current_for_this_data_file():
     """A stale build would make every comparison above pass against itself and
-    still ship yesterday's numbers. The manifest's hash is the check."""
-    from app.cache import data_hash
+    still ship yesterday's numbers. The manifest's hash is the check.
 
+    v7: the hash carries the dataset's effective asof (the 전일종가 cutoff
+    makes content a function of bytes AND day), so the expectation is built
+    the way build_static builds it — load, then hash with the loaded asof.
+    A tree built on an earlier day from the same bytes fails here, which is
+    exactly the staleness this test exists to catch."""
+    import datetime as dt
+
+    from app.cache import data_hash
+    from app.dataset import load_dataset
+
+    xlsx = REPO / "data" / "irsdata.xlsx"
     m = static("api/manifest.json")
-    assert m["dataHash"] == data_hash(REPO / "data" / "irsdata.xlsx"), (
-        "the committed static tree was built from a different data file — "
-        "re-run backend/scripts/build_static.py"
+    assert m["dataHash"] == data_hash(xlsx, load_dataset(xlsx).asof), (
+        "the committed static tree was built from a different data file or "
+        "on a different day — re-run backend/scripts/build_static.py"
     )
     assert m["asof"] == get(f"{BASE}/api/health")["asof"]
+    # the tree never claims today: its asof is a COMPLETED close
+    assert m["asof"] < dt.date.today().isoformat()

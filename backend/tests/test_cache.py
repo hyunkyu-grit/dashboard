@@ -37,6 +37,21 @@ def test_data_hash_changes_with_content(tmp_path):
     assert data_hash(f) == h2  # stable for unchanged content
 
 
+def test_data_hash_separates_days_for_the_same_bytes(tmp_path):
+    """전일종가 rule (v7): the same file re-read after midnight yields a
+    different dataset (the intraday row it dropped is now a past close), so
+    cache keys must carry the effective asof, not the bytes alone."""
+    import datetime as dt
+
+    f = tmp_path / "data.bin"
+    f.write_bytes(b"one")
+    a = data_hash(f, dt.date(2026, 8, 4))
+    b = data_hash(f, dt.date(2026, 8, 5))
+    assert a != b
+    assert a == data_hash(f, dt.date(2026, 8, 4))
+    assert data_hash(f) != a  # the bytes-only form is a different key space
+
+
 def test_real_data_file_hash_is_stable():
     data = Path(__file__).resolve().parents[2] / "data" / "irsdata.xlsx"
     assert data_hash(data) == data_hash(data)

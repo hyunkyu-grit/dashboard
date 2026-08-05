@@ -115,7 +115,12 @@ function NodeLine({
    * (see lib/format.ts). The readout card is where a level prints at full
    * precision, through `fmtLevel`. No other rounding lives in this file. */
   const axisLabel = (v: number) => fmtAxis(v, unit);
-  const labelEvery = Math.ceil(nodes.length / 8);
+  /* Every node earns its label when the spacing holds one ("빠짐없이" covers
+   * the names, not just the dots) — the widest label ("1.5Y" at 10px) needs
+   * ~28px, so 32px of track per node prints them all without collision. Only
+   * below that does the axis thin to roughly eight survivors. */
+  const labelEvery =
+    plotW / nodes.length >= 32 ? 1 : Math.ceil(nodes.length / 8);
 
   // nearest node by x, the same snap the preview chart uses — the nodes are
   // equal-spaced (§2), so this is arithmetic, not a search.
@@ -231,9 +236,18 @@ function NodeLine({
   );
 }
 
-const CURVE_NODES = ["3M", "6M", "9M", "1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y"];
+/** EVERY quoted node from 3M to 10Y, none skipped [OWNER, 2026-08-05: "3m부터
+ * 10Y까지 빠짐없이"]. 3M is the CD 91d average — the export has no IRS 3M
+ * column and the spec's 3M node IS CD91 (dataset._tenor_id), the same series
+ * the backtest prices 3M with; 4Y and 6Y–9Y are real sheet columns that were
+ * previously shown only in the table. 1D stays off: the ask was 3M~10Y, and
+ * the call rate is an anchor, not a curve point anyone trades. */
+const CURVE_NODES = [
+  "3M", "6M", "9M", "1Y", "1.5Y", "2Y", "3Y", "4Y", "5Y",
+  "6Y", "7Y", "8Y", "9Y", "10Y",
+];
 
-/** The IRS par curve across the 9 equal-spaced nodes, each carrying the
+/** The IRS par curve across the 14 equal-spaced nodes, each carrying the
  * readout its hover shows. Every field is read straight off the summary row —
  * the same row the table prints — so the curve and the table can never disagree
  * about a node (§16). A tenor absent from the payload yields nulls, which the

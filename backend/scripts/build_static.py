@@ -318,7 +318,7 @@ def build(out_root: Path, quiet: bool = False) -> dict:
         for p in (par_rates_at_index(dataset, i) for i in range(len(dataset.dates)))
     ]
 
-    hash_ = data_hash(DATA)
+    hash_ = data_hash(DATA, dataset.asof)
     fwd = cached("forwards", hash_, lambda: forwards_payload(dataset, curves))
     regret = cached("regret", hash_, lambda: regret_payload(dataset))
 
