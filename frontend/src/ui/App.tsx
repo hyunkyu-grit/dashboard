@@ -209,8 +209,19 @@ function Header({
   // card, no radius. It is chrome, not content.
   return (
     <header
-      className={`flex shrink-0 items-center gap-3 border-b border-edge bg-tile py-3 ${PAGE_X}`}
+      /* macOS toolbar band: 40px tall, and the surface is the kit's Scroll Edge
+         Effect (light #ffffff at 85 percent, dark #1e1e1e at 55) rather than an
+         opaque strip. The effect is a LAYER, not a property of the header —
+         `opacity` on the header itself would fade the title with it, so it is
+         painted behind the content the same way the row selection band is.
+         An earlier pass here argued this treatment was pointless because
+         nothing scrolls under the band. The kit ships it as its own component,
+         so the argument was wrong. */
+      className={`relative flex h-10 shrink-0 items-center gap-3 border-b border-edge ${PAGE_X}`}
     >
+      {/* -z-10: an absolutely positioned sibling paints ABOVE static ones, so
+          without this the band covers the title it sits behind. */}
+      <span aria-hidden className="kit-scroll-edge absolute inset-0 -z-10 backdrop-blur-xl" />
       <span className="text-[17px] font-bold text-ink">Sauron</span>
       <span className="text-[13px] opacity-45">KRW IRS</span>
       <span className="flex-1" />

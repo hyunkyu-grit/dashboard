@@ -85,6 +85,10 @@
   font-size: 13px;
   font-weight: 700;
 }
+.kit-scroll-edge {
+  background: #ffffff;
+  opacity: 0.85;
+}
 
 /* ---- Dark ---- */
 [data-theme="dark"] .kit-button {
@@ -168,4 +172,8 @@
   color: #4c4c4c;
   font-size: 13px;
   font-weight: 700;
+}
+[data-theme="dark"] .kit-scroll-edge {
+  background: #1e1e1e;
+  opacity: 0.55;
 }
