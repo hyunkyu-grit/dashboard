@@ -1819,16 +1819,29 @@ not reinvent it].** A candle body has a sign (close vs open), so it uses the
 (`--bw-up` / `--bw-down`), NOT the blue line colour. Line charts stay blue;
 only candle bodies take the red/blue direction pair.
 
-#### Selected / focus / action / pulse — INK [palette cut; re-reverses Session 16 Pass E]
+#### Selected / focus / action / pulse — INK, except the two states macOS fills [palette cut, NARROWED 2026-08-06]
 
-Every non-directional interactive state is **ink/grey**, not a hue:
+Every non-directional interactive state is **ink/grey**, not a hue — with two
+exceptions the owner opened when the macOS kit went in
+[OWNER, 2026-08-06 — "같은 파랑해도 돼"]: **a highlighted menu row and a
+selected segment take the blue, and so does the focus ring.** They are the three
+places the kit fills with its accent, and porting the shape while inverting the
+colour was leaving the control looking like a different control. The blue is
+**this product's** (`--bw-down`), not the kit's: one blue, and the kit's own
+(#0088ff / #0091ff) carries a white 13px label at 3.52:1, under the floor.
+
+That the selection blue equals the down-delta blue is the cost, and it was
+weighed: a fill and a ring surround a control, a change number sits in a column,
+and no surface puts a selected chip inside a number cell.
 
 | Role | Treatment |
 |---|---|
 | Primary action (filled button) | ink fill, light label (`bg-ink` / `text-page`) |
-| Selected state (tab, segmented, list item) | dark ink pill, light label — the reference tab control |
-| Focus ring (`:focus-visible`) | ink outline |
-| Selection (`::selection`) | ink background, light text |
+| Selected segment / tab | **blue fill, page label** — the kit's accent role, this product's blue (4.63:1 light / 5.49:1 dark) |
+| Highlighted menu row (command bar, change log) | **blue band r8, page label, everything on it solid** |
+| Filter chip (screener) — a *toggle*, not a selection | ink pill: the kit's Toggle is an accent label on a 6% accent fill, which measures 4.26:1 here |
+| Focus ring (`:focus-visible`) | **blue outline**, 2px + 1px offset (kit: 3.5px accent ring at 50%) |
+| Selection (`::selection`) | ink background, light text — not a control state, and the kit does not draw it |
 | Active-tab underline / pinned-row marker | ink |
 | Heatmap / cell pulse | ink |
 | Pay/Receive diagram | no accent — the curve takes the chart-stroke blue, arrows take the direction colours |

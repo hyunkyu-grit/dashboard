@@ -81,12 +81,39 @@
   --default-transition-timing-function: var(--bw-ease-out);
 }
 
-/* Focus + selection are INK (§9, palette cut): the product carries only
- * red/blue/grey, so every non-directional interactive state is ink. `--bw-ink`
- * inverts with the theme, so the outline/selection read on both surfaces. */
-:focus-visible {
-  outline: 2px solid var(--bw-ink);
-  outline-offset: 1px;
+/* A highlighted menu row paints its WHOLE content SOLID, which is what the kit's
+ * master does — the label and the shortcut are both full white on the band,
+ * neither of them dimmed the way they are at rest. Ours has to be said in CSS
+ * because the row carries content the row itself cannot reach: a DIRECTIONAL
+ * number, which would otherwise sit blue on the blue highlight, and a secondary
+ * span at 40 percent, which on a filled band reads as damage rather than
+ * hierarchy. `inherit` takes the row's own label colour (var(--bw-page)), so
+ * this holds in both themes and needs no second value. */
+.kit-menu-item:hover *,
+.kit-menu-item[data-selected="true"] * {
+  color: inherit;
+  opacity: 1;
+}
+
+/* Focus is the ACCENT (the kit draws every focus ring in System Colors/8 Blue),
+ * and this product's blue is the one it uses [OWNER, 2026-08-06 — "같은
+ * 파랑해도 돼"]. §9's palette cut said every non-directional state is ink; that
+ * cut is now narrower — selection and focus may carry the blue, everything else
+ * stays ink. --bw-down inverts with the theme (#0064ff / #4c93ff) and measures
+ * 4.63:1 and 5.49:1 against its own page, so the ring clears the 3:1 non-text
+ * floor on both surfaces. ::selection stays ink: text selection is not a
+ * control state and the kit does not draw it.
+ *
+ * In @layer base so a component that asks for `outline-none` gets it: unlayered
+ * CSS outranks every Tailwind utility regardless of order, and this rule was
+ * unlayered — it drew a ring around the command bar's input, which sets
+ * outline-none because the field spans the popover and the ring only showed as
+ * a stray line where the surface clipped it. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--bw-down);
+    outline-offset: 1px;
+  }
 }
 ::selection {
   background: var(--bw-ink);

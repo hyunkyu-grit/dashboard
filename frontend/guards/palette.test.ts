@@ -97,6 +97,59 @@ function contrast(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
+// ── the selection blue [OWNER, 2026-08-06 — "같은 파랑해도 돼"] ──
+//
+// The kit paints a selected segment, a highlighted menu row and a focus ring in
+// its accent. The palette cut used to force those to ink, on the ground that a
+// blue state sits beside blue change numbers; the owner ruled that acceptable.
+// What is NOT negotiable is that there stays exactly ONE blue and that a label
+// on it can be read: the kit's own accent (#0088ff / #0091ff) carries a white
+// 13px label at 3.52:1, which is why the generator rewrites it to --bw-down.
+
+const kit = cssOf("theme/kit.generated.css");
+
+describe("selection blue: one blue, and legible on both themes", () => {
+  it("the generated kit CSS carries no second blue", () => {
+    // any raw hex that is more blue than it is red/green — the kit accent and
+    // the menu highlight both match, ink and the greys do not
+    const offenders = [...kit.matchAll(/#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})\b/gi)]
+      .filter((m) => {
+        const [r, g, b] = m.slice(1, 4).map((h) => parseInt(h, 16));
+        return b - Math.max(r, g) > 24;
+      })
+      .map((m) => m[0]);
+    expect(offenders, offenders.join(", ")).toEqual([]);
+  });
+
+  it("the selected fill IS the direction blue, in both themes", () => {
+    // two blocks, one rule each: light (line-initial) and dark (theme-scoped)
+    expect(kit.match(/^\.kit-seg-on \{[^}]*background: var\(--bw-down\)/m)).not.toBeNull();
+    expect(
+      kit.match(/^\[data-theme="dark"\] \.kit-seg-on \{[^}]*background: var\(--bw-down\)/m),
+    ).not.toBeNull();
+  });
+
+  it("light: page label on the blue fill", () => {
+    expect(
+      contrast(hex(lightBlock, "--bw-page"), hex(lightBlock, "--bw-down")),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+  it("dark: page label on the blue fill", () => {
+    expect(
+      contrast(hex(darkBlock, "--bw-page"), hex(darkBlock, "--bw-down")),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+  it("the focus ring clears the 3:1 non-text floor on its own page", () => {
+    // an outline is a mark, not text — 3:1 against what it sits on
+    expect(
+      contrast(hex(lightBlock, "--bw-page"), hex(lightBlock, "--bw-down")),
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      contrast(hex(darkBlock, "--bw-page"), hex(darkBlock, "--bw-down")),
+    ).toBeGreaterThanOrEqual(3);
+  });
+});
+
 describe("ink pill / fill (bg-ink + text-page) is legible in both themes", () => {
   // an ink pill inverts with the theme, so its light-page label sits on the ink
   // fill on both surfaces — must clear the 4.5:1 text floor either way.

@@ -77,7 +77,15 @@ export function CommandBar({ onJump }: { onJump: (el: HTMLElement) => void }) {
               key={entry.anchor}
               value={entry.anchor}
               onSelect={() => jump(entry)}
-              className="flex cursor-pointer items-baseline justify-between rounded-sm px-2 py-1.5 text-[13px] data-[selected=true]:bg-ink data-[selected=true]:text-page"
+              /* This list IS a macOS menu, and the kit draws one master for a
+                 highlighted row (Menus - Menu with Selection - Items - Hover):
+                 r=8, 13/Medium, the band filled with the system blue and the
+                 label inverted. cmdk marks the row the keyboard is on with
+                 data-selected, the pointer marks it with :hover, and both
+                 resolve to that one master through kit-menu-item.
+                 -mx-1 gives the band the bleed the kit draws into the menu's
+                 own padding (the kit's is 11px against this list's p-1). */
+              className="kit-menu-item -mx-1 flex cursor-pointer items-baseline justify-between rounded-control-lg px-2"
             >
               <span>{entry.label}</span>
               <span className="opacity-40">{entry.anchor}</span>

@@ -244,13 +244,15 @@ function Field({
 /* Text field, resolved off the kit (Text Fields - 3 Rg): the field is the TILE
  * surface with a 1px hairline at ink 5 percent and r=6, its text sits 6px in at
  * Medium 13, and focus is a 3.5px ring at 50 percent — not the 2px/15 percent
- * ring this had. The kit draws that ring in the accent; it stays INK here
- * because §9's palette cut reserves hue for direction, and an accent-blue ring
- * beside blue change numbers would read as data. Shape from the kit, hue not. */
+ * ring this had. The kit draws that ring in the ACCENT and it does so here too
+ * now [OWNER, 2026-08-06]: the earlier pass left it ink because a blue ring sits
+ * beside blue change numbers, and the owner ruled that acceptable — a ring
+ * surrounds a control, a number does not, so the two do not compete. The hue is
+ * this product's blue, not the kit's. */
 const INPUT =
   "rounded-control bg-tile px-1.5 py-1 text-[13px] font-medium tabular-nums " +
   "outline-none ring-1 ring-inset ring-ink/[0.05] " +
-  "focus:ring-[3.5px] focus:ring-ink/50";
+  "focus:ring-[3.5px] focus:ring-down/50";
 
 /* A <select> is a POP-UP BUTTON in the kit, not a text field, and the two do not
  * share a shape. Observed in Sketch Cloud: pop-up buttons are capsules like every
@@ -258,7 +260,7 @@ const INPUT =
  * small-radius rectangle. Both were on INPUT before, so the selects were boxes. */
 const POPUP =
   "kit-button rounded-full px-3 text-[13px] font-medium tabular-nums " +
-  "outline-none focus:ring-[3.5px] focus:ring-ink/50";
+  "outline-none focus:ring-[3.5px] focus:ring-down/50";
 
 /** The P&L line, with a hovered readout [OWNER].
  *

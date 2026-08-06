@@ -152,7 +152,8 @@ function TableRow({
       onClick={() => onPin(row)}
       /* keyboard parity with the pointer affordances: Tab reaches a row and
          previews it (focus = hover), Enter/Space pins it (key = click). The
-         global :focus-visible ink outline is the affordance. */
+         global :focus-visible outline is the affordance (accent blue since
+         2026-08-06, the way macOS draws every focus ring). */
       tabIndex={0}
       onFocus={() => onHover(row)}
       onBlur={() => onHover(null)}
@@ -502,6 +503,11 @@ export function InstrumentTable({
             which is the iOS / older-macOS control; this kit fills the selected
             segment with the accent instead. The separator and the flat Medium
             weight were missing entirely.
+            The accent is THIS PRODUCT'S blue [OWNER, 2026-08-06]: the generator
+            rewrites the kit's own blue to the down token, so the selected
+            segment, the menu highlight and the focus ring all carry one blue
+            instead of the kit's second one (which also fell under the text
+            floor beneath a white label).
             Values in words, not hex: no-raw-hex.test.ts reads source text and
             does not strip comments. */}
         {/* CAPSULE. Observed in Sketch Cloud across all five sizes: the track is
@@ -546,7 +552,12 @@ export function InstrumentTable({
                          points at the wrong label for a frame — the one place
                          where the overshoot actively contradicts the meaning. */
                       transition={instant(ENTER, reduced)}
-                      className="absolute inset-0 rounded-control bg-down"
+                      /* CAPSULE, like the segment it fills. This carried r=6
+                         from before the control became a capsule, so the
+                         indicator's corners cut inside the slot it slides
+                         through. It is the same blue the kit's own selected
+                         segment now resolves to, so the two agree. */
+                      className="absolute inset-0 rounded-full bg-down"
                     />
                   )}
                   {/* the label rides ABOVE the indicator: the indicator is a
@@ -587,6 +598,14 @@ export function InstrumentTable({
                 snapReorder("screener");
                 setScreener(on ? null : sc.id);
               }}
+              /* ON stays the INK pill even though selection may now carry the
+                 blue [OWNER, 2026-08-06]. The kit's matching control is
+                 Buttons - Toggle, whose on-state is an accent LABEL on a 6
+                 percent accent fill — and that pairing measures 4.26:1 with this
+                 product's blue, under the 4.5 text floor §9 holds every label
+                 to. A solid blue pill would clear it, but then a filter chip and
+                 a tab would look identical while meaning different things: the
+                 tab picks the list, the chip narrows it. Ink keeps them apart. */
               className={`rounded-full px-2.5 py-1 text-[12px] transition-colors ${
                 on
                   ? "bg-ink text-page"
