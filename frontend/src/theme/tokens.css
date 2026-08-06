@@ -168,3 +168,40 @@
   --bw-hue-outright: #a0a6a8;
   --bw-hue-spread: #f0b26b;
 }
+
+/* Increase contrast — the OS-level accessibility switch, which this product did
+ * not answer before [2026-08-06].
+ *
+ * Why it exists: the direction pair already clears the 4.5:1 text floor on every
+ * surface (light 4.58/4.78, dark 5.10-6.51), and that headroom was bought
+ * deliberately — #f04452 was rejected at 3.71:1 for exactly this reason. But
+ * "clears the floor" is not the same as "serves a user who has asked the OS for
+ * more contrast", and macOS/iOS/Windows all expose that request. Reading a
+ * macOS UI kit is what surfaced the gap: Apple ships a second, deeper set of
+ * every system colour and the OS swaps to it on this switch. Apple's DEFAULTS
+ * are in fact weaker than ours (their red measures 3.57:1 on their own window
+ * background, ours 4.58:1) — what they had that we did not was the switch.
+ *
+ * The hues stay frozen. Each token is its own colour scaled toward black
+ * (light) or white (dark), so hue and the red/blue opposition are untouched;
+ * only lightness moves, to AAA 7:1 on every surface of its theme.
+ *
+ * All four move together on purpose. There is ONE red and ONE blue in this
+ * product: --bw-line is the down blue (a line has no sign) and --bw-ref-policy
+ * is the up red drawn translucent. Boosting the pair without the other two
+ * would fork the palette exactly where the spec says it must not fork. */
+@media (prefers-contrast: more) {
+  :root {
+    --bw-up: #a5222e;   /* 7.01 on page, 7.32 on tile (was 4.58 / 4.78) */
+    --bw-down: #004dc4; /* 7.03 on page, 7.35 on tile (was 4.71 / 4.92) */
+    --bw-line: #004dc4;
+    --bw-ref-policy: #a5222e;
+  }
+
+  [data-theme="dark"] {
+    --bw-up: #f59aa0;   /* 9.01 / 7.96 / 7.06 across page, tile, popover */
+    --bw-down: #83b4ff; /* 8.94 / 7.91 / 7.01 */
+    --bw-line: #83b4ff;
+    --bw-ref-policy: #f59aa0;
+  }
+}
