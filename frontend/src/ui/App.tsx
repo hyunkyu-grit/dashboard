@@ -216,18 +216,22 @@ function Header({
       <span className="flex-1" />
       <ChangeLog events={events} onFocus={onFocus} />
       <DataFreshness />
-      {/* macOS PUSH BUTTON (macos component pass): bordered, sitting a step
-          above its band, rather than bare text that only differs by opacity.
-          NOT given the toolbar vibrancy macOS pairs this with — this page never
-          scrolls (§shell: body is overflow-hidden and the table scrolls in its
-          own container), so nothing ever passes under the header band. A
-          backdrop-blur there composites the same colour over itself: cost with
-          no image. Proportions and the control treatment are the parts of the
-          macOS toolbar that survive that difference. */}
+      {/* Push button, measured off the kit (Buttons - Content Area - Toggle -
+          3 Rg - Active, Off, 1 Idle): 24px tall, ink at 5 percent, SF Pro
+          Medium 13 — and NO border and NO shadow. An earlier pass here gave it
+          a border, a tile fill and shadow-sm, which is the older bordered push
+          button; this kit's is a flat tinted slab.
+          Values are stated in words, not hex: no-raw-hex.test.ts scans source
+          text without stripping comments, and a slash-star path like
+          Buttons-star-Content would also close this JSX comment early.
+          Still NOT given the toolbar vibrancy macOS pairs this with: this page
+          never scrolls (§shell — body is overflow-hidden and the table scrolls
+          in its own container), so nothing ever passes under the header band
+          and a backdrop-blur there composites the same colour over itself. */}
       <button
         type="button"
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        className="rounded-control border border-edge bg-tile px-2.5 py-1 text-[12px] text-ink/80 shadow-sm transition-colors hover:bg-page hover:text-ink"
+        className="flex h-6 items-center rounded-control bg-ink/[0.05] px-3 text-[13px] font-medium text-ink/85 transition-colors hover:bg-ink/[0.09] hover:text-ink"
       >
         {theme === "dark" ? "밝게" : "어둡게"}
       </button>

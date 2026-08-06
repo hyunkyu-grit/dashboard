@@ -483,37 +483,63 @@ export function InstrumentTable({
           Still no press-scale — a segment shares an alignment with its
           neighbours; transform press feedback stays for isolated targets. */}
       <div className="border-b border-edge pb-2">
-        <div className="inline-flex gap-[2px] rounded-control bg-ink/[0.07] p-[2px]">
-          {FILTERS.map((f) => {
+        {/* Segmented control, read OFF THE KIT rather than from memory.
+            Measured at Regular size (Segmented Controls - Content Area - Duo -
+            Active, 3 Rg, plus its two segment masters):
+              track      60x24, ink at 8 percent, no padding around the segments
+              segment    30x24, no fill when off
+              selected   accent fill, white label
+              unselected label at ~85 percent ink
+              separator  1x14 at the seam, centred in the 24px box
+              type       SF Pro Medium 13 on EVERY segment, selected included
+            An earlier pass here guessed "recessed track, raised white pill",
+            which is the iOS / older-macOS control; this kit fills the selected
+            segment with the accent instead. The separator and the flat Medium
+            weight were missing entirely.
+            Values in words, not hex: no-raw-hex.test.ts reads source text and
+            does not strip comments. */}
+        <div className="inline-flex h-6 rounded-control bg-ink/[0.08]">
+          {FILTERS.map((f, i) => {
             const on = filter === f.id;
+            const prevOn = i > 0 && filter === FILTERS[i - 1].id;
+            /* macOS draws the seam only between two UNSELECTED segments — the
+               accent fill supplies its own edge on either side of itself. */
+            const seam = i > 0 && !on && !prevOn;
             return (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => {
-                  snapReorder("other"); // view change — reorder snaps
-                  onFilter(f.id);
-                }}
-                className={`relative rounded-control-sm px-3 py-[5px] text-[13px] transition-opacity ${
-                  on ? "font-semibold" : "opacity-55 hover:opacity-90"
-                }`}
-              >
-                {on && (
-                  <motion.div
-                    layoutId="tab-underline"
-                    /* ENTER, not SPRING [OWNER, 2026-08-06]. An indicator that
-                       overshoots past the tab it is naming and comes back
-                       points at the wrong label for a frame — the one place
-                       where the overshoot actively contradicts the meaning. */
-                    transition={instant(ENTER, reduced)}
-                    className="absolute inset-0 rounded-control-sm bg-tile shadow-sm"
+              <div key={f.id} className="relative flex">
+                {seam && (
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute left-0 top-1/2 h-[14px] w-px -translate-y-1/2 bg-ink/15"
                   />
                 )}
-                {/* the label rides ABOVE the indicator: the indicator is a
-                    sibling painted at inset-0, so without this the pill covers
-                    the text it is naming. */}
-                <span className="relative z-10">{f.label}</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    snapReorder("other"); // view change — reorder snaps
+                    onFilter(f.id);
+                  }}
+                  className={`relative flex items-center rounded-control px-3 text-[13px] font-medium transition-colors ${
+                    on ? "text-white" : "text-ink/85 hover:text-ink"
+                  }`}
+                >
+                  {on && (
+                    <motion.div
+                      layoutId="tab-underline"
+                      /* ENTER, not SPRING [OWNER, 2026-08-06]. An indicator that
+                         overshoots past the tab it is naming and comes back
+                         points at the wrong label for a frame — the one place
+                         where the overshoot actively contradicts the meaning. */
+                      transition={instant(ENTER, reduced)}
+                      className="absolute inset-0 rounded-control bg-down"
+                    />
+                  )}
+                  {/* the label rides ABOVE the indicator: the indicator is a
+                      sibling painted at inset-0, so without this the fill
+                      covers the text it is naming. */}
+                  <span className="relative z-10">{f.label}</span>
+                </button>
+              </div>
             );
           })}
         </div>
