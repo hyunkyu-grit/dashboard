@@ -510,11 +510,17 @@ export function InstrumentTable({
             floor beneath a white label).
             Values in words, not hex: no-raw-hex.test.ts reads source text and
             does not strip comments. */}
-        {/* CAPSULE. Observed in Sketch Cloud across all five sizes: the track is
-            fully rounded, not the 6px box an earlier pass assumed. The masters
-            carry no radius this extractor can read, so the number could only
-            come from looking. */}
-        <div className="kit-seg inline-flex rounded-full">
+        {/* ROUNDED RECTANGLE at this size, not a capsule. The masters carry no
+            radius any extractor can read, so this could only come from looking —
+            and looking once was not enough. Sketch Cloud, Duo, all five sizes
+            side by side: 1 Mn (46x16), 2 Sm (52x20) and 3 Rg (60x24) are rounded
+            rectangles; 4 Lg (68x28) and 5 XL (76x36) are capsules. The capsule
+            starts at 28, and this control is 24. Buttons and Pop-up Buttons draw
+            the same boundary at the same height.
+            The one place 24 IS a capsule is the TOOLBAR group (Titlebars and
+            Toolbars - Medium - Buttons: 24x24, 48x24 ... all fully round), which
+            is why the header keeps its capsule and this does not. */}
+        <div className="kit-seg inline-flex rounded-control">
           {FILTERS.map((f, i) => {
             const on = filter === f.id;
             const prevOn = i > 0 && filter === FILTERS[i - 1].id;
@@ -540,7 +546,7 @@ export function InstrumentTable({
                      Selected keeps the accent fill in every state. The kit has
                      no hover step — macOS controls do not light up under an
                      idle pointer — so hover only firms the label. */
-                  className={`relative flex items-center rounded-full px-3 transition-colors ${
+                  className={`relative flex items-center rounded-control px-3 transition-colors ${
                     on ? "kit-seg-on" : "kit-seg-off"
                   }`}
                 >
@@ -552,12 +558,10 @@ export function InstrumentTable({
                          points at the wrong label for a frame — the one place
                          where the overshoot actively contradicts the meaning. */
                       transition={instant(ENTER, reduced)}
-                      /* CAPSULE, like the segment it fills. This carried r=6
-                         from before the control became a capsule, so the
-                         indicator's corners cut inside the slot it slides
-                         through. It is the same blue the kit's own selected
-                         segment now resolves to, so the two agree. */
-                      className="absolute inset-0 rounded-full bg-down"
+                      /* Same radius as the segment it fills — r=6 at this size.
+                         It is the same blue the kit's own selected segment now
+                         resolves to, so fill and shape both agree. */
+                      className="absolute inset-0 rounded-control bg-down"
                     />
                   )}
                   {/* the label rides ABOVE the indicator: the indicator is a
@@ -606,7 +610,13 @@ export function InstrumentTable({
                  to. A solid blue pill would clear it, but then a filter chip and
                  a tab would look identical while meaning different things: the
                  tab picks the list, the chip narrows it. Ink keeps them apart. */
-              className={`rounded-full px-2.5 py-1 text-[12px] transition-colors ${
+              /* On the kit's ONE ladder step, like every other control in this
+                 pane: 24 tall, 13/Medium, r=6. It was 28 tall with a 12px label
+                 and a capsule — a height that pairs with 13 in the kit, a size
+                 that is not on its type scale at all, and a shape that belongs
+                 to 28. macOS sizes controls by PANE, not by importance: a window
+                 runs Regular throughout and Small is for dense inspectors. */
+              className={`flex h-6 items-center rounded-control px-3 text-[13px] font-medium transition-colors ${
                 on
                   ? "bg-ink text-page"
                   : "border border-edge opacity-65 hover:opacity-100"

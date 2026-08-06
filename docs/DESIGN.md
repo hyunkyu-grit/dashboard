@@ -1836,7 +1836,8 @@ and no surface puts a selected chip inside a number cell.
 
 | Role | Treatment |
 |---|---|
-| Primary action (filled button) | ink fill, light label (`bg-ink` / `text-page`) |
+| Default button of a sheet (백테스트 실행) | **blue fill, page label** — macOS marks its default button with the accent |
+| Other filled buttons / pills | ink fill, light label (`bg-ink` / `text-page`) |
 | Selected segment / tab | **blue fill, page label** — the kit's accent role, this product's blue (4.63:1 light / 5.49:1 dark) |
 | Highlighted menu row (command bar, change log) | **blue band r8, page label, everything on it solid** |
 | Filter chip (screener) — a *toggle*, not a selection | ink pill: the kit's Toggle is an accent label on a 6% accent fill, which measures 4.26:1 here |

@@ -249,17 +249,26 @@ function Field({
  * beside blue change numbers, and the owner ruled that acceptable — a ring
  * surrounds a control, a number does not, so the two do not compete. The hue is
  * this product's blue, not the kit's. */
+/* h-6 is the kit's 3 Rg, and it is what makes the row line up: the field was
+ * rendering 27.5px next to 24px pop-up buttons in the same row, so the two
+ * controls' top and bottom edges sat ~1.75px apart on both sides. Same defect
+ * class as the stepper that was a rung low — each value came from the kit, but
+ * from different rungs. */
 const INPUT =
-  "rounded-control bg-tile px-1.5 py-1 text-[13px] font-medium tabular-nums " +
+  "h-6 rounded-control bg-tile px-1.5 text-[13px] font-medium tabular-nums " +
   "outline-none ring-1 ring-inset ring-ink/[0.05] " +
   "focus:ring-[3.5px] focus:ring-down/50";
 
 /* A <select> is a POP-UP BUTTON in the kit, not a text field, and the two do not
- * share a shape. Observed in Sketch Cloud: pop-up buttons are capsules like every
- * other control in macOS 27, while text fields are the one control that stays a
- * small-radius rectangle. Both were on INPUT before, so the selects were boxes. */
+ * share a shape: the pop-up carries the chevron and the field does not. Both were
+ * on INPUT before.
+ * NOT a capsule. Looked at again in Sketch Cloud at 800 percent, size by size:
+ * Pop-up Buttons 3 Rg (120x24) is a rounded RECTANGLE and 4 Lg (120x28) is the
+ * first capsule — the same 28 boundary the Buttons and Segmented families draw.
+ * The pass that made every control a capsule read the 28/36 artboards and called
+ * it a rule; 24 has a long flat run on every edge. */
 const POPUP =
-  "kit-button rounded-full px-3 text-[13px] font-medium tabular-nums " +
+  "kit-button rounded-control px-3 text-[13px] font-medium tabular-nums " +
   "outline-none focus:ring-[3.5px] focus:ring-down/50";
 
 /** The P&L line, with a hovered readout [OWNER].
@@ -1668,7 +1677,12 @@ export function BacktestWindow({
                 ])
               }
               disabled={book.length >= MAX_POSITIONS}
-              className="rounded-popover border border-edge px-3 py-2 text-[13px] hover:bg-page disabled:opacity-40 disabled:hover:bg-transparent"
+              /* 4 Lg (28) and therefore a CAPSULE — the two action buttons sit a
+                 rung above the form's 24px fields, the way a sheet's buttons do
+                 in the kit (Alerts draws Cancel / Don't Save / Save at 228x28,
+                 all three fully round). It was 37.7px tall at r=10, which is on
+                 no rung of the kit's ladder at all. */
+              className="flex h-7 items-center rounded-full border border-edge px-4 text-[13px] font-medium hover:bg-page disabled:opacity-40 disabled:hover:bg-transparent"
             >
               + 포지션 추가
             </button>
@@ -1678,7 +1692,15 @@ export function BacktestWindow({
               type="button"
               onClick={() => run.mutate()}
               disabled={!ready || run.isPending}
-              className={`min-w-[6.75rem] rounded-popover bg-ink px-5 py-2 text-center text-[14px] font-semibold text-page hover:opacity-90 disabled:opacity-40 ${
+              /* The DEFAULT button of this sheet: same 28 capsule as its
+                 neighbour, filled, and filled with the accent — that is what
+                 macOS marks a default with, and the blue is now available to
+                 non-directional states [OWNER, 2026-08-06]. Ink read as one more
+                 dark chip in a window that has several; the label carries
+                 4.63:1 light / 5.49:1 dark on this fill.
+                 14px semibold was the one label in the window off the kit's type
+                 scale — 4 Lg carries 13/Medium like every size above 20. */
+              className={`flex h-7 min-w-[6.75rem] items-center justify-center rounded-full bg-down px-5 text-center text-[13px] font-medium text-page hover:opacity-90 disabled:opacity-40 ${
                 // a full revaluation takes a beat — the pulse says the server
                 // is working; motion-safe so reduced motion sees a still label
                 run.isPending ? "motion-safe:animate-pulse" : ""
