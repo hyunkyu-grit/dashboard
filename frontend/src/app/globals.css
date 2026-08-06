@@ -98,6 +98,32 @@ html {
   font-variant-numeric: tabular-nums;
 }
 
+/* Scrollbars, observed in the kit (Scrollbars/Light|Dark): a 12px lane with NO
+ * track fill and a thin capsule thumb that floats in it. The table body is the
+ * only thing in this app that scrolls, and it was showing the platform's own
+ * bar — which on Windows is a wide, boxy, full-track control and reads nothing
+ * like the reference. `color-scheme` in tokens.css still governs the native
+ * form-control chrome; this only restyles the bar itself. */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  border: 4px solid transparent; /* inset the thumb so it reads as 4px wide */
+  border-radius: 999px;
+  background-clip: content-box;
+  background-color: color-mix(in srgb, var(--bw-ink) 28%, transparent);
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--bw-ink) 45%, transparent);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 body {
   background: var(--bw-page);
   color: var(--bw-ink);
