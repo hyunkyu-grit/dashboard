@@ -56,6 +56,9 @@
    * arbitrary `shadow-[...]` class — that form generated a rule but computed to
    * a fully transparent shadow, which only showed up by looking at the panel. */
   --shadow-popover: 0 18px 46px rgb(0 0 0 / 0.25);
+  /* Windows - Utility Panel - Active: a single low drop, tighter and darker
+   * than the popover's. Two floating depths, two shadows, both from the kit. */
+  --shadow-window: 0 5px 20px rgb(0 0 0 / 0.3);
   --radius-popover: 10px;
   --radius-card: 12px;
   --radius-sheet: 14px;

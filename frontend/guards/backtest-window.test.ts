@@ -132,11 +132,18 @@ describe("the rendered window", () => {
      * in-flow chrome. This window was the only floating surface with neither
      * shadow nor scrim — in light, popover and tile are both #ffffff (ΔL* 0),
      * so it rested entirely on a 2.47:1 hairline. The shadow is the
-     * consistency fix; the assertion is inverted deliberately, not relaxed. */
+     * consistency fix; the assertion is inverted deliberately, not relaxed.
+     *
+     * 2026-08-06: the class moved from Tailwind's `shadow-lg` preset to the
+     * `shadow-window` token, whose value is measured off the macOS kit
+     * (Windows - Utility Panel - Active: 0,5 blur 20 at black 30 percent).
+     * The preset is a two-layer stack that sits tighter and darker than the
+     * single low drop macOS uses. The assertion still pins a specific shadow
+     * class, so a future edit that drops elevation still fails here. */
     const root = /<div[^>]*role="dialog"[^>]*>/.exec(markup)?.[0] ?? "";
     expect(root).toContain("bg-popover");
     expect(root).toContain("border-edge-live");
-    expect(root).toContain("shadow-lg");
+    expect(root).toContain("shadow-window");
     // a floating window still has no full-screen dim behind it — a backdrop is
     // a FIXED full-viewport layer ("fixed inset-0"); bare "inset-0" also
     // appears inside AnimatedNumber's cross-fade span and is not a backdrop

@@ -241,9 +241,16 @@ function Field({
   );
 }
 
+/* Text field, resolved off the kit (Text Fields - 3 Rg): the field is the TILE
+ * surface with a 1px hairline at ink 5 percent and r=6, its text sits 6px in at
+ * Medium 13, and focus is a 3.5px ring at 50 percent — not the 2px/15 percent
+ * ring this had. The kit draws that ring in the accent; it stays INK here
+ * because §9's palette cut reserves hue for direction, and an accent-blue ring
+ * beside blue change numbers would read as data. Shape from the kit, hue not. */
 const INPUT =
-  "rounded-popover bg-page px-3 py-2 text-[14px] tabular-nums outline-none " +
-  "focus:ring-2 focus:ring-ink/15";
+  "rounded-control bg-tile px-1.5 py-1 text-[13px] font-medium tabular-nums " +
+  "outline-none ring-1 ring-inset ring-ink/[0.05] " +
+  "focus:ring-[3.5px] focus:ring-ink/50";
 
 /** The P&L line, with a hovered readout [OWNER].
  *
@@ -371,7 +378,7 @@ function PnlChart({
       </svg>
       {hp && (
         <div
-          className="pointer-events-none absolute top-1 rounded-popover bg-popover px-2.5 py-2 text-[12px] shadow-lg"
+          className="pointer-events-none absolute top-1 rounded-popover bg-popover px-2.5 py-2 text-[12px] shadow-popover"
           style={{ left: tipLeft, width: CARD_W }}
         >
           <div className="tabular-nums opacity-50">{hp.t}</div>
@@ -829,7 +836,7 @@ export function LinkedPnlChart({
       </svg>
       {hp && hIdx != null && (
         <div
-          className="pointer-events-none absolute top-1 rounded-popover bg-popover px-2.5 py-2 text-[12px] shadow-lg"
+          className="pointer-events-none absolute top-1 rounded-popover bg-popover px-2.5 py-2 text-[12px] shadow-popover"
           style={{ left: tipLeft, width: CARD_W }}
         >
           <div className="tabular-nums opacity-50">{hp.t}</div>
@@ -1533,7 +1540,11 @@ export function BacktestWindow({
          border-edge-live (40% ink) is the live-weight one, and it was not
          enough on its own. NO backdrop: the app behind stays fully
          interactive. */
-      className={`fixed ${Z_WINDOW} flex max-h-[88vh] flex-col overflow-hidden rounded-card border border-edge-live bg-popover shadow-lg`}
+      /* Floating-window shadow is the kit's (Windows - Utility Panel - Active):
+         0,5 blur 20 spread 0 at black 30 percent. Tailwind's shadow-lg is a
+         two-layer preset that sits tighter and darker than macOS's single
+         low drop. */
+      className={`fixed ${Z_WINDOW} flex max-h-[88vh] flex-col overflow-hidden rounded-card border border-edge-live bg-popover shadow-window`}
       /* POSITION IS A TRANSFORM, NOT left/top (pass B). Dragging wrote
          `left`/`top` on every pointermove — a layout write per event, and the
          only continuous non-composited animation in the product, on the one
