@@ -119,7 +119,7 @@ export function ChangeLog({
         onClick={() => setOpen((o) => !o)}
         /* same kit Bordered button as the theme toggle: 24px, ink 8 percent,
            Medium 13, no border, no shadow */
-        className="kit-button flex items-center rounded-control px-3 transition-colors"
+        className="kit-button flex items-center rounded-full px-3 transition-colors"
         title="어제 대비 오늘 기록된 변화 (D-1 고정)"
       >
         {n > 0 ? `변화 ${n}` : "변화 없음"}

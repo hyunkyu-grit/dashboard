@@ -250,7 +250,13 @@ function Header({
            Buttons - Content Area - Bordered - 3 Rg, idle ink 8 percent, held
            down 16, disabled 4 with the label at 25. Hover is a web-only step
            placed between idle and pressed. */
-        className="kit-button flex items-center rounded-control px-3 transition-colors"
+        /* CAPSULE, not r=6. The kit's button masters carry no radius my
+           extractor can read, and the first pass filled that blank with an
+           assumed 6px — which is why these read as boxes next to real macOS.
+           The rendered symbols in Sketch Cloud are unambiguous: every button in
+           this kit, and every button in its own Alerts examples, is a capsule.
+           Seen, not inferred. */
+        className="kit-button flex items-center rounded-full px-3 transition-colors"
       >
         {theme === "dark" ? "밝게" : "어둡게"}
       </button>

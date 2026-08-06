@@ -504,7 +504,11 @@ export function InstrumentTable({
             weight were missing entirely.
             Values in words, not hex: no-raw-hex.test.ts reads source text and
             does not strip comments. */}
-        <div className="kit-seg inline-flex rounded-control">
+        {/* CAPSULE. Observed in Sketch Cloud across all five sizes: the track is
+            fully rounded, not the 6px box an earlier pass assumed. The masters
+            carry no radius this extractor can read, so the number could only
+            come from looking. */}
+        <div className="kit-seg inline-flex rounded-full">
           {FILTERS.map((f, i) => {
             const on = filter === f.id;
             const prevOn = i > 0 && filter === FILTERS[i - 1].id;
@@ -530,7 +534,7 @@ export function InstrumentTable({
                      Selected keeps the accent fill in every state. The kit has
                      no hover step — macOS controls do not light up under an
                      idle pointer — so hover only firms the label. */
-                  className={`relative flex items-center rounded-control px-3 transition-colors ${
+                  className={`relative flex items-center rounded-full px-3 transition-colors ${
                     on ? "kit-seg-on" : "kit-seg-off"
                   }`}
                 >
