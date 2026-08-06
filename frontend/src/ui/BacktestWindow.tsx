@@ -242,7 +242,7 @@ function Field({
 }
 
 const INPUT =
-  "rounded-[10px] bg-page px-3 py-2 text-[14px] tabular-nums outline-none " +
+  "rounded-popover bg-page px-3 py-2 text-[14px] tabular-nums outline-none " +
   "focus:ring-2 focus:ring-ink/15";
 
 /** The P&L line, with a hovered readout [OWNER].
@@ -371,7 +371,7 @@ function PnlChart({
       </svg>
       {hp && (
         <div
-          className="pointer-events-none absolute top-1 rounded-[10px] bg-popover px-2.5 py-2 text-[12px] shadow-lg"
+          className="pointer-events-none absolute top-1 rounded-popover bg-popover px-2.5 py-2 text-[12px] shadow-lg"
           style={{ left: tipLeft, width: CARD_W }}
         >
           <div className="tabular-nums opacity-50">{hp.t}</div>
@@ -829,7 +829,7 @@ export function LinkedPnlChart({
       </svg>
       {hp && hIdx != null && (
         <div
-          className="pointer-events-none absolute top-1 rounded-[10px] bg-popover px-2.5 py-2 text-[12px] shadow-lg"
+          className="pointer-events-none absolute top-1 rounded-popover bg-popover px-2.5 py-2 text-[12px] shadow-lg"
           style={{ left: tipLeft, width: CARD_W }}
         >
           <div className="tabular-nums opacity-50">{hp.t}</div>
@@ -1278,7 +1278,7 @@ function PositionRow({
         onClick={onRemove}
         disabled={!removable}
         title="이 포지션 빼기"
-        className="rounded-[10px] px-2 py-2 text-[16px] opacity-40 hover:opacity-90 disabled:opacity-15"
+        className="rounded-popover px-2 py-2 text-[16px] opacity-40 hover:opacity-90 disabled:opacity-15"
       >
         ×
       </button>
@@ -1594,7 +1594,7 @@ export function BacktestWindow({
           onClick={onClose}
           onPointerDown={(e) => e.stopPropagation()}
           title="닫기"
-          className="cursor-pointer rounded-[8px] px-2 text-[15px] opacity-50 hover:opacity-100"
+          className="cursor-pointer rounded-control px-2 text-[15px] opacity-50 hover:opacity-100"
         >
           ×
         </button>
@@ -1647,7 +1647,7 @@ export function BacktestWindow({
                 ])
               }
               disabled={book.length >= MAX_POSITIONS}
-              className="rounded-[10px] border border-edge px-3 py-2 text-[13px] hover:bg-page disabled:opacity-40 disabled:hover:bg-transparent"
+              className="rounded-popover border border-edge px-3 py-2 text-[13px] hover:bg-page disabled:opacity-40 disabled:hover:bg-transparent"
             >
               + 포지션 추가
             </button>
@@ -1657,7 +1657,7 @@ export function BacktestWindow({
               type="button"
               onClick={() => run.mutate()}
               disabled={!ready || run.isPending}
-              className={`min-w-[6.75rem] rounded-[10px] bg-ink px-5 py-2 text-center text-[14px] font-semibold text-page hover:opacity-90 disabled:opacity-40 ${
+              className={`min-w-[6.75rem] rounded-popover bg-ink px-5 py-2 text-center text-[14px] font-semibold text-page hover:opacity-90 disabled:opacity-40 ${
                 // a full revaluation takes a beat — the pulse says the server
                 // is working; motion-safe so reduced motion sees a still label
                 run.isPending ? "motion-safe:animate-pulse" : ""
@@ -1691,7 +1691,7 @@ export function BacktestWindow({
           )}
 
           {unavailable && (
-            <div className="mt-6 rounded-[12px] bg-page p-4 text-[13px] leading-relaxed">
+            <div className="mt-6 rounded-card bg-page p-4 text-[13px] leading-relaxed">
               <p className="font-semibold">백엔드가 필요한 화면이에요</p>
               <p className="mt-1 opacity-60">
                 백테스트는 입력마다 답이 달라 미리 구워둘 수 없어요.

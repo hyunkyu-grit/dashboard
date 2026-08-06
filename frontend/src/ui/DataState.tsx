@@ -58,7 +58,7 @@ export function ErrorState({ what, onRetry, retrying = false, className = "" }: 
           type="button"
           onClick={onRetry}
           disabled={retrying}
-          className="rounded-[8px] border border-edge px-3 py-1 text-[13px] hover:bg-page disabled:opacity-40"
+          className="rounded-control border border-edge px-3 py-1 text-[13px] hover:bg-page disabled:opacity-40"
         >
           {retrying ? "다시 시도하는 중" : "다시 시도"}
         </button>

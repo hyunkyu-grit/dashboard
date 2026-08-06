@@ -44,7 +44,7 @@ export function RegretLine({
     <button
       type="button"
       onClick={() => onFocus(r.id)}
-      className="w-full rounded-[6px] px-2 py-1.5 text-left hover:bg-page"
+      className="w-full rounded-control px-2 py-1.5 text-left hover:bg-page"
       title={`${r.date} ${r.label} — ${r.entry}에 ${directionLabel(r.id, r.direction)}, 100억`}
     >
       <span className="flex items-baseline gap-2">

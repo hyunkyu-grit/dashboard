@@ -544,7 +544,7 @@ export function InstrumentTable({
               snapReorder("other"); // view change — reorder snaps
               setStartFilter(e.target.value);
             }}
-            className="rounded-[8px] bg-page px-2 py-1 opacity-70"
+            className="rounded-control bg-page px-2 py-1 opacity-70"
           >
             <option value="all">전체 시작</option>
             {startOptions.map((s) => (

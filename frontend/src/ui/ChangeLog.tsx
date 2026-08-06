@@ -33,7 +33,7 @@ function EventLine({
     <button
       type="button"
       onClick={() => onFocus(e.id)}
-      className="flex w-full items-baseline gap-2 rounded-[6px] px-2 py-1 text-left hover:bg-page"
+      className="flex w-full items-baseline gap-2 rounded-control px-2 py-1 text-left hover:bg-page"
       title={`${e.label} — ${e.reasons.map((r) => REASON_LABEL[r]).join(", ")}`}
     >
       <span className="min-w-0 flex-1 truncate text-[13px]">{e.label}</span>
@@ -112,7 +112,7 @@ export function ChangeLog({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="rounded-[8px] px-2 py-0.5 text-[12px] opacity-60 hover:opacity-100"
+        className="rounded-control px-2 py-0.5 text-[12px] opacity-60 hover:opacity-100"
         title="어제 대비 오늘 기록된 변화 (D-1 고정)"
       >
         {n > 0 ? `변화 ${n}` : "변화 없음"}

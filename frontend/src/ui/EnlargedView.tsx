@@ -67,7 +67,7 @@ function SixBasisReadout({
   const delta = basis === "now" ? 0 : s.deltas[basis];
   return (
     <div className="mt-3">
-      <div className="flex overflow-hidden rounded-[8px] border border-edge text-[13px]">
+      <div className="flex overflow-hidden rounded-control border border-edge text-[13px]">
         {TIME_BASES.map((b) => (
           <button
             key={b}
@@ -140,7 +140,7 @@ function LegWeights({ seriesId }: { seriesId: string }) {
 
 function StrategyRegion() {
   return (
-    <div className="mt-6 flex h-40 items-center justify-center rounded-[16px] border border-dashed border-edge text-[13px] opacity-40">
+    <div className="mt-6 flex h-40 items-center justify-center rounded-card border border-dashed border-edge text-[13px] opacity-40">
       전략 도구가 이 자리에 들어올 예정이에요
     </div>
   );
@@ -162,7 +162,7 @@ function ChartTypeToggle({
   onChartType: (t: ChartType) => void;
 }) {
   return (
-    <div className="flex overflow-hidden rounded-[8px] border border-edge text-[13px]">
+    <div className="flex overflow-hidden rounded-control border border-edge text-[13px]">
       {CHART_TYPES.map((c) => (
         <button
           key={c.id}

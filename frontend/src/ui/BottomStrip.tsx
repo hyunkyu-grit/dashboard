@@ -44,7 +44,7 @@ function Anchor({ row, onPin }: { row: Row; onPin: (row: Row) => void }) {
     <button
       type="button"
       onClick={() => onPin(row)}
-      className="flex items-baseline gap-1.5 rounded-[6px] px-1.5 py-0.5 hover:bg-page"
+      className="flex items-baseline gap-1.5 rounded-control px-1.5 py-0.5 hover:bg-page"
       title={`${row.label} 고정`}
     >
       <span className="opacity-55">{row.label}</span>

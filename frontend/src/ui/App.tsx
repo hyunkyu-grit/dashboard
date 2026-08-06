@@ -172,7 +172,7 @@ function DataFreshness() {
     return (
       <span
         title={title}
-        className="rounded-[8px] border border-up px-2 py-0.5 text-[12px] font-semibold text-up"
+        className="rounded-control border border-up px-2 py-0.5 text-[12px] font-semibold text-up"
       >
         데이터 {f.ageBusinessDays}영업일 지연 — 최신 커브가 아닐 수 있어요 · {f.asOf}
       </span>
@@ -182,7 +182,7 @@ function DataFreshness() {
     return (
       <span
         title={title}
-        className="rounded-[8px] border border-edge px-2 py-0.5 text-[12px] text-ink"
+        className="rounded-control border border-edge px-2 py-0.5 text-[12px] text-ink"
       >
         {asOf} · {f.ageBusinessDays}영업일 지연
       </span>
@@ -219,7 +219,7 @@ function Header({
       <button
         type="button"
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        className="rounded-[8px] px-2 py-0.5 text-[13px] opacity-60 hover:opacity-100"
+        className="rounded-control px-2 py-0.5 text-[13px] opacity-60 hover:opacity-100"
       >
         {theme === "dark" ? "밝게" : "어둡게"}
       </button>

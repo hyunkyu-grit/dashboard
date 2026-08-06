@@ -38,6 +38,14 @@
    * 5px x440, 6px x224, 8px x148, 10px x134. Floating surfaces sit at the top of
    * that range, so the three steps come down 12/16/20 -> 10/12/14. The utility
    * NAMES are unchanged, so no source text moves and Tailwind still emits them. */
+  /* Five steps, macOS control scale. Before this the product carried SEVEN
+   * hardcoded radii (3, 6, 8, 10, 12, 16 px plus rounded-full) scattered across
+   * 14 components, and the two semantic steps that did exist were referenced
+   * twice between them. control-sm/control are the two new ones: every
+   * in-flow control (chip, cell, small button, legend swatch) lands on one of
+   * them, and the floating trio keeps its names. */
+  --radius-control-sm: 4px;
+  --radius-control: 6px;
   --radius-popover: 10px;
   --radius-card: 12px;
   --radius-sheet: 14px;

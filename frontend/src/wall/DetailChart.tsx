@@ -490,7 +490,7 @@ export function DetailChart({
       </div>
       {tip && (
         <div
-          className="pointer-events-none absolute z-10 rounded-[8px] bg-popover p-2 text-[12px] shadow-lg"
+          className="pointer-events-none absolute z-10 rounded-control bg-popover p-2 text-[12px] shadow-lg"
           style={{ left: Math.min(width - 150, hover!.x + 12), top: Math.max(4, hover!.y - 40), width: 140 }}
         >
           {tip}

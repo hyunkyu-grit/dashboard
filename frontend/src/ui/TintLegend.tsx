@@ -29,7 +29,7 @@ export function TintLegend({ className = "" }: { className?: string }) {
     <div className={`flex flex-col gap-1 ${className}`}>
       <div className="flex items-center gap-2 text-[11px] opacity-55">
         <span>하락</span>
-        <div className="flex overflow-hidden rounded-[3px] border border-edge">
+        <div className="flex overflow-hidden rounded-control-sm border border-edge">
           {STEPS.map((a, i) => (
             <div key={`d${i}`} className="h-3 w-4" style={swatch(a, false)} />
           ))}
