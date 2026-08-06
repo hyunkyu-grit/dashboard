@@ -24,7 +24,8 @@
    * frozen. #f9fafb is the same luminance cooled (b* -0.59), which spends none
    * of that headroom: up 4.582 -> 4.577. Separation stays 1.73 -> 1.78 L*.
    * The DARK half takes the full move instead — that is where the room is. */
-  --bw-page: #f9fafb;
+  /* MACOS TEST [branch macos-token-test] — Window Background + Material/Ultra Thick */
+  --bw-page: #f6f6f6;
   --bw-tile: #ffffff;
   --bw-popover: #ffffff;
   /* Ink carries the whole chrome: text, BOTH hairlines (color-mix below), the
@@ -32,7 +33,7 @@
    * the file. Cooling it is what actually reads as the reference, since the
    * light hairline already composites to ~#e4e4e4, the right weight and the
    * wrong temperature. Now #e3e4e5, cool at the same weight. */
-  --bw-ink: #191f28;
+  --bw-ink: #262626; /* MACOS TEST — Labels/1 Primary (black @ .85) composited on white */
   --bw-border: color-mix(in srgb, var(--bw-ink) 12%, transparent);
   --bw-border-live: color-mix(in srgb, var(--bw-ink) 40%, transparent);
 
@@ -65,13 +66,14 @@
    * the table was too light to read); deepened to #d92d3c (4.78:1 on the tile,
    * 4.58:1 on the page) keeping hue + saturation (§ Session 15 Pass E1). Down
    * #0064ff is 4.92:1. Levels stay ink. */
-  --bw-up: #d92d3c;
-  --bw-down: #0064ff;
+  /* MACOS TEST — System Colors/1 Red, /8 Blue, as shipped */
+  --bw-up: #ff383c;
+  --bw-down: #0088ff;
 
   /* Chart line — BLUE (§9, Session 16 Pass E). The same blue as the down-delta
    * (a line has no sign, so there is nothing to confuse). #0064ff is 4.92:1 on
    * white (clears the 3:1 stroke floor). */
-  --bw-line: #0064ff;
+  --bw-line: #0088ff; /* MACOS TEST */
 
   /* Reference-line colours [OWNER, 2026-08-04, revised same day — "한 개는
    * 회색 실선으로, 한 개는 빨간색인데 투명도 좀 올려서 실선으로"]. Both
@@ -82,8 +84,8 @@
    * product); its heavy transparency is what keeps a horizontal reference
    * from reading as a directional mark. Both tokens clear the 3:1 stroke
    * floor per theme (guarded in band-hue-contrast). */
-  --bw-ref-cd: #6b7280;
-  --bw-ref-policy: #d92d3c;
+  --bw-ref-cd: #8e8e93;   /* MACOS TEST — Grays/Grey */
+  --bw-ref-policy: #ff383c;
 
   /* Motion — three durations and ONE curve (§14, motion pass B 2026-08-06).
    *
@@ -129,10 +131,11 @@
    * downward freely — the page drops, the card rises away from it. Separation
    * page->tile 2.99 -> 6.13 L*, tile->popover 2.91 -> 4.79 L*: more than the
    * light half could have bought even by spending a hue. Cooled to match. */
-  --bw-page: #101113;
-  --bw-tile: #1c1e21;
-  --bw-popover: #25282c;
-  --bw-ink: #f2f4f6;
+  /* MACOS TEST — Window Backgrounds/Dark + raised content surfaces */
+  --bw-page: #1e1e1e;
+  --bw-tile: #262626;
+  --bw-popover: #2e2e2e;
+  --bw-ink: #ffffff;
   /* Hairlines soften as the surfaces separate: with 6.13 L* between page and
    * card the border no longer has to carry the boundary alone, and border-live
    * at 55% was reading as a rule rather than a hairline (5.31:1 on the page).
@@ -151,15 +154,15 @@
 
   /* Direction — lighter red/blue clear 4.5:1 on the dark tile (#0064ff is
    * only ~3.4:1 there, on the surfaces as of the 2026-08-05 pass). */
-  --bw-up: #f16e77;
-  --bw-down: #4c93ff;
-  /* line = blue on dark too (§9 Pass E); #4c93ff is 5.51:1 on the dark tile. */
-  --bw-line: #4c93ff;
+  /* MACOS TEST — System Colors dark variants, as shipped */
+  --bw-up: #ff4245;
+  --bw-down: #0091ff;
+  --bw-line: #0091ff;
 
   /* Reference colours, lifted for the dark tile (the light pair sit ~2:1
    * there). Same rule as the direction pair: grey lightened, red = dark up-red. */
-  --bw-ref-cd: #9ca3af;
-  --bw-ref-policy: #f16e77;
+  --bw-ref-cd: #98989d;   /* MACOS TEST */
+  --bw-ref-policy: #ff4245;
 
   /* Dark-mode band substitutes (sub-palette, unreferenced). */
   --bw-hue-curve: #8dc8e8;
@@ -192,16 +195,16 @@
  * would fork the palette exactly where the spec says it must not fork. */
 @media (prefers-contrast: more) {
   :root {
-    --bw-up: #a5222e;   /* 7.01 on page, 7.32 on tile (was 4.58 / 4.78) */
-    --bw-down: #004dc4; /* 7.03 on page, 7.35 on tile (was 4.71 / 4.92) */
-    --bw-line: #004dc4;
-    --bw-ref-policy: #a5222e;
+    --bw-up: #d70015;   /* MACOS TEST — Apple accessible red */
+    --bw-down: #0040dd; /* MACOS TEST — Apple accessible blue */
+    --bw-line: #0040dd;
+    --bw-ref-policy: #d70015;
   }
 
   [data-theme="dark"] {
-    --bw-up: #f59aa0;   /* 9.01 / 7.96 / 7.06 across page, tile, popover */
-    --bw-down: #83b4ff; /* 8.94 / 7.91 / 7.01 */
-    --bw-line: #83b4ff;
-    --bw-ref-policy: #f59aa0;
+    --bw-up: #ff6961;   /* MACOS TEST — Apple accessible red, dark */
+    --bw-down: #409cff; /* MACOS TEST — Apple accessible blue, dark */
+    --bw-line: #409cff;
+    --bw-ref-policy: #ff6961;
   }
 }

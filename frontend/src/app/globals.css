@@ -33,9 +33,14 @@
    * pageGutter.ts documents, where a built class names a rule that was never
    * generated and the style silently does not exist. The built CSS is checked
    * for these three radii after every change to this block. */
-  --radius-popover: 12px;
-  --radius-card: 16px;
-  --radius-sheet: 20px;
+  /* MACOS TEST [branch macos-token-test] — the kit's radii run tighter than ours:
+   * Global/Radius Small 5 / Medium 6, and the on-canvas histogram peaks at
+   * 5px x440, 6px x224, 8px x148, 10px x134. Floating surfaces sit at the top of
+   * that range, so the three steps come down 12/16/20 -> 10/12/14. The utility
+   * NAMES are unchanged, so no source text moves and Tailwind still emits them. */
+  --radius-popover: 10px;
+  --radius-card: 12px;
+  --radius-sheet: 14px;
   --font-sans: "Pretendard Variable", Pretendard, sans-serif;
 
   /* Motion (§14, pass B). Tailwind's own defaults are what the two bare
@@ -70,7 +75,7 @@ body {
   background: var(--bw-page);
   color: var(--bw-ink);
   font-family: var(--font-sans);
-  font-size: 15px; /* base body 15 (§9) */
+  font-size: 13px; /* MACOS TEST — the kit's 06 Body is 13/16px; ours was 15 (§9) */
   font-weight: 400;
   /* the page never scrolls — the surface is pinned to viewport height and its
    * table body scrolls internally (§shell, Session 13). */
