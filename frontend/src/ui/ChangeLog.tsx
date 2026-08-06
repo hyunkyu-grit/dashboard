@@ -38,7 +38,7 @@ function EventLine({
          rounded rect at r=8 filled with ink at 7 percent, and it is WIDER than
          the item, bleeding 11px into the menu's own padding on each side.
          -mx-1 reproduces that bleed against this menu's p-2. */
-      className="-mx-1 flex w-full items-baseline gap-2 rounded-control-lg px-3 py-1 text-left hover:bg-ink/[0.07]"
+      className="kit-menu-item -mx-1 flex w-full items-baseline gap-2 rounded-control-lg px-3 py-1 text-left"
       title={`${e.label} — ${e.reasons.map((r) => REASON_LABEL[r]).join(", ")}`}
     >
       <span className="min-w-0 flex-1 truncate text-[13px]">{e.label}</span>
@@ -119,7 +119,7 @@ export function ChangeLog({
         onClick={() => setOpen((o) => !o)}
         /* same kit Bordered button as the theme toggle: 24px, ink 8 percent,
            Medium 13, no border, no shadow */
-        className="flex h-6 items-center rounded-control bg-ink/[0.08] px-3 text-[13px] font-medium text-ink/85 transition-colors hover:bg-ink/[0.12] hover:text-ink active:bg-ink/[0.16] disabled:bg-ink/[0.04] disabled:text-ink/25"
+        className="kit-button flex items-center rounded-control px-3 transition-colors"
         title="어제 대비 오늘 기록된 변화 (D-1 고정)"
       >
         {n > 0 ? `변화 ${n}` : "변화 없음"}

@@ -1,6 +1,12 @@
 @import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 @import "tailwindcss";
 @import "../theme/tokens.css";
+/* Component classes GENERATED from the macOS 27 kit (tools/figparse/gen-kit-css.mjs
+ * in the figma-spike sandbox). Values are read out of the .sketch mechanically
+ * rather than transcribed by hand, which is the only way the numbers stay the
+ * kit's. Regenerate; never edit. Allowlisted in guards/no-raw-hex.test.ts for
+ * that reason. */
+@import "../theme/kit.generated.css";
 
 /* Expose semantic tokens as Tailwind utilities (bg-page, text-ink, ...). */
 @theme inline {

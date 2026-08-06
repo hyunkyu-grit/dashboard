@@ -1,0 +1,171 @@
+/* GENERATED from the macOS 27 UI Kit .sketch by tools/figparse/gen-kit-css.mjs.
+   Every value below is read out of the kit, not authored here. Regenerate rather
+   than edit. Light in :root, dark under [data-theme="dark"]. */
+
+/* ---- Light ---- */
+.kit-button {
+  height: 24px;
+  background: rgb(0 0 0 / 0.08);
+  color: #363636;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 16px;
+}
+.kit-button:hover {
+  height: 24px;
+  background: rgb(0 0 0 / 0.16);
+  color: #363636;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 16px;
+}
+.kit-button:disabled {
+  height: 24px;
+  background: rgb(0 0 0 / 0.04);
+  color: rgb(0 0 0 / 0.25);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 16px;
+}
+.kit-seg {
+  height: 24px;
+  background: rgb(0 0 0 / 0.08);
+}
+.kit-seg-on {
+  height: 24px;
+  background: #0088ff;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+}
+.kit-seg-off {
+  height: 24px;
+  color: #363636;
+  font-size: 13px;
+  font-weight: 500;
+}
+.kit-seg-off:active {
+  height: 24px;
+  background: rgb(0 0 0 / 0.16);
+  color: #363636;
+  font-size: 13px;
+  font-weight: 500;
+}
+.kit-field {
+  height: 24px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.05);
+  color: rgb(0 0 0 / 0.85);
+  font-size: 13px;
+  font-weight: 500;
+}
+.kit-popover {
+  background: rgb(255 255 255 / 0.7);
+  box-shadow: 0px 18px 46px 0px rgb(0 0 0 / 0.25), 0px -4px 2px -4px #272727, 0px 4px 8px -4px #272727, 0px -1px 1.5px -0.5px #272727, 0px 1px 1.5px -0.5px #272727, 0px 2px 0.25px -1.2px #ffffff, 0px 0px 0.3px 0.3px #dbdbdb, -1.25px 0px 0px -0.75px #dbdbdb, 1.25px 0px 0px -0.75px #dbdbdb;
+}
+.kit-window {
+  background: #ffffff;
+  box-shadow: 0px 5px 20px 0px rgb(0 0 0 / 0.3);
+}
+.kit-row-selected {
+  height: 32px;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 0.11);
+  opacity: 0.5;
+  color: #363636;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 16px;
+}
+.kit-menu-item:hover {
+  height: 24px;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 0.07);
+  color: #4c4c4c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ---- Dark ---- */
+[data-theme="dark"] .kit-button {
+  height: 24px;
+  background: rgb(255 255 255 / 0.07);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 16px;
+}
+[data-theme="dark"] .kit-button:hover {
+  height: 24px;
+  background: rgb(255 255 255 / 0.16);
+  color: rgb(255 255 255 / 0.96);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 16px;
+}
+[data-theme="dark"] .kit-button:disabled {
+  height: 24px;
+  background: rgb(255 255 255 / 0.04);
+  color: rgb(255 255 255 / 0.25);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 16px;
+}
+[data-theme="dark"] .kit-seg {
+  height: 24px;
+  background: rgb(255 255 255 / 0.08);
+}
+[data-theme="dark"] .kit-seg-on {
+  height: 24px;
+  background: #0091ff;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+}
+[data-theme="dark"] .kit-seg-off {
+  height: 24px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+}
+[data-theme="dark"] .kit-seg-off:active {
+  height: 24px;
+  background: rgb(255 255 255 / 0.16);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+}
+[data-theme="dark"] .kit-field {
+  height: 24px;
+  background: #1e1e1e;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.04);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+}
+[data-theme="dark"] .kit-popover {
+  background: rgb(26 26 26 / 0.5);
+  box-shadow: 0px 18px 48px 0px rgb(0 0 0 / 0.45), 0px 0px 0.3px 0.3px rgb(166 166 166 / 0.8), 0px -4px 8px -4px #343434, 0px 4px 8px -4px #343434, 0px -1px 1.5px -0.5px #676767, 0px 1px 1.5px -0.5px #676767, 0px 2px 0.2px -1.2px rgb(255 255 255 / 0.2), 1.25px 0px 0px -0.75px #a6a6a6, -1.25px 0px 0px -0.75px #a6a6a6;
+}
+[data-theme="dark"] .kit-window {
+  background: #1e1e1e;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.2), 0px 16px 33px 0px rgb(0 0 0 / 0.4), 0px 0px 1px 0px rgb(0 0 0 / 0.8);
+}
+[data-theme="dark"] .kit-row-selected {
+  height: 32px;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.11);
+  opacity: 0.5;
+  color: rgb(255 255 255 / 0.96);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 16px;
+}
+[data-theme="dark"] .kit-menu-item:hover {
+  height: 24px;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.08);
+  color: #4c4c4c;
+  font-size: 13px;
+  font-weight: 700;
+}

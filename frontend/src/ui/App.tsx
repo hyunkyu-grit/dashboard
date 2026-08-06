@@ -239,7 +239,7 @@ function Header({
            Buttons - Content Area - Bordered - 3 Rg, idle ink 8 percent, held
            down 16, disabled 4 with the label at 25. Hover is a web-only step
            placed between idle and pressed. */
-        className="flex h-6 items-center rounded-control bg-ink/[0.08] px-3 text-[13px] font-medium text-ink/85 transition-colors hover:bg-ink/[0.12] hover:text-ink active:bg-ink/[0.16] disabled:bg-ink/[0.04] disabled:text-ink/25"
+        className="kit-button flex items-center rounded-control px-3 transition-colors"
       >
         {theme === "dark" ? "밝게" : "어둡게"}
       </button>

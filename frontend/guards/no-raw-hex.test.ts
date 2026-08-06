@@ -10,7 +10,14 @@ import { describe, expect, it } from "vitest";
 import { stripComments } from "./_source";
 
 const SRC = join(__dirname, "..", "src");
-const ALLOWLIST = new Set([["theme", "tokens.css"].join(sep)]);
+/* tokens.css is the hand-authored token layer. kit.generated.css is MACHINE
+ * WRITTEN from the macOS 27 .sketch — its hex is the kit's own, transcribed by a
+ * generator precisely so no one types it. Editing it is what is forbidden there,
+ * not the hex. */
+const ALLOWLIST = new Set([
+  ["theme", "tokens.css"].join(sep),
+  ["theme", "kit.generated.css"].join(sep),
+]);
 const HEX = /#[0-9a-fA-F]{3,8}\b/;
 
 function* walk(dir: string): Generator<string> {

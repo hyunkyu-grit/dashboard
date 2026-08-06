@@ -183,7 +183,7 @@ function TableRow({
       {active && (
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-y-0 left-1 right-1 rounded-control-lg bg-ink/[0.055]"
+          className="kit-row-selected pointer-events-none absolute inset-y-0 left-1 right-1 !h-auto"
         />
       )}
       <div role="cell" className="relative z-10 pl-3 font-semibold">
@@ -504,7 +504,7 @@ export function InstrumentTable({
             weight were missing entirely.
             Values in words, not hex: no-raw-hex.test.ts reads source text and
             does not strip comments. */}
-        <div className="inline-flex h-6 rounded-control bg-ink/[0.08]">
+        <div className="kit-seg inline-flex rounded-control">
           {FILTERS.map((f, i) => {
             const on = filter === f.id;
             const prevOn = i > 0 && filter === FILTERS[i - 1].id;
@@ -530,10 +530,8 @@ export function InstrumentTable({
                      Selected keeps the accent fill in every state. The kit has
                      no hover step — macOS controls do not light up under an
                      idle pointer — so hover only firms the label. */
-                  className={`relative flex items-center rounded-control px-3 text-[13px] font-medium transition-colors ${
-                    on
-                      ? "text-white"
-                      : "text-ink/85 hover:text-ink active:bg-ink/[0.16]"
+                  className={`relative flex items-center rounded-control px-3 transition-colors ${
+                    on ? "kit-seg-on" : "kit-seg-off"
                   }`}
                 >
                   {on && (
