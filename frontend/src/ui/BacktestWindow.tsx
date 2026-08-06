@@ -252,6 +252,14 @@ const INPUT =
   "outline-none ring-1 ring-inset ring-ink/[0.05] " +
   "focus:ring-[3.5px] focus:ring-ink/50";
 
+/* A <select> is a POP-UP BUTTON in the kit, not a text field, and the two do not
+ * share a shape. Observed in Sketch Cloud: pop-up buttons are capsules like every
+ * other control in macOS 27, while text fields are the one control that stays a
+ * small-radius rectangle. Both were on INPUT before, so the selects were boxes. */
+const POPUP =
+  "kit-button rounded-full px-3 text-[13px] font-medium tabular-nums " +
+  "outline-none focus:ring-[3.5px] focus:ring-ink/50";
+
 /** The P&L line, with a hovered readout [OWNER].
  *
  * Hand-rolled SVG like every other chart here. Two things are deliberate:
@@ -1206,7 +1214,7 @@ function PositionRow({
         <select
           value={value.id}
           onChange={(e) => set({ id: e.target.value })}
-          className={`${INPUT} max-w-[13rem]`}
+          className={`${POPUP} max-w-[13rem]`}
         >
           {choices.map((g) => (
             <optgroup key={g.group} label={g.label}>
@@ -1226,7 +1234,7 @@ function PositionRow({
         <select
           value={value.direction}
           onChange={(e) => set({ direction: Number(e.target.value) })}
-          className={`${INPUT} max-w-[16rem]`}
+          className={`${POPUP} max-w-[16rem]`}
         >
           <option value={1}>{directionLabel(value.id, 1)}</option>
           <option value={-1}>{directionLabel(value.id, -1)}</option>
