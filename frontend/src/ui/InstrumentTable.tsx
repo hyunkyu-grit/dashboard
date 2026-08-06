@@ -171,8 +171,18 @@ function TableRow({
          palette cut requires every non-directional state to be ink/grey
          (gated by palette.test.ts). So the SHAPE comes across and the hue
          does not — which is the half that was carrying the meaning anyway. */
-      className={`relative grid h-12 cursor-pointer items-center border-b border-edge ${
-        active ? "" : "hover:bg-page/50"
+      /* HOVER TAKES THE SAME GEOMETRY as selection — an inset rounded band, not
+         the edge-to-edge tint it was. The kit ships no hover master for a list
+         row (Sidebars has Default / Selected / Disabled only; macOS rows do not
+         light up under an idle pointer), but this product's hover is functional
+         — it previews the row in the pane — so the cue stays and only its SHAPE
+         moves onto the kit's. The fill is unchanged, so no number is invented.
+         `isolate` + `-z-10`: a bare pseudo-element paints above the cells and
+         would grey out the numbers it is meant to sit behind. */
+      className={`relative isolate grid h-12 cursor-pointer items-center border-b border-edge ${
+        active
+          ? ""
+          : "before:pointer-events-none before:absolute before:inset-y-0 before:left-1 before:right-1 before:-z-10 before:rounded-control-lg before:content-[''] hover:before:bg-page/50"
       }`}
     >
       {/* Measured off the kit (Sidebars - Items - Level 0 - Selected): the
