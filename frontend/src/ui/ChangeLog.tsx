@@ -33,7 +33,12 @@ function EventLine({
     <button
       type="button"
       onClick={() => onFocus(e.id)}
-      className="flex w-full items-baseline gap-2 rounded-control px-2 py-1 text-left hover:bg-page"
+      /* Menu item, resolved through the kit's instance references
+         (Menus - Regular - Menu with Selection - Items): the highlight is a
+         rounded rect at r=8 filled with ink at 7 percent, and it is WIDER than
+         the item, bleeding 11px into the menu's own padding on each side.
+         -mx-1 reproduces that bleed against this menu's p-2. */
+      className="-mx-1 flex w-full items-baseline gap-2 rounded-control-lg px-3 py-1 text-left hover:bg-ink/[0.07]"
       title={`${e.label} — ${e.reasons.map((r) => REASON_LABEL[r]).join(", ")}`}
     >
       <span className="min-w-0 flex-1 truncate text-[13px]">{e.label}</span>
@@ -123,7 +128,13 @@ export function ChangeLog({
         <>
           {/* click-away scrim */}
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-40 mt-1 max-h-[70vh] w-[320px] overflow-y-auto rounded-popover border border-edge bg-popover p-2 shadow-lg">
+          {/* Floating surface, kit values (Popovers - South-Center): the body is
+              translucent rather than opaque, and the shadow is a single large
+              soft drop at 0,18 blur 46 black 25 percent — far softer and lower
+              than the Tailwind shadow-lg it replaces. backdrop-blur is what
+              makes the translucency legible; unlike the header band, content
+              really does pass under this one. */}
+          <div className="absolute right-0 z-40 mt-1 max-h-[70vh] w-[320px] overflow-y-auto rounded-popover border border-edge bg-popover/70 p-2 shadow-popover backdrop-blur-xl">
             <div className="px-2 pb-1 text-[11px] opacity-45">
               어제 대비 변화 · D-1 고정
             </div>

@@ -50,6 +50,12 @@
    * sidebar row selection is drawn at exactly r=8. The first pass here folded
    * 8 into 6 and lost it. */
   --radius-control-lg: 8px;
+
+  /* Floating-surface shadow, kit value (Popovers - South-Center): one large soft
+   * drop, 0/18 blur 46 at black 25 percent. Declared as a token rather than an
+   * arbitrary `shadow-[...]` class — that form generated a rule but computed to
+   * a fully transparent shadow, which only showed up by looking at the panel. */
+  --shadow-popover: 0 18px 46px rgb(0 0 0 / 0.25);
   --radius-popover: 10px;
   --radius-card: 12px;
   --radius-sheet: 14px;
