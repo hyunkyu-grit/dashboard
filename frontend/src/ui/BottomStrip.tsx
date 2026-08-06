@@ -136,10 +136,15 @@ export function BottomStrip({
             a lone chevron marooned ~1,700px from the thing it controls read as
             an artefact. Everything the strip offers is now one group at the
             left; the rest of the bar is quiet chrome. */}
+        {/* Disclosure button, observed in the kit (Disclosure Buttons - Content
+            Area - 2 Sm): a 20x20 SQUARE with a small radius — not a capsule
+            like the other controls, and not bare text. Its fill is the same
+            ink 8 percent as a Bordered button, and its glyph is Bold 10, a
+            weight up from the label text so a 10px chevron still reads. */}
         <button
           type="button"
           onClick={() => onCollapsed(true)}
-          className="ml-1 px-1 opacity-45 hover:opacity-100"
+          className="ml-1 flex size-5 items-center justify-center rounded-control-sm bg-ink/[0.08] text-[10px] font-bold leading-none text-ink/85 transition-colors hover:bg-ink/[0.16]"
           title="지표 바 접기"
         >
           ▾
