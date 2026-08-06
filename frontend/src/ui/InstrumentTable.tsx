@@ -174,10 +174,16 @@ function TableRow({
         active ? "" : "hover:bg-page/50"
       }`}
     >
+      {/* Measured off the kit (Sidebars - Items - Level 0 - Selected): the
+          selection is a rounded rectangle at r=8 filled with ink at 11 percent
+          and then set to 50 percent layer opacity, i.e. about 5.5 percent
+          effective, running the FULL row height and bleeding out past the
+          row's own padding rather than sitting inset from it. The first pass
+          here guessed r=6, 8 percent and a 3px vertical inset. */}
       {active && (
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-y-[3px] left-2 right-2 rounded-control bg-ink/[0.08]"
+          className="pointer-events-none absolute inset-y-0 left-1 right-1 rounded-control-lg bg-ink/[0.055]"
         />
       )}
       <div role="cell" className="relative z-10 pl-3 font-semibold">
@@ -519,8 +525,15 @@ export function InstrumentTable({
                     snapReorder("other"); // view change — reorder snaps
                     onFilter(f.id);
                   }}
+                  /* States are the kit's, not invented. Unselected: no fill at
+                     rest, ink 16 percent while held down (its "3 - Clicked").
+                     Selected keeps the accent fill in every state. The kit has
+                     no hover step — macOS controls do not light up under an
+                     idle pointer — so hover only firms the label. */
                   className={`relative flex items-center rounded-control px-3 text-[13px] font-medium transition-colors ${
-                    on ? "text-white" : "text-ink/85 hover:text-ink"
+                    on
+                      ? "text-white"
+                      : "text-ink/85 hover:text-ink active:bg-ink/[0.16]"
                   }`}
                 >
                   {on && (

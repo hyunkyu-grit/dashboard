@@ -46,6 +46,10 @@
    * them, and the floating trio keeps its names. */
   --radius-control-sm: 4px;
   --radius-control: 6px;
+  /* 8 belongs to the kit's scale (its own canvas histogram: 8px x148) and the
+   * sidebar row selection is drawn at exactly r=8. The first pass here folded
+   * 8 into 6 and lost it. */
+  --radius-control-lg: 8px;
   --radius-popover: 10px;
   --radius-card: 12px;
   --radius-sheet: 14px;

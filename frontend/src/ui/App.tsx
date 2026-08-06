@@ -231,7 +231,10 @@ function Header({
       <button
         type="button"
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        className="flex h-6 items-center rounded-control bg-ink/[0.05] px-3 text-[13px] font-medium text-ink/85 transition-colors hover:bg-ink/[0.09] hover:text-ink"
+        /* kit state table, Buttons 3 Rg: idle ink 5 percent, held down 13,
+           disabled 2 with the label at 25. Hover is a web-only step placed
+           between idle and pressed. */
+        className="flex h-6 items-center rounded-control bg-ink/[0.05] px-3 text-[13px] font-medium text-ink/85 transition-colors hover:bg-ink/[0.09] hover:text-ink active:bg-ink/[0.13] disabled:bg-ink/[0.02] disabled:text-ink/25"
       >
         {theme === "dark" ? "밝게" : "어둡게"}
       </button>
