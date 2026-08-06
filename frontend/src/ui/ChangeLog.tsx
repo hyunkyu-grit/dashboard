@@ -119,7 +119,10 @@ export function ChangeLog({
         onClick={() => setOpen((o) => !o)}
         /* same kit Bordered button as the theme toggle: 24px, ink 8 percent,
            Medium 13, no border, no shadow */
-        className="kit-button flex items-center rounded-full px-3 transition-colors"
+        /* No shell of its own: this trigger is now a SLOT inside the header's
+           toolbar button group, which carries the capsule and the fill. See the
+           group container in App.tsx. */
+        className="flex h-6 items-center px-3 text-[13px] font-medium text-ink/85 transition-colors hover:text-ink"
         title="어제 대비 오늘 기록된 변화 (D-1 고정)"
       >
         {n > 0 ? `변화 ${n}` : "변화 없음"}

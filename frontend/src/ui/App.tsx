@@ -225,41 +225,28 @@ function Header({
       <span className="text-[17px] font-bold text-ink">Sauron</span>
       <span className="text-[13px] opacity-45">KRW IRS</span>
       <span className="flex-1" />
-      <ChangeLog events={events} onFocus={onFocus} />
       <DataFreshness />
-      {/* Push button, measured off the kit (Buttons - Content Area - Toggle -
-          3 Rg - Active, Off, 1 Idle): 24px tall, ink at 5 percent, SF Pro
-          Medium 13 — and NO border and NO shadow. An earlier pass here gave it
-          a border, a tile fill and shadow-sm, which is the older bordered push
-          button; this kit's is a flat tinted slab.
-          Values are stated in words, not hex: no-raw-hex.test.ts scans source
-          text without stripping comments, and a slash-star path like
-          Buttons-star-Content would also close this JSX comment early.
-          Still NOT given the toolbar vibrancy macOS pairs this with: this page
-          never scrolls (§shell — body is overflow-hidden and the table scrolls
-          in its own container), so nothing ever passes under the header band
-          and a backdrop-blur there composites the same colour over itself. */}
-      <button
+      {/* TOOLBAR BUTTON GROUP, observed in the kit (Titlebars and Toolbars -
+          Medium - Buttons, sizes 1 through 6): adjacent toolbar controls do not
+          sit as separate pills. They share ONE 24px capsule and are divided by
+          a hairline. These two were free-standing buttons before.
+          The group owns the shell — fill, radius, height — and each child is a
+          bare slot, so the divider lands between them rather than between two
+          rounded ends. */}
+      <div className="flex h-6 items-center overflow-hidden rounded-full bg-ink/[0.08]">
+        <ChangeLog events={events} onFocus={onFocus} />
+        <span aria-hidden className="h-3.5 w-px shrink-0 bg-ink/15" />
+        <button
         type="button"
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        /* Kit variant: BORDERED, not Toggle. The kit ships six button variants
-           (Bordered, Bordered Default, Bordered Tinted, and Destructive and
-           Borderless forms, plus Toggle) and an earlier pass here reached for
-           Toggle, which is the pressed-state control. These are plain secondary
-           actions, so Bordered is the right one, and its numbers differ:
-           Buttons - Content Area - Bordered - 3 Rg, idle ink 8 percent, held
-           down 16, disabled 4 with the label at 25. Hover is a web-only step
-           placed between idle and pressed. */
-        /* CAPSULE, not r=6. The kit's button masters carry no radius my
-           extractor can read, and the first pass filled that blank with an
-           assumed 6px — which is why these read as boxes next to real macOS.
-           The rendered symbols in Sketch Cloud are unambiguous: every button in
-           this kit, and every button in its own Alerts examples, is a capsule.
-           Seen, not inferred. */
-        className="kit-button flex items-center rounded-full px-3 transition-colors"
-      >
-        {theme === "dark" ? "밝게" : "어둡게"}
-      </button>
+          /* A bare slot. The group above owns the fill (ink 8 percent, the kit's
+             Bordered value) and the capsule; putting either here again would
+             draw a pill inside a pill. */
+          className="flex h-6 items-center px-3 text-[13px] font-medium text-ink/85 transition-colors hover:text-ink"
+        >
+          {theme === "dark" ? "밝게" : "어둡게"}
+        </button>
+      </div>
     </header>
   );
 }
