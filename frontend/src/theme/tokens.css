@@ -85,6 +85,29 @@
   --bw-ref-cd: #6b7280;
   --bw-ref-policy: #d92d3c;
 
+  /* Motion — three durations and ONE curve (§14, motion pass B 2026-08-06).
+   *
+   * These are theme-invariant, so they live in :root only. Before this block
+   * the product had SEVEN distinct durations and FOUR easing curves, and only
+   * one of the curves had been chosen on purpose: every bare `{duration: x}`
+   * inherited motion's tween default `easeInOut` and both Tailwind transition
+   * utilities inherited `cubic-bezier(.4,0,.2,1)`, so nine of ten non-spring
+   * transitions ACCELERATED on entry — the opposite of the reference.
+   *
+   * MIRRORED in src/ui/motion.ts (seconds, and the curve as a bezier array),
+   * because motion/react takes numbers and cannot read a custom property.
+   * guards/motion-tokens.test.ts fails on drift, the same arrangement
+   * theme/ramp.ts EDGE_OPACITY has with the dark hairlines.
+   *
+   * There is deliberately NO --bw-ease-spring. Exactly one surface may
+   * overshoot [OWNER, 2026-08-06] and it is the row reorder, which is a
+   * motion/react spring (physics, not a bezier) — a CSS token for it would be
+   * defined and unreferenced, which is the trap --radius-card fell into. */
+  --bw-motion-fast: 120ms; /* hover tint, focus ring, chip state */
+  --bw-motion-base: 220ms; /* every entrance */
+  --bw-motion-exit: 160ms; /* every exit — exits run shorter than entrances */
+  --bw-ease-out: cubic-bezier(0.32, 0.72, 0, 1); /* hard deceleration, no overshoot */
+
   /* Sub-palette — DEFINED BUT UNREFERENCED (Session 12); RETIRED with the
    * palette cut. Kept only so the history is legible; no component references
    * these (gated). */

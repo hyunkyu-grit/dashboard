@@ -7,7 +7,7 @@
  * preview, click → pin, Esc unpins (in App). Rows self-register in the tile
  * registry so the command bar can scroll to them. */
 
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
@@ -29,7 +29,15 @@ import {
   visibleColumns,
   type VisibleColumns,
 } from "./columns";
-import { reorderAnimates, rowShouldFlip, SPRING } from "./motion";
+import {
+  ENTER,
+  EXIT,
+  flipWindow,
+  instant,
+  reorderAnimates,
+  rowShouldFlip,
+  SPRING,
+} from "./motion";
 import { OverviewColumns } from "./OverviewColumns";
 import { PAGE_X } from "./pageGutter";
 import { RangeCells, RangeHeader } from "./RangeCells";
@@ -83,6 +91,7 @@ function TableRow({
   flip,
   orderKey,
   enter,
+  reduced,
   template,
   visible,
 }: {
@@ -97,6 +106,9 @@ function TableRow({
   orderKey: string;
   /** row entered the set via a screener toggle → fade in at destination. */
   enter: boolean;
+  /** the OS preference, resolved once by the table and passed down — 140 rows
+   * must not open 140 matchMedia subscriptions. */
+  reduced: boolean;
   /** the ONE grid definition, shared with the header (columns session). */
   template: string;
   /** which columns fit — the ladder's prefix, sorted column forced in. */
@@ -113,16 +125,25 @@ function TableRow({
       ref={registerRef}
       layout={flip ? "position" : false}
       layoutDependency={orderKey}
-      transition={SPRING}
+      /* THE ONE SIGNATURE MOMENT [OWNER, 2026-08-06]. Every other spring in
+         the product was demoted to ENTER in this pass; the reorder keeps
+         SPRING because this is the only motion §14 ranks as functional, and
+         the only one whose overshoot lands on a position the eye is already
+         tracking. */
+      transition={instant(SPRING, reduced)}
       initial={enter ? { opacity: 0 } : false}
       animate={{ opacity: 1 }}
       variants={{
         // exits fade in place (popLayout pops them out of the flow so the
         // survivors slide at the same time); the cause decides whether the
         // fade runs at all — a tab switch snaps.
+        /* The ternary is INSIDE instant() rather than around it so the route
+           is unconditional: a `transition:` that reaches motion without
+           passing through instant() is what the reduced-motion guard counts,
+           and a branch that skips it on one arm is exactly the hole. */
         exit: (fade: boolean) => ({
           opacity: 0,
-          transition: { duration: fade ? 0.14 : 0 },
+          transition: instant(fade ? EXIT : { duration: 0 }, reduced),
         }),
       }}
       exit="exit"
@@ -235,6 +256,9 @@ export function InstrumentTable({
   /** BOK base rate step, forwarded to the overview's per-column charts. */
   policy?: PolicyStep;
 }) {
+  /* Resolved ONCE here and passed to every row: `useReducedMotion` subscribes
+   * to a media query per call, and the 포워드 tab renders 140 rows. */
+  const reduced = useReducedMotion() === true;
   const [sortCol, setSortCol] = useState<BasisKey | null>(null);
   const [sortAsc, setSortAsc] = useState(false);
   const [startFilter, setStartFilter] = useState<string>("all");
@@ -343,24 +367,43 @@ export function InstrumentTable({
     return out;
   }, [shown, divided, sortCol, filter]);
 
-  /** Event-time snapshot: old row tops (tile registry) + viewport window. */
+  /** h-12. Estimates a row's destination, and sizes the snapshot window.
+   * Declared above `snapReorder` because that handler reads it. */
+  const ROW_H = 48;
+
+  /** Event-time snapshot: old row tops (tile registry) + viewport window.
+   *
+   * MEASURES A WINDOW, NOT THE WHOLE TAB (pass B). This used to loop over
+   * every row in `shown` — 140 `offsetTop` reads on the 포워드 tab, on the
+   * main thread, before the state update — and the viewport cull ran
+   * afterwards, so it never reduced this cost. It was the one step in the
+   * reorder path that was O(all rows) rather than O(animated rows), and
+   * FLIP_MAX_ROWS = 400 was three times too loose to bound it usefully.
+   *
+   * `flipWindow` picks the ≤48 rows around the viewport, which is also the
+   * only set `rowShouldFlip` can admit. Rows outside it get no snapshot
+   * entry — and a missing entry means `oldTop` is null, which
+   * `rowShouldFlip` treats as "animate" by design (never freeze a row on a
+   * missing measurement). That default is wrong here, so the window is
+   * applied to the FLIP decision too (see `flip=` below), not just to the
+   * measuring. */
   const snapReorder = (cause: "sort" | "screener" | "other") => {
     if (cause === "other") {
       setFlipSnap({ cause, scrollTop: 0, viewH: 800, tops: new Map() });
       return;
     }
+    const vp = scrollRef.current;
+    const scrollTop = vp?.scrollTop ?? 0;
+    const viewH = vp?.clientHeight ?? 800;
+    const { from, to } = flipWindow(shown.length, scrollTop, viewH, ROW_H);
     const tops = new Map<string, number>();
-    for (const r of shown) {
+    for (let i = from; i < to; i++) {
+      const r = shown[i];
+      if (!r) continue;
       const el = getTile(r.id)?.el;
       if (el) tops.set(r.id, el.offsetTop);
     }
-    const vp = scrollRef.current;
-    setFlipSnap({
-      cause,
-      scrollTop: vp?.scrollTop ?? 0,
-      viewH: vp?.clientHeight ?? 800,
-      tops,
-    });
+    setFlipSnap({ cause, scrollTop, viewH, tops });
   };
 
   const clickSort = (b: BasisKey) => {
@@ -377,11 +420,22 @@ export function InstrumentTable({
 
   // Reorder motion (Pass C): FLIP rows to their new positions on sort and on
   // screener filtering. Transform-only (layout="position"); measured only
-  // when orderKey changes; culled to the viewport's neighbourhood; instant
-  // above FLIP_MAX_ROWS and under prefers-reduced-motion (MotionConfig).
+  // when orderKey changes; culled to the viewport's neighbourhood AND capped
+  // at FLIP_MAX_ANIMATED rows (pass B); instant above FLIP_MAX_ROWS and under
+  // prefers-reduced-motion (routed through instant(), not left to MotionConfig).
   const orderKey = `${sortCol ?? ""}|${sortAsc}|${screener ?? ""}`;
   const flipOn = reorderAnimates(flipSnap.cause, shown.length);
-  const ROW_H = 48; // h-12 — used only to estimate a row's destination
+  /* The destination window, computed against the SAME arithmetic the snapshot
+   * used, so "was measured" and "may animate" cannot disagree. Without this a
+   * row outside the snapshot window has a null `oldTop`, and rowShouldFlip
+   * reads null as "animate" by design — the un-measured tail of a 140-row tab
+   * would all animate from nowhere. */
+  const flipDest = flipWindow(
+    items.length,
+    flipSnap.scrollTop,
+    flipSnap.viewH,
+    ROW_H,
+  );
 
   // The column ladder (columns session): which columns fit the measured
   // width, sorted column forced in; header and body share the template.
@@ -424,7 +478,11 @@ export function InstrumentTable({
               {on && (
                 <motion.div
                   layoutId="tab-underline"
-                  transition={SPRING}
+                  /* ENTER, not SPRING [OWNER, 2026-08-06]. An underline that
+                     overshoots past the tab it is naming and comes back
+                     points at the wrong label for a frame — the one place
+                     where the overshoot actively contradicts the meaning. */
+                  transition={instant(ENTER, reduced)}
                   className="absolute inset-x-2 -bottom-px h-[2.5px] rounded-full bg-ink"
                 />
               )}
@@ -640,6 +698,8 @@ export function InstrumentTable({
                       orderKey={orderKey}
                       flip={
                         flipOn &&
+                        i >= flipDest.from &&
+                        i < flipDest.to &&
                         rowShouldFlip(
                           flipSnap.tops.get(it.row.id) ?? null,
                           i * ROW_H,
@@ -648,6 +708,7 @@ export function InstrumentTable({
                         )
                       }
                       enter={flipOn && flipSnap.cause === "screener"}
+                      reduced={reduced}
                       template={template}
                       visible={visible}
                     />

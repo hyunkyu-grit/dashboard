@@ -20,10 +20,12 @@
  * Same register as everywhere else: terse labels, tabular numerals, no prose.
  * Collapsible, remembered; collapsed leaves a thin handle. */
 
+import { motion, useReducedMotion } from "motion/react";
 import { useSyncExternalStore } from "react";
 
 import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 
+import { ENTER, FAST, instant } from "./motion";
 import { PAGE_X } from "./pageGutter";
 import type { Row } from "./rows";
 
@@ -70,52 +72,80 @@ export function BottomStrip({
   const anchors = ANCHOR_IDS.map((id) => rows.find((r) => r.id === id)).filter(
     (r): r is Row => !!r,
   );
+  const reduced = useReducedMotion() === true;
 
-  if (collapsed) {
-    // The whole bar is the target: at 12px tall a centred 32px pill is a
-    // cruel hit area, and with nothing else on the row there is no reason
-    // for anything else to be clickable. The pill stays centred because that
-    // is the grabber shape used by the sheets elsewhere in the product — it
-    // reads as something folded away, not as an artefact.
-    return (
-      <div
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-edge bg-tile"
+  /* Collapse/expand animates (pass B). It used to be a hard cut between two
+   * different subtrees, AND the app root's paddingBottom jumped 34↔12 in the
+   * same frame, so every pane and the whole table shifted 22px at once — the
+   * only un-animated state change in the product that moved other content.
+   *
+   * HEIGHT, not transform, and that is a deliberate exception to §14's
+   * composited-only rule. Translating the strip would leave the root padding
+   * to jump on its own, which is the defect; the two have to move together or
+   * neither should. This is one property on one element, animated in step with
+   * the root's own padding transition (App.tsx) — the same trade tint.ts
+   * records for the matrix cells, made for the same reason. Reduced motion
+   * takes it to zero through instant(), and `height` is a positional key so
+   * MotionConfig would too.
+   *
+   * BOTH contents stay mounted and cross-fade. Swapping subtrees mid-height-
+   * animation is what made the old version read as a glitch rather than a
+   * fold. */
+  return (
+    <motion.div
+      className="fixed inset-x-0 bottom-0 z-40 overflow-hidden border-t border-edge bg-tile"
+      initial={false}
+      animate={{ height: collapsed ? STRIP_H.collapsed : STRIP_H.open }}
+      transition={instant(ENTER, reduced)}
+    >
+      {/* Collapsed: the whole bar is the target. At 12px tall a centred 32px
+          pill is a cruel hit area, and with nothing else on the row there is
+          no reason for anything else to be clickable. The pill is the grabber
+          shape the sheets use — it reads as something folded away, not as an
+          artefact. `absolute` so it does not fight the open row for flow
+          while both are mounted. */}
+      <motion.button
+        type="button"
+        onClick={() => onCollapsed(false)}
+        aria-hidden={!collapsed}
+        tabIndex={collapsed ? 0 : -1}
+        className="absolute inset-x-0 top-0 flex items-center justify-center"
         style={{ height: STRIP_H.collapsed }}
+        initial={false}
+        animate={{ opacity: collapsed ? 1 : 0 }}
+        transition={instant(FAST, reduced)}
+        title="지표 바 펼치기"
       >
+        <span className="block h-[3px] w-8 rounded-full bg-edge" />
+      </motion.button>
+
+      <motion.div
+        className={`absolute inset-x-0 top-0 flex items-center gap-1 text-[12px] ${PAGE_X}`}
+        style={{ height: STRIP_H.open }}
+        initial={false}
+        animate={{ opacity: collapsed ? 0 : 1 }}
+        transition={instant(FAST, reduced)}
+        // a faded-out bar must not eat clicks aimed at the handle under it
+        inert={collapsed}
+      >
+        {anchors.map((r) => (
+          <Anchor key={r.id} row={r} onPin={onPin} />
+        ))}
+        {/* The collapse control sits WITH the anchors, not at the far edge.
+            With the calendar's slot gone the bar has no right-hand content, and
+            a lone chevron marooned ~1,700px from the thing it controls read as
+            an artefact. Everything the strip offers is now one group at the
+            left; the rest of the bar is quiet chrome. */}
         <button
           type="button"
-          onClick={() => onCollapsed(false)}
-          className="flex h-full w-full items-center justify-center"
-          title="지표 바 펼치기"
+          onClick={() => onCollapsed(true)}
+          className="ml-1 px-1 opacity-45 hover:opacity-100"
+          title="지표 바 접기"
         >
-          <span className="block h-[3px] w-8 rounded-full bg-edge" />
+          ▾
         </button>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={`fixed inset-x-0 bottom-0 z-40 flex items-center gap-1 border-t border-edge bg-tile text-[12px] ${PAGE_X}`}
-      style={{ height: STRIP_H.open }}
-    >
-      {anchors.map((r) => (
-        <Anchor key={r.id} row={r} onPin={onPin} />
-      ))}
-      {/* The collapse control sits WITH the anchors, not at the far edge.
-          With the calendar's slot gone the bar has no right-hand content, and
-          a lone chevron marooned ~1,700px from the thing it controls read as
-          an artefact. Everything the strip offers is now one group at the
-          left; the rest of the bar is quiet chrome. */}
-      <button
-        type="button"
-        onClick={() => onCollapsed(true)}
-        className="ml-1 px-1 opacity-45 hover:opacity-100"
-        title="지표 바 접기"
-      >
-        ▾
-      </button>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 

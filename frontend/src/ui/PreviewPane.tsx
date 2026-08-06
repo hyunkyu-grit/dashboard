@@ -7,14 +7,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useRef } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 import { fetchSeries, type PolicyStep } from "@/lib/api";
 import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 
 import { AnimatedNumber } from "./AnimatedNumber";
 import { ErrorState, LoadingState } from "./DataState";
-import { PRESS_SCALE, SPRING } from "./motion";
+import { ENTER, EXIT, instant, PRESS_SCALE } from "./motion";
 import { PreviewChart } from "./PreviewChart";
 import { useCdReference } from "./useCdReference";
 import type { Row } from "./rows";
@@ -116,6 +116,8 @@ export function PreviewPane({
     enabled: !!row?.seriesId,
     staleTime: 30_000,
   });
+  // hooks run before any early return
+  const reduced = useReducedMotion() === true;
 
   if (!row) {
     return <Sentence>행에 올려두면 그 종목 흐름이 나와요</Sentence>;
@@ -132,8 +134,8 @@ export function PreviewPane({
           key={row.id}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
+          exit={{ opacity: 0, transition: instant(EXIT, reduced) }}
+          transition={instant(ENTER, reduced)}
         >
           <PreviewBody
             row={row}
@@ -180,6 +182,7 @@ function PreviewBody({
   onRetry: () => void;
 }) {
   // hooks run before any early return
+  const reduced = useReducedMotion() === true;
   const cd = useCdReference(row.unit, row.seriesId);
   /* The date under the cursor when the chart is clicked. A ref, not state:
    * nothing renders from it, and re-rendering the chart on every mouse move
@@ -220,7 +223,14 @@ function PreviewBody({
           whileTap={{ scale: PRESS_SCALE }}
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ ...SPRING, duration: 0.18 }}
+          /* Was `{...SPRING, duration: 0.18}`, and the duration was DEAD:
+             motion's getSpringOptions resolves stiffness/damping ahead of
+             duration/bounce, so the documented "~180ms" never existed — the
+             spring physics ran. It is ENTER now: this stopped being the
+             signature moment when the owner moved that to the row reorder
+             [2026-08-06], and a chart block appearing from nothing is exactly
+             the case where an overshoot has no object to track. */
+          transition={instant(ENTER, reduced)}
           className="cursor-pointer"
         >
           {/* the chart hover tooltip is the sole readout for a hovered date

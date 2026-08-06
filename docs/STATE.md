@@ -6,15 +6,19 @@ the **middle one is the honest boundary** — what a trader must know before
 putting weight on any number on screen. A fourth short section records **known
 and accepted** limitations (settled — neither verified-good nor open).
 
-Head at writing: the closing-session-2 Pass F commit on `master`, mirrored to
-`D:\Backups\braveworld.git` (still the only backup — no git remote).
+Head at writing: `main`, mirrored to `D:\Backups\braveworld.git` AND pushed to
+`github.com/wwoo1116-cell/swap_monitor` (the remote landed 2026-08-05; the
+"no git remote" line this file carried for several sessions, and the `master`
+branch name, were both stale).
 
 ---
 
 ## 1. Works and is verified
 
-Automated gates (**BE 68 pass / 1 skip / 1 xfail, FE 54, lint 0, build+tsc
-clean**) plus, where noted, live browser checks.
+Automated gates (**BE 244 pass / 21 skip / 1 xfail, FE 625 pass / 4 skip
+across 44 files, lint 0, build+tsc clean** as of 2026-08-06 — the 68/54 figures
+this line carried were many sessions stale) plus, where noted, live browser
+checks.
 
 **Backtest PnL decomposition — VALIDATED 2026-08-03 (V-PASS; durable in
 `tests/test_backtest_validation.py`, `_theta.py`, `_neutrality.py`,
@@ -108,12 +112,23 @@ cue. Own-history cache: cold boot 17s → warm 2s.
   is the single most important open item.
 - **The volatility tab is unreviewed by a user.** 3M reaches a genuine (not
   artefact) 12× relative-ATR; whether the tab is useful is unconfirmed.
-- **NOTHING FROM THE 2026-08-05 TOSS LINE HAS BEEN SEEN ON A SCREEN.** Three
-  passes shipped — surface tokens (`0a8448e`), Korean register (`8a43034`) and
-  geometry (this one) — and every one of them was verified by *computation and
-  source assertion only*: CIELab and WCAG arithmetic for the tokens, character
-  counts and text-metric estimates for the copy, built-CSS inspection for the
-  radius utilities, and guards throughout. That is enough to prove no contrast
+- **NOTHING FROM THE TOSS LINE HAS BEEN SEEN ON A SCREEN — now FOUR passes.**
+  Surface tokens (`0a8448e`), Korean register (`8a43034`), geometry
+  (`b8f3941`), and **motion (2026-08-06)** — every one verified by *computation
+  and source assertion only*: CIELab and WCAG arithmetic for the tokens,
+  character counts and text-metric estimates for the copy, built-CSS
+  inspection for the radius and motion utilities, and guards throughout.
+
+  The motion pass adds its own unverified surface, and it is larger than the
+  others because it changed BEHAVIOUR, not only paint: five springs demoted to
+  a shared ease, a new 220ms/160ms/120ms system replacing seven ad-hoc
+  durations, the bottom strip's fold now animated, the backtest window moved
+  onto a transform, and `lightweight-charts` kinetic scroll switched off for
+  every user. None of it has been dragged, folded or flung by a person.
+  **The A7 checklist in the pass-A report (session scratchpad
+  `sauron-motion-pass-A.md`) is the list to work through**; item 10 — does the
+  enlarged chart still feel controllable to drag with inertia gone — is the one
+  that can send a ruling back. That is enough to prove no contrast
   floor was crossed and no class silently failed to generate. It is **not**
   enough to say the product looks right.
 
@@ -167,4 +182,6 @@ cue. Own-history cache: cold boot 17s → warm 2s.
   feed is an owner decision, out of scope here.
 - **No economic calendar; no strategy tooling / P&L / notional entry** (the
   reserved popup region stays empty) — deferred by owner.
-- **No git remote** — the D: mirror is the only backup.
+- ~~No git remote~~ — RESOLVED 2026-08-05: `origin` =
+  `github.com/wwoo1116-cell/swap_monitor`; the D: mirror is the second backup
+  now rather than the only one.

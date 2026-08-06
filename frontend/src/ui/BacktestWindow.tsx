@@ -15,9 +15,13 @@
  * `bt` URL param — a second cannot exist), draggable by its HEADER only, no
  * resize, no minimize, position remembered for the session (floatingWindow.ts)
  * and clamped so the handle never leaves the viewport. Depth is a surface
- * step + the strong hairline (`border-edge-live`) — no shadow, per §9; the
- * background is opaque (sticky-opaque spirit: no translucent chrome over
- * data). Reduced motion opens/closes it instantly (`instant()`).
+ * step, the strong hairline (`border-edge-live`) AND `shadow-lg` — §9's "no
+ * elevation" rule was corrected on 2026-08-05 (it claimed one sanctioned
+ * shadow existed while six did); shadows are permitted on floating surfaces
+ * and banned on in-flow chrome, and this window is the floating surface that
+ * had neither shadow nor scrim. The background is opaque (sticky-opaque
+ * spirit: no translucent chrome over data). Position is a transform, not
+ * left/top (pass B). Reduced motion opens/closes it instantly (`instant()`).
  *
  * TOSS-STYLE, WHICH IS A CONSTRAINT ON THE NUMBERS AS MUCH AS THE PAINT
  * [OWNER standing rule]. The result is one big figure in plain Korean, and the
@@ -77,7 +81,14 @@ import {
 } from "./floatingWindow";
 import { Z_WINDOW } from "./layers";
 import { LinkedLegsChart } from "./LinkedLegsChart";
-import { ARRIVE, ARRIVE_STAGGER, instant, STAGGER_STEP } from "./motion";
+import {
+  ARRIVE,
+  ARRIVE_STAGGER,
+  ENTER,
+  EXIT,
+  instant,
+  STAGGER_STEP,
+} from "./motion";
 import { CHART_PAD, type ChartMark, PreviewChart } from "./PreviewChart";
 import { GROUP_LABEL, type Group, type Row } from "./rows";
 import { useCdReference } from "./useCdReference";
@@ -1242,7 +1253,7 @@ function PositionRow({
           className="px-1 py-2 text-[14px] tabular-nums"
           title={struck ? `${struck.t} 종가 기준` : undefined}
         >
-          {/* NUMBER_FADE (§14): the level swaps as the date is typed, and a
+          {/* AnimatedNumber (§14): the level swaps as the date is typed, and a
               cross-fade is what separates "the number changed" from a
               flicker */}
           <AnimatedNumber value={entryLevelText(struck?.v ?? null, unit)} />
@@ -1515,13 +1526,32 @@ export function BacktestWindow({
       aria-label="백테스트"
       ref={rootRef}
       tabIndex={-1}
-      /* Opaque surface + the STRONG hairline: depth by surface step + border
-         (§9), no shadow. In light theme popover and tile are both white, so
-         the hairline carries the boundary alone — border-edge-live (40% ink)
-         is the live-weight one for exactly that job. NO backdrop: the app
-         behind stays fully interactive. */
+      /* Opaque surface, the STRONG hairline, AND a shadow: depth by surface
+         step + border + elevation (§9 as corrected 2026-08-05). In light
+         theme popover and tile are both #ffffff (ΔL* 0.00), so before the
+         shadow the boundary rested entirely on a 2.47:1 hairline —
+         border-edge-live (40% ink) is the live-weight one, and it was not
+         enough on its own. NO backdrop: the app behind stays fully
+         interactive. */
       className={`fixed ${Z_WINDOW} flex max-h-[88vh] flex-col overflow-hidden rounded-card border border-edge-live bg-popover shadow-lg`}
-      style={{ left: pos.left, top: pos.top, width: WINDOW_W, maxWidth: "96vw" }}
+      /* POSITION IS A TRANSFORM, NOT left/top (pass B). Dragging wrote
+         `left`/`top` on every pointermove — a layout write per event, and the
+         only continuous non-composited animation in the product, on the one
+         surface the reader physically pushes around.
+         `x`/`y` are motion's own transform channels rather than a raw
+         `transform` string: this element also animates `scale` on entrance,
+         and a hand-written transform would fight motion for the property.
+         The element stays anchored at the viewport origin, so the clamp
+         arithmetic in floatingWindow.ts is unchanged — it still describes a
+         top-left in viewport coordinates. */
+      style={{
+        left: 0,
+        top: 0,
+        x: pos.left,
+        y: pos.top,
+        width: WINDOW_W,
+        maxWidth: "96vw",
+      }}
       /* a window MATERIALIZES — the slight scale gives it a surface arriving
          rather than a div blinking on; exit is the faster twin (§14: exits
          run shorter than entrances). `transitionEnd: display none` is the
@@ -1534,8 +1564,16 @@ export function BacktestWindow({
          stops painting AND stops hit-testing. */
       initial={{ opacity: 0, scale: 0.985 }}
       animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, transitionEnd: { display: "none" } }}
-      transition={instant({ duration: 0.15, ease: ARRIVE.ease }, reduced === true)}
+      exit={{
+        opacity: 0,
+        transitionEnd: { display: "none" },
+        transition: instant(EXIT, reduced === true),
+      }}
+      /* Was an ad-hoc 0.15s pair. It is the shared entrance now — the window
+         was the last site still carrying its own duration, and "exits run
+         shorter than entrances" is the token pair's job rather than a number
+         written here. */
+      transition={instant(ENTER, reduced === true)}
     >
       {/* the drag handle — the ONLY draggable surface, and the strip the
           clamp keeps on-screen. The close button opts out of starting a
@@ -1574,12 +1612,10 @@ export function BacktestWindow({
                 key={i}
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
+                /* the shared entrance plus a delay — the 0.2s that used to
+                   sit here was an eighth distinct duration nobody chose */
                 transition={instant(
-                  {
-                    ...ARRIVE,
-                    duration: 0.2,
-                    delay: Math.min(i, 8) * STAGGER_STEP,
-                  },
+                  { ...ARRIVE, delay: Math.min(i, 8) * STAGGER_STEP },
                   reduced === true,
                 )}
               >

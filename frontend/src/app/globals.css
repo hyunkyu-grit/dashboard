@@ -37,6 +37,16 @@
   --radius-card: 16px;
   --radius-sheet: 20px;
   --font-sans: "Pretendard Variable", Pretendard, sans-serif;
+
+  /* Motion (§14, pass B). Tailwind's own defaults are what the two bare
+   * `transition-*` utilities in the product resolve to — `.15s` and
+   * `cubic-bezier(.4,0,.2,1)`, neither of them chosen here. Pointing the
+   * DEFAULTS at the tokens is what makes `transition-opacity` and
+   * `transition-colors` obey the timing system without touching either call
+   * site or inventing a utility name. Both sites are chip/tab state, which is
+   * exactly what `fast` is for. */
+  --default-transition-duration: var(--bw-motion-fast);
+  --default-transition-timing-function: var(--bw-ease-out);
 }
 
 /* Focus + selection are INK (§9, palette cut): the product carries only
@@ -67,4 +77,34 @@ body {
   overflow: hidden;
 }
 
-/* Depth = surface steps + borders. No shadows (design spec §9). */
+/* Depth = surface steps + borders on IN-FLOW chrome; `shadow-lg` is permitted
+ * on floating surfaces (§9, corrected 2026-08-05 — the old blanket "no
+ * shadows" claim was false when it was written: six usages existed). */
+
+/* prefers-reduced-motion collapses every animation to an INSTANT state change
+ * [OWNER, 2026-08-06 — "문자 그대로 전부 instant", opacity included].
+ *
+ * This blanket is the CSS half and it is not optional: `MotionConfig
+ * reducedMotion="user"` cannot reach a CSS transition, and motion/react only
+ * zeroes TRANSFORM and layout properties even where it does reach — opacity
+ * keeps running at full duration (positionalKeys in motion@12). So before this
+ * block the two Tailwind transitions, every backdrop fade, every number
+ * cross-fade and the row enter/exit fades all still animated with the OS
+ * preference set, while DESIGN §14 claimed the opposite and the guard asserted
+ * neither. The TS half routes every `transition=` through `instant()`.
+ *
+ * Deliberately a blanket rather than a per-site rule: a future
+ * `transition-*` utility must be covered the day it is written, not the day
+ * someone remembers this file. `scroll-behavior` is here for completeness —
+ * an explicit `scrollIntoView({behavior:"smooth"})` argument outranks it, so
+ * those two call sites are gated in JS as well (ui/motion.ts). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}

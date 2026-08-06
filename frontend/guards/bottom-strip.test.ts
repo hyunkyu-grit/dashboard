@@ -40,8 +40,25 @@ describe("the anchors are a level, a slope and a forward", () => {
 describe("it is chrome, not content", () => {
   it("fixed to the viewport bottom, above the card", () => {
     expect(strip).toMatch(/fixed inset-x-0 bottom-0 z-40/);
-    // twice: the open bar and the collapsed handle
-    expect(strip.match(/fixed inset-x-0 bottom-0 z-40/g)).toHaveLength(2);
+    /* ONCE, not twice. It was twice while the two states were separate
+       subtrees returned from separate branches; pass B made collapse/expand
+       animate, which needs both contents mounted inside ONE fixed container
+       so the height can interpolate between them. The two inner layers are
+       absolutely positioned within it. */
+    expect(strip.match(/fixed inset-x-0 bottom-0 z-40/g)).toHaveLength(1);
+    expect(strip.match(/absolute inset-x-0 top-0/g)).toHaveLength(2);
+  });
+
+  it("the collapsed handle and the open bar cross-fade rather than swap", () => {
+    // a hard subtree swap mid-height-animation read as a glitch, not a fold
+    expect(strip).toMatch(/animate=\{\{ opacity: collapsed \? 1 : 0 \}\}/);
+    expect(strip).toMatch(/animate=\{\{ opacity: collapsed \? 0 : 1 \}\}/);
+  });
+
+  it("the faded-out layer cannot eat clicks aimed at the other one", () => {
+    // opacity 0 still hit-tests; both layers overlap by construction here
+    expect(strip).toMatch(/inert=\{collapsed\}/);
+    expect(strip).toMatch(/tabIndex=\{collapsed \? 0 : -1\}/);
   });
 
   it("the app root pads by the strip's height, in BOTH states", () => {

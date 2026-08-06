@@ -18,7 +18,7 @@
  * over the floating backtest window, whose state it never touches. */
 
 import { useQuery } from "@tanstack/react-query";
-import { motion, type PanInfo } from "motion/react";
+import { motion, type PanInfo, useReducedMotion } from "motion/react";
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 
@@ -34,7 +34,7 @@ import { instrumentGloss, instrumentSubtitle } from "./gloss";
 import { Z_MODAL } from "./layers";
 import { PayReceive } from "./PayReceive";
 import type { Side } from "./payReceiveModel";
-import { SHEET_SPRING } from "./motion";
+import { ENTER, EXIT, instant } from "./motion";
 import type { Row } from "./rows";
 
 /* lightweight-charts is the largest dependency in the build (196 KB raw) and
@@ -268,22 +268,28 @@ export function EnlargedView({
     if (info.offset.y > 120 || info.velocity.y > 500) onClose();
   };
 
+  /* No spring here any more [OWNER, 2026-08-06]: exactly one surface may
+   * overshoot and it is the row reorder. The sheet rises on the shared
+   * ease-out and leaves on the shorter exit. Drag-dismiss is unchanged — it
+   * follows the pointer, which is direct manipulation, not an animation. */
+  const reduced = useReducedMotion() === true;
+
   return (
     <motion.div
       className={`fixed inset-0 ${Z_MODAL} flex items-end justify-center bg-page/70`}
       onClick={onClose}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
+      exit={{ opacity: 0, transition: instant(EXIT, reduced) }}
+      transition={instant(ENTER, reduced)}
     >
       <motion.div
         className="max-h-[92vh] w-full max-w-[1000px] overflow-y-auto rounded-t-sheet bg-popover p-6 shadow-lg"
         onClick={(e) => e.stopPropagation()}
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        transition={SHEET_SPRING}
+        exit={{ y: "100%", transition: instant(EXIT, reduced) }}
+        transition={instant(ENTER, reduced)}
         drag="y"
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={{ top: 0, bottom: 0.5 }}

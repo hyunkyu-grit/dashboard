@@ -25,7 +25,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import { classify } from "./gloss";
-import { SPRING } from "./motion";
+import { ENTER } from "./motion";
 import {
   baseValue,
   diagramSpec,
@@ -141,7 +141,16 @@ function Diagram({ spec }: { spec: DiagramSpec }) {
    * one transformation, not two drawings. The solid current curve never
    * moves; the fill recomputes per frame and flips colour as q crosses 0.
    * An instrument change (different mode/band) snaps instead of morphing —
-   * a morph between two different trades would be a lie. */
+   * a morph between two different trades would be a lie.
+   *
+   * ENTER, not a spring [OWNER, 2026-08-06 — one overshoot, and it is the row
+   * reorder]. An overshoot here was actively wrong: q past ±1 draws a curve
+   * MORE deformed than the trade being described, so the diagram briefly
+   * asserted a position nobody holds. This is also the one place in the
+   * product that animates a non-composited property on purpose — `q` drives a
+   * React render per frame and the SVG `d` and polygon points are recomputed.
+   * That is allowed here and only here: it is a SCHEMATIC curve, not chart
+   * data (§14's ban is on chart path geometry, which `pane-still` guards). */
   const reduced = useReducedMotion();
   const mv = useMotionValue<number>(spec.sign);
   const [q, setQ] = useState<number>(spec.sign);
@@ -156,7 +165,7 @@ function Diagram({ spec }: { spec: DiagramSpec }) {
       setQ(spec.sign);
       return;
     }
-    const controls = animate(mv, spec.sign, SPRING);
+    const controls = animate(mv, spec.sign, ENTER);
     return () => controls.stop();
   }, [spec.sign, shapeKey, reduced, mv]);
 

@@ -5,7 +5,12 @@
  * `?tile=…` opens the enlarged view. No navigation, no basis selector. */
 
 import { useQuery } from "@tanstack/react-query";
-import { AnimatePresence, motion, MotionConfig } from "motion/react";
+import {
+  AnimatePresence,
+  motion,
+  MotionConfig,
+  useReducedMotion,
+} from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -35,7 +40,14 @@ import { diagramSpec } from "./payReceiveModel";
 import { BacktestWindow, BOOKABLE_GROUPS } from "./BacktestWindow";
 import { InstrumentTable, type TabId } from "./InstrumentTable";
 import { Z_MODAL } from "./layers";
-import { SHEET_SPRING } from "./motion";
+import {
+  EASE_OUT,
+  ENTER,
+  EXIT,
+  instant,
+  MOTION,
+  scrollIntoViewSafely,
+} from "./motion";
 import { PreviewPane } from "./PreviewPane";
 import { clearBtPatch, mergeQuery } from "./urlState";
 import { PAGE_R, PAGE_X, PAGE_X_PX } from "./pageGutter";
@@ -90,22 +102,27 @@ function PreviewSheet({
   policy?: PolicyStep;
 }) {
   const [ref, w] = useMeasure<HTMLDivElement>();
+  /* The sheet no longer springs [OWNER, 2026-08-06 — exactly one surface may
+   * overshoot, and it is the row reorder]. It rises on the shared ease-out and
+   * leaves on the shorter exit; the drag-dismiss still follows the pointer,
+   * which is direct manipulation rather than an animation. */
+  const reduced = useReducedMotion() === true;
   return (
     <motion.div
       className={`fixed inset-0 ${Z_MODAL} flex items-end justify-center bg-page/70`}
       onClick={onClose}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
+      exit={{ opacity: 0, transition: instant(EXIT, reduced) }}
+      transition={instant(ENTER, reduced)}
     >
       <motion.div
         className="max-h-[85vh] w-full overflow-y-auto rounded-t-sheet bg-popover p-5"
         onClick={(e) => e.stopPropagation()}
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        transition={SHEET_SPRING}
+        exit={{ y: "100%", transition: instant(EXIT, reduced) }}
+        transition={instant(ENTER, reduced)}
         drag="y"
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={{ top: 0, bottom: 0.5 }}
@@ -430,8 +447,12 @@ export function App() {
     );
   }, [tileParam, rowsComplete, enlargedRow, router, params]);
 
+  /* `scrollIntoViewSafely`, not a bare `behavior: "smooth"`: an explicit
+   * behaviour argument OUTRANKS `scroll-behavior: auto` from the
+   * reduced-motion blanket in globals.css, so this is one of the two paths
+   * that has to read the preference itself (ui/motion.ts). */
   const scrollTo = useCallback((el: HTMLElement) => {
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    scrollIntoViewSafely(el);
   }, []);
 
   // Change-log line → focus (§3/§12): switch to the instrument's OWN group tab
@@ -446,9 +467,10 @@ export function App() {
       setTab(row.group);
       setPinned(row);
       requestAnimationFrame(() =>
-        requestAnimationFrame(() =>
-          getTile(id)?.el.scrollIntoView({ behavior: "smooth", block: "center" }),
-        ),
+        requestAnimationFrame(() => {
+          const el = getTile(id)?.el;
+          if (el) scrollIntoViewSafely(el);
+        }),
       );
     },
     [rows],
@@ -477,9 +499,19 @@ export function App() {
         strip is fixed chrome, so padding the border-box root shortens every
         pane and scroll container inside it at once — the last row is never
         underneath the strip, collapsed or expanded. */}
+    {/* the root's padding moves WITH the strip's height (pass B). Before this
+        the 22px shift landed in a single frame and every pane jumped; the two
+        now run the same duration and curve, so the fold reads as one motion.
+        The reduced-motion blanket in globals.css zeroes this transition with
+        `!important`, which reaches an inline style. */}
     <div
       className="flex h-screen flex-col overflow-hidden bg-tile"
-      style={{ paddingBottom: stripCollapsed ? STRIP_H.collapsed : STRIP_H.open }}
+      style={{
+        paddingBottom: stripCollapsed ? STRIP_H.collapsed : STRIP_H.open,
+        transitionProperty: "padding-bottom",
+        transitionDuration: `${MOTION.base}s`,
+        transitionTimingFunction: `cubic-bezier(${EASE_OUT.join(",")})`,
+      }}
     >
         <Header events={summary?.events ?? []} onFocus={focusFromChangeLog} />
 

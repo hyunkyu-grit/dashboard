@@ -90,6 +90,21 @@ function buildOptions(width: number, height: number) {
     // orientation labels instead (round boundaries, no ticks — Pass B).
     timeScale: { visible: false, borderColor: t.border, minBarSpacing: 0.05 },
     crosshair: { mode: 0 },
+    /* KINETIC SCROLL OFF [OWNER, 2026-08-06 — provisional, re-check at QA].
+     *
+     * The library default is `{mouse: false, touch: true}`, and it was the one
+     * animation in the product that nothing knew about: it runs on the
+     * library's own rAF, outside React, outside MotionConfig, and
+     * lightweight-charts has no per-preference switch — so a fling kept
+     * coasting with prefers-reduced-motion set. §14's rule is that reduced
+     * motion is literally instant, and turning it off is the only way to
+     * comply.
+     *
+     * The cost is stated because it is not free: touch inertia is gone for
+     * EVERY reader, not only the ones who asked for less motion. If dragging
+     * the enlarged chart feels dead on a real touch device, this is the line
+     * to reopen (A7 checklist item 10). */
+    kineticScroll: { mouse: false, touch: false },
   };
   assertNoCssVars(options);
   return options;

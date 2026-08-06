@@ -9,8 +9,10 @@ import { describe, expect, it } from "vitest";
 import { code } from "./_source";
 
 import {
+  FLIP_MAX_ANIMATED,
   FLIP_MAX_ROWS,
   FLIP_NEAR_SCREENS,
+  flipWindow,
   reorderAnimates,
   rowShouldFlip,
 } from "../src/ui/motion";
@@ -25,7 +27,61 @@ describe("what animates: cause × row count", () => {
   it("above the threshold even sort snaps; the forward tab stays under it", () => {
     expect(reorderAnimates("sort", FLIP_MAX_ROWS)).toBe(true);
     expect(reorderAnimates("sort", FLIP_MAX_ROWS + 1)).toBe(false);
-    expect(168).toBeLessThanOrEqual(FLIP_MAX_ROWS); // 포워드 tab animates, culled
+    /* 포워드 is the largest tab and it animates, culled. It was written here
+     * as 168 for several sessions and the real count is 140 — rows.ts skips
+     * ON starts and xSPOT tenors, so the number in the spec had never been
+     * true. A literal asserting a stale fact against a constant can never
+     * fail and never tells the truth; this reads the row builder's actual
+     * shape instead. */
+    expect(FORWARD_ROWS).toBe(140);
+    expect(FORWARD_ROWS).toBeLessThanOrEqual(FLIP_MAX_ROWS);
+  });
+});
+
+/** The 포워드 row count the builder actually produces: 21 start points minus
+ * ON, times 8 tenors minus SPOT (ui/rows.ts). */
+const FORWARD_ROWS = (21 - 1) * (8 - 1);
+
+describe("the animated set is capped, not just culled", () => {
+  /* The cull alone scales WITH the viewport: ±1 viewport-height admits ~44
+   * rows on a 700px table and ~125 on a 2000px one, so a re-sort cost more on
+   * a bigger monitor. The cap is what makes the bound independent of it, and
+   * it is the same window the event-time snapshot measures — that loop used to
+   * be O(all rows). */
+  it("a short tab is entirely inside the window", () => {
+    expect(flipWindow(30, 0, 700, 48)).toEqual({ from: 0, to: 30 });
+  });
+
+  it("a long tab yields exactly FLIP_MAX_ANIMATED rows", () => {
+    const w = flipWindow(140, 0, 700, 48);
+    expect(w.to - w.from).toBe(FLIP_MAX_ANIMATED);
+  });
+
+  it("the window follows the scroll position", () => {
+    const top = flipWindow(140, 0, 700, 48);
+    const mid = flipWindow(140, 48 * 60, 700, 48);
+    expect(top.from).toBe(0);
+    expect(mid.from).toBeGreaterThan(top.from);
+    // centred on the viewport, not anchored to its top edge
+    expect(mid.from).toBeLessThan(60);
+    expect(mid.to).toBeGreaterThan(60);
+  });
+
+  it("it never runs off either end", () => {
+    const end = flipWindow(140, 48 * 1000, 700, 48);
+    expect(end.to).toBe(140);
+    expect(end.from).toBe(140 - FLIP_MAX_ANIMATED);
+    expect(flipWindow(140, -9999, 700, 48).from).toBe(0);
+  });
+
+  it("a zero row height cannot divide by zero", () => {
+    expect(() => flipWindow(140, 100, 700, 0)).not.toThrow();
+  });
+
+  it("the cap is smaller than the threshold it sits under", () => {
+    // FLIP_MAX_ROWS bounds whether the reorder animates AT ALL;
+    // FLIP_MAX_ANIMATED bounds how much of it does. The second must bite first.
+    expect(FLIP_MAX_ANIMATED).toBeLessThan(FLIP_MAX_ROWS);
   });
 });
 
@@ -59,5 +115,45 @@ describe("the FLIP is transform-only", () => {
   });
   it("exits pop out of the flow so they fade in place", () => {
     expect(src).toContain('mode="popLayout"');
+  });
+
+  it("the snapshot measures the window, not the whole tab", () => {
+    // the one O(all rows) step that used to survive the cull: offsetTop was
+    // read for every row in `shown` BEFORE the cull decided what could move
+    expect(src).toMatch(/flipWindow\(shown\.length/);
+    expect(src).not.toMatch(/for \(const r of shown\)/);
+  });
+
+  it("the render honours the same window the snapshot measured", () => {
+    // otherwise an unmeasured row has a null oldTop, which rowShouldFlip
+    // reads as "animate" — the whole unmeasured tail would slide from nowhere
+    expect(src).toMatch(/i >= flipDest\.from/);
+    expect(src).toMatch(/i < flipDest\.to/);
+  });
+});
+
+describe("the reorder is the ONE surface allowed to overshoot", () => {
+  const src = code("ui/InstrumentTable.tsx");
+
+  it("rows keep the spring", () => {
+    expect(src).toMatch(/transition=\{instant\(SPRING, reduced\)\}/);
+  });
+
+  it("nothing else in the product does", () => {
+    // five sites were demoted in pass B [OWNER, 2026-08-06]; SPRING must not
+    // reappear outside the row. The tab underline is in this same file, so
+    // one occurrence is the whole budget.
+    for (const f of [
+      "ui/App.tsx",
+      "ui/EnlargedView.tsx",
+      "ui/PreviewPane.tsx",
+      "ui/PayReceive.tsx",
+      "ui/AnimatedNumber.tsx",
+      "ui/BottomStrip.tsx",
+      "ui/BacktestWindow.tsx",
+    ]) {
+      expect(code(f), f).not.toMatch(/\bSPRING\b/);
+    }
+    expect((src.match(/\bSPRING\b/g) ?? []).length).toBe(2); // import + use
   });
 });

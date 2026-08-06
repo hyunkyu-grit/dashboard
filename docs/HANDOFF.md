@@ -188,9 +188,60 @@ rule:
 
 ---
 
-## 6. Current state (as of the 2026-08-05 session)
+## 6. Current state (as of the 2026-08-06 session)
 
-### Latest — the Toss line, three passes, CLOSED (2026-08-05)
+### Latest — the motion line: diagnose (pass A) → timing system (pass B), 2026-08-06
+
+Pass A wrote no code. It measured the product against the reference's motion
+properties and produced the rulings pass B needed; the full report lives
+outside the repo (session scratchpad `sauron-motion-pass-A.md`). What it found,
+condensed, because pass B acts on it:
+
+- **7 durations, 4 easing curves, and only ONE curve chosen on purpose.** Every
+  bare `{duration: x}` inherited motion's tween default `easeInOut`; both
+  Tailwind transition utilities inherited `cubic-bezier(.4,0,.2,1)`. Nine of
+  the ten non-spring transitions accelerated on entry.
+- **There were no motion tokens at all** — not defined-and-bypassed like
+  `--radius-card`, simply absent. Every value was a literal at its call site.
+- **Reduced motion did not work and the guard could not have noticed.** See
+  DESIGN §14 "Reduced motion is literally instant" — the mechanism is recorded
+  there so it is not re-diagnosed.
+- **Six surfaces overshot**, not one.
+- **FLIP was already built and correct**; the one defect was `snapReorder`
+  reading `offsetTop` for all 140 rows outside the cull.
+- Row counts in the spec were stale (168 vs 140; "전체 ~200" vs 24).
+
+**Rulings [OWNER, 2026-08-06]** — two went against the diagnosis' own
+recommendation, and the ruling won:
+
+1. reduced motion is **literally instant, opacity included** (recommendation
+   had been movement-only);
+2. **exactly one** surface overshoots — the row reorder;
+3. `--ease-out` = `cubic-bezier(0.32, 0.72, 0, 1)` (recommendation had been to
+   reuse the existing `.22,1,.36,1`);
+4. scope = timing tokens + ease · bottom strip · backtest drag → transform ·
+   reorder snapshot cap. Rolling digits and origin-anchoring are OUT.
+5. `lightweight-charts` kinetic scroll off entirely, **provisional, re-check at
+   QA** — it costs touch inertia for every user.
+
+**Pass B shipped all of it**, plus DESIGN/HANDOFF rot #1–#5. New guards:
+`motion-tokens.test.ts` (CSS↔TS mirror, three-durations-one-curve, and a
+BUILT-CSS check that is freshness-gated so it cannot pass on a stale build);
+`reduced-motion.test.ts` rewritten from a pure-function test into a per-file
+call-site count. `SHEET_SPRING` and `NUMBER_FADE` are deleted rather than left
+unreferenced.
+
+**Not done, deliberately:** no stagger was added to the reorder. It was in the
+candidate spec but no scope option covered it, and staggering rows that are
+moving to make room for each other breaks the simultaneity that makes the set
+read as one rearrangement. If it is wanted, it belongs on ENTER only and must
+be derived (`min(24ms, 200ms / n)`), never fixed — 48 rows × 24ms is 1,152ms.
+
+**Still unseen on a screen.** Pass B is verified by gates, source assertion and
+built-CSS inspection, exactly like the three Toss-line passes before it. The
+A7 checklist in the pass-A report is the owner's QA list.
+
+### Before that — the Toss line, three passes, CLOSED (2026-08-05)
 
 One line of work in three commits. **It is finished** — DESIGN §9/§15 carry the
 binding rules and §7 below carries what it left open. Do not reopen it without
@@ -626,8 +677,10 @@ topology (krw-fi-pms: NSSM service + Cloudflare tunnel + rewrite) is the model,
 and its 120s-TTFB problem does not apply here (backtest 0.6–3.4s vs simulate's
 106–118s).
 
-**Open:** `ui/EnlargedView.tsx` and `wall/DetailChart.tsx` are unreferenced —
-the chart click opens the backtest now. Deleting them costs weekly/monthly
+**Open — CORRECTED 2026-08-06: they are NOT unreferenced.** `EnlargedView` is
+rendered by `App` on `?tile=` and reached by the 크게 보기 button in the preview
+pane header (`PreviewPane.tsx`); it lazy-loads `DetailChart` through
+`next/dynamic`. What is true is that the CHART CLICK opens the backtest instead. Deleting them costs weekly/monthly
 candles and the six-basis readout, which the owner has not ruled on. They carry
 a ⚠ note. [RESOLVED 2026-08-04: both live again — the backtest moved to a
 floating window and `?tile=` returned to the enlarged view.]
@@ -1446,7 +1499,11 @@ not have to re-derive it:
     `touch-action: manipulation`, ~28px close target, pinned-viewport shell;
   - **no `aria-live`** on the backtest result arriving (errors have `role="alert"`);
   - **`<title>` is static** — it does not follow the enlarged view or the window;
-  - **~200 rows render unvirtualized** on the 전체 tab (the guideline says >50);
+  - **140 rows render unvirtualized** on the 포워드 tab (the guideline says
+    >50). This said "~200 rows on the 전체 tab" until 2026-08-06 and both
+    halves were wrong: 전체 is the 24-row three-column overview, not a list.
+    Note the reorder does NOT depend on virtualization landing — FLIP's cost is
+    O(animated rows) and is capped at 48 (§14);
   - no `<meta name="theme-color">`; loading copy lacks the `…` character.
 - **Layout sizing after the register change was ESTIMATED, not measured.** Text
   metrics (Hangul ≈ 1.0em, Latin ≈ 0.52em) say no container changed line count

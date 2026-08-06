@@ -382,8 +382,11 @@ parallel to everything — table, tabs, pins and the enlarged view keep working
 underneath it. Mechanics deliberately minimal (`ui/floatingWindow.ts`): ONE
 instance (presence IS the `bt` URL param), draggable by its HEADER only, no
 resize, no minimize; position is session memory, clamped so the handle never
-leaves the viewport; opaque surface + `border-edge-live` hairline, no shadow
-(§9), no backdrop; `Z_WINDOW` above chrome, BELOW modals. The URL split into
+leaves the viewport; opaque surface + `border-edge-live` hairline + the
+sanctioned `shadow-lg` (§9 as CORRECTED 2026-08-05 — the old blanket "no
+shadow" claim was false when written, and this window was the one floating
+surface with neither shadow nor scrim), no backdrop; position is a TRANSFORM
+rather than left/top (motion pass B), `Z_WINDOW` above chrome, BELOW modals. The URL split into
 namespaces (`ui/urlState.ts`): `tile`/`type` for the enlarged view,
 `bt`/`bti`/`btf` for the window, every write through `mergeQuery`, which
 patches only its own keys — the STRUCTURAL fix for the back-wipes-the-popup
@@ -2080,21 +2083,31 @@ band card expanding into its view) went with them. This list is what later
 sessions work from — do not reinstate motion designed for the retired layout.
 
 **Present:**
-1. **Tab underline** — single sliding indicator (`layoutId`), SPRING.
-2. **Enlarged sheet** — backdrop fade (200ms) + sheet slide-up (SHEET_SPRING)
+1. **Tab underline** — single sliding indicator (`layoutId`), ENTER
+   (was SPRING until pass B).
+2. **Enlarged sheet** — backdrop fade + sheet slide-up on ENTER, exit on EXIT,
    + drag-to-dismiss; the single-column preview sheet mirrors it.
-3. **Preview chart entrance** — fade + scale-from-0.98 pop-in, keyed by
-   series, after the ~120ms hover delay.
+3. **Preview chart entrance** — fade + scale-from-0.98, keyed by series, after
+   the ~120ms hover delay. It was documented as "the signature moment (~180ms)"
+   and BOTH halves were wrong: the owner moved the signature to the row reorder
+   (2026-08-06), and the ~180ms never existed — `{...SPRING, duration: 0.18}`
+   is resolved by motion as a spring, since `getSpringOptions` takes
+   stiffness/damping ahead of duration/bounce. The dead value is deleted.
 4. **Press-scale (0.98)** — on the preview chart block only. NOT on table
    rows: the old `<table>` couldn't transform rows; §14's press rule kept it
    to isolated targets. (The Pass-A grid conversion makes rows transformable
    again; row press-scale stays out until a session decides it.)
-5. **Changed-number cross-fade** (AnimatedNumber, ~180ms).
-6. `prefers-reduced-motion` → MotionConfig collapses everything to instant.
+5. **Changed-number cross-fade** (AnimatedNumber) — on three readouts, never
+   in the table.
+6. `prefers-reduced-motion` → instant, in CSS and TS both (pass B). The old
+   claim that MotionConfig alone did this was false; see "Reduced motion is
+   literally instant" below.
 
 **Recorded in §14 but NOT in the current build (stale spec):** the heatmap
 hover pulse (the calendar heatmap has no pulse) and "rows scale to 0.98"
-(they never did in the list-first table).
+(they never did in the list-first table). Both were ALSO left standing in the
+"Rules (carried forward)" block for several sessions, which is the half a
+reader treats as live; the pulse line is deleted from it as of pass B.
 
 **Missing — structural losses this session addresses:**
 - Row reorder on sort / screener filter teleports → **Pass C** (functional:
@@ -2118,10 +2131,25 @@ Rules, pinned by `guards/reorder.test.ts`:
 - **Viewport-culled**: a row animates only if its old or new position is
   within one viewport-height of the visible window; everything else jumps.
 - **Threshold = 400 rows** (`FLIP_MAX_ROWS`): above it the reorder is instant.
-  With culling, the 168-row forward tab and ~200-row 전체 stay animated —
-  only ~15–30 rows actually move on screen; the threshold bounds the
-  per-row DOM-read bookkeeping, not the paint cost.
-- `prefers-reduced-motion` reorders instantly (MotionConfig).
+  No tab reaches it — 포워드 is the largest at **140** rows, not the 168 this
+  line claimed for several sessions (`rows.ts` skips ON starts and xSPOT
+  tenors, so the spec's number had never been true), and 전체 is not a list at
+  all any more but the 24-row three-column overview.
+- **Cap = 48 rows** (`FLIP_MAX_ANIMATED`, pass B), a hard slice ON TOP of the
+  geometric cull. The cull alone scales WITH the viewport — ±1 viewport-height
+  admits ~44 rows on a 700px table and ~125 on a 2000px one — so a re-sort used
+  to cost more on a bigger monitor. 48 is ~2.5× the ~19 rows visible at 48px in
+  a ~900px table: enough slack for rows that scroll into view mid-animation,
+  and a bound that does not move. A row outside the viewport cannot be tracked
+  by the eye, which is the entire job of this motion.
+- **The same window is what gets MEASURED.** `snapReorder` used to read
+  `offsetTop` for every row in `shown` at event time, on the main thread,
+  BEFORE the cull decided what could move — the one O(all rows) step in the
+  path. It measures `flipWindow(...)` now. The render honours the same window,
+  because an unmeasured row has a null `oldTop` and `rowShouldFlip` reads null
+  as "animate" by design.
+- `prefers-reduced-motion` reorders instantly (routed through `instant()`, not
+  left to MotionConfig — see below).
 
 ### Pay/Receive morph + preview cross-fade [motion session, Pass D]
 
@@ -2187,31 +2215,118 @@ plain `onPin={setPinned}`, corner label present).
 - **Themes**: passes A–E exercised in dark; grid + morphs re-checked in
   light.
 
+### The timing system [motion pass B, 2026-08-06 — THE LIVE RULE]
+
+**Three durations and one curve.** Defined in `theme/tokens.css`, mirrored in
+`ui/motion.ts` because motion/react takes numbers and cannot read a custom
+property; `guards/motion-tokens.test.ts` fails on drift and also reads the
+BUILT stylesheet (the `--radius-card` lesson).
+
+| Token | Value | Use |
+|---|---|---|
+| `--bw-motion-fast` | 120ms | hover tint, focus ring, chip state |
+| `--bw-motion-base` | 220ms | every entrance |
+| `--bw-motion-exit` | 160ms | every exit |
+| `--bw-ease-out` | `cubic-bezier(0.32, 0.72, 0, 1)` | the only curve |
+
+Tailwind's `--default-transition-duration` / `--default-transition-timing-function`
+point at the tokens, which is how `transition-opacity` and `transition-colors`
+obey the system without either call site naming a number.
+
+**What this replaced, so it is not re-derived:** seven distinct durations
+(0.14 / 0.15 / 0.18 / 0.2 / 0.25 / 0.3 / 2.0s) and four easing curves, of which
+exactly ONE had been chosen deliberately. Every bare `{duration: x}` inherited
+motion's tween default `easeInOut` and both Tailwind utilities inherited
+`cubic-bezier(.4,0,.2,1)` — so nine of the ten non-spring transitions in the
+product ACCELERATED on entry, the opposite of the reference. There were no
+motion tokens at all; the failure was not a bypassed token layer but the
+absence of one.
+
+**Exits never overshoot and always run shorter than their entrance.**
+
+### The one signature moment [OWNER, 2026-08-06]
+
+**Exactly one surface may overshoot, and it is the ROW REORDER.** It keeps
+`SPRING` (stiffness 400, damping 30, ζ ≈ 0.75). Five sites were demoted to
+`ENTER` in the same pass: the tab underline, the preview chart entrance, the
+pay/receive morph, and both bottom sheets. `SHEET_SPRING` was deleted rather
+than left defined-and-unreferenced.
+
+Why the reorder: §14 ranks it as the only motion here that is functional rather
+than decorative, and it is the only candidate whose overshoot lands on a
+POSITION the eye is already tracking rather than on a surface arriving from
+nothing. A row that overshoots and settles reads as "this one landed here".
+Pinning was the other candidate and is REJECTED — it already carries three
+non-motion acknowledgments, and §14 closed that question when the ghost gesture
+was removed. Do not re-derive it.
+
+The tab underline's demotion has its own reason: an underline that overshoots
+past the tab it is naming points at the wrong label for a frame.
+
 ### Rules (carried forward)
 
-- Library: `motion` (framer-motion's successor). Springs may overshoot: ~stiff
-  400, damping 30; durations 200–280ms.
-- **Right-pane chart entrance is the signature moment** — it pops in: fade +
-  scale from 0.98 with the spring (~180ms), AFTER the ~120ms hover delay.
+- Library: `motion` (framer-motion's successor).
 - **Tooltip** follows the cursor with no spring lag — it should feel attached.
-- **Heatmap pulse**: two cycles ~600ms each, then settle to a static ink
-  outline while the date stays hovered.
-- **Enlarged sheet** springs up from the bottom; drag-to-dismiss follows the
-  pointer.
+- **Enlarged sheet** rises from the bottom on `ENTER`; drag-to-dismiss follows
+  the pointer (direct manipulation, not an animation).
 - **Tabs** use a single sliding underline (`motion` shared-layout `layoutId`),
   not a fading pill — one element moving reads as a pointer; two fading
-  elements read as a blob. Same spring (~200–260ms). The active tab's label
-  goes weight 600 (no colour change beyond ink strength). Under reduced motion
-  the underline jumps.
+  elements read as a blob. The active tab's label goes weight 600 (no colour
+  change beyond ink strength). Under reduced motion the underline jumps.
 - **Press-feedback rule [Session 13]:** transform-based press-scale (0.98) is
   applied ONLY to isolated targets — table rows and standalone buttons — never
   to an element that shares an alignment with its neighbours. Tabs, table
   headers, and table cells get colour/background transitions only; a scale on
   them wobbles and breaks the shared baseline. (In practice table rows use a
   background change too, since CSS transforms do not apply to `table-row`.)
-- A changed number cross-fades. No digit-rolling library.
-- `prefers-reduced-motion` collapses every animation to instant (asserted by a
-  test).
+- **A changed number cross-fades — on THREE readouts only** (the preview pane's
+  hero level and the two backtest entry levels). The table's ~1,960 numbers do
+  not animate on refresh and must not: a level that moves in a rates monitor
+  reads as a live tick, which is what `pane-still` exists to prevent. No
+  digit-rolling library, and rolling digits are OUT OF SCOPE [OWNER,
+  2026-08-06].
+- **Column appear/drop never animates** — it is a layout change, not a state
+  change (`columns.ts`, `guards/table-grid.test.ts`).
+- **`prefers-reduced-motion` collapses every animation to instant, opacity
+  included** [OWNER, 2026-08-06]. This is now TRUE rather than merely claimed;
+  see below.
+
+### Reduced motion is literally instant [OWNER, 2026-08-06]
+
+The previous wording of this rule ("collapses every animation to instant
+(asserted by a test)") was false in **both** halves, and the way it was false
+is worth keeping:
+
+- `MotionConfig reducedMotion="user"` zeroes only TRANSFORM and layout
+  properties. motion@12's `positionalKeys` is
+  `{width,height,top,left,right,bottom} ∪ transforms` — **`opacity` is not in
+  it**, so every cross-fade, every backdrop and every row enter/exit fade ran
+  at full duration with the preference set.
+- Tailwind's `transition-opacity` / `transition-colors` are CSS; MotionConfig
+  cannot reach them, and the built stylesheet contained no
+  `prefers-reduced-motion: reduce` block at all.
+- `scrollIntoView({behavior:"smooth"})` outranks `scroll-behavior`.
+- The guard asserted none of it: it tested the pure function `instant()`, which
+  had exactly one consumer in the product. It would have passed with the rule
+  deleted everywhere.
+
+The rule holds in three places now, and all three are guarded:
+
+1. **CSS** — a blanket `@media (prefers-reduced-motion: reduce)` in
+   `app/globals.css` zeroing `transition-duration`, `animation-duration` and
+   `animation-iteration-count`. A blanket on purpose: a future
+   `transition-*` utility is covered the day it is written.
+2. **TS** — every authored `transition=` routes through `instant()`.
+   `guards/reduced-motion.test.ts` COUNTS the call sites per file and requires
+   the counts to match, the shape `backtest-context.test.ts` already used.
+3. **Imperative** — `PayReceive` checks `useReducedMotion()` and jumps;
+   `scrollIntoViewSafely()` reads the media query at event time.
+
+**`lightweight-charts` kinetic scroll is OFF** (`kineticScroll: {mouse: false,
+touch: false}` in `DetailChart`). The library ignores the preference and offers
+no per-preference switch, so turning it off was the only way to comply. It
+costs touch inertia for every user, not only reduced-motion ones — accepted as
+provisional [OWNER, 2026-08-06], to be re-checked at QA.
 
 ### Backtest window motion [motion pass, 2026-08-05]
 
