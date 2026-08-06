@@ -112,9 +112,9 @@ export function ChangeLog({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        /* same kit-measured push button as the theme toggle: 24px, ink 5%
-           fill, Medium 13, no border, no shadow */
-        className="flex h-6 items-center rounded-control bg-ink/[0.05] px-3 text-[13px] font-medium text-ink/85 transition-colors hover:bg-ink/[0.09] hover:text-ink active:bg-ink/[0.13] disabled:bg-ink/[0.02] disabled:text-ink/25"
+        /* same kit Bordered button as the theme toggle: 24px, ink 8 percent,
+           Medium 13, no border, no shadow */
+        className="flex h-6 items-center rounded-control bg-ink/[0.08] px-3 text-[13px] font-medium text-ink/85 transition-colors hover:bg-ink/[0.12] hover:text-ink active:bg-ink/[0.16] disabled:bg-ink/[0.04] disabled:text-ink/25"
         title="어제 대비 오늘 기록된 변화 (D-1 고정)"
       >
         {n > 0 ? `변화 ${n}` : "변화 없음"}

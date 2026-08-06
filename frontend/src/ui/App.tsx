@@ -231,10 +231,15 @@ function Header({
       <button
         type="button"
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        /* kit state table, Buttons 3 Rg: idle ink 5 percent, held down 13,
-           disabled 2 with the label at 25. Hover is a web-only step placed
-           between idle and pressed. */
-        className="flex h-6 items-center rounded-control bg-ink/[0.05] px-3 text-[13px] font-medium text-ink/85 transition-colors hover:bg-ink/[0.09] hover:text-ink active:bg-ink/[0.13] disabled:bg-ink/[0.02] disabled:text-ink/25"
+        /* Kit variant: BORDERED, not Toggle. The kit ships six button variants
+           (Bordered, Bordered Default, Bordered Tinted, and Destructive and
+           Borderless forms, plus Toggle) and an earlier pass here reached for
+           Toggle, which is the pressed-state control. These are plain secondary
+           actions, so Bordered is the right one, and its numbers differ:
+           Buttons - Content Area - Bordered - 3 Rg, idle ink 8 percent, held
+           down 16, disabled 4 with the label at 25. Hover is a web-only step
+           placed between idle and pressed. */
+        className="flex h-6 items-center rounded-control bg-ink/[0.08] px-3 text-[13px] font-medium text-ink/85 transition-colors hover:bg-ink/[0.12] hover:text-ink active:bg-ink/[0.16] disabled:bg-ink/[0.04] disabled:text-ink/25"
       >
         {theme === "dark" ? "밝게" : "어둡게"}
       </button>
