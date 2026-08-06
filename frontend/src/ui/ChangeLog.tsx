@@ -112,7 +112,9 @@ export function ChangeLog({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="rounded-control px-2 py-0.5 text-[12px] opacity-60 hover:opacity-100"
+        /* same macOS push button as the theme toggle — the two header controls
+           were both bare text differing only by opacity */
+        className="rounded-control border border-edge bg-tile px-2.5 py-1 text-[12px] text-ink/80 shadow-sm transition-colors hover:bg-page hover:text-ink"
         title="어제 대비 오늘 기록된 변화 (D-1 고정)"
       >
         {n > 0 ? `변화 ${n}` : "변화 없음"}

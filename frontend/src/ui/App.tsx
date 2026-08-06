@@ -216,10 +216,18 @@ function Header({
       <span className="flex-1" />
       <ChangeLog events={events} onFocus={onFocus} />
       <DataFreshness />
+      {/* macOS PUSH BUTTON (macos component pass): bordered, sitting a step
+          above its band, rather than bare text that only differs by opacity.
+          NOT given the toolbar vibrancy macOS pairs this with — this page never
+          scrolls (§shell: body is overflow-hidden and the table scrolls in its
+          own container), so nothing ever passes under the header band. A
+          backdrop-blur there composites the same colour over itself: cost with
+          no image. Proportions and the control treatment are the parts of the
+          macOS toolbar that survive that difference. */}
       <button
         type="button"
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        className="rounded-control px-2 py-0.5 text-[13px] opacity-60 hover:opacity-100"
+        className="rounded-control border border-edge bg-tile px-2.5 py-1 text-[12px] text-ink/80 shadow-sm transition-colors hover:bg-page hover:text-ink"
       >
         {theme === "dark" ? "밝게" : "어둡게"}
       </button>

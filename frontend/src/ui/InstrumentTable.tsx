@@ -163,13 +163,28 @@ function TableRow({
         }
       }}
       style={{ gridTemplateColumns: template }}
-      className={`grid h-12 cursor-pointer items-center border-b border-edge ${
-        active ? "bg-page" : "hover:bg-page/50"
+      /* macOS list selection is an INSET ROUNDED BAND, not an edge-to-edge
+         tint (macos component pass). The accent-filled row macOS actually
+         ships is not portable here twice over: a blue fill would sit under
+         red/blue direction numerals and take their legibility, and §9's
+         palette cut requires every non-directional state to be ink/grey
+         (gated by palette.test.ts). So the SHAPE comes across and the hue
+         does not — which is the half that was carrying the meaning anyway. */
+      className={`relative grid h-12 cursor-pointer items-center border-b border-edge ${
+        active ? "" : "hover:bg-page/50"
       }`}
     >
-      <div role="cell" className="relative pl-3 font-semibold">
+      {active && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-[3px] left-2 right-2 rounded-control bg-ink/[0.08]"
+        />
+      )}
+      <div role="cell" className="relative z-10 pl-3 font-semibold">
+        {/* the pin bar moves in to left-2 so it lands ON the selection band's
+            left edge rather than floating outside it */}
         {pinned && (
-          <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-ink" />
+          <span className="absolute left-2 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-ink" />
         )}
         {/* quoted vs interpolated (§6): a filled dot = live-quoted node, a
             hollow dot = interpolated tenor (4Y/6Y/7Y/8Y/9Y). A dot, not a
@@ -456,39 +471,52 @@ export function InstrumentTable({
     <div className="flex h-full min-h-0 flex-col">
       {/* fixed: tabs + forward controls stay at the top of the surface (§shell) */}
       <div className={`shrink-0 pt-4 ${PAGE_X}`}>
-      {/* Tabs: a sliding underline indicator (§14). No press-scale here — a
-          tab shares an alignment with its neighbours; transform press feedback
-          is reserved for isolated targets (rows, standalone buttons). */}
-      <div className="flex gap-1 border-b border-edge">
-        {FILTERS.map((f) => {
-          const on = filter === f.id;
-          return (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => {
-                snapReorder("other"); // view change — reorder snaps
-                onFilter(f.id);
-              }}
-              className={`relative px-3 py-2 text-[13px] transition-opacity ${
-                on ? "font-semibold" : "opacity-55 hover:opacity-90"
-              }`}
-            >
-              {f.label}
-              {on && (
-                <motion.div
-                  layoutId="tab-underline"
-                  /* ENTER, not SPRING [OWNER, 2026-08-06]. An underline that
-                     overshoots past the tab it is naming and comes back
-                     points at the wrong label for a frame — the one place
-                     where the overshoot actively contradicts the meaning. */
-                  transition={instant(ENTER, reduced)}
-                  className="absolute inset-x-2 -bottom-px h-[2.5px] rounded-full bg-ink"
-                />
-              )}
-            </button>
-          );
-        })}
+      {/* Tabs: a macOS SEGMENTED CONTROL (macos component pass). Was a sliding
+          underline on a rail. The mechanism is unchanged — one shared layoutId
+          slides a single indicator between segments — but the indicator is now
+          the selected segment itself.
+          The track is RECESSED (ink at 7%) and the selected segment returns to
+          the base surface. Stating it that way rather than "white pill on grey"
+          is what makes it work in both themes: in light the pill reads as
+          raised white, in dark it reads as lifted out of a darker groove, and
+          neither needs a theme-specific colour.
+          Still no press-scale — a segment shares an alignment with its
+          neighbours; transform press feedback stays for isolated targets. */}
+      <div className="border-b border-edge pb-2">
+        <div className="inline-flex gap-[2px] rounded-control bg-ink/[0.07] p-[2px]">
+          {FILTERS.map((f) => {
+            const on = filter === f.id;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => {
+                  snapReorder("other"); // view change — reorder snaps
+                  onFilter(f.id);
+                }}
+                className={`relative rounded-control-sm px-3 py-[5px] text-[13px] transition-opacity ${
+                  on ? "font-semibold" : "opacity-55 hover:opacity-90"
+                }`}
+              >
+                {on && (
+                  <motion.div
+                    layoutId="tab-underline"
+                    /* ENTER, not SPRING [OWNER, 2026-08-06]. An indicator that
+                       overshoots past the tab it is naming and comes back
+                       points at the wrong label for a frame — the one place
+                       where the overshoot actively contradicts the meaning. */
+                    transition={instant(ENTER, reduced)}
+                    className="absolute inset-0 rounded-control-sm bg-tile shadow-sm"
+                  />
+                )}
+                {/* the label rides ABOVE the indicator: the indicator is a
+                    sibling painted at inset-0, so without this the pill covers
+                    the text it is naming. */}
+                <span className="relative z-10">{f.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* curve-level extreme, stated once (§I) — a fact about the whole curve,
