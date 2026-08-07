@@ -144,7 +144,7 @@ export function BottomStrip({
         <button
           type="button"
           onClick={() => onCollapsed(true)}
-          className="ml-1 flex size-5 items-center justify-center rounded-control-sm bg-ink/[0.08] text-[10px] font-bold leading-none text-ink/85 transition-colors hover:bg-ink/[0.16]"
+          className="ml-1 flex size-5 items-center justify-center rounded-control-sm bg-ink/[0.08] text-[10px] font-bold leading-none text-ink-1 transition-colors hover:bg-ink/[0.16]"
           title="지표 바 접기"
         >
           ▾

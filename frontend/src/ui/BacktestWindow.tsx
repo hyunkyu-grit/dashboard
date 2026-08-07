@@ -964,7 +964,7 @@ function Result({
           earns no width; the struck par rates live in the fold's per-leg
           table, where they are a fact per swap. */}
       <table className="mt-5 w-full text-[13px] tabular-nums">
-        <thead className="text-left text-ink/50">
+        <thead className="text-left text-ink-2">
           <tr>
             <th className="pb-1 font-normal">종목</th>
             <th className="pb-1 font-normal">방향</th>
@@ -1022,7 +1022,7 @@ function Result({
           collecting coupon" is a question about the RESULT, not about how the
           trade was built. */}
       <table className="mt-5 w-full text-[13px] tabular-nums">
-        <thead className="text-left text-ink/50">
+        <thead className="text-left text-ink-2">
           <tr>
             <th className="pb-1 font-normal">손익 구성</th>
             <th className="pb-1 text-right font-normal">평가손익</th>

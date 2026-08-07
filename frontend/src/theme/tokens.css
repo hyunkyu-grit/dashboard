@@ -240,7 +240,38 @@
  *   pass), so the host wins.
  */
 :root {
-  /* Fills scale — Apple's, one step per level. */
+  /* Fills scale — Apple's, one step per level.
+   *
+   * The monitor half moved onto this scale on 2026-08-07. It had been writing
+   * inline alphas (text-ink/50 …) at 85·50·45·25·15 — three of those ARE the
+   * scale and two had drifted off it by five. Measured on both surfaces before
+   * moving, light / dark, page / tile:
+   *
+   *   /85 → ink-1   8.96 9.36 12.30 11.30  →  8.96 9.36 16.67 15.13
+   *   /50 → ink-2   3.05 3.09  5.12  4.89  →  unchanged light, 5.91 5.60 dark
+   *   /45 → ink-2   2.67 2.70  4.41  4.25  →  3.05 3.09  5.91  5.60
+   *   /25 → ink-3   unchanged (25 is the step)
+   *
+   * /15 did NOT come here: the scale's next step is 10 and that makes the two
+   * vertical hairlines FAINTER (1.34 → 1.21 light). They are hairlines, so they
+   * took --bw-border instead — 1.26 light / 1.67 dark, the closest value and
+   * the semantically right token.
+   *
+   * NOT FIXED HERE, measured and left for the owner: ink-2 as TEXT is 3.05:1
+   * on page and 3.09:1 on tile, under the 4.5 floor. Ten label/header sites sit
+   * there. It was already true at /50 and /45 — this pass did not introduce it
+   * and does not carry a mandate to repaint every secondary label.
+   *
+   * Four arbitrary-value alphas were left alone on purpose. They are CONTROL
+   * surfaces, not fills, and each needs a value moved to reach the ramp:
+   *   App.tsx bg-ink/[0.08] and BottomStrip bg-ink/[0.08] → --bw-ctl-idle
+   *     costs 8% → 7% in dark;
+   *   BottomStrip hover:bg-ink/[0.16] sits on the ACTIVE rung, skipping the
+   *     ramp's 12% hover — naming it correctly weakens the hover;
+   *   BacktestWindow ring-ink/[0.05] → --bw-field-border changes the mix base
+   *     from ink to pure black (1.097 → 1.116 light, 1.150 → 1.116 dark).
+   * Three small decisions that belong with the control system, not smuggled
+   * into a fills pass. */
   --bw-ink-1: color-mix(in srgb, var(--bw-ink) 85%, transparent);
   --bw-ink-2: color-mix(in srgb, var(--bw-ink) 50%, transparent);
   --bw-ink-3: color-mix(in srgb, var(--bw-ink) 25%, transparent);

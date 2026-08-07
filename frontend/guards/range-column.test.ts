@@ -61,17 +61,22 @@ describe("the cell carries no colour or tint (§5)", () => {
 
   it("the body values are plain ink; only the header and the note are muted", () => {
     // exactly three text-colour declarations in the file: the header's
-    // text-ink/50 (the same muting every other column header uses), the
-    // hidden-column note's text-ink/45 (the table's own note idiom), and the
+    // text-ink-2 (the same muting every other column header uses), the
+    // hidden-column note's text-ink-2 (the table's own note idiom), and the
     // body cell's plain text-ink. A fourth would be something new on the
-    // numbers. The track's bg-ink/25 hairline and bg-ink marker are ink at
+    // numbers. The track's bg-ink-3 hairline and bg-ink marker are ink at
     // alpha too — a graphic of a level is still a level (§5).
+    //
+    // The header and the note were text-ink/50 and text-ink/45 until the
+    // fills-scale pass (2026-08-07). They named the SAME tier and differed by
+    // five points of alpha for no reason anyone recorded, so both landed on
+    // ink-2 and the two entries below are now identical on purpose.
     expect(src.match(/text-ink[^"\s]*/g)).toEqual([
-      "text-ink/50",
-      "text-ink/45",
+      "text-ink-2",
+      "text-ink-2",
       "text-ink",
     ]);
-    expect(src.match(/bg-ink[^"\s]*/g)).toEqual(["bg-ink/25", "bg-ink"]);
+    expect(src.match(/bg-ink[^"\s]*/g)).toEqual(["bg-ink-3", "bg-ink"]);
     // Three inline styles: the two copies of the shared sub-grid template
     // (header and body, one definition, exactly as the table's outer grid
     // works) and the track marker's position — which is a percentage of the

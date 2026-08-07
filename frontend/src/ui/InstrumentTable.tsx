@@ -233,13 +233,13 @@ function TableRow({
         {row.quoted === true && (
           <span
             title="고시 만기"
-            className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-ink/45 align-middle"
+            className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-ink-2 align-middle"
           />
         )}
         {row.quoted === false && (
           <span
             title="보간 만기"
-            className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full border border-ink/45 align-middle"
+            className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full border border-ink-2 align-middle"
           />
         )}
         {row.label}
@@ -571,7 +571,7 @@ export function InstrumentTable({
                 {seam && (
                   <span
                     aria-hidden
-                    className="pointer-events-none absolute left-0 top-1/2 h-[14px] w-px -translate-y-1/2 bg-ink/15"
+                    className="pointer-events-none absolute left-0 top-1/2 h-[14px] w-px -translate-y-1/2 bg-edge"
                   />
                 )}
                 <button
@@ -762,13 +762,13 @@ export function InstrumentTable({
                 When width runs out, columns DROP in ladder order rather than
                 shrink (columns session); header and body derive from the same
                 `visible` set so they cannot disagree. Muting is a TEXT-colour
-                alpha (text-ink/50), never element opacity — opacity on the
+                alpha (text-ink-2), never element opacity — opacity on the
                 row would sink the sticky header background and let rows bleed
                 through (§G). A hairline (not a shadow) marks the boundary. */}
             <div
               role="row"
               style={{ gridTemplateColumns: template }}
-              className="sticky top-0 z-10 grid items-end border-b border-edge bg-tile pb-2 text-left text-ink/50"
+              className="sticky top-0 z-10 grid items-end border-b border-edge bg-tile pb-2 text-left text-ink-2"
             >
               <div role="columnheader" className="pl-3">
                 종목

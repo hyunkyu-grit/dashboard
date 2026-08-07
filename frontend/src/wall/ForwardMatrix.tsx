@@ -118,7 +118,7 @@ function GaugeTrack({
       {/* the 52-week average — a hairline tick, quieter than the marker */}
       {avgFrac != null && (
         <div
-          className="absolute top-1/2 h-2.5 w-px -translate-x-1/2 -translate-y-1/2 bg-ink/45"
+          className="absolute top-1/2 h-2.5 w-px -translate-x-1/2 -translate-y-1/2 bg-ink-2"
           style={{ left: `${(avgFrac * 100).toFixed(1)}%` }}
         />
       )}
@@ -126,7 +126,7 @@ function GaugeTrack({
           full ink at the tails, half-ink otherwise. */}
       <div
         className={`absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ${
-          extreme ? "bg-ink" : "bg-ink/50"
+          extreme ? "bg-ink" : "bg-ink-2"
         }`}
         style={{ left: pos }}
       />

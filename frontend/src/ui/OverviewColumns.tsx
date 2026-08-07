@@ -85,7 +85,7 @@ function Head({ asOf }: { asOf?: string }) {
     <div
       role="row"
       style={{ gridTemplateColumns: TEMPLATE }}
-      className="grid items-end border-b border-edge pb-2 text-left text-ink/50"
+      className="grid items-end border-b border-edge pb-2 text-left text-ink-2"
     >
       <div role="columnheader" className="pl-3">
         종목

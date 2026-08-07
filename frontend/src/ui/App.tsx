@@ -235,14 +235,14 @@ function Header({
           rounded ends. */}
       <div className="flex h-6 items-center overflow-hidden rounded-full bg-ink/[0.08]">
         <ChangeLog events={events} onFocus={onFocus} />
-        <span aria-hidden className="h-3.5 w-px shrink-0 bg-ink/15" />
+        <span aria-hidden className="h-3.5 w-px shrink-0 bg-edge" />
         <button
         type="button"
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           /* A bare slot. The group above owns the fill (ink 8 percent, the kit's
              Bordered value) and the capsule; putting either here again would
              draw a pill inside a pill. */
-          className="flex h-6 items-center px-3 text-[13px] font-medium text-ink/85 transition-colors hover:text-ink"
+          className="flex h-6 items-center px-3 text-[13px] font-medium text-ink-1 transition-colors hover:text-ink"
         >
           {theme === "dark" ? "밝게" : "어둡게"}
         </button>
@@ -634,9 +634,9 @@ export function App() {
                     the pane scrolls; nothing animates. */}
                 {pinned && (
                   // §G: a sticky element carries an opaque bg and mutes via a
-                  // TEXT alpha (text-ink/45), never element opacity — opacity
+                  // TEXT alpha (text-ink-2), never element opacity — opacity
                   // would sink the bg and let the chart bleed through it.
-                  <div className="pointer-events-none sticky bottom-0 -mb-2 bg-tile pt-1 text-[11px] text-ink/45">
+                  <div className="pointer-events-none sticky bottom-0 -mb-2 bg-tile pt-1 text-[11px] text-ink-2">
                     {pinned.label}
                     {pinnedMode ? ` · ${pinnedMode}` : ""}
                   </div>

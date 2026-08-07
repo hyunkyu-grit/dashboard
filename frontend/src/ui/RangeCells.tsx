@@ -73,7 +73,7 @@ function RangeTrack({ row }: { row: Row }) {
   if (pct == null) return <span className="pr-3" />;
   return (
     <span className="relative mr-3 block h-3 self-center overflow-visible">
-      <span className="absolute inset-x-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full bg-ink/25" />
+      <span className="absolute inset-x-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full bg-ink-3" />
       <span
         className="absolute top-1/2 h-3 w-[2px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink"
         style={{ left: `${pct}%` }}
@@ -107,7 +107,7 @@ export function RangeHeader({
     <div
       role="columnheader"
       style={{ gridTemplateColumns: rangeTemplate(slider) }}
-      className="grid text-ink/50"
+      className="grid text-ink-2"
     >
       {RANGE_LABELS.map((label) => (
         <span
@@ -124,7 +124,7 @@ export function RangeHeader({
       )}
       {note ? (
         <span
-          className="whitespace-nowrap pr-1 text-right text-[11px] text-ink/45"
+          className="whitespace-nowrap pr-1 text-right text-[11px] text-ink-2"
           title={noteTitle}
         >
           {note}
