@@ -10,12 +10,17 @@ import { describe, expect, it } from "vitest";
 import { stripComments } from "./_source";
 
 const SRC = join(__dirname, "..", "src");
-/* tokens.css is the hand-authored token layer. kit.generated.css is MACHINE
- * WRITTEN from the macOS 27 .sketch — its hex is the kit's own, transcribed by a
- * generator precisely so no one types it. Editing it is what is forbidden there,
- * not the hex. */
+/* tokens.css is the hand-authored token layer. kit.css is VENDORED from
+ * designcodex — its hex is the kit's own, read out of the .sketch by a
+ * generator precisely so no one types it. Editing it is what is forbidden
+ * there, not the hex.
+ *
+ * kit.generated.css stays allowlisted while its nine call sites are still
+ * standing; it is being retired in favour of kit.css [OWNER, 2026-08-07 —
+ * 목업으로 간다]. Its own header pointed at a generator that exists nowhere. */
 const ALLOWLIST = new Set([
   ["theme", "tokens.css"].join(sep),
+  ["theme", "kit.css"].join(sep),
   ["theme", "kit.generated.css"].join(sep),
 ]);
 const HEX = /#[0-9a-fA-F]{3,8}\b/;

@@ -63,6 +63,29 @@
   --bw-interactive: #f58220;
   --bw-on-interactive: #1a1a1a;
 
+  /* ── 액센트 [OWNER, 2026-08-07 — 오너가 목업으로 간다고 확정] ──────────
+   * "액센트는 은퇴했다 (palette cut) — 빨강 하나, 파랑 하나" 는 폐기됐다.
+   * 값은 킷 그대로다 (System Colors / 2 Orange, designcodex/dist/kit.css).
+   *
+   * 채움과 전경이 갈린다. 채움 주황 위에 흰 글자는 2.31:1 로 못 쓰고,
+   * 검정 85%(킷 Labels/1 Primary)면 7.61:1 이다. 그래서 on-accent 는 잉크다.
+   * 채움 주황을 선으로 쓰면 흰 배경에서 2.31:1 로 그래픽 3:1 하한도 못 넘어,
+   * 글자·선용은 명도를 낮춘 별도 값을 둔다 — 킷에 없는 제품 값이다
+   * (Codex/README.md "킷에 없는 값은 제품이 정한다"). 흰 배경 4.53:1. */
+  --bw-accent: var(--kit-system-colors-light-2-orange);
+  --bw-accent-fg: #b85e00;
+  --bw-on-accent: var(--kit-labels-light-1-primary);
+
+  /* ── Liquid Glass — 툴바·사이드바·메뉴가 뜨는 기능 레이어 ──────────────
+   * "이 셸은 머티리얼을 안 쓴다" 는 폐기됐다 [OWNER, 2026-08-07].
+   * HIG Materials: 유리는 기능 레이어 전용이고 콘텐츠 레이어에는 쓰지 않는다.
+   * 사이드바는 가독을 위해 바보다 불투명하다 — 킷이 그렇게 준다. */
+  --bw-glass-bar: var(--kit-liquid-glass-light-regular-large-fill-0);
+  --bw-glass-bar-tint: var(--kit-liquid-glass-light-regular-large-fill-1);
+  --bw-glass-side: var(--kit-sidebar-background-light-active-fill-0);
+  --bw-glass-menu: var(--kit-liquid-glass-light-menus-fill-0);
+  --bw-blur: 40px;
+
   /* Semantic direction (§9) — red up / blue down (Toss convention). These are
    * used as change-number TEXT, so both must clear 4.5:1, not just the 3:1 mark
    * floor. Up was #f04452 (3.71:1 on white — the one colour covering most of
@@ -79,7 +102,11 @@
   /* Chart line — BLUE (§9, Session 16 Pass E). The same blue as the down-delta
    * (a line has no sign, so there is nothing to confuse). #0064ff is 4.92:1 on
    * white (clears the 3:1 stroke floor). */
-  --bw-line: #0064ff;
+  /* 차트 선 — 액센트 전경 [OWNER, 2026-08-07 — 목업]. 선은 부호가 없다.
+   * 이 선이 하락 파랑과 같은 색이던 것이 §9 가 "a line has no sign, so there
+   * is nothing to confuse" 로 감수하던 비용이었는데, 액센트로 옮기면서 그
+   * 충돌 자체가 없어진다. 흰 배경 4.53:1 로 그래픽 3:1 하한을 넘는다. */
+  --bw-line: var(--bw-accent-fg);
 
   /* Reference-line colours [OWNER, 2026-08-04, revised same day — "한 개는
    * 회색 실선으로, 한 개는 빨간색인데 투명도 좀 올려서 실선으로"]. Both
@@ -161,13 +188,23 @@
 
   /* RETIRED (see the light block) — kept defined, unreferenced. */
   --bw-brand: #8dc8e8;
+  --bw-accent: var(--kit-system-colors-dark-2-orange);
+  /* 다크에서는 채움과 전경이 같은 값이다 — 킷 dark orange 가 어두운 표면 위에서
+   * 이미 충분하다. [측정 2026-08-07] page 7.47 / tile 6.78 / popover 6.17,
+   * 셋 다 그래픽 3:1 을 크게 넘는다. 라이트처럼 따로 낮출 이유가 없다. */
+  --bw-accent-fg: var(--kit-system-colors-dark-2-orange);
+  --bw-on-accent: var(--kit-labels-light-1-primary);        /* 주황 위 검정 7.84:1 */
+  --bw-glass-bar: var(--kit-liquid-glass-dark-regular-large-fill-0);
+  --bw-glass-bar-tint: var(--kit-liquid-glass-dark-regular-large-fill-1);
+  --bw-glass-side: var(--kit-sidebar-background-dark-active-fill-0);
+  --bw-glass-menu: var(--kit-liquid-glass-dark-menus-fill-0);
 
   /* Direction — lighter red/blue clear 4.5:1 on the dark tile (#0064ff is
    * only ~3.4:1 there, on the surfaces as of the 2026-08-05 pass). */
   /* Direction stays this product's dark pair (see the light block). */
   --bw-up: #f16e77;
   --bw-down: #4c93ff;
-  --bw-line: #4c93ff;
+  --bw-line: var(--bw-accent-fg);
 
   /* Reference colours, lifted for the dark tile (the light pair sit ~2:1
    * there). Same rule as the direction pair: grey lightened, red = dark up-red. */
@@ -197,25 +234,38 @@
  *
  * The hues stay frozen. Each token is its own colour scaled toward black
  * (light) or white (dark), so hue and the red/blue opposition are untouched;
- * only lightness moves, to AAA 7:1 on every surface of its theme.
+ * only lightness moves.
  *
- * All four move together on purpose. There is ONE red and ONE blue in this
- * product: --bw-line is the down blue (a line has no sign) and --bw-ref-policy
- * is the up red drawn translucent. Boosting the pair without the other two
- * would fork the palette exactly where the spec says it must not fork. */
+ * The target was AAA 7:1 and it is reached on five of the six surface/theme
+ * pairs; the dark POPOVER is the exception (up 6.57, down 6.52, line 6.39 —
+ * measured 2026-08-07). That surface is the lightest of the dark three, and
+ * boosting dark ink means lightening it, so the two move toward each other.
+ * The honest invariant, and the one band-hue-contrast now asserts, is that
+ * every token GAINS on every surface and none falls under its floor. An
+ * earlier version of this comment claimed 7:1 everywhere; it was not measured
+ * against the popover.
+ *
+ * They move together on purpose. There is ONE red and ONE blue in this
+ * product, and --bw-ref-policy is the up red drawn translucent: boosting the
+ * pair without it would fork the palette exactly where the spec says it must
+ * not fork. --bw-line is no longer in this list — it left the down blue for
+ * the accent [OWNER, 2026-08-07] and now follows --bw-accent-fg, which is
+ * boosted here in its place. */
 @media (prefers-contrast: more) {
   :root {
     --bw-up: #a5222e;   /* this product's red, deepened to AAA 7:1 */
     --bw-down: #004dc4; /* this product's blue, deepened to AAA 7:1 */
-    --bw-line: #004dc4;
     --bw-ref-policy: #a5222e;
+    /* 선은 더 이상 down 파랑이 아니라 액센트다. 부스트에서도 액센트를
+     * 따라가므로 여기서 따로 정의하지 않는다 (--bw-line: var(--bw-accent-fg)). */
+    --bw-accent-fg: #854301;   /* 킷 hue 유지, AAA 7:1 — 7.50 tile / 7.06 page [측정] */
   }
 
   [data-theme="dark"] {
     --bw-up: #f59aa0;
     --bw-down: #83b4ff;
-    --bw-line: #83b4ff;
     --bw-ref-policy: #f59aa0;
+    --bw-accent-fg: #ff973e;   /* 킷 hue 유지, AAA 7:1 — 7.02 tile / 7.74 page [측정] */
   }
 }
 
@@ -240,7 +290,15 @@
  *   pass), so the host wins.
  */
 :root {
-  /* Fills scale — Apple's, one step per level.
+  /* Ink ladder — the kit's LABELS ramp, one step per level.
+   *
+   * Named "Fills" here until 2026-08-07, which was wrong and worth correcting:
+   * the kit ships both ramps and they are different scales. Fills is
+   * 10/8/5/3/2 (--kit-fills-light-*); Labels is 85/50/25/10/5/3
+   * (--kit-labels-light-*), and all six steps below match Labels exactly,
+   * dark included (--kit-labels-dark-1 is #ffffff and -2 is 55% — which is
+   * what the dark block overrides these to). These carry TEXT, so Labels is
+   * also the semantically right ramp; only the name had drifted.
    *
    * The monitor half moved onto this scale on 2026-08-07. It had been writing
    * inline alphas (text-ink/50 …) at 85·50·45·25·15 — three of those ARE the

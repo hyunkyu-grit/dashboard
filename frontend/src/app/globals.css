@@ -1,5 +1,7 @@
 @import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 @import "tailwindcss";
+/* 킷 전량. 제품 토큰보다 FIRST — 제품이 킷 위에 덮어쓰는 관계다 (designcodex/docs/USAGE.md §2). */
+@import "../theme/kit.css";
 @import "../theme/tokens.css";
 /* Component classes GENERATED from the macOS 27 kit (tools/figparse/gen-kit-css.mjs
  * in the figma-spike sandbox). Values are read out of the .sketch mechanically
@@ -24,6 +26,12 @@
   --color-up: var(--bw-up);
   --color-down: var(--bw-down);
   --color-line: var(--bw-line);
+  --color-accent: var(--bw-accent);
+  --color-accent-fg: var(--bw-accent-fg);
+  --color-on-accent: var(--bw-on-accent);
+  --color-glass-bar: var(--bw-glass-bar);
+  --color-glass-side: var(--bw-glass-side);
+  --color-glass-menu: var(--bw-glass-menu);
   /* reference-line hues [OWNER, 2026-08-04] — CD / 기준금리 overlays only */
   --color-ref-cd: var(--bw-ref-cd);
   --color-ref-policy: var(--bw-ref-policy);
