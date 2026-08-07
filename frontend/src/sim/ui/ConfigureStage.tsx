@@ -401,17 +401,19 @@ function SpreadSection() {
   const { params, patchParams } = useSimulationPort();
   const [open, setOpen] = useState(false);
 
-  // CD는 다른 테너 스프레드와 같은 줄에 둔다 — 3M도 커브 위의 한 점이고,
-  // 사용자가 커브를 기울일 때 짧은 쪽부터 만진다.
+  // CD가 이 줄에 있었고 금통위 이벤트로 내렸다 [트레이더 피드백 4, 2026-08-07].
+  // 여기서는 3M 마디에 닿지 못했다 — 이벤트가 하나라도 있으면 스왑 커브의 짧은
+  // 끝은 이벤트 계단이 통째로 정하고 이 터미널 값은 무시된다. 손잡이가 있는데
+  // 아무것도 안 움직이는 것보다, 실제로 움직이는 자리에 두는 것이 맞다.
+  //
   // 10년에서 끊는다 [OWNER, 2026-08-06] — 북의 최장 만기가 9.67년이고 10년을
   // 넘는 스왑이 한 건도 없다. 30Y 손잡이는 어떤 포지션에도 닿지 않으면서
   // 화면만 차지했다. params.spread30y는 "0"으로 남아 커브 수학은 그대로다.
-  const rows: { key: "spreadCd" | "spread1y" | "spread10y"; label: string }[] = [
-    { key: "spreadCd", label: "CD 3M" },
+  const rows: { key: "spread1y" | "spread10y"; label: string }[] = [
     { key: "spread1y", label: "1Y" },
     { key: "spread10y", label: "10Y" },
   ];
-  const nonZero = [...rows.map((r) => params[r.key] ?? "0"), params.irsSpread].filter(
+  const nonZero = [...rows.map((r) => params[r.key]), params.irsSpread].filter(
     (v) => toNum(v) !== 0,
   ).length;
 
@@ -424,11 +426,11 @@ function SpreadSection() {
     >
       <div className="px-4 pb-4">
         <p className="pb-2 text-body text-ink-2">테너 스프레드 (국고 3Y 대비)</p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {rows.map((r) => (
             <Field key={r.key} label={r.label}>
               <NumberField
-                value={params[r.key] ?? "0"}
+                value={params[r.key]}
                 onChange={(v) => patchParams({ [r.key]: v })}
                 suffix="bp"
                 aria-label={`${r.label} 스프레드`}
@@ -437,7 +439,7 @@ function SpreadSection() {
           ))}
         </div>
         <p className="pt-1.5 text-callout text-ink-2">
-          CD는 3M 마디만 움직여요. 오버나이트는 금통위 경로가 정해요.
+          짧은 쪽(CD·오버나이트)은 아래 금통위 이벤트가 정해요.
         </p>
         <p className="pb-2 pt-4 text-body text-ink-2">IRS 스프레드 (국채 대비)</p>
         <NumberField
@@ -467,6 +469,12 @@ function PolicyEventSection() {
       onToggle={() => setOpen((v) => !v)}
     >
       <div className="px-4 pb-4">
+        {/* 두 칸이 무엇인지 먼저 말한다 — 행에는 자리가 없고, 라벨 없이 bp 칸
+            둘이 나란히 서면 어느 쪽이 CD 인지 물어볼 곳이 없다. */}
+        <p className="pb-2 text-callout text-ink-2">
+          기준금리가 얼마 움직이는지, CD가 그보다 얼마 더 움직이는지예요. CD의 그날
+          이동은 둘의 합이에요.
+        </p>
         {events.length === 0 ? (
           <p className="pb-3 text-body text-ink-2">등록된 이벤트가 없어요.</p>
         ) : (
@@ -491,8 +499,8 @@ function PolicyEventSection() {
                   }
                 />
                 <NumberField
-                  className="w-32"
-                  aria-label="이벤트 변동폭"
+                  className="w-[76px]"
+                  aria-label="기준금리 변동"
                   value={ev.shiftBp}
                   suffix="bp"
                   onChange={(v) =>
@@ -501,10 +509,28 @@ function PolicyEventSection() {
                     })
                   }
                 />
+                {/* CD 추가 [트레이더 피드백 4, 2026-08-07]. 커브 스프레드에 있던
+                    손잡이를 여기로 내렸다 — 짧은 끝은 이 계단만 움직인다. */}
+                <NumberField
+                  className="w-[76px]"
+                  aria-label="CD 추가"
+                  value={ev.cdSpreadBp ?? "0"}
+                  suffix="CD"
+                  onChange={(v) =>
+                    patchParams({
+                      shortEndEvents: events.map((x) =>
+                        x.id === ev.id ? { ...x, cdSpreadBp: v } : x,
+                      ),
+                    })
+                  }
+                />
                 <Button
                   variant="ghost"
                   size="sm"
                   aria-label="이벤트 삭제"
+                  // 칸이 셋이 되면서 자리가 빠듯해졌다. 줄이지 않으면 "삭제"가
+                  // 두 줄로 접히고 행 높이가 무너진다.
+                  className="shrink-0 whitespace-nowrap"
                   onClick={() =>
                     patchParams({ shortEndEvents: events.filter((x) => x.id !== ev.id) })
                   }
@@ -520,7 +546,9 @@ function PolicyEventSection() {
           size="sm"
           onClick={() =>
             patchParams({
-              shortEndEvents: [...events, { id: nextId(), date: "", shiftBp: "-25" }],
+              // CD 추가는 0으로 시작한다 — 기본 주장은 "CD가 기준금리만큼
+              // 움직인다"이고, 그것이 아무 근거도 더하지 않는 값이다.
+              shortEndEvents: [...events, { id: nextId(), date: "", shiftBp: "-25", cdSpreadBp: "0" }],
             })
           }
         >

@@ -99,6 +99,31 @@ export function deriveFundingSteps(
   return pts;
 }
 
+/** 지평 끝의 CD 추가 스프레드 — 창 안 이벤트들의 `cdSpreadBp` 합
+ * [트레이더 피드백 4, 2026-08-07].
+ *
+ * `deriveFundingSteps` 와 같은 창(0 ≤ day ≤ simDays)만 센다. 마감일 뒤의
+ * 이벤트가 터미널 노드에만 들어가면 커브의 끝점과 그 끝점까지 가는 계단이
+ * 어긋나고, 그건 미리보기와 실행이 갈리는 자리다.
+ *
+ * 1D 노드에는 안 붙는다: `generateShockCurves` 가 이 값을 3M 마디에만 더한다.
+ * CD 는 3개월 자금시장 금리이고 오버나이트는 기준금리를 따른다. */
+export function cdSpreadFromEvents(
+  shortEndEvents: ScenarioParams["shortEndEvents"],
+  baseDate: string,
+  simDays: number,
+): number {
+  if (!baseDate) return 0;
+  const base = new Date(baseDate);
+  return shortEndEvents
+    .filter((ev) => ev.date)
+    .filter((ev) => {
+      const day = Math.round((new Date(ev.date).getTime() - base.getTime()) / 86400000);
+      return day >= 0 && day <= simDays;
+    })
+    .reduce((sum, ev) => sum + toNum(ev.cdSpreadBp ?? "0"), 0);
+}
+
 /** Final short-end (BOK) cumulative shock — last funding step, else 0 (rate unchanged). */
 export function shortEndBpFromSteps(fundingSteps: { day: number; cumBp: number }[]): number {
   return fundingSteps.length > 0 ? fundingSteps[fundingSteps.length - 1].cumBp : 0;
@@ -170,6 +195,7 @@ export function anchorConversionError(params: ScenarioParams): string | null {
 export function buildSimulateRequest(inputs: SimulationInputs, params: ScenarioParams): SimulateRequest {
   const fundingSteps = deriveFundingSteps(params.shortEndEvents, inputs.baseDate, params.simDays);
   const shortEndBp = shortEndBpFromSteps(fundingSteps);
+  const cdSpreadBp = cdSpreadFromEvents(params.shortEndEvents, inputs.baseDate, params.simDays);
 
   const credit: CreditSpreads = {
     특은채: toNum(params.creditSpreads["특은채"] ?? "0"),
@@ -200,7 +226,7 @@ export function buildSimulateRequest(inputs: SimulationInputs, params: ScenarioP
     credit,
     toNum(params.irsSpread),
     shortEndBp,
-    toNum(params.spreadCd ?? "0"),
+    cdSpreadBp,
   );
 
   return {
@@ -210,9 +236,24 @@ export function buildSimulateRequest(inputs: SimulationInputs, params: ScenarioP
     // s15: omitted unless explicitly configured — the backend then derives
     // funding from its 기준금리+10bp constant (single source; no stepping).
     ...(inputs.fundingRate !== undefined ? { fundingRate: inputs.fundingRate } : {}),
+    /* 이 배열이 **커브의 짧은 끝**을 정한다 [트레이더 피드백 4, 2026-08-07].
+     *
+     * 엔진의 `_cum_shock_r`(chart.py)은 τ ≤ 0.25 에서 이 계단의 누적 bp 를
+     * 그대로 쓴다 — 터미널 쇼크 노드는 거기서 쳐다보지 않는다. 그래서 CD 가
+     * 기준금리보다 더(또는 덜) 움직인다는 주장은 여기 실려야 하고, 커브 스프레드
+     * 옆의 터미널 손잡이로는 3M 마디에 닿지 못했다. 그 손잡이를 없애고 이벤트
+     * 안으로 내린 이유가 그것이다.
+     *
+     * 그래서 여기 나가는 값은 **CD 의 그날 이동**이다: 기준금리 변동 + CD 추가.
+     *
+     * 대가를 적어 둔다. 같은 배열을 `fundingStepping` 이 켜져 있을 때 조달비용
+     * 계단으로도 쓴다 — 그 경우 조달비용이 기준금리가 아니라 CD 만큼 걸음을
+     * 하게 된다. 이 화면에서는 그 토글이 없고(스왑 전용 범위에서 걷어냈다)
+     * `fundingStepping` 은 구조적으로 false 라 지금은 닿지 않는다. 되살릴 일이
+     * 생기면 CD 추가를 여기서 빼고 짧은 끝을 다른 경로로 실어야 한다. */
     fundingEvents: params.shortEndEvents
       .filter((ev) => ev.date)
-      .map((ev) => ({ date: ev.date, shiftBp: toNum(ev.shiftBp) })),
+      .map((ev) => ({ date: ev.date, shiftBp: toNum(ev.shiftBp) + toNum(ev.cdSpreadBp ?? "0") })),
     simDays: params.simDays,
     shockType: "ramp",
     shockMode: "matrix",

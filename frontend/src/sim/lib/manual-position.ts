@@ -16,10 +16,14 @@
  * 두 화면이 같은 "3s10s"를 다르게 이해하면 비교가 불가능해진다.
  *
  * ─ 남은 것 ────────────────────────────────────────────────────────────────
- * 여기 있는 것은 **입력 폼의 상태**뿐이다: 무슨 상품인지, 어느 방향인지, 얼마나.
- * 억 원 단위도 여기서만 쓴다(페이로드는 원). 고정금리는 더 이상 사용자가 넣지
- * 않는다 — 다리마다 그 날 par로 쳐지고, 그래서 진입 MtM이 0이며 결과에 남는
- * 것이 **경로가 만든 손익뿐**이다. 이 화면이 묻는 것이 정확히 그것이다.
+ * 여기 있는 것은 **입력 폼의 상태**뿐이다: 무슨 상품인지, 어느 방향인지, 얼마나,
+ * 그리고 금리를 par 에서 옮겼다면 얼마로. 억 원 단위도 여기서만 쓴다(페이로드는 원).
+ *
+ * 고정금리 기본값은 여전히 **그 날의 par** 다 — 다리마다 par 로 쳐지면 진입 MtM 이
+ * 0이고, 결과에 남는 것이 경로가 만든 손익뿐이다. 이 화면이 묻는 것이 정확히
+ * 그것이다. 다만 이제 덮어쓸 수 있다 [트레이더 피드백 3, 2026-08-07]: 이미 들고
+ * 있는 포지션을 이 경로에 놓아 보려면 진입 레벨이 par 가 아니다. 덮어쓴 순간
+ * 진입 MtM 이 0이 아니게 되고, 그건 오프마켓 진입이 실제로 그렇다는 뜻이다.
  */
 
 /** 모니터의 그룹과 같은 이름. GROUP_LABEL(ui/rows.ts)의 부분집합이다 —
@@ -67,6 +71,24 @@ export interface ManualPosition {
   direction: 1 | -1;
   /** 억 원. 사람이 말하는 단위로 들고 있다가 요청에서만 원으로 바꾼다. */
   notionalEok: number;
+  /** 다리별 고정금리 덮어쓰기, 퍼센트 [트레이더 피드백 3, 2026-08-07:
+   * "기본적으로는 Par Rate가 들어가있되, 원하면 내가 원하는 금리를 넣고 싶다"].
+   *
+   * **다리별**인 이유: 한 줄이 상품 하나이고 상품은 다리를 여럿 갖는다.
+   * 3s10s 에 금리 하나를 넣으라고 하면 그 하나가 3Y 것인지 10Y 것인지 말할 수
+   * 없다. 화면이 이미 다리마다 par 를 적고 있으므로, 그 칸이 그대로 입력칸이
+   * 되는 것이 가장 적은 새 개념이다.
+   *
+   * 키는 다리 id(`3Y-10Y#0`)다. 상품을 바꾸면 다리가 달라지므로 그때 비운다 —
+   * 남겨 두면 3s10s 의 3Y 금리가 2s5s 의 2Y 다리에 조용히 붙는다.
+   *
+   * 없거나 항목이 없으면 그 다리는 par 다. 이 필드가 통째로 없는 옛 저장분도
+   * 그대로 유효하다.
+   *
+   * 대가를 적어 둔다: par 로 치면 진입 MtM 이 0이라 결과에 남는 것이 경로가
+   * 만든 손익뿐인데, 덮어쓰면 진입 시점에 이미 평가손익이 있다. 그건 오프마켓
+   * 진입이 실제로 그렇다는 뜻이지 오류가 아니다. 화면이 그 사실을 말한다. */
+  rateOverrides?: Record<string, number>;
 }
 
 /** 백엔드가 돌려준 다리 하나 — 화면에는 읽기 전용으로만 보인다. */
@@ -130,4 +152,25 @@ export function positionError(p: ManualPosition): string | null {
 
 export function notionalToKrw(eok: number): number {
   return eok * 1e8;
+}
+
+/** 이 다리가 실제로 쓸 고정금리(퍼센트) — 덮어썼으면 그 값, 아니면 par. */
+export function effectiveRate(leg: ExpandedLeg, p: ManualPosition): number {
+  const v = p.rateOverrides?.[leg.id];
+  return typeof v === "number" && Number.isFinite(v) ? v : leg.couponRate;
+}
+
+/** 페이로드에 실을 다리들. **한 곳에서만** 덮어쓴다 — 화면과 요청이 각자
+ * 적용하면 보이는 금리와 평가되는 금리가 갈라질 수 있다. */
+export function applyRateOverrides(legs: ExpandedLeg[], p: ManualPosition): ExpandedLeg[] {
+  if (!p.rateOverrides) return legs;
+  return legs.map((l) => {
+    const r = effectiveRate(l, p);
+    return r === l.couponRate ? l : { ...l, couponRate: r };
+  });
+}
+
+/** 덮어쓴 다리가 하나라도 있는가 — 화면이 진입 MtM 안내를 띄울지 정한다. */
+export function hasRateOverride(legs: ExpandedLeg[], p: ManualPosition): boolean {
+  return legs.some((l) => effectiveRate(l, p) !== l.couponRate);
 }

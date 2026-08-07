@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_SCENARIO_PARAMS, EMPTY_SIMULATION_INPUTS } from "../types/simulation-port";
 import {
   buildSimulateRequest,
+  cdSpreadFromEvents,
   deriveFundingSteps,
   generateShockCurves,
   shortEndBpFromSteps,
@@ -240,5 +241,56 @@ describe("N1 degeneracy floor (anchorConversionError)", () => {
     expect(tenorSpreadAt("1Y", -5, 12)).toBe(-5);
     expect(tenorSpreadAt("5Y", -5, 12)).toBeCloseTo((12 * 2) / 7, 12);
     expect(tenorSpreadAt("10Y", -5, 12)).toBe(12);
+  });
+});
+
+/* CD 스프레드가 금통위 이벤트로 내려온 뒤 [트레이더 피드백 4, 2026-08-07].
+ *
+ * 이 산술을 테스트로 못 박는 이유: 커브의 짧은 끝은 엔진에서 **이벤트 계단만**
+ * 본다(chart.py `_cum_shock_r`, τ ≤ 0.25 에서 BOK 누적 bp 직결). 그래서 CD 가
+ * 기준금리와 다르게 움직인다는 주장은 wire 의 fundingEvents 에 실려야 하고,
+ * 그 합산이 조용히 어긋나면 화면은 아무 말도 하지 않는다. */
+describe("CD 스프레드 (금통위 이벤트)", () => {
+  const INPUTS = { ...EMPTY_SIMULATION_INPUTS, baseDate: "2026-08-05" };
+  const withEvents = (evs: { id: number; date: string; shiftBp: string; cdSpreadBp?: string }[]) => ({
+    ...DEFAULT_SCENARIO_PARAMS,
+    shortEndEvents: evs,
+  });
+
+  it("wire 의 shiftBp 는 CD 의 그날 이동 = 기준금리 변동 + CD 추가", () => {
+    const req = buildSimulateRequest(
+      INPUTS,
+      withEvents([{ id: 0, date: "2026-09-10", shiftBp: "-25", cdSpreadBp: "-5" }]),
+    );
+    expect(req.fundingEvents).toEqual([{ date: "2026-09-10", shiftBp: -30 }]);
+  });
+
+  it("터미널 3M 마디는 기준금리 누적 + CD 추가 합, 1D 는 기준금리 누적만", () => {
+    const req = buildSimulateRequest(
+      INPUTS,
+      withEvents([
+        { id: 0, date: "2026-09-10", shiftBp: "-25", cdSpreadBp: "-5" },
+        { id: 1, date: "2026-11-10", shiftBp: "-25", cdSpreadBp: "3" },
+      ]),
+    );
+    // 기준금리 누적 −50, CD 추가 합 −2.
+    expect(at(req.shockCurves.swapCurve, 1 / 365)).toBeCloseTo(-50, 9);
+    expect(at(req.shockCurves.swapCurve, 0.25)).toBeCloseTo(-52, 9);
+  });
+
+  it("cdSpreadFromEvents 는 창(0..simDays) 밖 이벤트를 세지 않는다", () => {
+    const evs = [
+      { id: 0, date: "2026-07-01", shiftBp: "-25", cdSpreadBp: "-5" }, // 기준일 이전
+      { id: 1, date: "2026-09-10", shiftBp: "-25", cdSpreadBp: "-7" },
+      { id: 2, date: "2028-01-01", shiftBp: "-25", cdSpreadBp: "-9" }, // 마감일 이후
+    ];
+    expect(cdSpreadFromEvents(evs, "2026-08-05", 180)).toBe(-7);
+  });
+
+  it("CD 추가가 없으면 종전 공식과 같다 (골든 핀이 계속 성립하는 조건)", () => {
+    const evs = [{ id: 0, date: "2026-09-10", shiftBp: "-25" }];
+    expect(cdSpreadFromEvents(evs, "2026-08-05", 180)).toBe(0);
+    const req = buildSimulateRequest(INPUTS, withEvents(evs));
+    expect(req.fundingEvents).toEqual([{ date: "2026-09-10", shiftBp: -25 }]);
   });
 });

@@ -30,7 +30,7 @@ import { useEffect, useMemo } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { instrumentsApi, marketDataApi, positionsApi } from "@/sim/lib/api-client";
-import { notionalToKrw, type ExpandedLeg } from "@/sim/lib/manual-position";
+import { applyRateOverrides, notionalToKrw, type ExpandedLeg } from "@/sim/lib/manual-position";
 import type { Position } from "@/sim/types/portfolio";
 import { useSimulationDataStore } from "@/sim/store/simulation-data-store";
 
@@ -113,6 +113,11 @@ export function useBook() {
     const out: Record<string, { legs: ExpandedLeg[]; error: string | null; pending: boolean }> = {};
     manualPositions.forEach((p, i) => {
       const q = expansions[i];
+      /* 여기 담기는 것은 **서버가 준 par 그대로**다. 사용자의 덮어쓰기는 아래
+       * `enginePositions` 에서만 얹는다 [트레이더 피드백 3, 2026-08-07] —
+       * 화면이 "par 는 얼마였는데 내가 얼마로 옮겼다" 를 말하려면 par 가 어딘가에
+       * 남아 있어야 하고, 그 자리가 여기다. 여기서 덮어쓰면 par 가 사라져서
+       * 되돌리기도, 비교도 할 수 없게 된다. */
       out[p.id] = {
         legs: q?.data?.legs ?? [],
         error: q?.error ? (q.error as Error).message : null,
@@ -122,10 +127,13 @@ export function useBook() {
     return out;
   }, [manualPositions, expansions]);
 
-  /* 페이로드에 실리는 것은 다리들이다. 줄이 아니라. */
+  /* 페이로드에 실리는 것은 다리들이다. 줄이 아니라.
+   *
+   * 줄을 훑어서 모은다 — `Object.values(legsByRow)` 로 평평하게 펴면 다리가
+   * 어느 줄에서 왔는지를 잃고, 그러면 그 줄의 금리 덮어쓰기를 얹을 수 없다. */
   const enginePositions = useMemo(
-    () => Object.values(legsByRow).flatMap((r) => r.legs),
-    [legsByRow],
+    () => manualPositions.flatMap((p) => applyRateOverrides(legsByRow[p.id]?.legs ?? [], p)),
+    [manualPositions, legsByRow],
   ) as unknown as Position[];
 
   /* 무한 렌더 루프를 끊는 것 [2026-08-07].

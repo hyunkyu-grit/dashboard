@@ -50,23 +50,26 @@ export interface ScenarioParams {
   spread30y: string;
   creditSpreads: Record<string, string>;
   irsSpread: string;
-  shortEndEvents: { id: number; date: string; shiftBp: string }[];
+  /** 금통위 이벤트. `shiftBp` 는 그 날 **기준금리**가 움직이는 폭이고,
+   * `cdSpreadBp` 는 CD 가 그보다 더(또는 덜) 움직이는 폭이다
+   * [트레이더 피드백 4, 2026-08-07]. CD 의 그날 이동 = shiftBp + cdSpreadBp.
+   *
+   * cdSpreadBp 가 여기 있는 이유는 `lib/scenario-curves.buildSimulateRequest`
+   * 의 주석에 적혀 있다 — 짧게: 커브의 짧은 끝은 **이벤트 계단으로만** 움직이고,
+   * 커브 스프레드 쪽의 터미널 손잡이는 3M 마디에서 그 계단에 덮인다. */
+  shortEndEvents: { id: number; date: string; shiftBp: string; cdSpreadBp?: string }[];
   /** s13 — fan-chart σ in bp/√business-day (free-text like the other numeric
    * params; sanitized to (0, 25] at request-build time, backend default 2.0). */
   sigmaBp: string;
   /** SIM2-5 (ruling ④) — opt-in 금통위 funding stepping (default off = the
    * s15 fixed constant, byte-identical). Rides the payload as fundingStepping. */
   fundingStepping: boolean;
-  /** CD(3M) 스프레드, bp — 자유 입력이라 문자열 [OWNER, 2026-08-06].
-   *
-   * 국고 테너 스프레드(1Y/10Y/30Y)와 같은 층위의 손잡이지만, BOK 경로와 **따로**
-   * 단기 구간을 민다. 3M 노드에만 붙고 1D(오버나이트)는 안 건드린다 — CD는
-   * 3개월 자금시장 금리다. 스왑 커브는 국채 커브 + irsSpread이므로 이 값이
-   * 스왑의 짧은 쪽에 그대로 흐른다.
-   *
-   * OPTIONAL: 없으면 "0"과 같다. 옛 파라미터 상태와 골든 픽스처가 그대로
-   * 유효하다. */
-  spreadCd?: string;
+  /* `spreadCd` 가 여기 있었다 [OWNER, 2026-08-06 → 트레이더 피드백 4,
+   * 2026-08-07]. 커브 스프레드 옆에 선 터미널 손잡이였는데, 그 자리에서는
+   * **3M 마디에 닿지 못했다** — 금통위 이벤트가 있으면 스왑 커브의 짧은 끝은
+   * 이벤트 계단이 통째로 정하고 터미널 노드는 무시된다(엔진 `_cum_shock_r`,
+   * τ ≤ 0.25 에서 BOK 누적 bp 직결). 그래서 손잡이를 이벤트 안으로 내렸다:
+   * `shortEndEvents[].cdSpreadBp`. 터미널 값은 이제 그 합에서 파생된다. */
   /** SIM2-2 (ruling ①) — the intermediate waypoint days the USER has edited
    * (stepper, typed commit, or drag). Explicit flags, never value-equality
    * inference: an untouched waypoint re-lerps onto the line toward
@@ -104,7 +107,6 @@ export type ScenarioCase = Pick<
   | "touchedWaypointDays"
   | "spread1y"
   | "spread10y"
-  | "spreadCd"
   | "irsSpread"
   | "shortEndEvents"
 >;
@@ -115,7 +117,6 @@ export const CASE_KEYS = [
   "touchedWaypointDays",
   "spread1y",
   "spread10y",
-  "spreadCd",
   "irsSpread",
   "shortEndEvents",
 ] as const satisfies readonly (keyof ScenarioCase)[];
@@ -147,7 +148,6 @@ const seedCase = (bp: number, days: number): ScenarioCase => ({
   touchedWaypointDays: [],
   spread1y: "0",
   spread10y: "0",
-  spreadCd: "0",
   irsSpread: "0",
   shortEndEvents: [],
 });
@@ -203,7 +203,6 @@ export const DEFAULT_SCENARIO_PARAMS: ScenarioParams = {
   shortEndEvents: [],
   sigmaBp: "2.0",
   fundingStepping: false,
-  spreadCd: "0",
   touchedWaypointDays: [],
   anchorTenor: "3Y",
 };

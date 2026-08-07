@@ -13,15 +13,21 @@
  * 다리를 **읽기 전용으로** 펼쳐 보여준다: 무엇이 실제로 평가되는지 보이지
  * 않으면 스프레드의 두 명목이 왜 다른지 알 길이 없다.
  *
- * 고정금리 입력칸은 없다. 다리마다 그 날 par로 쳐지므로 진입 MtM이 0이고,
- * 결과에 남는 것은 **경로가 만든 손익뿐**이다. 이 화면이 묻는 것이 그것이다.
+ * 고정금리는 다리마다 **그 날 par가 기본**이다 — 그러면 진입 MtM이 0이고 결과에
+ * 남는 것이 경로가 만든 손익뿐이다. 이 화면이 묻는 것이 그것이다. 다만 par가
+ * 들어가 있는 그 칸을 고칠 수 있다 [트레이더 피드백 3, 2026-08-07]: 이미 들고
+ * 있는 포지션을 이 경로에 놓아 보려면 진입 레벨이 par가 아니다. 옮긴 줄은 진입
+ * MtM이 0이 아니게 되고, 화면이 그 사실을 말한다.
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
+import { useCdRate } from "@/sim/hooks/use-cd-rate";
 import { useSimulationDataStore } from "@/sim/store/simulation-data-store";
 import {
   directionOptions,
+  effectiveRate,
+  hasRateOverride,
   KIND_LABEL,
   KIND_ORDER,
   kindOf,
@@ -37,25 +43,123 @@ function eok(krw: number): string {
   return `${(krw / 1e8).toLocaleString(undefined, { maximumFractionDigits: 1 })}억`;
 }
 
-function LegList({ legs, error, pending }: { legs: ExpandedLeg[]; error: string | null; pending: boolean }) {
+/** 고정금리 한 칸.
+ *
+ * 초안(draft) 버퍼를 따로 드는 이유: 보여줄 때는 par 와 같은 자릿수(소수 넷)로
+ * 정렬돼야 하는데, 그 형식을 그대로 제어값으로 쓰면 `3.` 을 치는 순간 `3.0000`
+ * 으로 되돌아가서 소수점 뒤를 칠 수가 없다. 타이핑 중에는 친 글자를 그대로 두고,
+ * 칸을 떠날 때 형식으로 돌아온다. 값 자체는 칠 때마다 바로 반영된다 — 커밋을
+ * blur 로 미루면 숫자를 고쳐 놓고 다른 데를 누르기 전까지 차트가 거짓말을 한다. */
+function RateInput({
+  label,
+  value,
+  off,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  off: boolean;
+  onCommit: (n: number) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      aria-label={label}
+      value={draft ?? value.toFixed(4)}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setDraft(raw);
+        const n = Number(raw);
+        if (raw.trim() !== "" && Number.isFinite(n)) onCommit(n);
+      }}
+      onBlur={() => setDraft(null)}
+      className={cn(
+        "h-6 w-24 shrink-0 rounded-control-sm border border-field bg-tile px-2 text-right tabular-nums",
+        off ? "text-ink" : "text-ink-2",
+      )}
+    />
+  );
+}
+
+function LegList({
+  legs,
+  error,
+  pending,
+  position,
+  onPatch,
+}: {
+  legs: ExpandedLeg[];
+  error: string | null;
+  pending: boolean;
+  position: ManualPosition;
+  onPatch: (patch: Partial<ManualPosition>) => void;
+}) {
   if (pending) return <p className="text-callout text-ink-2">다리를 세우는 중…</p>;
   if (error) return <p className="text-callout text-up">{error}</p>;
   if (legs.length === 0) return null;
+
+  /** 한 다리의 금리를 옮기거나(숫자) 되돌린다(null → par). */
+  const setRate = (legId: string, v: number | null) => {
+    const next = { ...(position.rateOverrides ?? {}) };
+    if (v === null) delete next[legId];
+    else next[legId] = v;
+    // 남은 항목이 없으면 필드 자체를 지운다 — 빈 객체가 남으면 저장분이
+    // "덮어썼다가 되돌린 줄"과 "한 번도 안 건드린 줄"을 구분 못 한 채 커진다.
+    onPatch({ rateOverrides: Object.keys(next).length > 0 ? next : undefined });
+  };
+
+  const moved = hasRateOverride(legs, position);
+
   return (
     <div className="flex flex-col gap-0.5">
-      {legs.map((l) => (
-        <div key={l.id} className="flex items-baseline gap-2 text-callout text-ink-2">
-          {/* 다리의 부호는 상품의 방향과 다른 층위다 — 여기서는 스왑 그대로
-              고정 지급/수취로 적는다. 상품 방향은 위 세그먼트가 말한다. */}
-          <span className="w-14 shrink-0 tabular-nums text-ink-1">{l.tenor}</span>
-          <span className="w-12 shrink-0">{l.direction === 1 ? "수취" : "지급"}</span>
-          <span className="w-20 shrink-0 text-right tabular-nums">{eok(l.notional)}</span>
-          <span className="w-20 shrink-0 text-right tabular-nums">{l.couponRate.toFixed(4)}%</span>
-          <span className="tabular-nums">
-            {l.startDate} → {l.maturityDate}
-          </span>
-        </div>
-      ))}
+      {legs.map((l) => {
+        const rate = effectiveRate(l, position);
+        const off = rate !== l.couponRate;
+        return (
+          <div key={l.id} className="flex items-center gap-2 text-callout text-ink-2">
+            {/* 다리의 부호는 상품의 방향과 다른 층위다 — 여기서는 스왑 그대로
+                고정 지급/수취로 적는다. 상품 방향은 위 세그먼트가 말한다. */}
+            <span className="w-14 shrink-0 tabular-nums text-ink-1">{l.tenor}</span>
+            <span className="w-12 shrink-0">{l.direction === 1 ? "수취" : "지급"}</span>
+            <span className="w-20 shrink-0 text-right tabular-nums">{eok(l.notional)}</span>
+            {/* par 가 있던 자리가 그대로 입력칸이 된다 [트레이더 피드백 3].
+                새 칸을 만들지 않는 이유: 이 줄은 이미 "이 다리는 이 금리로
+                쳐진다"를 말하고 있었다. 고칠 수 있게 된 것뿐이다. */}
+            <RateInput
+              label={`${l.tenor} 고정금리`}
+              value={rate}
+              off={off}
+              onCommit={(n) => setRate(l.id, n)}
+            />
+            <span className="shrink-0">%</span>
+            {off ? (
+              // 되돌릴 곳. par 가 얼마였는지도 같이 말한다 — "얼마에서 옮겼나"를
+              // 물으려고 다시 계산하게 두지 않는다.
+              <button
+                type="button"
+                onClick={() => setRate(l.id, null)}
+                className="shrink-0 rounded-control-sm px-1.5 text-ink-2 underline-offset-2 hover:text-ink hover:underline"
+              >
+                par {l.couponRate.toFixed(4)}%로
+              </button>
+            ) : (
+              <span className="tabular-nums">
+                {l.startDate} → {l.maturityDate}
+              </span>
+            )}
+          </div>
+        );
+      })}
+      {moved && (
+        /* 사실 하나를 말한다. par 진입은 MtM 0에서 출발하지만 옮긴 진입은
+           아니다 — 결과의 평가손익에 경로가 만들지 않은 몫이 처음부터 섞여
+           있다는 뜻이고, 그걸 모르면 숫자를 잘못 읽는다. */
+        <p className="pt-1 text-callout text-ink-2">
+          금리를 par에서 옮겼어요. 진입 시점 평가손익이 0이 아니에요.
+        </p>
+      )}
     </div>
   );
 }
@@ -95,7 +199,9 @@ function PositionRow({
               const k = e.target.value as keyof InstrumentCatalog;
               const list = catalog?.[k] ?? [];
               const first = (list.find((o) => o.key) ?? list[0])?.id;
-              if (first) onPatch({ seriesId: first });
+              // 상품이 바뀌면 다리가 달라지므로 금리 덮어쓰기를 비운다 —
+              // 남겨 두면 3s10s 의 3Y 금리가 2s5s 의 2Y 다리에 조용히 붙는다.
+              if (first) onPatch({ seriesId: first, rateOverrides: undefined });
             }}
             className="h-6 rounded-control-sm border border-field bg-tile px-2 text-body text-ink-1"
           >
@@ -119,7 +225,7 @@ function PositionRow({
           <select
             aria-label="상품"
             value={position.seriesId}
-            onChange={(e) => onPatch({ seriesId: e.target.value })}
+            onChange={(e) => onPatch({ seriesId: e.target.value, rateOverrides: undefined })}
             className="h-6 rounded-control-sm border border-field bg-tile px-2 text-body text-ink-1"
           >
             {[true, false].map((wantKey) => {
@@ -173,7 +279,13 @@ function PositionRow({
       {error ? (
         <p className="text-body text-up">{error}</p>
       ) : (
-        <LegList legs={legs.legs} error={legs.error} pending={legs.pending} />
+        <LegList
+          legs={legs.legs}
+          error={legs.error}
+          pending={legs.pending}
+          position={position}
+          onPatch={onPatch}
+        />
       )}
     </div>
   );
@@ -198,6 +310,7 @@ export function PositionsPanel({
   const patch = useSimulationDataStore((s) => s.updateManualPosition);
   const remove = useSimulationDataStore((s) => s.removeManualPosition);
   const clear = useSimulationDataStore((s) => s.clearManualPositions);
+  const cd = useCdRate(baseDate);
 
   /** 실제로 평가되는 다리 수 — 줄 수가 아니다. 스프레드 하나가 두 다리다. */
   const legCount = useMemo(
@@ -212,11 +325,22 @@ export function PositionsPanel({
       title="포지션"
       className={className}
       aside={
-        positions.length > 0 ? (
-          <Button variant="ghost" size="sm" onClick={clear}>
-            전체 삭제
-          </Button>
-        ) : undefined
+        <>
+          {/* CD 3M — 이 화면이 세우는 스왑의 변동 쪽 지수다 [트레이더 피드백 4,
+              2026-08-07]. 고정금리는 다리마다 적혀 있는데 그것이 무엇 대비인지는
+              화면 어디에도 없었다. 헤더에 한 번만 적는다: 다리마다 반복하면
+              같은 사실을 N번 말하게 된다(모든 다리가 같은 날의 같은 CD다). */}
+          {cd !== null && (
+            <span className="whitespace-nowrap text-[13px] tabular-nums text-ink-2">
+              CD 3M {cd.toFixed(4)}%
+            </span>
+          )}
+          {positions.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={clear}>
+              전체 삭제
+            </Button>
+          )}
+        </>
       }
     >
       {marketUnavailable && (
