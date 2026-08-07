@@ -65,12 +65,13 @@ interface SimulationDataState {
    * 이제 이것이 `inputs.positions`의 원천이고, 북 브릿지는 기준일과 데이터
    * 범위만 준다.
    *
-   * 페이로드 모양이 아니라 **입력 폼의 상태**를 들고 있다 — 억 원, 퍼센트,
-   * 테너 라벨. 엔진 단위로의 변환은 lib/manual-position.ts가 한 곳에서 한다.
+   * 페이로드 모양이 아니라 **입력 폼의 상태**를 들고 있다 — 상품 id, 방향,
+   * 억 원. 스왑 다리로의 전개는 백엔드가 한다(POST /api/instruments/expand):
+   * DV01 중립 가중에 커브가 필요하고 브라우저는 계산하지 않는다.
    * localStorage에 남는다: 시나리오를 여러 번 바꿔가며 돌리는 것이 이 화면의
    * 일인데 새로고침마다 다시 입력하는 건 말이 안 된다. */
   manualPositions: ManualPosition[];
-  addManualPosition: (baseDate: string) => void;
+  addManualPosition: () => void;
   updateManualPosition: (id: string, patch: Partial<ManualPosition>) => void;
   removeManualPosition: (id: string) => void;
   clearManualPositions: () => void;
@@ -98,7 +99,7 @@ interface SimulationDataState {
  *
  * 읽기가 절대 던지지 않는다: 스토어 생성은 모듈 로드 시점이고, 여기서 던지면
  * 손상된 항목 하나가 탭 전체를 못 열게 만든다. */
-const MANUAL_KEY = "bw-sim-manual-v1";
+const MANUAL_KEY = "bw-sim-manual-v2";
 
 function loadManualPositions(): ManualPosition[] {
   if (typeof window === "undefined") return []; // SSR — localStorage가 없다
@@ -142,14 +143,14 @@ export const useSimulationDataStore = create<SimulationDataState>((set) => ({
   setStage: (stage) => set({ stage }),
 
   manualPositions: loadManualPositions(),
-  addManualPosition: (baseDate) =>
+  addManualPosition: () =>
     set((s) => {
       // seq는 길이가 아니라 **지금까지 쓴 적 없는 번호**여야 한다. 길이로
       // 만들면 3개 중 가운데를 지우고 추가할 때 id가 겹치고, 겹친 id는 React
       // key와 삭제 대상을 동시에 헷갈리게 한다.
       const used = s.manualPositions.map((p) => Number(p.id.replace("manual-", "")) || 0);
       const seq = (used.length ? Math.max(...used) : 0) + 1;
-      return persistManual([...s.manualPositions, newManualPosition(baseDate, seq)]);
+      return persistManual([...s.manualPositions, newManualPosition(seq)]);
     }),
   updateManualPosition: (id, patch) =>
     set((s) =>

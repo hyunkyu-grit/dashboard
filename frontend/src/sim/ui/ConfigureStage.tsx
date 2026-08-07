@@ -37,6 +37,7 @@ import { useSimulationPort } from "@/sim/hooks/use-simulation";
 import { useSimulationDataStore } from "@/sim/store/simulation-data-store";
 import { addDaysIso, diffDaysIso, isValidIso } from "@/sim/lib/dates";
 import { useBook } from "@/sim/hooks/use-book";
+import { useInstrumentCatalog } from "@/sim/hooks/use-instruments";
 import { anchorConversionError, toNum } from "@/sim/lib/scenario-curves";
 import {
   WAYPOINT_STEP_BP,
@@ -89,7 +90,8 @@ export function ConfigureStage() {
   const setUserBaseDate = useSimulationDataStore((s) => s.setUserBaseDate);
   const userBaseDate = useSimulationDataStore((s) => s.userBaseDate);
   const manualPositions = useSimulationDataStore((s) => s.manualPositions);
-  const { latestDataDate, parQuotes, bookError } = useBook();
+  const { latestDataDate, legsByRow, marketUnavailable } = useBook();
+  const catalog = useInstrumentCatalog();
 
   const anchor: AnchorTenor = params.anchorTenor ?? "3Y";
   const anchorError = anchorConversionError(params);
@@ -168,13 +170,11 @@ export function ConfigureStage() {
           </div>
           <div className="flex items-center justify-between gap-3 pb-4">
             <span className="text-body text-ink-2">
-              {/* 넣은 줄과 평가되는 줄이 다를 수 있다(기준일에 만기가 지난
-                  줄은 빠진다). 다르면 그 사실을 말한다 — 조용히 줄어든 건수는
-                  결과를 잘못 읽게 만든다. */}
+              {/* 상품 수와 다리 수는 다르다 — 스프레드 하나가 두 다리, 플라이
+                  하나가 세 다리다. 실제로 평가되는 것은 다리 쪽이라 둘 다
+                  말한다. */}
               {inputs.positions.length > 0
-                ? manualPositions.length > inputs.positions.length
-                  ? `스왑 ${inputs.positions.length}건을 평가해요 — ${manualPositions.length - inputs.positions.length}건은 기준일에 이미 만기예요`
-                  : `스왑 ${inputs.positions.length}건을 평가해요`
+                ? `상품 ${manualPositions.length}개 · 스왑 ${inputs.positions.length}다리를 평가해요`
                 : "평가할 포지션이 없어요"}
             </span>
             {/* "오늘로"가 아니라 "최신 데이터로"다. 오늘은 대개 워크북에 없는
@@ -195,7 +195,12 @@ export function ConfigureStage() {
 
         {/* 포지션이 금리 경로보다 위에 온다. 순서가 질문의 순서다 — 무엇을
             평가할지 먼저 정하고, 그 다음에 어떤 경로에 둘지 정한다. */}
-        <PositionsPanel baseDate={baseDate} parQuotes={parQuotes} bookError={bookError} />
+        <PositionsPanel
+          baseDate={baseDate}
+          catalog={catalog.data}
+          legsByRow={legsByRow}
+          marketUnavailable={marketUnavailable}
+        />
 
         <Section title="목표 금리">
           <div className="flex flex-col gap-4 pb-4 pt-3">

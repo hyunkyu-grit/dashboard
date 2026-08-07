@@ -1,91 +1,134 @@
 "use client";
 
 /**
- * 직접 입력한 포지션들 — 이 화면이 무엇을 평가할지 [OWNER, 2026-08-07].
+ * 직접 넣은 포지션 — 이 화면이 무엇을 평가할지 [OWNER, 2026-08-07].
  *
- * 북(`Portfolio Data.xlsx`)이 한동안 쓰이지 않는다. 질문이 "내 북이 어떻게
- * 되나"에서 "**이 포지션을 이 금리 경로에 두면 어떻게 되나**"로 바뀌었고,
- * 그 질문의 입력은 손으로 넣는 몇 줄이다.
+ * 한 줄은 **상품 하나**다: 아웃라이트·스프레드·버터플라이·포워드. 모니터 옆
+ * 탭들이 세상을 나누는 방식 그대로이고, 같은 id 문법(`3Y-10Y`, `1Yx1Y`)을
+ * 쓴다. 처음에는 스왑 다리 하나를 넣게 했는데, 그건 "3s10s 100억"을 넣고
+ * 싶은 사람에게 다리 둘을 손으로 만들고 명목을 눈대중으로 맞추라는 소리였다.
  *
- * ─ 테너가 만기의 주인이다 ────────────────────────────────────────────────
- * 한 줄은 방향·테너·명목·고정금리로 읽힌다. 테너를 고르면 만기일이 따라오고
- * (시작일 + n년), 고정금리는 그날의 시장 par로 채워진다. 그 상태의 포지션은
- * 진입 MtM이 0이라, 결과에 남는 것이 **경로가 만든 손익뿐**이다 — 묻고 있는
- * 것이 정확히 그것이다.
+ * 다리는 백엔드가 편다(POST /api/instruments/expand) — DV01 중립 가중은
+ * 기준일 커브가 있어야 하고 브라우저는 계산하지 않는다(§16). 화면은 돌아온
+ * 다리를 **읽기 전용으로** 펼쳐 보여준다: 무엇이 실제로 평가되는지 보이지
+ * 않으면 스프레드의 두 명목이 왜 다른지 알 길이 없다.
  *
- * 날짜와 금리는 그대로 고칠 수 있다. 이미 보유 중인 포지션은 par에 있지 않고
- * 시작일도 과거이기 때문이다. 두 경우가 같은 표에서 표현된다.
- *
- * ─ 왜 셀 편집이지 폼이 아닌가 ────────────────────────────────────────────
- * 포지션은 서로 비교하면서 넣는다("3년 받고 10년 주면?"). 한 줄씩 모달을
- * 여는 형태는 그 비교를 화면 밖으로 밀어낸다. 행이 곧 입력이면 네 줄을
- * 나란히 두고 숫자만 바꿔볼 수 있다.
+ * 고정금리 입력칸은 없다. 다리마다 그 날 par로 쳐지므로 진입 MtM이 0이고,
+ * 결과에 남는 것은 **경로가 만든 손익뿐**이다. 이 화면이 묻는 것이 그것이다.
  */
 
 import { useMemo } from "react";
 
 import { useSimulationDataStore } from "@/sim/store/simulation-data-store";
 import {
-  parRatePct,
+  directionOptions,
+  KIND_LABEL,
+  KIND_ORDER,
+  kindOf,
   positionError,
-  TENORS,
-  withStartDate,
-  withTenor,
+  type ExpandedLeg,
+  type InstrumentCatalog,
   type ManualPosition,
-  type ParQuote,
-  type TenorLabel,
 } from "@/sim/lib/manual-position";
-import { Button, Field, Input, NumberField, Section, Segmented, cn } from "@/sim/ui/primitives";
+import { Button, Field, NumberField, Section, Segmented, cn } from "@/sim/ui/primitives";
 
-const DIRECTION_OPTIONS = [
-  { value: "recv", label: "고정 수취" },
-  { value: "pay", label: "고정 지급" },
-] as const;
+/** 돈은 억 단위로 읽는다. 다리 명목은 백엔드가 원으로 주므로 여기서 되돌린다. */
+function eok(krw: number): string {
+  return `${(krw / 1e8).toLocaleString(undefined, { maximumFractionDigits: 1 })}억`;
+}
 
-/** 행 하나. ConfigureStage의 목록 행과 같은 32px 사다리 위에 있지만, 이 행은
- * 입력칸을 여럿 물고 있어 한 칸으로는 좁다 — 두 줄로 접는다. */
+function LegList({ legs, error, pending }: { legs: ExpandedLeg[]; error: string | null; pending: boolean }) {
+  if (pending) return <p className="text-callout text-ink-2">다리를 세우는 중…</p>;
+  if (error) return <p className="text-callout text-up">{error}</p>;
+  if (legs.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-0.5">
+      {legs.map((l) => (
+        <div key={l.id} className="flex items-baseline gap-2 text-callout text-ink-2">
+          {/* 다리의 부호는 상품의 방향과 다른 층위다 — 여기서는 스왑 그대로
+              고정 지급/수취로 적는다. 상품 방향은 위 세그먼트가 말한다. */}
+          <span className="w-14 shrink-0 tabular-nums text-ink-1">{l.tenor}</span>
+          <span className="w-12 shrink-0">{l.direction === 1 ? "수취" : "지급"}</span>
+          <span className="w-20 shrink-0 text-right tabular-nums">{eok(l.notional)}</span>
+          <span className="w-20 shrink-0 text-right tabular-nums">{l.couponRate.toFixed(4)}%</span>
+          <span className="tabular-nums">
+            {l.startDate} → {l.maturityDate}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PositionRow({
   position,
-  parPct,
+  catalog,
+  legs,
   onPatch,
   onRemove,
 }: {
   position: ManualPosition;
-  parPct: number | null;
+  catalog: InstrumentCatalog | undefined;
+  legs: { legs: ExpandedLeg[]; error: string | null; pending: boolean };
   onPatch: (patch: Partial<ManualPosition>) => void;
   onRemove: () => void;
 }) {
-  const error = positionError(position, parPct);
-  return (
-    <div className="relative isolate flex flex-col gap-2 border-t border-edge py-3 first:border-t-0">
-      <div className="flex flex-wrap items-end gap-3">
-        <Field label="방향">
-          <Segmented
-            options={DIRECTION_OPTIONS}
-            value={position.direction === 1 ? "recv" : "pay"}
-            onChange={(v) => onPatch({ direction: v === "recv" ? 1 : -1 })}
-            label="고정 수취 / 고정 지급"
-          />
-        </Field>
+  const kind = kindOf(position.seriesId);
+  const error = positionError(position);
+  const dirs = directionOptions(position.seriesId);
 
-        <Field label="테너">
-          {/* 네이티브 select다. 아홉 개를 세그먼트로 늘어놓으면 폼 폭을 넘고,
-              이 셸에는 드롭다운 프리미티브가 없다. */}
+  return (
+    <div className="flex flex-col gap-2 border-t border-edge py-3 first:border-t-0">
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label="종류">
           <select
-            aria-label="테너"
-            value={position.tenor}
-            onChange={(e) => onPatch(withTenor(position, e.target.value as TenorLabel))}
+            aria-label="상품 종류"
+            value={kind}
+            onChange={(e) => {
+              // 종류를 바꾸면 그 종류의 첫 상품으로 간다. 예전 id를 들고
+              // 있으면 종류와 id가 어긋난 줄이 생긴다.
+              const k = e.target.value as keyof InstrumentCatalog;
+              const first = catalog?.[k]?.[0]?.id;
+              if (first) onPatch({ seriesId: first });
+            }}
             className="h-6 rounded-control-sm border border-field bg-tile px-2 text-body text-ink-1"
           >
-            {TENORS.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            {KIND_ORDER.map((k) => (
+              <option key={k} value={k}>
+                {KIND_LABEL[k]}
               </option>
             ))}
           </select>
         </Field>
 
-        <Field label="명목">
+        <Field label="상품">
+          <select
+            aria-label="상품"
+            value={position.seriesId}
+            onChange={(e) => onPatch({ seriesId: e.target.value })}
+            className="h-6 rounded-control-sm border border-field bg-tile px-2 text-body text-ink-1"
+          >
+            {(catalog?.[kind] ?? []).map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="방향">
+          {/* 라벨이 종류마다 다르다 — 아웃라이트는 페이/리시브, 스프레드는
+              스티프너/플래트너, 플라이는 벨리 매수/매도. 원화 데스크가 실제로
+              쓰는 말이고, 규칙은 lib/manual-position.directionLabel에 있다. */}
+          <Segmented
+            options={dirs}
+            value={position.direction === 1 ? "long" : "short"}
+            onChange={(v) => onPatch({ direction: v === "long" ? 1 : -1 })}
+            label="방향"
+          />
+        </Field>
+
+        <Field label="명목" hint={kind === "outright" ? undefined : "기준 다리"}>
           <NumberField
             value={String(position.notionalEok)}
             onChange={(v) => onPatch({ notionalEok: Number(v) || 0 })}
@@ -95,65 +138,32 @@ function PositionRow({
           />
         </Field>
 
-        <Field
-          label="고정금리"
-          /* 비워 두면 par로 간다는 사실을 라벨 옆에서 말한다. 빈 칸이 0으로
-             읽히면 사용자는 0% 스왑을 평가한 줄 모르고 결과를 믿는다. */
-          hint={
-            position.fixedRatePct === ""
-              ? parPct !== null
-                ? `시장 par ${parPct.toFixed(4)}%`
-                : "그날 호가 없음"
-              : "직접 입력"
-          }
-        >
-          <NumberField
-            value={position.fixedRatePct === "" ? "" : String(position.fixedRatePct)}
-            onChange={(v) => onPatch({ fixedRatePct: v === "" ? "" : Number(v) })}
-            suffix="%"
-            placeholder={parPct !== null ? parPct.toFixed(4) : "—"}
-            aria-label="고정금리"
-            className="w-32"
-          />
-        </Field>
-
         <Button variant="ghost" size="sm" onClick={onRemove} aria-label="이 포지션 삭제">
           삭제
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
-        <Field label="시작일">
-          <Input
-            type="date"
-            value={position.startDate}
-            onChange={(e) => onPatch(withStartDate(position, e.target.value))}
-          />
-        </Field>
-        <Field label="만기일" hint={`${position.tenor} 기준`}>
-          <Input
-            type="date"
-            value={position.maturityDate}
-            onChange={(e) => onPatch({ maturityDate: e.target.value })}
-          />
-        </Field>
-      </div>
-
-      {error && <p className="text-body text-up">{error}</p>}
+      {error ? (
+        <p className="text-body text-up">{error}</p>
+      ) : (
+        <LegList legs={legs.legs} error={legs.error} pending={legs.pending} />
+      )}
     </div>
   );
 }
 
 export function PositionsPanel({
   baseDate,
-  parQuotes,
-  bookError,
+  catalog,
+  legsByRow,
+  marketUnavailable,
   className,
 }: {
   baseDate: string;
-  parQuotes: readonly ParQuote[];
-  /** 북 읽기가 실패했는지. 알림일 뿐 이 화면을 막지 않는다. */
-  bookError: boolean;
+  catalog: InstrumentCatalog | undefined;
+  legsByRow: Record<string, { legs: ExpandedLeg[]; error: string | null; pending: boolean }>;
+  /** 시장 데이터를 아예 못 읽었다 — 이때는 포지션을 만들 수도 없다. */
+  marketUnavailable: boolean;
   className?: string;
 }) {
   const positions = useSimulationDataStore((s) => s.manualPositions);
@@ -162,24 +172,17 @@ export function PositionsPanel({
   const remove = useSimulationDataStore((s) => s.removeManualPosition);
   const clear = useSimulationDataStore((s) => s.clearManualPositions);
 
-  /* 순명목이 아니라 방향별 합계다. 수취 100억과 지급 100억을 합쳐 0이라고
-     적으면 두 다리짜리 포지션이 "없음"으로 보인다. */
-  const totals = useMemo(() => {
-    let recv = 0;
-    let pay = 0;
-    for (const p of positions) {
-      if (p.direction === 1) recv += p.notionalEok;
-      else pay += p.notionalEok;
-    }
-    return { recv, pay };
-  }, [positions]);
+  /** 실제로 평가되는 다리 수 — 줄 수가 아니다. 스프레드 하나가 두 다리다. */
+  const legCount = useMemo(
+    () => Object.values(legsByRow).reduce((n, r) => n + r.legs.length, 0),
+    [legsByRow],
+  );
+
+  const canAdd = Boolean(baseDate) && !marketUnavailable;
 
   return (
     <Section
       title="포지션"
-      /* `first`가 아니다 — 기간 구획 다음에 오므로 위 헤어라인이 있어야
-         한다. 첫 구획만 그것을 생략하는 이유는 헤더의 경계선과 겹쳐 두 줄이
-         되기 때문이고, 여기는 그 자리가 아니다. */
       className={className}
       aside={
         positions.length > 0 ? (
@@ -189,20 +192,22 @@ export function PositionsPanel({
         ) : undefined
       }
     >
-      {bookError && (
-        /* 북이 안 읽혔다는 사실은 알리되 길을 막지 않는다 — 이 화면은 손입력
-           만으로 완결된다. 예전에는 이 자리가 정지 화면이었다. */
-        <p className="pt-3 text-body text-ink-2">
-          저장된 북은 읽지 못했어요. 아래에 직접 넣은 포지션으로 돌아갑니다.
+      {marketUnavailable && (
+        /* 원인을 정확히 말한다. 예전에는 이 상황이 각 행의 "그날 호가가
+           없어요"로 나타났는데, 없는 것은 호가가 아니라 시장 데이터 전체이고
+           고칠 곳도 행이 아니라 백엔드였다. */
+        <p className="pt-3 text-body text-up">
+          시장 데이터를 읽지 못했어요. 백엔드가 떠 있는지 확인해 주세요 — 포지션은 그 뒤에 넣을 수 있어요.
         </p>
       )}
 
       {positions.length === 0 ? (
         <div className="flex flex-col items-start gap-3 py-4">
           <p className="text-body text-ink-2">
-            평가할 포지션이 없어요. 스왑을 넣으면 아래 금리 경로에서 어떻게 되는지 보여드릴게요.
+            평가할 포지션이 없어요. 아웃라이트·스프레드·버터플라이·포워드를 넣으면 아래 금리 경로에서 어떻게
+            되는지 보여드릴게요.
           </p>
-          <Button variant="primary" onClick={() => add(baseDate)} disabled={!baseDate}>
+          <Button variant="primary" onClick={add} disabled={!canAdd}>
             포지션 추가
           </Button>
         </div>
@@ -213,7 +218,8 @@ export function PositionsPanel({
               <PositionRow
                 key={p.id}
                 position={p}
-                parPct={parRatePct(parQuotes, p.tenor)}
+                catalog={catalog}
+                legs={legsByRow[p.id] ?? { legs: [], error: null, pending: true }}
                 onPatch={(patchIn) => patch(p.id, patchIn)}
                 onRemove={() => remove(p.id)}
               />
@@ -221,9 +227,9 @@ export function PositionsPanel({
           </div>
           <div className={cn("flex items-center justify-between gap-3 border-t border-edge py-3")}>
             <span className="text-body text-ink-2">
-              {`수취 ${totals.recv.toLocaleString()}억 · 지급 ${totals.pay.toLocaleString()}억`}
+              {`${positions.length}개 상품 · 스왑 ${legCount}다리`}
             </span>
-            <Button variant="secondary" size="sm" onClick={() => add(baseDate)} disabled={!baseDate}>
+            <Button variant="secondary" size="sm" onClick={add} disabled={!canAdd}>
               포지션 추가
             </Button>
           </div>

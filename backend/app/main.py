@@ -63,6 +63,7 @@ from irs_pricer.core import data_watch, ttl_cache
 from irs_pricer.core.errors import CurveBootstrapError
 from irs_pricer.engine import curve_cache
 
+from . import instruments as instruments_mod
 from . import payloads
 from .backtest import BacktestError, Position, run_backtest
 from .cache import cached, data_hash
@@ -353,6 +354,46 @@ def backtest(positions: str = "") -> dict:
 def volatility() -> dict:
     # Relative-ATR list rows + across-tenor curve, all precomputed (§16).
     return payloads.volatility(_dataset, _bases, _volatility)
+
+
+@router.get("/api/instruments")
+def instruments() -> dict:
+    """What the 시뮬레이션 tab can book, grouped the way the tabs are.
+
+    The monitor already divides the world into 아웃라이트/스프레드/버터플라이/
+    포워드; the simulation's position entry offers the same list rather than a
+    bare tenor picker, so "3s10s" means one thing in this product.
+    """
+    return instruments_mod.catalog()
+
+
+@router.post("/api/instruments/expand")
+def expand_instrument(body: dict) -> dict:
+    """One instrument line → the swap legs the engine prices.
+
+    LIVE, and it has to be: the leg weights are DV01-neutral at the base date's
+    curve, and §16 says the browser computes nothing. The response rows are
+    already in the shape /api/simulate takes.
+    """
+    try:
+        series_id = str(body["seriesId"])
+        direction = int(body.get("direction", 1))
+        notional = float(body["notional"])
+        base = dt.date.fromisoformat(str(body["baseDate"])[:10])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"seriesId·notional·baseDate가 필요해요 ({exc})",
+        )
+    if notional <= 0:
+        raise HTTPException(status_code=422, detail="명목은 0보다 커야 해요.")
+    try:
+        legs = instruments_mod.expand(_dataset, series_id, direction, notional, base)
+    except BacktestError as exc:
+        # 다리를 못 세우는 이유는 사용자가 고칠 수 있는 것들이다 — 그 날 호가가
+        # 없거나, 데이터 범위를 벗어난 날짜거나. 500이 아니라 이유를 말한다.
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"seriesId": series_id, "kind": instruments_mod.kind_of(series_id), "legs": legs}
 
 
 # The monitor first, then the simulation — the order the reader meets them, and

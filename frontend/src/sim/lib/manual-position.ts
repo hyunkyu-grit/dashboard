@@ -1,181 +1,124 @@
 /**
- * 손으로 넣은 스왑 한 줄 → 엔진이 받는 Position.
+ * 직접 넣은 포지션 한 줄 — **상품 하나**이지 스왑 다리 하나가 아니다.
  *
- * 왜 이게 생겼나 [OWNER, 2026-08-07]: 북(`data/Portfolio Data.xlsx`)을 한동안
- * 안 쓰기로 했다. 알고 싶은 것이 "내 북이 어떻게 되나"가 아니라 "이 포지션을
- * 이 금리 경로에 두면 어떻게 되나"이기 때문이다. 북 브릿지는 살아 있지만
- * (use-book.ts) 더 이상 포지션의 주인이 아니고, 실패해도 화면을 막지 않는다.
+ * 처음에는 다리 하나였다(방향·테너·명목·고정금리). 틀린 모델이었다. 이 화면
+ * 옆의 모니터는 이미 세상을 아웃라이트·스프레드·버터플라이·포워드로 나눠
+ * 보여주고, 트레이더가 넣고 싶은 것은 "3년 수취"가 아니라 **"3s10s 100억"**
+ * 이다. 다리를 손으로 둘 만들고 명목을 눈대중으로 맞추라고 하는 것은 도구가
+ * 할 일을 사람에게 미루는 것이었다 [OWNER, 2026-08-07].
  *
- * ─ 최소 입력 ──────────────────────────────────────────────────────────────
- * 백엔드가 스왑에서 실제로 요구하는 것은 계약 조건뿐이다. 나머지는
- * services/simulation/swap_inputs.py가 채운다:
+ * ─ 전개는 백엔드가 한다 ──────────────────────────────────────────────────
+ * 다리 가중은 기준일 커브에서 DV01 중립으로 잡히고, 브라우저는 계산하지
+ * 않는다(design spec §16). 그래서 이 모듈에는 다리를 만드는 산술이 없다 —
+ * POST /api/instruments/expand가 페이로드 모양 그대로 돌려주고, 화면은 그것을
+ * 보여주기만 한다. 다리 규칙 자체도 새로 쓰지 않았다: backtest._legs_for가
+ * 정한 것(스프레드 = 롱 B/숏 A, 플라이 = 벨리 2 vs 윙 각 1)을 그대로 쓴다.
+ * 두 화면이 같은 "3s10s"를 다르게 이해하면 비교가 불가능해진다.
  *
- *   remainingDays      만기 − 기준일
- *   nextFixingDate     ISDA 스케줄에서 기준일 다음 지급일
- *   currentFloatRate   CD 픽싱 이력에서 그 구간의 리셋값
- *
- * 그래서 이 모듈은 그 세 개를 **지어내지 않는다.** 여기서 계산하면 백엔드와
- * 두 개의 진실이 생기고, 어긋나는 순간 어느 쪽이 맞는지 알 방법이 없다.
- * `irsToPosition`(use-book.ts)이 북 행에 대해 지키는 규율과 같은 규율이다.
- *
- * ─ 단위 ───────────────────────────────────────────────────────────────────
- * `couponRate`는 **퍼센트**(3.4225), 시장 스냅샷의 `rate`는 **소수**(0.034225).
- * 화면의 명목은 **억 원**, 페이로드의 notional은 **원**. 둘 다 여기서 한 번만
- * 변환한다 — 컴포넌트가 ×100이나 ×1e8을 들고 있으면 그게 다음 버그다.
+ * ─ 남은 것 ────────────────────────────────────────────────────────────────
+ * 여기 있는 것은 **입력 폼의 상태**뿐이다: 무슨 상품인지, 어느 방향인지, 얼마나.
+ * 억 원 단위도 여기서만 쓴다(페이로드는 원). 고정금리는 더 이상 사용자가 넣지
+ * 않는다 — 다리마다 그 날 par로 쳐지고, 그래서 진입 MtM이 0이며 결과에 남는
+ * 것이 **경로가 만든 손익뿐**이다. 이 화면이 묻는 것이 정확히 그것이다.
  */
 
-import type { Position } from "@/sim/types/portfolio";
+/** 모니터의 그룹과 같은 이름. GROUP_LABEL(ui/rows.ts)의 부분집합이다 —
+ * 변동성은 포지션이 아니라 관측이라 여기 없다. */
+export type InstrumentKind = "outright" | "spread" | "fly" | "forward";
 
-/** 화면이 들고 있는 한 줄. 페이로드가 아니라 입력 폼의 상태다. */
-export interface ManualPosition {
-  /** 행의 안정적인 신원. 정렬·삭제·React key가 이것에 매달린다. */
+export const KIND_LABEL: Record<InstrumentKind, string> = {
+  outright: "아웃라이트",
+  spread: "스프레드",
+  fly: "버터플라이",
+  forward: "포워드",
+};
+
+export const KIND_ORDER: InstrumentKind[] = ["outright", "spread", "fly", "forward"];
+
+/** GET /api/instruments의 한 항목. */
+export interface InstrumentOption {
   id: string;
-  /** +1 = 고정 수취, −1 = 고정 지급. 백엔드 관례와 같은 부호다. */
+  label: string;
+}
+
+export type InstrumentCatalog = Record<InstrumentKind, InstrumentOption[]>;
+
+/** 화면이 들고 있는 한 줄. */
+export interface ManualPosition {
+  /** 행의 안정적인 신원 — 정렬·삭제·React key가 여기 매달린다. */
+  id: string;
+  /** 상품 id. `10Y` · `3Y-10Y` · `2Y-5Y-10Y` · `1Yx1Y`. 모니터가 쓰는 문법
+   * 그대로라, 같은 문자열이 두 화면에서 같은 것을 뜻한다. */
+  seriesId: string;
+  /** +1 = 그 상품의 **호가 값을 롱**. 모니터·백테스트와 같은 정의다.
+   *
+   * 스왑 다리의 부호와 헷갈리기 쉬워서 적어 둔다: 아웃라이트 10Y를 롱한다는
+   * 것은 금리가 오르면 이득이라는 뜻이고, 그것은 고정 **지급**이다. 그 뒤집기는
+   * 백엔드(app/instruments.py)가 한 곳에서 한다. */
   direction: 1 | -1;
-  /** 표시용 테너 라벨 ("3Y"). 만기일을 만들고 par 금리를 고르는 데 쓴다. */
-  tenor: TenorLabel;
-  /** 억 원. 사람이 말하는 단위로 들고 있다가 페이로드에서만 원으로 바꾼다. */
+  /** 억 원. 사람이 말하는 단위로 들고 있다가 요청에서만 원으로 바꾼다. */
   notionalEok: number;
-  /** 퍼센트. 빈 문자열 = "시장 par를 따르겠다" — 숫자 0과 다르다. */
-  fixedRatePct: number | "";
+}
+
+/** 백엔드가 돌려준 다리 하나 — 화면에는 읽기 전용으로만 보인다. */
+export interface ExpandedLeg {
+  id: string;
+  tenor: string;
+  direction: number;
+  notional: number;
+  couponRate: number;
   startDate: string;
   maturityDate: string;
 }
 
-/** 고를 수 있는 테너. 화면의 드롭다운이자 만기일 산술의 정의역이다.
- *
- * **10Y에서 끝나는 것은 데이터의 사실이다** [2026-08-07]. 시장 소스가
- * `data/irsdata.xlsx`(원화 IRS 종합코드)로 바뀌었고 이 워크북은 10Y까지만
- * 싣는다 — 이전 소스(True Data.xlsx)는 30Y까지 있었다. 15Y·20Y를 여기 남겨
- * 두면 고를 수는 있는데 커브를 못 세워서 그 스왑만 조용히 제외된다.
- * 고를 수 있는 것과 가격되는 것은 같아야 한다.
- *
- * 1.5Y도 워크북에 있지만 뺐다 — 사람이 "1년 반짜리 스왑"을 넣는 일이 드물고,
- * 필요하면 만기일을 직접 고치면 된다. 넣으려면 여기 한 줄이면 되고,
- * loaders/irsdata.py의 `_NODE_QUOTES`가 이미 그 핀을 싣고 있다. */
-export const TENORS = ["1Y", "2Y", "3Y", "4Y", "5Y", "6Y", "7Y", "8Y", "9Y", "10Y"] as const;
-export type TenorLabel = (typeof TENORS)[number];
+export const DEFAULT_SERIES_ID = "3Y";
+export const DEFAULT_NOTIONAL_EOK = 100;
 
-export const DEFAULT_TENOR: TenorLabel = "3Y";
-
-/** "3Y" → 3. 라벨이 곧 연수라 파싱이 곧 정의다. */
-export function tenorYears(t: TenorLabel): number {
-  return Number(t.slice(0, -1));
-}
-
-/** 기준일 + n년. 같은 월·일을 잡되, 그 날이 없는 경우(2/29 → 평년)만
- * 그 달의 마지막 날로 내린다. Date의 월 넘침(3/1로 굴러가는 것)을 막는다. */
-export function addYearsIso(iso: string, years: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  if (!y || !m || !d) return iso;
-  const targetY = y + years;
-  const lastDay = new Date(Date.UTC(targetY, m, 0)).getUTCDate();
-  const day = Math.min(d, lastDay);
-  return `${targetY}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-/** 시장 스냅샷의 스왑 호가 한 줄. api-types의 것과 같은 모양이지만 이 모듈은
- * 필요한 두 필드만 본다 — 스냅샷 타입 전체에 묶이면 테스트가 무거워진다. */
-export interface ParQuote {
-  tenor_years: number;
-  /** 선택적이고 null도 된다 — api-types의 RateQuoteIn과 같은 모양이어야 하고,
-   * 그쪽이 두 상태를 모두 쓴다. 아래 조회는 `== null`로 둘을 함께 잡는다. */
-  tenor_months?: number | null;
-  rate: number;
-}
-
-/**
- * 해당 테너의 시장 par 금리(퍼센트). 없으면 null.
- *
- * `tenor_months`가 채워진 행은 1년 미만 구간(6M·9M)이라 연 단위 테너와 겹치지
- * 않는다. 그 행들을 먼저 걸러내지 않으면 `tenor_years: 1`인 6M 호가가 1Y로
- * 잡힌다 — 백테스트가 같은 함정을 한 번 밟았다(1년 미만 만기가 1Y로 가격됨).
- */
-export function parRatePct(quotes: readonly ParQuote[], tenor: TenorLabel): number | null {
-  const years = tenorYears(tenor);
-  const hit = quotes.find((q) => q.tenor_months == null && q.tenor_years === years);
-  return hit ? hit.rate * 100 : null;
-}
-
-/** 새 행 하나. 고정금리는 비워 둔다 — 화면이 시장 par로 채운다. */
-export function newManualPosition(baseDate: string, seq: number): ManualPosition {
+export function newManualPosition(seq: number): ManualPosition {
   return {
     id: `manual-${seq}`,
+    seriesId: DEFAULT_SERIES_ID,
     direction: 1,
-    tenor: DEFAULT_TENOR,
-    notionalEok: 100,
-    fixedRatePct: "",
-    startDate: baseDate,
-    maturityDate: addYearsIso(baseDate, tenorYears(DEFAULT_TENOR)),
+    notionalEok: DEFAULT_NOTIONAL_EOK,
   };
 }
 
-/** 테너를 바꾸면 만기일이 따라간다 — 시작일은 그대로. 사용자가 만기일을 직접
- * 고친 뒤 테너를 다시 건드리면 그 편집은 덮인다. 테너가 만기의 주인이고,
- * 만기를 직접 쓰는 것은 그 위의 명시적 덮어쓰기라는 순서다. */
-export function withTenor(p: ManualPosition, tenor: TenorLabel): ManualPosition {
-  return { ...p, tenor, maturityDate: addYearsIso(p.startDate, tenorYears(tenor)) };
+/** id만 보고 종류를 안다 — 백엔드의 kind_of와 같은 규칙이고, 목록을 다시
+ * 훑지 않아도 되게 한다. `x`가 먼저인 이유는 포워드에 `-`가 없기 때문이다. */
+export function kindOf(seriesId: string): InstrumentKind {
+  if (seriesId.includes("x")) return "forward";
+  const dashes = (seriesId.match(/-/g) ?? []).length;
+  return dashes === 0 ? "outright" : dashes === 1 ? "spread" : "fly";
 }
 
-/** 시작일을 바꾸면 만기일도 테너만큼 다시 민다. 같은 이유다. */
-export function withStartDate(p: ManualPosition, startDate: string): ManualPosition {
-  return { ...p, startDate, maturityDate: addYearsIso(startDate, tenorYears(p.tenor)) };
+/** 방향을 뭐라고 부르는가 [OWNER, 2026-07-31 — BacktestWindow의 규칙 재사용].
+ *
+ * 아웃라이트·포워드는 **페이/리시브**다. 원화 데스크는 이걸 동사로 쓴다
+ * ("IRS 페이했다"). 고정 지급/수취는 회계의 등록부이지 트레이딩의 말이 아니다.
+ * 스프레드·플라이는 그렇게 부르지 않는다 — 스티프너/플래트너이고, 벨리를
+ * 사는지 파는지다. */
+export function directionLabel(seriesId: string, direction: 1 | -1): string {
+  const kind = kindOf(seriesId);
+  if (kind === "outright" || kind === "forward") return direction === 1 ? "페이" : "리시브";
+  if (kind === "spread") return direction === 1 ? "스티프너" : "플래트너";
+  return direction === 1 ? "벨리 매도" : "벨리 매수";
 }
 
-/** 이 줄이 실행 가능한가. 불가능하면 그 이유 — 실행 버튼을 막는 쪽이 아니라
- * 무엇이 틀렸는지 말하는 쪽이 이 함수의 일이다. */
-export function positionError(p: ManualPosition, parPct: number | null): string | null {
-  if (!p.startDate || !p.maturityDate) return "날짜가 비었어요";
-  if (Date.parse(p.maturityDate) <= Date.parse(p.startDate)) {
-    return "만기일이 시작일보다 뒤여야 해요";
-  }
+/** 두 방향의 라벨 쌍 — 세그먼트가 읽는다. */
+export function directionOptions(seriesId: string): { value: "long" | "short"; label: string }[] {
+  return [
+    { value: "long", label: directionLabel(seriesId, 1) },
+    { value: "short", label: directionLabel(seriesId, -1) },
+  ];
+}
+
+/** 이 줄이 실행 가능한가. 불가능하면 그 이유. */
+export function positionError(p: ManualPosition): string | null {
+  if (!p.seriesId) return "상품을 골라주세요";
   if (!(p.notionalEok > 0)) return "명목이 0보다 커야 해요";
-  if (p.fixedRatePct === "" && parPct === null) {
-    return `${p.tenor} 시장 호가가 그날 없어요 — 고정금리를 직접 넣어주세요`;
-  }
   return null;
 }
 
-/** 화면의 한 줄 → 엔진의 Position.
- *
- * `parPct`는 고정금리를 비워 둔 줄에만 쓰인다. 그 경우 진입 시점 MtM이 0인
- * 신규 거래가 되고, 결과에 남는 것은 **경로가 만든 손익뿐**이다 — 이 화면이
- * 답하려는 질문이 정확히 그것이다. 직접 적은 금리는 그대로 존중한다(기존
- * 포지션은 par에 있지 않다).
- */
-export function toEnginePosition(p: ManualPosition, parPct: number | null): Position {
-  const coupon = p.fixedRatePct === "" ? (parPct ?? 0) : p.fixedRatePct;
-  return {
-    id: p.id,
-    name: `${p.direction === 1 ? "수취" : "지급"} ${p.tenor}`,
-    book: "직접입력",
-    bondType: "swap",
-    sector: "IRS",
-    maturityDate: p.maturityDate,
-    couponRate: coupon,
-    // 원화 IRS는 분기 정산이다. 북 브릿지도 같은 값을 싣는다.
-    frequency: 4,
-    notional: p.notionalEok * 1e8,
-    entryYield: 0,
-    entryYieldPurchase: 0,
-    evaluationAmount: 0,
-    duration: 0,
-    pvbp: 0,
-    tenor: p.tenor,
-    // 0을 보내면 백엔드가 만기−기준일로 채운다 (swap_inputs.py). 여기서
-    // 계산해 보내면 그 규칙이 두 곳에 살게 된다.
-    remainingDays: 0,
-    durationWeight: 0,
-    krdMap: {},
-    direction: p.direction,
-    currentFloatRate: 0,
-    startDate: p.startDate,
-  };
-}
-
-/** 기준일에 이미 만기가 지난 줄은 평가 대상이 아니다. 북 브릿지가 북 행에
- * 대해 하는 필터와 같은 것 — 손입력이라고 예외를 두면 엔진이 조용히 제외한
- * 뒤 결과만 비어 보인다. */
-export function isLive(p: ManualPosition, baseDate: string): boolean {
-  return Date.parse(p.maturityDate) > Date.parse(baseDate);
+export function notionalToKrw(eok: number): number {
+  return eok * 1e8;
 }

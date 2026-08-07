@@ -27,16 +27,18 @@
  */
 
 import { useEffect, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 
-import { marketDataApi, positionsApi } from "@/sim/lib/api-client";
-import { isLive, parRatePct, toEnginePosition } from "@/sim/lib/manual-position";
+import { instrumentsApi, marketDataApi, positionsApi } from "@/sim/lib/api-client";
+import { notionalToKrw, type ExpandedLeg } from "@/sim/lib/manual-position";
+import type { Position } from "@/sim/types/portfolio";
 import { useSimulationDataStore } from "@/sim/store/simulation-data-store";
 
 export const BOOK_KEYS = {
   positions: ["positions"] as const,
   dateRange: ["market-data", "range"] as const,
   snapshot: ["market-data", "snapshot"] as const,
+  expand: ["instruments", "expand"] as const,
 };
 
 /* `irsToPosition` (백엔드 IRS 행 → 도메인 Position)이 여기 있었고 삭제했다
@@ -59,25 +61,23 @@ export function useBook() {
     retry: 1,
   });
 
-  // 사용자가 고른 날짜가 있으면 그것이 이긴다. 없으면 데이터가 있는 마지막 날.
-  const baseDate = userBaseDate || range.data?.max_date || "";
+  /* 기준일은 **가격 가능한 날**이어야 한다.
+   *
+   * 예전에는 `userBaseDate || max_date || ""`였고, 그 마지막 칸이 사고였다.
+   * 백엔드가 아직 대답하지 않았거나 라우트가 없으면 기준일이 빈 문자열이
+   * 되고, 그 상태로 만든 줄은 시작일도 만기일도 없이 태어난 뒤 "그날 호가가
+   * 없어요"만 반복했다. 원인은 호가가 아니라 날짜였는데 화면은 호가를 탓했다.
+   *
+   * 이제 데이터 범위를 모르면 기준일도 없고(`""`), 그 상태에서는 포지션을
+   * 추가할 수 없으며, 화면이 "시장 데이터를 못 읽었다"고 그 사실 그대로
+   * 말한다. 사용자가 고른 날짜도 범위 밖이면 받지 않는다 — 워크북에 없는
+   * 날로 실행하면 스왑이 통째로 제외된 채 결과만 조용히 빈다. */
+  const available = range.data?.available_dates;
+  const priceable = (d: string | null): d is string =>
+    !!d && (!available || available.includes(d));
+  const baseDate = priceable(userBaseDate) ? userBaseDate : (range.data?.max_date ?? "");
 
-  /* 기준일의 par 스냅샷. 직접 입력한 줄의 고정금리를 비워 뒀을 때 그 자리를
-   * 채우는 값이라, 기준일이 바뀌면 같이 바뀌어야 한다. `enabled`로 막는 이유는
-   * 기준일이 없는 첫 렌더에 `/api/market-data/`(빈 날짜)를 때리지 않기
-   * 위해서다 — 404가 조용히 에러 상태로 남는다. */
-  const snapshot = useQuery({
-    queryKey: [...BOOK_KEYS.snapshot, baseDate] as const,
-    queryFn: () => marketDataApi.snapshot(baseDate),
-    enabled: Boolean(baseDate),
-    staleTime: 5 * 60_000,
-    retry: 1,
-  });
-
-  const parQuotes = useMemo(() => snapshot.data?.swap_quotes ?? [], [snapshot.data]);
-
-  /* 북은 이제 알림용이다. 실패해도 아래 setInputs는 그대로 돌아가고, 화면은
-   * 손입력만으로 완결된다. */
+  /* 북은 이제 알림용이다. 실패해도 아래 setInputs는 그대로 돌아간다. */
   const book = useQuery({
     queryKey: BOOK_KEYS.positions,
     queryFn: () => positionsApi.list(),
@@ -85,15 +85,48 @@ export function useBook() {
     retry: 1,
   });
 
+  /* 상품 한 줄 → 스왑 다리들. 백엔드가 한다 — DV01 중립 가중은 기준일 커브가
+   * 있어야 하고 브라우저는 계산하지 않는다(§16).
+   *
+   * 줄이 여럿이면 요청도 여럿이다. 한 번에 묶어 보내는 엔드포인트를 만들지
+   * 않은 이유는, 줄 하나가 실패해도 나머지는 살아야 하기 때문이다 — 6M 호가가
+   * 없는 날 그 줄만 빠지고 다른 줄은 그대로 평가된다. 묶으면 전부 아니면
+   * 전무가 된다. */
+  const expansions = useQueries({
+    queries: manualPositions.map((p) => ({
+      queryKey: [...BOOK_KEYS.expand, baseDate, p.seriesId, p.direction, p.notionalEok] as const,
+      queryFn: () =>
+        instrumentsApi.expand({
+          seriesId: p.seriesId,
+          direction: p.direction,
+          notional: notionalToKrw(p.notionalEok),
+          baseDate,
+        }),
+      enabled: Boolean(baseDate) && p.notionalEok > 0,
+      staleTime: 5 * 60_000,
+      retry: 1,
+    })),
+  });
+
+  /** 줄 id → 그 줄의 다리들(또는 실패 사유). 화면이 행 아래에 펼쳐 보여준다. */
+  const legsByRow = useMemo(() => {
+    const out: Record<string, { legs: ExpandedLeg[]; error: string | null; pending: boolean }> = {};
+    manualPositions.forEach((p, i) => {
+      const q = expansions[i];
+      out[p.id] = {
+        legs: q?.data?.legs ?? [],
+        error: q?.error ? (q.error as Error).message : null,
+        pending: q?.isPending ?? false,
+      };
+    });
+    return out;
+  }, [manualPositions, expansions]);
+
+  /* 페이로드에 실리는 것은 다리들이다. 줄이 아니라. */
   const enginePositions = useMemo(
-    () =>
-      baseDate
-        ? manualPositions
-            .filter((p) => isLive(p, baseDate))
-            .map((p) => toEnginePosition(p, parRatePct(parQuotes, p.tenor)))
-        : [],
-    [manualPositions, parQuotes, baseDate],
-  );
+    () => Object.values(legsByRow).flatMap((r) => r.legs),
+    [legsByRow],
+  ) as unknown as Position[];
 
   useEffect(() => {
     if (!baseDate) return;
@@ -108,17 +141,17 @@ export function useBook() {
   }, [baseDate, enginePositions, setInputs]);
 
   return {
-    /* 기준일을 아직 모르는 동안만 대기다. 북과 스냅샷은 여기 없다 — 북은
-     * 게이트가 아니고, 스냅샷은 없으면 고정금리를 직접 넣으면 되는 편의값이다. */
+    /* 기준일을 아직 모르는 동안만 대기다. 북은 여기 없다 — 게이트가 아니다. */
     isPending: range.isPending,
     isError: range.isError,
     error: range.error,
     /** 데이터가 있는 마지막 날 — 기준일 선택의 상한이다. */
     latestDataDate: range.data?.max_date ?? null,
-    /** 그날의 par 호가. 직접 입력 행이 고정금리 자리에 보여준다. */
-    parQuotes,
-    /** 북 읽기 결과 — 알림일 뿐 게이트가 아니다. */
+    /** 시장 데이터를 아예 못 읽었다. 이때는 포지션을 만들 수도 없다. */
+    marketUnavailable: !range.isPending && !baseDate,
+    /** 줄별 다리 — 화면이 읽기 전용으로 펼친다. */
+    legsByRow,
+    /** 북 읽기 결과. 지금은 워크북이 없는 것이 정상이라 화면에 띄우지 않는다. */
     bookError: book.isError,
-    bookSwapCount: (book.data ?? []).filter((p) => p.instrument_type === "irs").length,
   };
 }

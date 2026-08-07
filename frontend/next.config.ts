@@ -84,6 +84,10 @@ const nextConfig: NextConfig = {
       { source: "/api/market-data/:path*", destination: `${origin}/api/market-data/:path*` },
       { source: "/api/positions", destination: `${origin}/api/positions` },
       { source: "/api/positions/:path*", destination: `${origin}/api/positions/:path*` },
+      // 상품 목록과 다리 전개. `expand`는 기준일 커브에서 DV01 중립 가중을
+      // 잡으므로 정적 쌍둥이를 만들 수 없다 — 백테스트와 같은 이유로 LIVE다.
+      { source: "/api/instruments", destination: `${origin}/api/instruments` },
+      { source: "/api/instruments/:path*", destination: `${origin}/api/instruments/:path*` },
       // `/api/credit-curve/*` is deliberately ABSENT. Its workbook (Credit
       // Matrix Data.xlsx) was deleted with the data consolidation, nothing in
       // the frontend calls it any more, and a rule pointing at an endpoint

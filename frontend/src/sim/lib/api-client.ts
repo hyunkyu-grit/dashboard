@@ -19,6 +19,7 @@ import type {
   ParsedPosition,
   PositionsSummary,
 } from "./api-types";
+import type { ExpandedLeg, InstrumentCatalog } from "./manual-position";
 
 // Base origin for all /api/* calls — RE-EXPORTED from the monitor's, not
 // decided here (2026-08-07). There is one backend now, on :8100, and two
@@ -92,15 +93,36 @@ async function apiGet<T>(path: string): Promise<T> {
   return handleResponse<T>(res);
 }
 
-/* `apiPost` stood here and is DELETED [2026-08-07]. Its only caller was
- * creditCurveApi.series, removed above; every remaining call in this module is
- * a GET. The simulation's one POST lives in sim/api/simulation-api.ts and does
- * its own fetch — it needs an AbortSignal, which this helper never took. */
+async function apiPost<T>(path: string, payload: unknown): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new ApiError(NETWORK_ERROR_MESSAGE, 0);
+  }
+  return handleResponse<T>(res);
+}
 
 export const marketDataApi = {
   dateRange: () => apiGet<DateRangeResponse>("/api/market-data/range"),
   snapshot: (valuationDate: string) =>
     apiGet<MarketDataResponse>(`/api/market-data/${valuationDate}`),
+};
+
+/** 상품 목록과 다리 전개. 둘 다 모니터 쪽 라우터(app/main.py)가 답한다 —
+ * 다리 규칙과 DV01 가중이 백테스트의 것과 같아야 하고, 그 기계가 거기 있다. */
+export const instrumentsApi = {
+  catalog: () => apiGet<InstrumentCatalog>("/api/instruments"),
+  /** LIVE. 가중이 기준일 커브에 달려 있어 정적 쌍둥이를 만들 수 없다. */
+  expand: (req: { seriesId: string; direction: number; notional: number; baseDate: string }) =>
+    apiPost<{ seriesId: string; kind: string; legs: ExpandedLeg[] }>(
+      "/api/instruments/expand",
+      req,
+    ),
 };
 
 /* `creditCurveApi` (taxonomy + series) stood here and is DELETED
