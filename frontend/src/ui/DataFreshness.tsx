@@ -31,7 +31,7 @@ export function DataFreshness() {
     return (
       <span
         title={title}
-        className="rounded-control border border-up px-2 py-0.5 text-[12px] font-semibold text-up"
+        className="rounded-control border border-up px-2 py-0.5 text-[13px] font-semibold text-up"
       >
         데이터 {f.ageBusinessDays}영업일 지연 — 최신 커브가 아닐 수 있어요 · {f.asOf}
       </span>
@@ -41,14 +41,14 @@ export function DataFreshness() {
     return (
       <span
         title={title}
-        className="rounded-control border border-edge px-2 py-0.5 text-[12px] text-ink"
+        className="rounded-control border border-edge px-2 py-0.5 text-[13px] text-ink"
       >
         {asOf} · {f.ageBusinessDays}영업일 지연
       </span>
     );
   }
   return (
-    <span title={title} className="text-[12px] text-ink-2">
+    <span title={title} className="text-[13px] text-ink-2">
       {asOf}
     </span>
   );

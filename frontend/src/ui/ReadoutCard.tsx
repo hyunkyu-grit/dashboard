@@ -56,7 +56,7 @@ export function ReadoutCard({
 }) {
   return (
     <div
-      className="pointer-events-none absolute top-2 rounded-control bg-popover p-2 text-[12px] shadow-lg"
+      className="pointer-events-none absolute top-2 rounded-control bg-popover p-2 text-[13px] shadow-lg"
       style={{ left, width: READOUT_CARD_W }}
     >
       <div className="mb-1 font-semibold">{title}</div>

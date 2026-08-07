@@ -74,7 +74,7 @@ function SixBasisReadout({
              주황 위 흰 글자는 2.31:1 이다.
           2. 안 고른 칸이 `opacity-50` 이었다. 요소 불투명도는 배경까지 같이
              내려서 칸이 뚫려 보인다(§G). 잉크 층위(ink-2)가 그 자리다. */}
-      <div className="flex overflow-hidden rounded-control border border-edge text-[13px]">
+      <div className="flex overflow-hidden rounded-control border border-edge text-[14px]">
         {TIME_BASES.map((b) => (
           <button
             key={b}
@@ -91,14 +91,14 @@ function SixBasisReadout({
         ))}
       </div>
       <div className="mt-2 flex items-baseline gap-3">
-        <span className="text-[15px] tabular-nums">
+        <span className="text-[16px] tabular-nums">
           {s.unit === "%" ? fmtRate(level) : `${level?.toFixed(1)}`}
-          <span className="ml-1 text-[12px] opacity-45">
+          <span className="ml-1 text-[13px] opacity-45">
             {s.unit === "%" ? "%" : "bp"}
           </span>
         </span>
         {basis !== "now" && (
-          <span className={`text-[13px] tabular-nums ${dirClass(delta)}`}>
+          <span className={`text-[14px] tabular-nums ${dirClass(delta)}`}>
             {fmtBp(delta)}
           </span>
         )}
@@ -124,10 +124,10 @@ function LegWeights({ seriesId }: { seriesId: string }) {
     const manwon = Math.round(leg.dv01 * 100);
     return (
       <div className="mt-4">
-        <div className="text-[12px] opacity-45">DV01</div>
-        <div className="mt-0.5 text-[15px] tabular-nums">
+        <div className="text-[13px] opacity-45">DV01</div>
+        <div className="mt-0.5 text-[16px] tabular-nums">
           {manwon.toLocaleString()}만원 / bp
-          <span className="ml-1 text-[12px] opacity-45">100억 명목 기준</span>
+          <span className="ml-1 text-[13px] opacity-45">100억 명목 기준</span>
         </div>
       </div>
     );
@@ -136,9 +136,9 @@ function LegWeights({ seriesId }: { seriesId: string }) {
   const ratio = data.legs.map((l) => `${l.tenor} ${l.notional}`).join(" : ");
   return (
     <div className="mt-4">
-      <div className="text-[12px] opacity-45">DV01 중립 비중</div>
-      <div className="mt-0.5 text-[15px] tabular-nums">{ratio}</div>
-      <p className="mt-1 text-[12px] opacity-45">
+      <div className="text-[13px] opacity-45">DV01 중립 비중</div>
+      <div className="mt-0.5 text-[16px] tabular-nums">{ratio}</div>
+      <p className="mt-1 text-[13px] opacity-45">
         현재 커브 기준 지표예요. 커브가 움직이면 함께 변해요.
       </p>
     </div>
@@ -147,7 +147,7 @@ function LegWeights({ seriesId }: { seriesId: string }) {
 
 function StrategyRegion() {
   return (
-    <div className="mt-6 flex h-40 items-center justify-center rounded-card border border-dashed border-edge text-[13px] opacity-40">
+    <div className="mt-6 flex h-40 items-center justify-center rounded-card border border-dashed border-edge text-[14px] opacity-40">
       전략 도구가 이 자리에 들어올 예정이에요
     </div>
   );
@@ -169,7 +169,7 @@ function ChartTypeToggle({
   onChartType: (t: ChartType) => void;
 }) {
   return (
-    <div className="flex overflow-hidden rounded-control border border-edge text-[13px]">
+    <div className="flex overflow-hidden rounded-control border border-edge text-[14px]">
       {CHART_TYPES.map((c) => (
         <button
           key={c.id}
@@ -210,7 +210,7 @@ function Body({
     // every group now derives a history (outrights, spreads, forwards, vol);
     // this stays only as a defensive fallback.
     return (
-      <p className="p-10 text-center text-[15px] opacity-55">
+      <p className="p-10 text-center text-[16px] opacity-55">
         과거 흐름을 볼 수 없어요
       </p>
     );
@@ -220,9 +220,9 @@ function Body({
     <>
       <div className="mb-2 flex items-baseline justify-between">
         <div>
-          <h2 className="text-[17px] font-semibold">{row.label}</h2>
+          <h2 className="text-[18px] font-semibold">{row.label}</h2>
           {/* subtitle naming the construct (§ Pass C1) */}
-          <p className="mt-0.5 text-[13px] opacity-55">{instrumentSubtitle(row)}</p>
+          <p className="mt-0.5 text-[14px] opacity-55">{instrumentSubtitle(row)}</p>
         </div>
         <ChartTypeToggle chartType={chartType} onChartType={onChartType} />
       </div>
@@ -238,7 +238,7 @@ function Body({
           carry & roll; both were removed (see DESIGN §2) and nothing has
           replaced them. Do not fill it to balance the layout. */}
       {/* what this instrument IS — static, keyed to kind (§ Pass C1) */}
-      <p className="mt-3 max-w-[720px] text-[13px] leading-relaxed opacity-70">
+      <p className="mt-3 max-w-[720px] text-[14px] leading-relaxed opacity-70">
         {instrumentGloss(row)}
       </p>
       {/* what you execute (DV01 ratio, §B) beside which way it profits (§A) */}

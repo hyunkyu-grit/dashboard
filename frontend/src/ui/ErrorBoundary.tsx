@@ -42,15 +42,15 @@ export class ErrorBoundary extends Component<Props, State> {
         // root's strip padding and read as a stray line. It stands in for the
         // bar, in the bar's place.
         return (
-          <div className="fixed inset-x-0 bottom-0 z-40 flex h-[34px] items-center border-t border-edge bg-tile px-3 text-[12px] opacity-45">
+          <div className="fixed inset-x-0 bottom-0 z-40 flex h-[34px] items-center border-t border-edge bg-tile px-3 text-[13px] opacity-45">
             {this.props.fallback}
           </div>
         );
       }
       return (
         <div className="flex flex-col items-center justify-center gap-2 p-10 text-center">
-          <p className="text-[15px]">{this.props.fallback}</p>
-          <p className="max-w-md text-[12px] opacity-40">
+          <p className="text-[16px]">{this.props.fallback}</p>
+          <p className="max-w-md text-[13px] opacity-40">
             {this.state.error.message}
           </p>
         </div>

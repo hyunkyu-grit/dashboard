@@ -27,7 +27,7 @@ function swatch(alpha: number, up: boolean) {
 export function TintLegend({ className = "" }: { className?: string }) {
   return (
     <div className={`flex flex-col gap-1 ${className}`}>
-      <div className="flex items-center gap-2 text-[11px] opacity-55">
+      <div className="flex items-center gap-2 text-[12px] opacity-55">
         <span>하락</span>
         <div className="flex overflow-hidden rounded-control-sm border border-edge">
           {STEPS.map((a, i) => (
@@ -41,7 +41,7 @@ export function TintLegend({ className = "" }: { className?: string }) {
         </div>
         <span>상승</span>
       </div>
-      <p className="text-[11px] opacity-45">
+      <p className="text-[12px] opacity-45">
         칸이 진할수록 그 종목의 10년 일간 변동 대비 오늘 움직임이 커요.
       </p>
     </div>

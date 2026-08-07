@@ -24,11 +24,11 @@ export interface BacktestPoint {
 
 export function BacktestDailyPnl({ points }: { points: BacktestPoint[] }) {
   if (points.length === 0) {
-    return <p className="py-6 text-center text-[13px] text-ink-2">아직 없어요</p>;
+    return <p className="py-6 text-center text-[14px] text-ink-2">아직 없어요</p>;
   }
   const rows = [...points].reverse();
   return (
-    <table className="w-full text-[13px] tabular-nums">
+    <table className="w-full text-[14px] tabular-nums">
       <thead>
         <tr className="text-ink-2">
           <th scope="col" className="py-1 text-left font-medium">

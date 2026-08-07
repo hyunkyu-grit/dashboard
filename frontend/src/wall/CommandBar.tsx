@@ -58,7 +58,7 @@ export function CommandBar({ onJump }: { onJump: (el: HTMLElement) => void }) {
           value={query}
           onValueChange={setQuery}
           placeholder="종목 이름을 입력하면 그 위치로 이동해요 — 5y, 3s10s, 1yf"
-          className="w-full border-b border-edge bg-transparent px-3 py-2 text-[14px] outline-none placeholder:opacity-40"
+          className="w-full border-b border-edge bg-transparent px-3 py-2 text-[15px] outline-none placeholder:opacity-40"
           onKeyDown={(e) => {
             if (e.key === "Escape") {
               // this Escape means "close the bar" only — stop it before the
@@ -69,7 +69,7 @@ export function CommandBar({ onJump }: { onJump: (el: HTMLElement) => void }) {
           }}
         />
         <Command.List className="max-h-[40vh] overflow-y-auto p-1">
-          <Command.Empty className="px-2 py-3 text-[13px] opacity-50">
+          <Command.Empty className="px-2 py-3 text-[14px] opacity-50">
             찾는 종목이 없어요
           </Command.Empty>
           {results.map((entry) => (

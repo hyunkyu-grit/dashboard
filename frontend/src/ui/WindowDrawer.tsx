@@ -69,7 +69,7 @@ export function WindowDrawer({ tabs }: { tabs: DrawerTab[] }) {
                   setOpen(true);
                 }
               }}
-              className={`flex h-7 min-w-[44px] items-center rounded-control px-2.5 text-[13px] transition-colors ${
+              className={`flex h-7 min-w-[44px] items-center rounded-control px-2.5 text-[14px] transition-colors ${
                 on
                   ? "bg-accent font-medium text-on-accent"
                   : dead
@@ -87,7 +87,7 @@ export function WindowDrawer({ tabs }: { tabs: DrawerTab[] }) {
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
           aria-label={open ? "서랍 접기" : "서랍 펼치기"}
-          className="flex size-5 items-center justify-center rounded-control-sm text-[10px] font-bold leading-none text-ink-2 transition-colors hover:text-ink"
+          className="flex size-5 items-center justify-center rounded-control-sm text-[11px] font-bold leading-none text-ink-2 transition-colors hover:text-ink"
           style={{ transform: open ? undefined : "rotate(180deg)" }}
         >
           ▾
@@ -108,7 +108,7 @@ export function WindowDrawer({ tabs }: { tabs: DrawerTab[] }) {
                 스크롤한다. 창 자체의 max-h 는 그대로다. */}
             <div className="max-h-[38vh] overflow-y-auto [overflow-anchor:none] px-5 py-3">
               {tab?.content ?? (
-                <p className="py-6 text-center text-[13px] text-ink-2">
+                <p className="py-6 text-center text-[14px] text-ink-2">
                   {tab?.unavailable ?? "아직 없어요"}
                 </p>
               )}

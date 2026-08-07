@@ -331,7 +331,7 @@ export function PositionsPanel({
               화면 어디에도 없었다. 헤더에 한 번만 적는다: 다리마다 반복하면
               같은 사실을 N번 말하게 된다(모든 다리가 같은 날의 같은 CD다). */}
           {cd !== null && (
-            <span className="whitespace-nowrap text-[13px] tabular-nums text-ink-2">
+            <span className="whitespace-nowrap text-[14px] tabular-nums text-ink-2">
               CD 3M {cd.toFixed(4)}%
             </span>
           )}

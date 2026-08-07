@@ -213,7 +213,7 @@ function Header({
         aria-pressed={sidebarOpen}
         aria-label={sidebarOpen ? "사이드바 숨기기" : "사이드바 보이기"}
         title={sidebarOpen ? "사이드바 숨기기" : "사이드바 보이기"}
-        className="flex size-6 shrink-0 items-center justify-center rounded-control text-[13px] text-ink-1 transition-colors hover:bg-ink-6 active:bg-ink-4"
+        className="flex size-6 shrink-0 items-center justify-center rounded-control text-[14px] text-ink-1 transition-colors hover:bg-ink-6 active:bg-ink-4"
       >
         ◧
       </button>
@@ -234,7 +234,7 @@ function Header({
           /* A bare slot. The group above owns the fill (ink 8 percent, the kit's
              Bordered value) and the capsule; putting either here again would
              draw a pill inside a pill. */
-          className="flex h-6 items-center px-3 text-[13px] font-medium text-ink-1 transition-colors hover:text-ink"
+          className="flex h-6 items-center px-3 text-[14px] font-medium text-ink-1 transition-colors hover:text-ink"
         >
           {theme === "dark" ? "밝게" : "어둡게"}
         </button>
@@ -606,7 +606,7 @@ export function App() {
         {/* an unknown ?tile= id: the parameter is cleared and said, rather
             than leaving a bogus URL rendering nothing (Pass B) */}
         {missingTile && (
-          <p className={`pb-2 text-center text-[12px] opacity-55 ${PAGE_X}`}>
+          <p className={`pb-2 text-center text-[13px] opacity-55 ${PAGE_X}`}>
             {missingTile} 종목을 찾지 못해 닫았어요
           </p>
         )}

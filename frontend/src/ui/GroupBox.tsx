@@ -56,14 +56,14 @@ export function GroupBox({
 /** 헤더의 제목. 킷 04 Title3 Emphasized. */
 export function GroupBoxTitle({ children }: { children: ReactNode }) {
   return (
-    <h2 className="whitespace-nowrap text-[15px] font-semibold text-ink">{children}</h2>
+    <h2 className="whitespace-nowrap text-[16px] font-semibold text-ink">{children}</h2>
   );
 }
 
 /** 헤더의 부기 — 제목이 아니라 그 옆에 붙는 사실. 킷 06 Body, 이차 잉크. */
 export function GroupBoxNote({ children }: { children: ReactNode }) {
   return (
-    <span className="whitespace-nowrap text-[13px] text-ink-2">{children}</span>
+    <span className="whitespace-nowrap text-[14px] text-ink-2">{children}</span>
   );
 }
 

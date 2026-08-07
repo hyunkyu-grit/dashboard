@@ -144,20 +144,32 @@ export function ContributionTable({ run }: { run: SimulateResponse }) {
 /* KRD 표의 칸 폭.
  *
  * 테너 칸은 전부 같은 폭이다 [OWNER, 2026-08-07]. 그 폭을 상수로 박지 않는
- * 이유: 가장 긴 값에 맞춘 고정 폭(`-5,718,914` → 84)이면 테너 16개가
+ * 이유: 가장 긴 값에 맞춘 고정 폭(`-5,718,914` → 84px)이면 테너 16개가
  * 1,500px 를 먹어서 창 밖으로 나간다 — 값이 작은 실행에서도 늘 스크롤이다.
  * 그래서 **이번 표에 실제로 있는 가장 긴 숫자**가 폭을 정한다. 여전히 전부
  * 같은 폭이고, 필요한 만큼만 넓다.
  *
- * 13px tabular-nums 는 자릿수마다 폭이 같다 — 그래서 글자 수 × 자폭으로 재는
- * 것이 성립한다. 7.3 은 Pretendard 13px 의 숫자 전각폭이고, +8 은 pl-2. */
-const SECTOR_W = 72;
-const TOTAL_W = 92;
-const DIGIT_W = 7.3;
+ * 폭의 단위는 `ch` 다 [2026-08-07 — 사다리 손질]. 처음에는 "자릿수 × 7.3px"
+ * 로 계산했는데 그 7.3 이 애초에 틀렸고(Pretendard 13px 의 실측은 7.99),
+ * 본문이 14px 로 올라가면서 8.60 이 되어 더 틀어졌다. 자폭을 코드에 적어 두면
+ * 글꼴이나 사다리가 움직일 때마다 조용히 어긋난다 — 칸이 좁아진 것은 화면에서
+ * 숫자가 옆 칸으로 새는 것으로만 드러난다.
+ *
+ * `ch` 는 정의상 "0" 의 진행폭이고 tabular-nums 에서 모든 숫자가 그 폭이다.
+ * 즉 글꼴이 무엇이든, 크기가 몇이든 자릿수가 곧 폭이 된다. 이 리포가 표의
+ * 트랙에 이미 쓰고 있는 단위이기도 하다(ui/columns.ts).
+ *
+ * 함정 하나는 그대로 안고 간다: `ch` 는 **그 요소 자신의 font-size** 로
+ * 풀린다. 여기서는 `<col>` 이 표에서 크기를 물려받으므로 셀과 같은 값이지만,
+ * 이 표에 크기 유틸리티를 하나 얹는 순간 트랙과 내용이 갈린다. */
+const SECTOR_W = "6ch";
+const TOTAL_W = "8ch";
 
-function tenorWidth(labels: string[], cells: string[]) {
-  const longest = Math.max(...labels.map((s) => s.length), ...cells.map((s) => s.length), 3);
-  return Math.max(48, Math.ceil(longest * DIGIT_W) + 8);
+/** 가장 긴 문자열의 글자 수 + 좌우 여백(pl-2 = 8px). 최소 4자 — 라벨(`1.5Y`)이
+ * 숫자보다 길 수 있고, 그보다 좁아지면 헤더가 접힌다. */
+function tenorWidth(labels: string[], cells: string[]): string {
+  const longest = Math.max(...labels.map((s) => s.length), ...cells.map((s) => s.length), 4);
+  return `calc(${longest}ch + 8px)`;
 }
 
 export function KrdGrid({ run }: { run: SimulateResponse }) {
@@ -199,7 +211,9 @@ export function KrdGrid({ run }: { run: SimulateResponse }) {
             아니라 가로 스크롤이다(숫자는 접히면 안 된다). */}
         <table
           className="w-full table-fixed text-body"
-          style={{ minWidth: SECTOR_W + tenors.length * tenorW + TOTAL_W }}
+          style={{
+            minWidth: `calc(${SECTOR_W} + ${tenors.length} * (${tenorW}) + ${TOTAL_W})`,
+          }}
         >
           <colgroup>
             <col style={{ width: SECTOR_W }} />

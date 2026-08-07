@@ -76,7 +76,7 @@ function Item({
              호버는 잉크 5%. 목업은 3%(킷 Fills/4)인데 이 제품에서 3% 상태
              표시는 화면에서 안 보인다는 것이 이미 측정돼 있다. */
           className={`flex h-sb-item min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-left transition-colors ${
-            sub ? "text-[13px]" : ""
+            sub ? "text-[14px]" : ""
           } ${
             on ? "bg-accent font-semibold text-on-accent" : "text-ink hover:bg-ink-5"
           }`}
@@ -85,7 +85,7 @@ function Item({
               color." 문자는 목업이 고른 것 그대로. */}
           <span
             aria-hidden
-            className={`w-3.5 shrink-0 text-center text-[10px] ${
+            className={`w-3.5 shrink-0 text-center text-[11px] ${
               on ? "text-on-accent" : "text-accent-fg"
             }`}
           >

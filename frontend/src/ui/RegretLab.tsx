@@ -48,24 +48,24 @@ export function RegretLine({
       title={`${r.date} ${r.label} — ${r.entry}에 ${directionLabel(r.id, r.direction)}, 100억`}
     >
       <span className="flex items-baseline gap-2">
-        <span className="shrink-0 text-[12px] tabular-nums opacity-45">
+        <span className="shrink-0 text-[13px] tabular-nums opacity-45">
           {shortDate(r.date)}
         </span>
         {/* no truncate anywhere in this panel [OWNER, 2026-08-04: "한글
             잘림 꺼라"] — a clipped 방향어 hides the trade; long lines WRAP. */}
-        <span className="min-w-0 flex-1 break-keep text-[13px]">{r.label}</span>
+        <span className="min-w-0 flex-1 break-keep text-[14px]">{r.label}</span>
         <span
-          className={`shrink-0 text-[12px] tabular-nums ${dirClass(r.deltaBp)}`}
+          className={`shrink-0 text-[13px] tabular-nums ${dirClass(r.deltaBp)}`}
         >
           {fmtBp(r.deltaBp)}
         </span>
       </span>
       <span className="flex items-baseline gap-2 pl-[34px]">
-        <span className="min-w-0 flex-1 break-keep text-[12px] opacity-55">
+        <span className="min-w-0 flex-1 break-keep text-[13px] opacity-55">
           {directionLabel(r.id, r.direction)}
         </span>
         <span
-          className={`shrink-0 text-[13px] tabular-nums ${dirClass(r.pnl)}`}
+          className={`shrink-0 text-[14px] tabular-nums ${dirClass(r.pnl)}`}
         >
           {fmtKrw(r.pnl)}
         </span>
@@ -83,18 +83,18 @@ export function RegretLab({
 }) {
   return (
     <div className="max-w-[440px]">
-      <h2 className="text-[15px] font-semibold">라고 할 때 살걸</h2>
-      <p className="mt-1 text-[12px] leading-relaxed opacity-55">
+      <h2 className="text-[16px] font-semibold">라고 할 때 살걸</h2>
+      <p className="mt-1 text-[13px] leading-relaxed opacity-55">
         지난 20영업일의 주요 종목 변화 각각을 다음 영업일에 그 방향대로
         100억 따라갔다면 지금까지의 손익이에요. 진입은 이벤트 다음 영업일
         종가예요. 손익은 백테스트 엔진의 전체 재평가 값이에요.
       </p>
-      <p className="mt-1 text-[11px] opacity-40">
+      <p className="mt-1 text-[12px] opacity-40">
         연구실의 실험 기능이에요. 피드백에 따라 본 탭으로 옮기거나 내려요.
       </p>
       <div className="mt-3 border-t border-edge pt-3">
         {regret.length === 0 ? (
-          <p className="px-2 py-3 text-[13px] opacity-55">
+          <p className="px-2 py-3 text-[14px] opacity-55">
             지난 20영업일에 기록된 변화가 없어요.
           </p>
         ) : (

@@ -490,7 +490,7 @@ export function DetailChart({
         {axisLabels.map((l) => (
           <span
             key={`${l.text}@${Math.round(l.x)}`}
-            className="absolute top-0.5 -translate-x-1/2 whitespace-nowrap text-[11px] text-ink opacity-45"
+            className="absolute top-0.5 -translate-x-1/2 whitespace-nowrap text-[12px] text-ink opacity-45"
             style={{ left: l.x }}
           >
             {l.text}
@@ -499,7 +499,7 @@ export function DetailChart({
       </div>
       {tip && (
         <div
-          className="pointer-events-none absolute z-10 rounded-control bg-popover p-2 text-[12px] shadow-lg"
+          className="pointer-events-none absolute z-10 rounded-control bg-popover p-2 text-[13px] shadow-lg"
           style={{ left: Math.min(width - 150, hover!.x + 12), top: Math.max(4, hover!.y - 40), width: 140 }}
         >
           {tip}

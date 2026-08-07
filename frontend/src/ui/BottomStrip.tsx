@@ -130,7 +130,7 @@ export function BottomStrip({
       </motion.button>
 
       <motion.div
-        className={`absolute inset-x-0 top-0 flex items-center gap-1 text-[12px] ${PAGE_X}`}
+        className={`absolute inset-x-0 top-0 flex items-center gap-1 text-[13px] ${PAGE_X}`}
         style={{ height: STRIP_H.open }}
         initial={false}
         animate={{ opacity: collapsed ? 0 : 1 }}
@@ -154,7 +154,7 @@ export function BottomStrip({
         <button
           type="button"
           onClick={() => onCollapsed(true)}
-          className="ml-1 flex size-5 items-center justify-center rounded-control-sm bg-ink/[0.08] text-[10px] font-bold leading-none text-ink-1 transition-colors hover:bg-ink/[0.16]"
+          className="ml-1 flex size-5 items-center justify-center rounded-control-sm bg-ink/[0.08] text-[11px] font-bold leading-none text-ink-1 transition-colors hover:bg-ink/[0.16]"
           title="지표 바 접기"
         >
           ▾

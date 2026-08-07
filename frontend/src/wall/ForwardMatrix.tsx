@@ -27,7 +27,7 @@ export function ForwardMatrix({ payload }: { payload: ForwardsPayload }) {
   return (
     <div className="max-w-full overflow-x-auto">
       <table
-        className="text-[13px]"
+        className="text-[14px]"
         style={{ borderCollapse: "separate", borderSpacing: 0 }}
       >
         <thead>
@@ -145,7 +145,7 @@ export function KeyForwardBlock({ payload }: { payload: ForwardsPayload }) {
   // is now unambiguously "current level + position", the table owns changes.
   return (
     <table
-      className="text-[13px]"
+      className="text-[14px]"
       style={{ borderCollapse: "separate", borderSpacing: 0 }}
     >
       <thead>
@@ -161,7 +161,7 @@ export function KeyForwardBlock({ payload }: { payload: ForwardsPayload }) {
           </th>
           {/* track ends labelled ONCE, here, not per row (§E1) */}
           <th className="min-w-[150px] px-1 font-normal">
-            <div className="flex justify-between text-[11px] opacity-45">
+            <div className="flex justify-between text-[12px] opacity-45">
               <span>52주 최저</span>
               <span>52주 최고</span>
             </div>

@@ -168,15 +168,29 @@ describe("the 전체 overview", () => {
     expect(overview).not.toMatch(/levelText\(\{ \.\.\.row/);
   });
 
-  it("sets the table's type size — 13px, the same as every instrument tab", () => {
-    /* It shipped at 11px, was raised to 16px when that read as small, and
-     * landed at 13px when the owner asked for parity with the tabs. `ch`
-     * resolves against the element's OWN font-size, so the size and the
-     * column widths are one decision, not two — which is the argument for
-     * taking both from `columns.ts` rather than setting either here. */
-    expect(overview).toMatch(/text-\[13px\]/);
-    expect(overview).not.toMatch(/text-\[1[0-2]px\]/);
-    expect(overview).not.toMatch(/text-\[1[4-9]px\]/);
+  it("sets the table's type size — the same size every instrument tab uses", () => {
+    /* It shipped at 11px, was raised to 16px when that read as small, landed
+     * at 13px when the owner asked for parity with the tabs, and moved to 14
+     * with the 2026-08-07 ladder bump. `ch` resolves against the element's OWN
+     * font-size, so the size and the column widths are one decision, not two —
+     * which is the argument for taking both from `columns.ts` rather than
+     * setting either here.
+     *
+     * **파리티를 재고, 숫자를 재지 않는다** [2026-08-07]. 앞 판은 `13px` 을
+     * 문자열로 박아 뒀는데, 그러면 사다리를 한 칸 올릴 때마다 이 가드가 파리티가
+     * 깨져서가 아니라 숫자가 달라져서 빨간불이 된다 — 지키려던 것이 파리티였는데
+     * 실제로 지킨 것은 13이었다. 이제 표에서 읽어 와 비교한다. */
+    // 표의 사다리는 `role="table"` 을 진 요소가 한 번 정하고 행들이 물려받는다.
+    // 그 요소에서 읽는다 — 다른 곳의 크기(스크리너 설명, 구분 헤딩)를 집으면
+    // 파리티를 엉뚱한 것과 재게 된다.
+    const tableSize = /role="table"[\s\S]{0,200}?text-\[(\d+)px\]/.exec(table)?.[1];
+    expect(tableSize, "instrument table sets no explicit type size on role=table").toBeDefined();
+    expect(overview).toMatch(new RegExp(`text-\\[${tableSize}px\\]`));
+    // 그리고 그 하나뿐이다 — 개요가 자기 사다리를 따로 들면 파리티가 이름만 남는다
+    const sizes = new Set(
+      [...overview.matchAll(/text-\[(\d+)px\]/g)].map((m) => m[1]),
+    );
+    expect([...sizes]).toEqual([tableSize]);
   });
 
   it("heads the level column with the data's date, as the table does", () => {

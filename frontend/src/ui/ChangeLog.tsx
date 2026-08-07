@@ -41,16 +41,16 @@ function EventLine({
       className="kit-menu-item -mx-1 flex w-full items-baseline gap-2 rounded-control-lg px-3 py-1 text-left"
       title={`${e.label} — ${e.reasons.map((r) => REASON_LABEL[r]).join(", ")}`}
     >
-      <span className="min-w-0 flex-1 truncate text-[13px]">{e.label}</span>
+      <span className="min-w-0 flex-1 truncate text-[14px]">{e.label}</span>
       {e.reasons.map((r) => (
         <span
           key={r}
-          className="shrink-0 rounded-full border border-edge px-1.5 text-[11px] opacity-70"
+          className="shrink-0 rounded-full border border-edge px-1.5 text-[12px] opacity-70"
         >
           {REASON_LABEL[r]}
         </span>
       ))}
-      <span className={`shrink-0 text-[13px] tabular-nums ${dirClass(e.deltaBp)}`}>
+      <span className={`shrink-0 text-[14px] tabular-nums ${dirClass(e.deltaBp)}`}>
         {fmtBp(e.deltaBp)}
       </span>
     </button>
@@ -73,7 +73,7 @@ function Cluster({
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
-            className="ml-2 mt-0.5 text-[11px] opacity-55 hover:opacity-90"
+            className="ml-2 mt-0.5 text-[12px] opacity-55 hover:opacity-90"
           >
             {open ? "관련 숨기기" : `연관 ${c.count}건`}
           </button>
@@ -122,7 +122,7 @@ export function ChangeLog({
         /* No shell of its own: this trigger is now a SLOT inside the header's
            toolbar button group, which carries the capsule and the fill. See the
            group container in App.tsx. */
-        className="flex h-6 items-center px-3 text-[13px] font-medium text-ink-1 transition-colors hover:text-ink"
+        className="flex h-6 items-center px-3 text-[14px] font-medium text-ink-1 transition-colors hover:text-ink"
         title="어제 대비 오늘 기록된 변화 (D-1 고정)"
       >
         {n > 0 ? `변화 ${n}` : "변화 없음"}
@@ -138,11 +138,11 @@ export function ChangeLog({
               makes the translucency legible; unlike the header band, content
               really does pass under this one. */}
           <div className="absolute right-0 z-40 mt-1 max-h-[70vh] w-[320px] overflow-y-auto rounded-popover border border-edge bg-popover/70 p-2 shadow-popover backdrop-blur-xl">
-            <div className="px-2 pb-1 text-[11px] opacity-45">
+            <div className="px-2 pb-1 text-[12px] opacity-45">
               어제 대비 변화 · D-1 고정
             </div>
             {n === 0 ? (
-              <p className="px-2 py-3 text-[13px] opacity-55">
+              <p className="px-2 py-3 text-[14px] opacity-55">
                 오늘 기록된 변화가 없어요.
               </p>
             ) : (

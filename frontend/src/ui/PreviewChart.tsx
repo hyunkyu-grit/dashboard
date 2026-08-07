@@ -656,7 +656,7 @@ export function PreviewChart({
             setView(null);
           }}
           onPointerDown={(e) => e.stopPropagation()}
-          className="absolute left-1 top-0 cursor-pointer rounded-control border border-edge bg-tile px-2 py-0.5 text-[11px] opacity-70 hover:opacity-100"
+          className="absolute left-1 top-0 cursor-pointer rounded-control border border-edge bg-tile px-2 py-0.5 text-[12px] opacity-70 hover:opacity-100"
         >
           전체 기간
         </button>

@@ -79,8 +79,8 @@ export function SimulationWindow({ onClose }: { onClose: () => void }) {
         className="flex shrink-0 cursor-grab touch-none select-none items-center gap-2 border-b border-edge bg-popover px-5 py-3"
       >
         <WindowControls onClose={onClose} />
-        <span className="text-[17px] font-bold">시뮬레이션 결과</span>
-        <span className="text-[13px] text-ink-2">이 경로면 얼마였을까</span>
+        <span className="text-[18px] font-bold">시뮬레이션 결과</span>
+        <span className="text-[14px] text-ink-2">이 경로면 얼마였을까</span>
         <span className="flex-1" />
       </div>
 

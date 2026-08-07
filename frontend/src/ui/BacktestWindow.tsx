@@ -233,7 +233,7 @@ function Field({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[12px] opacity-50">{label}</span>
+      <span className="text-[13px] opacity-50">{label}</span>
       {children}
     </label>
   );
@@ -253,7 +253,7 @@ function Field({
  * class as the stepper that was a rung low — each value came from the kit, but
  * from different rungs. */
 const INPUT =
-  "h-6 rounded-control bg-tile px-1.5 text-[13px] font-medium tabular-nums " +
+  "h-6 rounded-control bg-tile px-1.5 text-[14px] font-medium tabular-nums " +
   "outline-none ring-1 ring-inset ring-ink/[0.05] " +
   "focus:ring-[3.5px] focus:ring-down/50";
 
@@ -266,7 +266,7 @@ const INPUT =
  * The pass that made every control a capsule read the 28/36 artboards and called
  * it a rule; 24 has a long flat run on every edge. */
 const POPUP =
-  "kit-button rounded-control px-3 text-[13px] font-medium tabular-nums " +
+  "kit-button rounded-control px-3 text-[14px] font-medium tabular-nums " +
   "outline-none focus:ring-[3.5px] focus:ring-down/50";
 
 /** The P&L line, with a hovered readout [OWNER].
@@ -395,7 +395,7 @@ function PnlChart({
       </svg>
       {hp && (
         <div
-          className="pointer-events-none absolute top-1 rounded-popover bg-popover px-2.5 py-2 text-[12px] shadow-popover"
+          className="pointer-events-none absolute top-1 rounded-popover bg-popover px-2.5 py-2 text-[13px] shadow-popover"
           style={{ left: tipLeft, width: CARD_W }}
         >
           <div className="tabular-nums opacity-50">{hp.t}</div>
@@ -853,7 +853,7 @@ export function LinkedPnlChart({
       </svg>
       {hp && hIdx != null && (
         <div
-          className="pointer-events-none absolute top-1 rounded-popover bg-popover px-2.5 py-2 text-[12px] shadow-popover"
+          className="pointer-events-none absolute top-1 rounded-popover bg-popover px-2.5 py-2 text-[13px] shadow-popover"
           style={{ left: tipLeft, width: CARD_W }}
         >
           <div className="tabular-nums opacity-50">{hp.t}</div>
@@ -921,7 +921,7 @@ function Result({
   const unitOf = (id: string): Unit => naming.get(id)?.unit ?? unitFromShape(id);
   return (
     <div className="mt-5">
-      <p className="text-[13px] opacity-55">
+      <p className="text-[14px] opacity-55">
         {result.from} → {result.to} · 포지션 {result.positions.length}개
       </p>
       <p
@@ -938,7 +938,7 @@ function Result({
         </div>
       )}
 
-      <div className="mt-3 flex gap-6 text-[13px] tabular-nums">
+      <div className="mt-3 flex gap-6 text-[14px] tabular-nums">
         <span>
           <span className="opacity-50">최고 </span>
           <span className="text-up">{fmtKrw(result.maxProfit)}</span>
@@ -961,7 +961,7 @@ function Result({
           has one par PER LEG. A column that is either a duplicate or a dash
           earns no width; the struck par rates live in the fold's per-leg
           table, where they are a fact per swap. */}
-      <table className="mt-5 w-full text-[13px] tabular-nums">
+      <table className="mt-5 w-full text-[14px] tabular-nums">
         <thead className="text-left text-ink-2">
           <tr>
             <th className="pb-1 font-normal">종목</th>
@@ -988,12 +988,12 @@ function Result({
               <td className="py-1.5 pr-4 text-right">
                 {entryLevelText(p.entryValue, unitOf(p.id))}
                 {p.entryValue != null && (
-                  <span className="ml-0.5 text-[11px] opacity-45">
+                  <span className="ml-0.5 text-[12px] opacity-45">
                     {LEVEL_SUFFIX[unitOf(p.id)]}
                   </span>
                 )}
               </td>
-              <td className="py-1.5 text-[12px] opacity-60">
+              <td className="py-1.5 text-[13px] opacity-60">
                 {p.entry} → {p.exit}
                 {/* 만기 and 청산 are different facts: one ran to the end of
                     its own schedule, the other was closed out early. */}
@@ -1019,7 +1019,7 @@ function Result({
           it. Above the fold, because "was this a rate call or was I just
           collecting coupon" is a question about the RESULT, not about how the
           trade was built. */}
-      <table className="mt-5 w-full text-[13px] tabular-nums">
+      <table className="mt-5 w-full text-[14px] tabular-nums">
         <thead className="text-left text-ink-2">
           <tr>
             <th className="pb-1 font-normal">손익 구성</th>
@@ -1080,21 +1080,21 @@ function Result({
             })()}
         </tbody>
       </table>
-      <p className="mt-1.5 text-[12px] opacity-50">
+      <p className="mt-1.5 text-[13px] opacity-50">
         평가손익 = 금리·잔존만기 변화, 캐리손익 = 실제 주고받은 이자. 둘의
         합이 손익이에요.
       </p>
 
       <details className="mt-5">
-        <summary className="cursor-pointer text-[13px] opacity-50 hover:opacity-80">
+        <summary className="cursor-pointer text-[14px] opacity-50 hover:opacity-80">
           자세히 — 다리별 구성·정산
         </summary>
         {result.positions.map((p, i) => (
           <div key={`${p.id}-${i}`} className="mt-3">
-            <p className="text-[12px] font-semibold opacity-70">
+            <p className="text-[13px] font-semibold opacity-70">
               {naming.get(p.id)?.label ?? p.id} · {fmtMove(p, unitOf(p.id))}
             </p>
-            <table className="mt-1 w-full text-[13px] tabular-nums">
+            <table className="mt-1 w-full text-[14px] tabular-nums">
               <tbody>
                 {p.legs.map((l) => (
                   <tr key={l.tenor} className="border-t border-edge">
@@ -1122,7 +1122,7 @@ function Result({
                 ))}
               </tbody>
             </table>
-            <p className="mt-1 text-[12px] opacity-50">
+            <p className="mt-1 text-[13px] opacity-50">
               누적 정산현금 {fmtKrw(p.cash)}
             </p>
           </div>
@@ -1130,7 +1130,7 @@ function Result({
         {/* the mechanics, one sentence per fact — the four-sentence essay
             this replaces said the same things with connective tissue nobody
             reads twice [OWNER, 2026-08-05 lighten pass] */}
-        <p className="mt-3 text-[12px] leading-relaxed opacity-55">
+        <p className="mt-3 text-[13px] leading-relaxed opacity-55">
           매일 그날 커브로 재평가한 값 + 정산 현금이에요. Δ금리×DV01 근사가
           아니라 롤다운·캐리가 들어 있어요. 다리 둘 이상이면 진입일 DV01
           중립 비율이에요. 청산 포지션은 청산일 손익으로 합계에 남아요.
@@ -1258,7 +1258,7 @@ function PositionRow({
             onChange={(e) => set({ eok: Math.max(1, Number(e.target.value)) })}
             className={`${INPUT} w-20 text-right`}
           />
-          <span className="text-[14px] opacity-55">억</span>
+          <span className="text-[15px] opacity-55">억</span>
         </div>
       </Field>
       <Field label="진입일">
@@ -1274,7 +1274,7 @@ function PositionRow({
         {/* a readout, not an input — same vertical rhythm as its neighbours
             so the sentence still reads left to right */}
         <span
-          className="px-1 py-2 text-[14px] tabular-nums"
+          className="px-1 py-2 text-[15px] tabular-nums"
           title={struck ? `${struck.t} 종가 기준` : undefined}
         >
           {/* AnimatedNumber (§14): the level swaps as the date is typed, and a
@@ -1282,7 +1282,7 @@ function PositionRow({
               flicker */}
           <AnimatedNumber value={entryLevelText(struck?.v ?? null, unit)} />
           {struck && (
-            <span className="ml-0.5 text-[11px] opacity-45">
+            <span className="ml-0.5 text-[12px] opacity-45">
               {LEVEL_SUFFIX[unit]}
             </span>
           )}
@@ -1313,7 +1313,7 @@ function PositionRow({
       {parts.length > 0 && (
         <div
           data-entry-components=""
-          className="w-full pb-0.5 text-[12px] tabular-nums"
+          className="w-full pb-0.5 text-[13px] tabular-nums"
           title={struck ? `${struck.t} 종가 기준` : undefined}
         >
           {parts.map((p, i) => (
@@ -1590,8 +1590,8 @@ export function BacktestWindow({
             표면이 창이라는 선언이다. 닫기 하나만 두는 이유는
             ui/WindowControls.tsx 에 적혀 있다. */}
         <WindowControls onClose={onClose} />
-        <span className="text-[17px] font-bold">백테스트</span>
-        <span className="text-[13px] text-ink-2">
+        <span className="text-[18px] font-bold">백테스트</span>
+        <span className="text-[14px] text-ink-2">
           그때 들어갔으면 지금 얼마였을까
         </span>
         <span className="flex-1" />
@@ -1649,7 +1649,7 @@ export function BacktestWindow({
                  in the kit (Alerts draws Cancel / Don't Save / Save at 228x28,
                  all three fully round). It was 37.7px tall at r=10, which is on
                  no rung of the kit's ladder at all. */
-              className="flex h-7 items-center rounded-full border border-edge px-4 text-[13px] font-medium hover:bg-page disabled:opacity-40 disabled:hover:bg-transparent"
+              className="flex h-7 items-center rounded-full border border-edge px-4 text-[14px] font-medium hover:bg-page disabled:opacity-40 disabled:hover:bg-transparent"
             >
               + 포지션 추가
             </button>
@@ -1670,7 +1670,7 @@ export function BacktestWindow({
                  같이 움직인다: 채움 주황 위 흰 글자는 2.31:1, 잉크는 7.61:1.
                  14px semibold was the one label in the window off the kit's type
                  scale — 4 Lg carries 13/Medium like every size above 20. */
-              className={`flex h-7 min-w-[6.75rem] items-center justify-center rounded-full bg-accent px-5 text-center text-[13px] font-medium text-on-accent hover:opacity-90 disabled:opacity-40 ${
+              className={`flex h-7 min-w-[6.75rem] items-center justify-center rounded-full bg-accent px-5 text-center text-[14px] font-medium text-on-accent hover:opacity-90 disabled:opacity-40 ${
                 // a full revaluation takes a beat — the pulse says the server
                 // is working; motion-safe so reduced motion sees a still label
                 run.isPending ? "motion-safe:animate-pulse" : ""
@@ -1682,7 +1682,7 @@ export function BacktestWindow({
                 §15 keeps hints 합니다체/noun-final, and lighter here means
                 FEWER words, not a softer register [OWNER, 2026-08-05:
                 "말들을 좀 더 가볍게"] */}
-            <span className="text-[12px] opacity-45">
+            <span className="text-[13px] opacity-45">
               청산일 비우면 {asOf ?? "마지막 영업일"}까지예요 · 뒤 표를 누르면
               추가돼요
             </span>
@@ -1704,7 +1704,7 @@ export function BacktestWindow({
           )}
 
           {unavailable && (
-            <div className="mt-6 rounded-card bg-page p-4 text-[13px] leading-relaxed">
+            <div className="mt-6 rounded-card bg-page p-4 text-[14px] leading-relaxed">
               <p className="font-semibold">백엔드가 필요한 화면이에요</p>
               <p className="mt-1 opacity-60">
                 백테스트는 입력마다 답이 달라 미리 구워둘 수 없어요.
@@ -1717,7 +1717,7 @@ export function BacktestWindow({
             </div>
           )}
           {run.error && !unavailable && (
-            <p className="mt-6 text-[13px] text-up">{run.error.message}</p>
+            <p className="mt-6 text-[14px] text-up">{run.error.message}</p>
           )}
           {/* THE ANSWER ARRIVES (§14 arrival): keyed by the run's identity so
               every fresh answer rises in — a re-run with the same result is
@@ -1741,7 +1741,7 @@ export function BacktestWindow({
             </motion.div>
           )}
           {!shownResult && !run.error && !run.isPending && (
-            <p className="mt-8 text-center text-[14px] opacity-45">
+            <p className="mt-8 text-center text-[15px] opacity-45">
               조건을 정하고 실행을 눌러 주세요
             </p>
           )}

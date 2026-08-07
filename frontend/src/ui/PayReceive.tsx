@@ -115,7 +115,7 @@ function fillRegions(cur: Pt[], want: Pt[], dv: number[]): FillRegion[] {
 
 function Toggle({ side, onSide }: { side: Side; onSide: (s: Side) => void }) {
   return (
-    <div className="flex overflow-hidden rounded-control border border-edge text-[12px]">
+    <div className="flex overflow-hidden rounded-control border border-edge text-[13px]">
       {(["pay", "receive"] as Side[]).map((sd) => (
         <button
           key={sd}
@@ -255,7 +255,7 @@ export function PayReceive({
   if (c.kind === "volatility") {
     return (
       <div className="mt-4">
-        <div className="flex h-[180px] w-[340px] items-center justify-center rounded-popover border border-dashed border-edge px-6 text-center text-[12px] leading-relaxed opacity-45">
+        <div className="flex h-[180px] w-[340px] items-center justify-center rounded-popover border border-dashed border-edge px-6 text-center text-[13px] leading-relaxed opacity-45">
           변동성은 커브의 모양이 아니라 크기의 비율이에요. 그래서 페이/리시브 그림으로 나타내지 않아요.
         </div>
       </div>
@@ -269,7 +269,7 @@ export function PayReceive({
     <div className="mt-4">
       <div className="mb-1 flex items-center gap-2">
         <Toggle side={side} onSide={onSide} />
-        <span className="text-[13px] font-semibold">{spec.term}</span>
+        <span className="text-[14px] font-semibold">{spec.term}</span>
       </div>
       <Diagram spec={spec} />
     </div>

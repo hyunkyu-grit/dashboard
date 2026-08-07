@@ -32,7 +32,7 @@ const HEADER_H = 96; // name + level + delta, and the caption under the chart
 
 function Sentence({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-[320px] items-center justify-center px-8 text-center text-[15px] opacity-55">
+    <div className="flex h-[320px] items-center justify-center px-8 text-center text-[16px] opacity-55">
       {children}
     </div>
   );
@@ -54,7 +54,7 @@ function Header({
       {/* the 한 줄 fragment that sat opposite the name is gone with the column
           (pass L); the pane's own readouts already carry the 52-week range */}
       <div className="flex items-baseline">
-        <span className="text-[17px] font-semibold">{row.label}</span>
+        <span className="text-[18px] font-semibold">{row.label}</span>
         <span className="flex-1" />
         {/* the enlarged view's way in (backtest-window session): the CHART
             click belongs to the backtest [OWNER], so the bigger view gets a
@@ -63,7 +63,7 @@ function Header({
           <button
             type="button"
             onClick={() => onEnlarge(row)}
-            className="text-[12px] opacity-50 hover:opacity-100"
+            className="text-[13px] opacity-50 hover:opacity-100"
           >
             크게 보기
           </button>
@@ -75,9 +75,9 @@ function Header({
           className="text-[28px] font-bold leading-none tabular-nums"
         />
         {UNIT_SUFFIX[row.unit] && (
-          <span className="text-[12px] opacity-45">{UNIT_SUFFIX[row.unit]}</span>
+          <span className="text-[13px] opacity-45">{UNIT_SUFFIX[row.unit]}</span>
         )}
-        <span className={`text-[13px] tabular-nums ${dirClass(row.changes.d1)}`}>
+        <span className={`text-[14px] tabular-nums ${dirClass(row.changes.d1)}`}>
           {fmtDelta(row.changes.d1, row.unit)}
         </span>
       </div>
@@ -254,7 +254,7 @@ function PreviewBody({
               still promised "크게 볼 수 있습니다" — a claim about a view that
               no longer opens. The date under the cursor becomes the entry
               date, which is the half worth saying. */}
-          <p className="mt-2 text-[12px] opacity-40">
+          <p className="mt-2 text-[13px] opacity-40">
             누르면 커서 날짜부터 백테스트가 열려요
           </p>
         </motion.div>

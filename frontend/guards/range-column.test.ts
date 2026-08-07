@@ -137,8 +137,10 @@ describe("the column carries no sort affordance", () => {
       expect(line, `a sub-grid container sizes its own text: ${line.trim()}`)
         .not.toMatch(/text-\[\d+px\]/);
     }
-    // and the sizing that does exist is on a child
-    expect(src).toMatch(/<span[\s\S]{0,160}text-\[11px\]/);
+    // and the sizing that does exist is on a child. 숫자를 박지 않는다 —
+    // 지키는 것은 "컨테이너가 아니라 자식이 크기를 진다"이지 그 크기가 얼마인지가
+    // 아니다 (사다리는 2026-08-07 에 한 칸 올랐다).
+    expect(src).toMatch(/<span[\s\S]{0,160}text-\[\d+px\]/);
   });
 
   it("the header states three sub-labels, in high → low → mean order", () => {

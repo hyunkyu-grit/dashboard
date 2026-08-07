@@ -127,6 +127,32 @@
   --radius-sheet: 14px;
   --font-sans: "Pretendard Variable", Pretendard, sans-serif;
 
+  /* 활자 사다리 [2026-08-07].
+   *
+   * `text-body` · `text-callout` · `text-headline` 은 69군데에서 쓰이고 있었고
+   * **한 줄의 CSS 도 만들지 않았다.** Tailwind 는 `--text-*` 가 있어야 그 이름의
+   * 유틸리티를 낸다 — 없으면 클래스는 붙지만 규칙이 없고, 그 요소는 그냥
+   * `body` 의 크기를 물려받는다. 그래서 셋이 전부 13px 로 같았다. 이 리포가
+   * 반복해서 적어 온 함정(`rounded-card` 가 정의 없이 이름만 있던 것)과 같은
+   * 것이고, 크기 위계가 있다고 믿으면서 없는 상태로 오래 지냈다.
+   *
+   * 이제 실제로 낸다. 그리고 같은 손질에서 사다리를 한 칸 올린다 — 화면이
+   * 전반적으로 작았다 [OWNER, 2026-08-07]. 킷의 06 Body 는 13/16 이고 이것이
+   * 그 위 한 칸이다.
+   *
+   *   callout   13/16   부기·보조 문장  (종전 13 그대로 — 줄어드는 것은 없다)
+   *   body      14/18   본문
+   *   headline  15/20   구획 안의 소제목
+   *
+   * 아래 `body{font-size}` 도 같이 14 로 간다. 클래스 없는 텍스트가 뒤처지면
+   * 사다리가 두 개가 된다. */
+  --text-callout: 13px;
+  --text-callout--line-height: 16px;
+  --text-body: 14px;
+  --text-body--line-height: 18px;
+  --text-headline: 15px;
+  --text-headline--line-height: 20px;
+
   /* Motion (§14, pass B). Tailwind's own defaults are what the two bare
    * `transition-*` utilities in the product resolve to — `.15s` and
    * `cubic-bezier(.4,0,.2,1)`, neither of them chosen here. Pointing the
@@ -240,7 +266,10 @@ body {
   background: var(--bw-page);
   color: var(--bw-ink);
   font-family: var(--font-sans);
-  font-size: 13px; /* MACOS TEST — the kit's 06 Body is 13/16px; ours was 15 (§9) */
+  /* 킷의 06 Body 는 13/16 이고 한동안 그 값이었다. 한 칸 올린다 [OWNER,
+   * 2026-08-07 — "전반적으로 키워볼까"]. 위 `--text-body` 와 같은 값이어야
+   * 한다: 클래스 없는 텍스트가 뒤처지면 사다리가 두 개가 된다. */
+  font-size: 14px;
   font-weight: 400;
   /* the page never scrolls — the surface is pinned to viewport height and its
    * table body scrolls internally (§shell, Session 13). */

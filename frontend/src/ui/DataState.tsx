@@ -30,7 +30,7 @@ interface Props {
 export function LoadingState({ what, className = "" }: Props) {
   return (
     <div className={`flex items-center justify-center p-10 text-center ${className}`}>
-      <p className="text-[15px] opacity-50">
+      <p className="text-[16px] opacity-50">
         {what ? `${what} 불러오는 중이에요` : "불러오는 중이에요"}
       </p>
     </div>
@@ -45,11 +45,11 @@ export function ErrorState({ what, onRetry, retrying = false, className = "" }: 
       role="alert"
     >
       <div>
-        <p className="text-[15px]">
+        <p className="text-[16px]">
           {what ? `${what} 불러오지 못했어요` : "불러오지 못했어요"}
         </p>
         {/* the likeliest cause by far, and the one the reader can act on */}
-        <p className="mt-1 text-[12px] opacity-45">
+        <p className="mt-1 text-[13px] opacity-45">
           서버에 연결되지 않았을 수 있어요
         </p>
       </div>
@@ -58,7 +58,7 @@ export function ErrorState({ what, onRetry, retrying = false, className = "" }: 
           type="button"
           onClick={onRetry}
           disabled={retrying}
-          className="rounded-control border border-edge px-3 py-1 text-[13px] hover:bg-page disabled:opacity-40"
+          className="rounded-control border border-edge px-3 py-1 text-[14px] hover:bg-page disabled:opacity-40"
         >
           {retrying ? "다시 시도하는 중" : "다시 시도"}
         </button>
