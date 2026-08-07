@@ -57,7 +57,7 @@ const BUTTON_BASE =
  *
  * hover는 사실상 **킷에 없다**. 아트보드는 4개 있는데(Over-glass / 1 Mn) 값이
  * idle과 완전히 같다 — 자리만 있고 정의가 없다. Content Area에는 아트보드조차
- * 없다. 웹에서는 필요하므로 idle과 clicked 사이에 넣었다(--sim-ctl-hover).
+ * 없다. 웹에서는 필요하므로 idle과 clicked 사이에 넣었다(--bw-ctl-hover).
  *
  * 안 가져온 것: 02 Bordered Tinted, 03/05 Destructive. 전자는 강조 파랑,
  * 후자는 빨강 기반인데 이 제품에서 그 두 색은 부호 전용이고, 파괴적 동작도
@@ -387,7 +387,7 @@ export function Field({
  * 왜 카드를 버렸나: 사우론의 셸은 떠 있는 카드의 모자이크가 아니라 **끊기지
  * 않는 한 장의 표면**이다(docs/DESIGN.md). 처음엔 구획마다 라운드 카드를
  * 얹었는데, 그건 사우론이 Session 16에서 폐기한 바로 그 그림이었다 — 회색
- * 페이지 위에 흰 카드가 떠 있는 배치. 라이트 테마에서 `--sim-page`는 이제
+ * 페이지 위에 흰 카드가 떠 있는 배치. 라이트 테마에서 `--bw-page`는 이제
  * 캔버스 픽셀을 거의 칠하지 않는다.
  *
  * 라운드와 테두리는 **실제로 떠 있는 것**에만 쓴다 → FloatingCard. */

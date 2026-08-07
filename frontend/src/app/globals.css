@@ -43,21 +43,21 @@
    * the simulation's token answer to controls that this product dresses with
    * generated .kit-* classes instead. Both answers to the same kit live here
    * for now; unifying them is a design pass, not a merge step. */
-  --color-ink-1: var(--sim-ink-1);
-  --color-ink-2: var(--sim-ink-2);
-  --color-ink-3: var(--sim-ink-3);
-  --color-ink-4: var(--sim-ink-4);
-  --color-ink-5: var(--sim-ink-5);
-  --color-ink-6: var(--sim-ink-6);
-  --color-ctl: var(--sim-ctl-idle);
-  --color-ctl-hover: var(--sim-ctl-hover);
-  --color-ctl-active: var(--sim-ctl-active);
-  --color-ctl-disabled: var(--sim-ctl-disabled);
-  --color-prominent: var(--sim-ctl-prominent);
-  --color-prominent-hover: var(--sim-ctl-prominent-hover);
-  --color-prominent-active: var(--sim-ctl-prominent-active);
-  --color-field: var(--sim-field-border);
-  --shadow-popover: var(--sim-shadow-popover);
+  --color-ink-1: var(--bw-ink-1);
+  --color-ink-2: var(--bw-ink-2);
+  --color-ink-3: var(--bw-ink-3);
+  --color-ink-4: var(--bw-ink-4);
+  --color-ink-5: var(--bw-ink-5);
+  --color-ink-6: var(--bw-ink-6);
+  --color-ctl: var(--bw-ctl-idle);
+  --color-ctl-hover: var(--bw-ctl-hover);
+  --color-ctl-active: var(--bw-ctl-active);
+  --color-ctl-disabled: var(--bw-ctl-disabled);
+  --color-prominent: var(--bw-ctl-prominent);
+  --color-prominent-hover: var(--bw-ctl-prominent-hover);
+  --color-prominent-active: var(--bw-ctl-prominent-active);
+  --color-field: var(--bw-field-border);
+  --shadow-popover: var(--bw-shadow-popover);
   /* Floating-surface radius scale (§9, geometry pass 2026-08-05). Three steps,
    * smallest first: popover 12 (dropdown, command palette), card 16 (the
    * backtest window), sheet 20 (both bottom sheets, top corners only). These

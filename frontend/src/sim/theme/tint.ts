@@ -1,7 +1,7 @@
 /* 부호 틴트 — 히트맵 셀의 배경.
  *
  * 규칙 [OWNER, 2026-08-06]: **색은 부호만 말한다.** 크기는 농도가 말한다.
- * 그래서 양수는 --sim-up 계열, 음수는 --sim-down 계열이고, 두 색 사이에
+ * 그래서 양수는 --bw-up 계열, 음수는 --bw-down 계열이고, 두 색 사이에
  * 제3의 색조는 없다. 회색조로 인쇄해도 농도 순서가 그대로 남는다.
  *
  * ─ 한 셀에서 색은 한 채널만 쓴다 ─────────────────────────────────────────
@@ -45,8 +45,8 @@ export function tintFor(value: number, scale: number): string | undefined {
   // 눌러버려 표가 "한 칸만 있는" 것처럼 보인다.
   const frac = Math.min(1, Math.sqrt(Math.abs(value) / scale));
   const mix = Math.round(MIN_MIX + frac * (MAX_MIX - MIN_MIX));
-  const hue = value > 0 ? "--sim-up" : "--sim-down";
-  return `color-mix(in srgb, var(${hue}) ${mix}%, var(--sim-tile))`;
+  const hue = value > 0 ? "--bw-up" : "--bw-down";
+  return `color-mix(in srgb, var(${hue}) ${mix}%, var(--bw-tile))`;
 }
 
 /** 방향색 자체 (텍스트용). **틴트가 칠해지지 않은 표면에서만 쓴다** — 위
@@ -55,6 +55,6 @@ export function tintFor(value: number, scale: number): string | undefined {
  * 0은 방향이 아니므로 잉크로 남는다. 0을 빨강이나 파랑으로 칠하면 있지도 않은
  * 부호를 주장하게 된다. */
 export function directionVar(value: number): string {
-  if (!Number.isFinite(value) || value === 0) return "var(--sim-ink)";
-  return value > 0 ? "var(--sim-up)" : "var(--sim-down)";
+  if (!Number.isFinite(value) || value === 0) return "var(--bw-ink)";
+  return value > 0 ? "var(--bw-up)" : "var(--bw-down)";
 }

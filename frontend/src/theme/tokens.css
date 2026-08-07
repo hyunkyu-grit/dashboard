@@ -219,67 +219,51 @@
   }
 }
 
-/* ── The simulation tab ────────────────────────────────────────────────────
- * The scenario simulation arrived from simulation_project (2026-08-07) with
- * its own `--sim-*` token system. Both systems were styled from the same
- * macOS 27 UI kit and had converged on the same values almost everywhere —
- * --line, --up, --down, --tile, --popover and --border-live were already
- * byte-identical — so this is nine ALIASES onto the tokens above, not a
- * second palette.
+/* ── Control ramp and fills scale ──────────────────────────────────────────
+ * These arrived with the scenario simulation (2026-08-07) under a `--bw-*`
+ * prefix, next to nine aliases onto the tokens above. The aliases are gone —
+ * their consumers name `--bw-*` directly now — and what is left was never
+ * simulation-specific: a fills scale and a control ramp this product had no
+ * token form of. It dressed its own controls with generated `.kit-*` classes
+ * instead (theme/kit.generated.css), which is the second answer to the same
+ * kit; folding those in is the next step, not this one.
  *
- * Aliasing rather than copying is what makes one page one product: the theme
- * toggle, the dark block, and the prefers-contrast boost above all reach the
- * simulation for free, because they move --bw-* and these follow. Copying the
- * values would have forked the palette on the first token anyone edited.
+ * Renamed to `--bw-*` on 2026-08-07 with NO value change. The prefix was the
+ * last thing suggesting two palettes on one page: `@theme` already resolved
+ * both families into one namespace, and every formula below already derived
+ * from `--bw-ink`, so the theme toggle and the prefers-contrast boost have
+ * always reached them.
  *
  * Two values the simulation held that are NOT carried over, both deliberate:
- *   --sim-page was #f9fafb against this product's #f8f8f8, and --sim-ink was
- *   #191f28 against #262626. This repo's are the measured ones (§9 and the
- *   surface pass), so the host wins. The visible delta is one step of page
- *   grey and a slightly warmer ink.
- *
- * The rest of the block is the simulation's own: a fills scale and a control
- * ramp that this product had no token form of — it dresses its controls with
- * generated `.kit-*` classes instead (theme/kit.generated.css). Reconciling
- * those two answers to the same kit is a design pass, not a merge step, and
- * it is NOT done here. Every value below is derived from --sim-ink, so it
- * tracks the host's ink and flips with the host's theme.
+ *   its page was #f9fafb against this product's #f8f8f8, and its ink #191f28
+ *   against #262626. This repo's are the measured ones (§9 and the surface
+ *   pass), so the host wins.
  */
 :root {
-  --sim-page: var(--bw-page);
-  --sim-tile: var(--bw-tile);
-  --sim-popover: var(--bw-popover);
-  --sim-ink: var(--bw-ink);
-  --sim-line: var(--bw-line);
-  --sim-up: var(--bw-up);
-  --sim-down: var(--bw-down);
-  --sim-border: var(--bw-border);
-  --sim-border-live: var(--bw-border-live);
-
   /* Fills scale — Apple's, one step per level. */
-  --sim-ink-1: color-mix(in srgb, var(--sim-ink) 85%, transparent);
-  --sim-ink-2: color-mix(in srgb, var(--sim-ink) 50%, transparent);
-  --sim-ink-3: color-mix(in srgb, var(--sim-ink) 25%, transparent);
-  --sim-ink-4: color-mix(in srgb, var(--sim-ink) 10%, transparent);
-  --sim-ink-5: color-mix(in srgb, var(--sim-ink) 5%, transparent);
-  --sim-ink-6: color-mix(in srgb, var(--sim-ink) 3%, transparent);
+  --bw-ink-1: color-mix(in srgb, var(--bw-ink) 85%, transparent);
+  --bw-ink-2: color-mix(in srgb, var(--bw-ink) 50%, transparent);
+  --bw-ink-3: color-mix(in srgb, var(--bw-ink) 25%, transparent);
+  --bw-ink-4: color-mix(in srgb, var(--bw-ink) 10%, transparent);
+  --bw-ink-5: color-mix(in srgb, var(--bw-ink) 5%, transparent);
+  --bw-ink-6: color-mix(in srgb, var(--bw-ink) 3%, transparent);
 
-  --sim-field-border: color-mix(in srgb, #000000 5%, transparent);
-  --sim-focus-ring: color-mix(in srgb, var(--sim-ink) 50%, transparent);
+  --bw-field-border: color-mix(in srgb, #000000 5%, transparent);
+  --bw-focus-ring: color-mix(in srgb, var(--bw-ink) 50%, transparent);
 
-  --sim-ctl-idle: color-mix(in srgb, var(--sim-ink) 8%, transparent);
-  --sim-ctl-hover: color-mix(in srgb, var(--sim-ink) 12%, transparent);
-  --sim-ctl-active: color-mix(in srgb, var(--sim-ink) 16%, transparent);
-  --sim-ctl-disabled: color-mix(in srgb, var(--sim-ink) 4%, transparent);
+  --bw-ctl-idle: color-mix(in srgb, var(--bw-ink) 8%, transparent);
+  --bw-ctl-hover: color-mix(in srgb, var(--bw-ink) 12%, transparent);
+  --bw-ctl-active: color-mix(in srgb, var(--bw-ink) 16%, transparent);
+  --bw-ctl-disabled: color-mix(in srgb, var(--bw-ink) 4%, transparent);
 
   /* The default button: ink, not accent. The kit paints this one with the
    * system accent; this product already owns a blue and spends it on
    * direction, so the prominent control is ink here. */
-  --sim-ctl-prominent: var(--sim-ink);
-  --sim-ctl-prominent-hover: color-mix(in srgb, var(--sim-ink) 95%, #000000);
-  --sim-ctl-prominent-active: color-mix(in srgb, var(--sim-ink) 90%, #000000);
+  --bw-ctl-prominent: var(--bw-ink);
+  --bw-ctl-prominent-hover: color-mix(in srgb, var(--bw-ink) 95%, #000000);
+  --bw-ctl-prominent-active: color-mix(in srgb, var(--bw-ink) 90%, #000000);
 
-  --sim-shadow-popover: 0 18px 46px color-mix(in srgb, #000000 25%, transparent);
+  --bw-shadow-popover: 0 18px 46px color-mix(in srgb, #000000 25%, transparent);
 }
 
 /* Only the formulas that genuinely differ in dark. The nine aliases are absent
@@ -288,18 +272,18 @@
 [data-theme="dark"] {
   /* Primary label is full-strength in dark: 85% of white on a dark ground
    * reads as grey, not as the primary tier. */
-  --sim-ink-1: var(--sim-ink);
-  --sim-ink-2: color-mix(in srgb, var(--sim-ink) 55%, transparent);
+  --bw-ink-1: var(--bw-ink);
+  --bw-ink-2: color-mix(in srgb, var(--bw-ink) 55%, transparent);
 
-  --sim-field-border: color-mix(in srgb, #ffffff 4%, transparent);
+  --bw-field-border: color-mix(in srgb, #ffffff 4%, transparent);
 
-  --sim-ctl-idle: color-mix(in srgb, var(--sim-ink) 7%, transparent);
-  --sim-ctl-hover: color-mix(in srgb, var(--sim-ink) 11%, transparent);
+  --bw-ctl-idle: color-mix(in srgb, var(--bw-ink) 7%, transparent);
+  --bw-ctl-hover: color-mix(in srgb, var(--bw-ink) 11%, transparent);
 
   /* toward white in dark, toward black in light — a press always goes darker
    * than its rest state relative to the surface it sits on */
-  --sim-ctl-prominent-hover: color-mix(in srgb, var(--sim-ink) 95%, #ffffff);
-  --sim-ctl-prominent-active: color-mix(in srgb, var(--sim-ink) 90%, #ffffff);
+  --bw-ctl-prominent-hover: color-mix(in srgb, var(--bw-ink) 95%, #ffffff);
+  --bw-ctl-prominent-active: color-mix(in srgb, var(--bw-ink) 90%, #ffffff);
 
-  --sim-shadow-popover: 0 18px 46px color-mix(in srgb, #000000 55%, transparent);
+  --bw-shadow-popover: 0 18px 46px color-mix(in srgb, #000000 55%, transparent);
 }

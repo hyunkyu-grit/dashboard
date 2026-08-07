@@ -12,12 +12,12 @@
 export type SemanticToken = "page" | "tile" | "popover" | "ink" | "border" | "borderLive";
 
 const TOKEN_VARS: Record<SemanticToken, string> = {
-  page: "--sim-page",
-  tile: "--sim-tile",
-  popover: "--sim-popover",
-  ink: "--sim-ink",
-  border: "--sim-border",
-  borderLive: "--sim-border-live",
+  page: "--bw-page",
+  tile: "--bw-tile",
+  popover: "--bw-popover",
+  ink: "--bw-ink",
+  border: "--bw-border",
+  borderLive: "--bw-border-live",
 };
 
 export type ResolvedTheme = Record<SemanticToken, string>;
@@ -50,18 +50,18 @@ export function resolveTheme(): ResolvedTheme {
 
 /** 잉크(전경) 색. 다계열 램프의 바탕이 된다. */
 export function resolveInk(): string {
-  return resolveVar("--sim-ink");
+  return resolveVar("--bw-ink");
 }
 
 /** 차트 선 색. */
 export function resolveLine(): string {
-  return resolveVar("--sim-line");
+  return resolveVar("--bw-line");
 }
 
 /** 방향색 — 빨강 상승 / 파랑 하락. 호출부가 조용히 뒤바꿀 수 없도록 부호를
  * 인자로 받는다. */
 export function resolveDirection(up: boolean): string {
-  return resolveVar(up ? "--sim-up" : "--sim-down");
+  return resolveVar(up ? "--bw-up" : "--bw-down");
 }
 
 /** 해석된 `rgb(...)` 색에 알파를 입힌다. 캔버스에는 stroke-opacity가 없으므로,

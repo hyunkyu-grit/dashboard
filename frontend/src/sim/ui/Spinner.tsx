@@ -46,7 +46,7 @@ export function Spinner({ size = 32, label = "계산 중" }: { size?: number; la
             width: size * W,
             height: size * L,
             borderRadius: size * W,
-            background: "var(--sim-ink)",
+            background: "var(--bw-ink)",
             opacity: alpha,
             // 상자 한가운데를 축으로 45°씩. translateX(-50%)가 먼저 와야
             // 회전축이 살(spoke)의 중심선에 놓인다.

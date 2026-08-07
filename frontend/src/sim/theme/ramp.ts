@@ -22,14 +22,14 @@ export const SERIES_OPACITY: Record<Theme, readonly number[]> = {
  * `1 | 2 | 3 | 4`라 소수를 받지도 않는다 — 차트에 꽂는 순간 타입 에러다.
  *
  * 굵기는 "이 선이 주인공인가"만 말한다. 다섯을 가르는 일은 농도가 진다.
- * tokens.css의 --sim-width-* 와 미러; ramp-sync가 어긋남에서 실패한다. */
+ * tokens.css의 --bw-border / --bw-border-live 와 미러; ramp-sync가 어긋남에서 실패한다. */
 export const SERIES_WIDTH: readonly (1 | 2 | 3 | 4)[] = [2, 1, 1, 1, 1];
 
-/** 헤어라인 잉크 농도 — tokens.css의 --sim-border / --sim-border-live
+/** 헤어라인 잉크 농도 — tokens.css의 --bw-border / --bw-border-live
  * color-mix 퍼센트를 미러. SVG가 수백 개의 그리드라인을 칠할 때 var() 조회를
  * 요소마다 지불하지 않으려고 여기 둔다. */
 export const EDGE_OPACITY: Record<Theme, { base: number; live: number }> = {
-  // 라이트 base는 **0.12로 되돌렸다** — 이식(2026-08-07) 때 --sim-border가
+  // 라이트 base는 **0.12로 되돌렸다** — 이식(2026-08-07) 때 --bw-border가
   // --bw-border의 별칭이 됐고, 그 값이 12%다.
   //
   // 여기 있던 값은 0.10이었다. 헤어라인을 Apple Fills 스케일의 한 칸(잉크
