@@ -86,7 +86,9 @@ import {
 } from "./motion";
 import { CHART_PAD, type ChartMark, PreviewChart } from "./PreviewChart";
 import { GROUP_LABEL, type Group, type Row } from "./rows";
+import { BacktestDailyPnl } from "./BacktestDailyPnl";
 import { WindowControls } from "./WindowControls";
+import { WindowDrawer } from "./WindowDrawer";
 import { useCdReference } from "./useCdReference";
 
 /* Money, the way a Korean desk reads it: 억 / 만, never 12 raw digits.
@@ -1745,6 +1747,32 @@ export function BacktestWindow({
           )}
         </ErrorBoundary>
       </div>
+
+      {/* 대사용 숫자 — 시뮬레이션 결과 창과 **같은 서랍**이다
+          [트레이더 피드백 5, 2026-08-07]. 껍데기가 하나여야 "둘 다에 존재한다"
+          가 유지된다.
+          KRD 는 아직 없다: 백테스트 응답은 `points`(일별 손익)와 포지션별
+          기록만 들고, 테너별 민감도는 계산하지 않는다. 탭을 **숨기지 않고
+          비워 두는** 이유가 그것이다 — 없다는 사실이 화면에서 보여야 다음
+          사람이 "왜 한쪽에만 있지" 를 묻지 않는다. */}
+      {shownResult && (
+        <WindowDrawer
+          tabs={[
+            {
+              id: "pnl",
+              label: "일별 PnL",
+              content: <BacktestDailyPnl points={shownResult.points} />,
+            },
+            {
+              id: "krd",
+              label: "KRD",
+              content: null,
+              unavailable:
+                "백테스트는 아직 테너별 민감도를 계산하지 않아요 — 응답에 일별 손익만 있어요",
+            },
+          ]}
+        />
+      )}
     </motion.div>
   );
 }

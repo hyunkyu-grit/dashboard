@@ -27,8 +27,9 @@
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef } from "react";
 
-import { useSimulationDataStore } from "@/sim/store/simulation-data-store";
+import { useSimulationPort } from "@/sim/hooks/use-simulation";
 import { ErrorBoundary } from "@/ui/ErrorBoundary";
+import { WindowDrawer } from "@/ui/WindowDrawer";
 import { WINDOW_W } from "@/ui/floatingWindow";
 import { Z_WINDOW } from "@/ui/layers";
 import { ENTER, EXIT, instant } from "@/ui/motion";
@@ -36,8 +37,10 @@ import { useFloatingWindow } from "@/ui/useFloatingWindow";
 import { WindowControls } from "@/ui/WindowControls";
 
 import { ResultsStage } from "./ResultsStage";
+import { DailyPnlTable, KrdGrid } from "./ResultsTables";
 
 export function SimulationWindow({ onClose }: { onClose: () => void }) {
+  const { lastRun } = useSimulationPort();
   const reduced = useReducedMotion() === true;
   const { pos, dragHandlers } = useFloatingWindow("simulation");
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -89,6 +92,24 @@ export function SimulationWindow({ onClose }: { onClose: () => void }) {
           <ResultsStage onEdit={onClose} />
         </ErrorBoundary>
       </div>
+
+      {/* 대사용 숫자는 하단 서랍에 [트레이더 피드백 5, 2026-08-07]. 둘 다
+          2026-08-06 에 "지금 당장은 필요없을 듯" 으로 감췄던 표인데, 실제
+          트레이딩 시스템과 맞춰 보려면 있어야 한다는 것이 이번 피드백이다.
+          본문에 되돌리지 않고 서랍에 두는 이유: 매번 보는 숫자가 아니라
+          대사할 때 보는 숫자다. */}
+      {lastRun && (
+        <WindowDrawer
+          tabs={[
+            {
+              id: "pnl",
+              label: "일별 PnL",
+              content: <DailyPnlTable run={lastRun} />,
+            },
+            { id: "krd", label: "KRD", content: <KrdGrid run={lastRun} /> },
+          ]}
+        />
+      )}
     </motion.div>
   );
 }

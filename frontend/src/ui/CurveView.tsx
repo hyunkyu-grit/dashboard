@@ -27,7 +27,7 @@
 import { useMemo, useState } from "react";
 
 import type { Unit, WallSummary } from "@/lib/api";
-import { fmtAxis, levelHeadText, levelHeadTitle } from "@/lib/format";
+import { fmtAxis } from "@/lib/format";
 import { BASIS_SECONDARY_OPACITY } from "@/theme/ramp";
 
 import {

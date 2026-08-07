@@ -17,7 +17,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EventCluster, PolicyStep } from "@/lib/api";
 import {
   fetchForwards,
-  fetchHealth,
   fetchVolatility,
   fetchWallSummary,
 } from "@/lib/api";

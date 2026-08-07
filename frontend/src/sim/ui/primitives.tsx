@@ -419,12 +419,18 @@ export function Section({
   aside,
   children,
   className,
+  bare,
 }: {
   title?: string;
   aside?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  /** 박스 없이 내용만. **이미 박스 안**일 때 쓴다 — 창 하단 서랍이 그렇다:
+   * 탭 라벨이 제목을 말하므로 여기서 또 헤더를 그리면 제목이 둘이 되고,
+   * 테두리는 박스 안의 박스가 된다 (`ui/WindowDrawer.tsx`). */
+  bare?: boolean;
 }) {
+  if (bare) return <div className={className}>{children}</div>;
   return (
     <GroupBox
       className={className}

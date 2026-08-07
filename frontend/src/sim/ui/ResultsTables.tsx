@@ -141,6 +141,25 @@ export function ContributionTable({ run }: { run: SimulateResponse }) {
 
 // ── 2. 테너별 KRD ───────────────────────────────────────────────────────────
 
+/* KRD 표의 칸 폭.
+ *
+ * 테너 칸은 전부 같은 폭이다 [OWNER, 2026-08-07]. 그 폭을 상수로 박지 않는
+ * 이유: 가장 긴 값에 맞춘 고정 폭(`-5,718,914` → 84)이면 테너 16개가
+ * 1,500px 를 먹어서 창 밖으로 나간다 — 값이 작은 실행에서도 늘 스크롤이다.
+ * 그래서 **이번 표에 실제로 있는 가장 긴 숫자**가 폭을 정한다. 여전히 전부
+ * 같은 폭이고, 필요한 만큼만 넓다.
+ *
+ * 13px tabular-nums 는 자릿수마다 폭이 같다 — 그래서 글자 수 × 자폭으로 재는
+ * 것이 성립한다. 7.3 은 Pretendard 13px 의 숫자 전각폭이고, +8 은 pl-2. */
+const SECTOR_W = 72;
+const TOTAL_W = 92;
+const DIGIT_W = 7.3;
+
+function tenorWidth(labels: string[], cells: string[]) {
+  const longest = Math.max(...labels.map((s) => s.length), ...cells.map((s) => s.length), 3);
+  return Math.max(48, Math.ceil(longest * DIGIT_W) + 8);
+}
+
 export function KrdGrid({ run }: { run: SimulateResponse }) {
   const rows = run.pvbpSensitivity ?? [];
   if (rows.length === 0) return null;
@@ -155,14 +174,40 @@ export function KrdGrid({ run }: { run: SimulateResponse }) {
     0,
   );
 
+  // 셀 글자를 먼저 만든다 — 폭을 재는 것도, 그리는 것도 같은 문자열이어야
+  // 폭과 내용이 어긋나지 않는다.
+  const text = (v: number) => (v === 0 ? "—" : Math.round(v).toLocaleString());
+  const tenorW = tenorWidth(
+    tenors,
+    rows.flatMap((r) => tenors.map((t) => text(r.tenors[t] ?? 0))),
+  );
+
   return (
-    <Section title="테너별 금리 민감도">
+    <Section title="테너별 금리 민감도" bare>
       <p className="pb-2 text-body text-ink-2">
         금리가 1bp 움직일 때 각 테너에서 얼마가 움직이는지예요. 빨강은 오르면 버는
         쪽, 파랑은 오르면 잃는 쪽이에요.
       </p>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-body">
+        {/* 테너 칸은 **전부 같은 폭**이다 [OWNER, 2026-08-07].
+            자동 폭이면 칸마다 자릿수만큼 넓어져서, 값이 큰 테너가 넓은 칸을
+            갖는다 — 틴트가 배경을 칠하는 표에서는 그 폭 차이가 곧 두 번째
+            인코딩처럼 읽힌다. 실제로는 폭이 아니라 색과 숫자가 크기를 말한다.
+            같은 폭이면 눈이 격자를 따라 가로세로로 곧장 훑을 수 있다.
+            그래서 `table-fixed` + colgroup 이다. 폭이 내용에서 오지 않으므로
+            표 전체의 최소 폭도 여기서 정해진다 — 자리가 모자라면 줄바꿈이
+            아니라 가로 스크롤이다(숫자는 접히면 안 된다). */}
+        <table
+          className="w-full table-fixed text-body"
+          style={{ minWidth: SECTOR_W + tenors.length * tenorW + TOTAL_W }}
+        >
+          <colgroup>
+            <col style={{ width: SECTOR_W }} />
+            {tenors.map((t) => (
+              <col key={t} style={{ width: tenorW }} />
+            ))}
+            <col style={{ width: TOTAL_W }} />
+          </colgroup>
           <thead>
             <tr>
               <Th>섹터</Th>
@@ -181,11 +226,11 @@ export function KrdGrid({ run }: { run: SimulateResponse }) {
                   return (
                     <td
                       key={t}
-                      className="py-1.5 pl-3 text-right"
+                      className="py-1.5 pl-2 text-right"
                       // 틴트 셀의 글자는 잉크다 — 배경이 이미 부호를 말한다.
                       style={{ background: tintFor(v, scale) }}
                     >
-                      {v === 0 ? <span className="text-ink-3">—</span> : Math.round(v).toLocaleString()}
+                      {v === 0 ? <span className="text-ink-3">—</span> : text(v)}
                     </td>
                   );
                 })}
@@ -208,7 +253,7 @@ export function DailyPnlTable({ run }: { run: SimulateResponse }) {
   if (rows.length === 0) return null;
 
   return (
-    <Section title="일별 손익">
+    <Section title="일별 손익" bare>
       <p className="pb-2 text-body text-ink-2">
         하루하루의 누적 손익이에요. 위 커브를 숫자로 옮긴 것이라 같은 값이에요.
       </p>

@@ -31,7 +31,6 @@ import {
   type VisibleColumns,
 } from "./columns";
 import {
-  ENTER,
   EXIT,
   flipWindow,
   instant,
