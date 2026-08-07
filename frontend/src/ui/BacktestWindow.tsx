@@ -1693,14 +1693,17 @@ export function BacktestWindow({
               onClick={() => run.mutate()}
               disabled={!ready || run.isPending}
               /* The DEFAULT button of this sheet: same 28 capsule as its
-                 neighbour, filled, and filled with the accent — that is what
-                 macOS marks a default with, and the blue is now available to
-                 non-directional states [OWNER, 2026-08-06]. Ink read as one more
-                 dark chip in a window that has several; the label carries
-                 4.63:1 light / 5.49:1 dark on this fill.
+                 neighbour, filled, and filled with THE ACCENT — that is what
+                 macOS marks a default with.
+                 2026-08-07: 그 "액센트" 가 파랑에서 주황으로 돌아왔다 [OWNER].
+                 파랑이 여기 있던 것은 액센트가 은퇴해 있던 동안 그 자리를 대신
+                 메운 것이고, 액센트가 있는 지금은 방향 파랑을 비운다 — 이 창은
+                 파란 −25.1억을 같이 띄운다.
+                 라벨이 `text-page`(흰 글자)에서 `text-on-accent`(잉크 85%)로
+                 같이 움직인다: 채움 주황 위 흰 글자는 2.31:1, 잉크는 7.61:1.
                  14px semibold was the one label in the window off the kit's type
                  scale — 4 Lg carries 13/Medium like every size above 20. */
-              className={`flex h-7 min-w-[6.75rem] items-center justify-center rounded-full bg-down px-5 text-center text-[13px] font-medium text-page hover:opacity-90 disabled:opacity-40 ${
+              className={`flex h-7 min-w-[6.75rem] items-center justify-center rounded-full bg-accent px-5 text-center text-[13px] font-medium text-on-accent hover:opacity-90 disabled:opacity-40 ${
                 // a full revaluation takes a beat — the pulse says the server
                 // is working; motion-safe so reduced motion sees a still label
                 run.isPending ? "motion-safe:animate-pulse" : ""

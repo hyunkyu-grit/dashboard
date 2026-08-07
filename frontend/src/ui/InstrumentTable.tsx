@@ -52,6 +52,7 @@ import {
   type Row,
 } from "./rows";
 import { SCREENERS } from "./screener";
+import type { TabId } from "./tabs";
 import { columnCue } from "./tint";
 import { LoadingState } from "./DataState";
 
@@ -78,27 +79,13 @@ const RANGE_COL_NAME = "52주 레인지";
 /** The position track's noun for the same note (pass N). */
 const SLIDER_COL_NAME = "52주 내 위치";
 
-/** A tab is a row filter, the overview, the 시뮬레이션, or the 연구실 — the
- * incubation surface pinned to the FAR RIGHT [OWNER, 2026-08-04]. Tab order is
- * the product's order of confidence: an experiment that earns trader feedback
- * graduates leftward into the main tabs.
+/* 탭의 정의는 ui/tabs.ts 로 옮겼다 [2026-08-07]. 탭은 이제 표 안의 세그먼티드
+ * 컨트롤이 아니라 셸의 사이드바(ui/Sidebar.tsx)이고, 표와 셸이 함께 읽는
+ * 정의가 표 안에 있으면 셸이 표를 import 해야 한다.
  *
- * 시뮬레이션 sits between the row filters and 연구실 (2026-08-07). It is not a
- * row filter — it renders its own screen and the table does not appear under
- * it, the same shape 전체 and 연구실 already have — but it is finished work,
- * not an experiment, so it goes to the LEFT of the incubation surface. */
-export type TabId = Group | "all" | "sim" | "lab";
-
-const FILTERS: { id: TabId; label: string }[] = [
-  { id: "all", label: "전체" },
-  { id: "outright", label: GROUP_LABEL.outright },
-  { id: "spread", label: GROUP_LABEL.spread },
-  { id: "fly", label: GROUP_LABEL.fly },
-  { id: "forward", label: GROUP_LABEL.forward },
-  { id: "vol", label: GROUP_LABEL.vol },
-  { id: "sim", label: "시뮬레이션" },
-  { id: "lab", label: "연구실" },
-];
+ * `TabId` 는 여기서 계속 내보낸다 — 부르는 쪽이 여덟 군데이고, 그것들이
+ * 가리키는 것은 그대로다. */
+export type { TabId };
 
 /** Which tabs draw the 주요/전체 divider [OWNER, 2026-07-31]. Generalized from
  * the forward tab, whose two-block layout is the reference. 변동성 is absent
@@ -278,7 +265,6 @@ export function InstrumentTable({
   forwards,
   curveBanner,
   filter,
-  onFilter,
   activeId,
   pinnedId,
   onHover,
@@ -295,8 +281,9 @@ export function InstrumentTable({
   asOf?: string;
   forwards?: ForwardsPayload;
   curveBanner?: CurveBanner;
+  /** 어느 탭이 켜져 있나. 고르는 것은 셸의 사이드바이고 표는 결과만 받는다
+   * — 탭이 표 안의 컨트롤이던 시절의 `onFilter` 는 없어졌다 [2026-08-07]. */
   filter: TabId;
-  onFilter: (f: TabId) => void;
   /** 연구실 residents (§lab). 라고 할 때 살걸 rows + the focus routing the
    * change log uses (switch tab, pin, scroll). */
   regret?: RegretEntry[];
@@ -359,6 +346,22 @@ export function InstrumentTable({
     viewH: number;
     tops: ReadonlyMap<string, number>;
   }>({ cause: "other", scrollTop: 0, viewH: 800, tops: new Map() });
+
+  /* 탭이 바깥에서 바뀐다 [2026-08-07]. 예전에는 이 파일 안의 세그먼티드 버튼이
+   * 핸들러에서 `snapReorder("other")` 를 부르고 나서 필터를 바꿨는데, 탭이
+   * 사이드바로 나가면서 그 핸들러가 여기 없다.
+   *
+   * 이펙트가 아니라 **렌더 중 setState** 인 이유: "other" 스냅은 리오더를
+   * 애니메이션하지 **않게** 하는 스냅이고, 이펙트는 새 필터의 커밋 뒤에 도는
+   * 탓에 탭이 바뀌는 그 한 프레임을 놓친다 — 행들이 한 번 날아다니고 나서
+   * 스냅이 걸린다. 이전 값과 다를 때만 부르므로 루프가 되지 않는다(React 가
+   * 권하는 "props 로 state 조정" 형태 그대로). DOM 도 ref 도 읽지 않는다:
+   * "other" 분기는 상수만 쓴다. */
+  const [snapFor, setSnapFor] = useState<TabId>(filter);
+  if (snapFor !== filter) {
+    setSnapFor(filter);
+    setFlipSnap({ cause: "other", scrollTop: 0, viewH: 800, tops: new Map() });
+  }
 
   const isForward = filter === "forward";
   // 전체 is not a list any more — it is the three-column overview (§전체). The
@@ -515,105 +518,9 @@ export function InstrumentTable({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* fixed: tabs + forward controls stay at the top of the surface (§shell) */}
+      {/* 고정 머리 — 스크리너 칩과 포워드 컨트롤이 표면 위쪽에 남는다 (§shell).
+          탭 스트립은 여기 있었고 이제 셸의 사이드바다 [2026-08-07]. */}
       <div className={`shrink-0 pt-4 ${PAGE_X}`}>
-      {/* Tabs: a macOS SEGMENTED CONTROL (macos component pass). Was a sliding
-          underline on a rail. The mechanism is unchanged — one shared layoutId
-          slides a single indicator between segments — but the indicator is now
-          the selected segment itself.
-          The track is RECESSED (ink at 7%) and the selected segment returns to
-          the base surface. Stating it that way rather than "white pill on grey"
-          is what makes it work in both themes: in light the pill reads as
-          raised white, in dark it reads as lifted out of a darker groove, and
-          neither needs a theme-specific colour.
-          Still no press-scale — a segment shares an alignment with its
-          neighbours; transform press feedback stays for isolated targets. */}
-      <div className="border-b border-edge pb-2">
-        {/* Segmented control, read OFF THE KIT rather than from memory.
-            Measured at Regular size (Segmented Controls - Content Area - Duo -
-            Active, 3 Rg, plus its two segment masters):
-              track      60x24, ink at 8 percent, no padding around the segments
-              segment    30x24, no fill when off
-              selected   accent fill, white label
-              unselected label at ~85 percent ink
-              separator  1x14 at the seam, centred in the 24px box
-              type       SF Pro Medium 13 on EVERY segment, selected included
-            An earlier pass here guessed "recessed track, raised white pill",
-            which is the iOS / older-macOS control; this kit fills the selected
-            segment with the accent instead. The separator and the flat Medium
-            weight were missing entirely.
-            The accent is THIS PRODUCT'S blue [OWNER, 2026-08-06]: the generator
-            rewrites the kit's own blue to the down token, so the selected
-            segment, the menu highlight and the focus ring all carry one blue
-            instead of the kit's second one (which also fell under the text
-            floor beneath a white label).
-            Values in words, not hex: no-raw-hex.test.ts reads source text and
-            does not strip comments. */}
-        {/* ROUNDED RECTANGLE at this size, not a capsule. The masters carry no
-            radius any extractor can read, so this could only come from looking —
-            and looking once was not enough. Sketch Cloud, Duo, all five sizes
-            side by side: 1 Mn (46x16), 2 Sm (52x20) and 3 Rg (60x24) are rounded
-            rectangles; 4 Lg (68x28) and 5 XL (76x36) are capsules. The capsule
-            starts at 28, and this control is 24. Buttons and Pop-up Buttons draw
-            the same boundary at the same height.
-            The one place 24 IS a capsule is the TOOLBAR group (Titlebars and
-            Toolbars - Medium - Buttons: 24x24, 48x24 ... all fully round), which
-            is why the header keeps its capsule and this does not. */}
-        <div className="kit-seg inline-flex rounded-control">
-          {FILTERS.map((f, i) => {
-            const on = filter === f.id;
-            const prevOn = i > 0 && filter === FILTERS[i - 1].id;
-            /* macOS draws the seam only between two UNSELECTED segments — the
-               accent fill supplies its own edge on either side of itself. */
-            const seam = i > 0 && !on && !prevOn;
-            return (
-              <div key={f.id} className="relative flex">
-                {seam && (
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute left-0 top-1/2 h-[14px] w-px -translate-y-1/2 bg-edge"
-                  />
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    snapReorder("other"); // view change — reorder snaps
-                    onFilter(f.id);
-                  }}
-                  /* States are the kit's, not invented. Unselected: no fill at
-                     rest, ink 16 percent while held down (its "3 - Clicked").
-                     Selected keeps the accent fill in every state. The kit has
-                     no hover step — macOS controls do not light up under an
-                     idle pointer — so hover only firms the label. */
-                  className={`relative flex items-center rounded-control px-3 transition-colors ${
-                    on ? "kit-seg-on" : "kit-seg-off"
-                  }`}
-                >
-                  {on && (
-                    <motion.div
-                      layoutId="tab-underline"
-                      /* ENTER, not SPRING [OWNER, 2026-08-06]. An indicator that
-                         overshoots past the tab it is naming and comes back
-                         points at the wrong label for a frame — the one place
-                         where the overshoot actively contradicts the meaning. */
-                      transition={instant(ENTER, reduced)}
-                      /* Same radius as the segment it fills — r=6 at this size.
-                         It is the same blue the kit's own selected segment now
-                         resolves to, so fill and shape both agree. */
-                      className="absolute inset-0 rounded-control bg-down"
-                    />
-                  )}
-                  {/* the label rides ABOVE the indicator: the indicator is a
-                      sibling painted at inset-0, so without this the fill
-                      covers the text it is naming. */}
-                  <span className="relative z-10">{f.label}</span>
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
       {/* curve-level extreme, stated once (§I) — a fact about the whole curve,
           not any row, so the per-row percentile is suppressed on outrights. */}
       {curveBanner?.kind && (

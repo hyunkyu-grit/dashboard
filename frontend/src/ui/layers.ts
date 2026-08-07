@@ -19,6 +19,18 @@
 /** Sticky table header — inside the scroll container, below everything else. */
 export const Z_TABLE_HEAD = "z-10";
 
+/* ── 셸의 두 기둥 [2026-08-07] ───────────────────────────────────────────────
+ * 둘 다 격자 행이 아니라 **떠 있는 레이어**다 (HIG Materials: Liquid Glass
+ * "floats above the content layer"). 그래서 여기에 번호가 필요하다 — 본문은
+ * 이 둘 밑으로 지나간다.
+ *
+ * 툴바가 사이드바보다 위다: 툴바는 창 폭을 가로지르고 사이드바는 그 밑에서
+ * 시작한다. 반대로 두면 사이드바 머리가 툴바를 뚫는다.
+ * 둘 다 Z_CHROME 아래다. 지표 바·명령 바는 본문 위에 얹히는 것이고 이 둘은
+ * 본문의 **테두리**라, 겹칠 일이 생기면 얹히는 쪽이 이겨야 한다. */
+export const Z_SIDEBAR = "z-20";
+export const Z_TOOLBAR = "z-30";
+
 /** Page chrome that outlives the content: the bottom strip, the command bar. */
 export const Z_CHROME = "z-40";
 

@@ -215,13 +215,33 @@ export function ConfigureStage() {
               </div>
             </Field>
 
+            {/* 스테퍼가 붙는다 [OWNER, 2026-08-07 — "bp 목표는 스테퍼가 맞는
+                자리일 수 있습니다"]. 바로 아래 경로 설계의 D+n 행들은 이미
+                Input + Stepper 짝이고, 같은 단위를 같은 걸음으로 움직이는
+                칸이 하나만 자유 입력이던 것이 어긋난 자리였다.
+                걸음은 `WAYPOINT_STEP_BP` 로 같다 — 목표와 그 경유지가 다른
+                눈금을 쓰면 손으로 맞춰 놓은 경로가 목표를 한 번 누를 때마다
+                어긋난다. 자유 입력은 그대로 남는다: 스테퍼는 흔한 걸음을
+                한 번의 클릭으로 만들 뿐 값을 가두지 않는다. */}
             <Field label={`국고 ${anchor} 목표 변동`} hint={`D+${params.simDays} 시점`}>
-              <NumberField
-                value={params.baseShockBp}
-                onChange={(v) => patchParams({ baseShockBp: v })}
-                suffix="bp"
-                aria-label={`국고 ${anchor} 목표 변동`}
-              />
+              <div className="flex items-center gap-1.5">
+                <NumberField
+                  value={params.baseShockBp}
+                  onChange={(v) => patchParams({ baseShockBp: v })}
+                  aria-label={`국고 ${anchor} 목표 변동`}
+                />
+                <Stepper
+                  label={`국고 ${anchor} 목표 변동 ${WAYPOINT_STEP_BP}bp`}
+                  onStep={(d) => {
+                    const n = toNum(params.baseShockBp);
+                    if (n === null) return;
+                    patchParams({
+                      baseShockBp: String(n + d * WAYPOINT_STEP_BP),
+                    });
+                  }}
+                />
+                <span className="shrink-0 text-body text-ink-2">bp</span>
+              </div>
             </Field>
 
             {anchorError && (

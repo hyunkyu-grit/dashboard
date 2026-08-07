@@ -40,6 +40,8 @@ from itertools import combinations
 from .backtest import BacktestError, _build_legs, _index_on_or_after
 from .curves import TENOR_T
 from .dataset import Dataset
+from .derive import is_key
+from .forwards import KEY_FORWARDS
 
 # 다리로 세울 수 있는 노드. 데이터가 있는 par 테너만 — 1D(콜)와 3M(CD)은
 # 스왑의 다리가 아니라 커브의 짧은 끝이다.
@@ -66,16 +68,35 @@ def _years(tenor: str) -> float:
 
 
 def catalog() -> dict[str, list[dict]]:
-    """고를 수 있는 상품들, 모니터의 그룹 그대로. 프론트의 드롭다운이 이걸 읽는다."""
+    """고를 수 있는 상품들, 모니터의 그룹 그대로. 프론트의 드롭다운이 이걸 읽는다.
+
+    각 항목에 `key`가 붙는다 [2026-08-07] — 모니터의 표가 이미 쓰는 **주요/전체**
+    구분이고 판정도 같은 곳(`derive.is_key`, `forwards.KEY_FORWARDS`)에서 나온다.
+    프론트에 두 번째 목록을 두지 않는 이유가 이 함수가 있는 이유와 같다: 두 화면이
+    서로 다른 "주요 스프레드"를 가지면 그 순간 비교가 불가능해진다.
+
+    무엇을 고를 수 있는지는 **바뀌지 않는다.** 전체 106개가 그대로 다 있고, 표시
+    순서만 주요가 먼저다. 버터플라이 56개를 스크롤해서 찾는 것이 고르는 게
+    아니라는 것이 [OWNER]의 지적이었고, 답은 목록을 줄이는 것이 아니라 이미 있는
+    큐레이션을 여기에도 적용하는 것이다.
+    """
     out: dict[str, list[dict]] = {"outright": [], "spread": [], "fly": [], "forward": []}
     for t in LEG_TENORS:
-        out["outright"].append({"id": t, "label": t})
+        out["outright"].append({"id": t, "label": t, "key": is_key(t, "outright")})
     for a, b in combinations(COMBO_TENORS, 2):
-        out["spread"].append({"id": f"{a}-{b}", "label": f"{a}-{b}"})
+        sid = f"{a}-{b}"
+        out["spread"].append({"id": sid, "label": sid, "key": is_key(sid, "spread")})
     for a, b, c in combinations(COMBO_TENORS, 3):
-        out["fly"].append({"id": f"{a}-{b}-{c}", "label": f"{a}-{b}-{c}"})
+        sid = f"{a}-{b}-{c}"
+        out["fly"].append({"id": sid, "label": sid, "key": is_key(sid, "fly")})
+    # 포워드는 자기 플래그를 따로 든다 — `is_key`가 forward를 항상 False로 답하고
+    # (그 함수의 독스트링이 그렇게 적혀 있다), 주요 목록은 forwards.KEY_FORWARDS다.
+    # KEY_FORWARDS의 첫 칸이 곧 id다 — ("1Yx1Y", 1.0, 1.0). 뒤 둘은 연 단위
+    # 시작·기간이라 여기서는 쓰지 않는다.
+    key_forwards = {label for label, *_ in KEY_FORWARDS}
     for start, span in FORWARD_GRID:
-        out["forward"].append({"id": f"{start}x{span}", "label": f"{start}x{span}"})
+        sid = f"{start}x{span}"
+        out["forward"].append({"id": sid, "label": sid, "key": sid in key_forwards})
     return out
 
 

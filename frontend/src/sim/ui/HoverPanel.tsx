@@ -52,7 +52,15 @@ export function HoverPanel({ at, width, title, rows, footer }: HoverPanelProps) 
       // 허용되는 유일한 경우다.
       // 그림자는 킷 Popovers의 첫 겹이다 (0 18px 46px #000/0.25). 라운드 20도
       // 팝오버 마스터에서 왔다. 킷은 여기에 유리 가장자리 겹을 다섯 개 더
-      // 얹는데 이 셸은 머티리얼을 안 쓴다 — 남는 건 "떠 있다" 하나다.
+      // 얹는데 그중 유리는 여기 오지 않는다.
+      //
+      // "이 셸은 머티리얼을 안 쓴다" 는 폐기됐다 [OWNER, 2026-08-07] — 툴바와
+      // 사이드바가 Liquid Glass 를 쓴다. 그런데 이 패널은 여전히 불투명하다.
+      // 이유가 뒤집힌 것이 아니라 바뀌었다: HIG Materials 가 유리를 **기능
+      // 레이어 전용**으로 두고 "Don't use Liquid Glass in the content layer"
+      // 라고 적는다. 커서를 따라다니는 값 읽기는 콘텐츠 위의 콘텐츠라
+      // 불투명한 면이 맞고, 그 뒤에 있는 차트를 흐리게 하면 읽으려던 것이
+      // 가려진다. 남는 건 "떠 있다" 하나다.
       className="pointer-events-none absolute z-20 rounded-popover border border-edge bg-popover px-3 py-2 shadow-popover"
       style={{ left, top: at.y + OFFSET, width: PANEL_W }}
       // 나타날 때만 페이드한다. **자리 이동은 애니메이션하지 않는다** — 커서를

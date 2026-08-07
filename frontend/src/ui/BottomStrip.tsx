@@ -93,7 +93,10 @@ export function BottomStrip({
    * fold. */
   return (
     <motion.div
-      className="fixed inset-x-0 bottom-0 z-40 overflow-hidden border-t border-edge bg-tile"
+      /* 사이드바 오른쪽에서 시작한다 [2026-08-07]. 사이드바는 창 높이를 끝까지
+         쓰는 기둥이고, 그 위를 이 띠가 가로지르면 기둥이 잘려 보인다. macOS 의
+         사이드바도 창 바닥까지 내려간다. */
+      className="fixed bottom-0 left-sidebar right-0 z-40 overflow-hidden border-t border-edge bg-tile"
       initial={false}
       animate={{ height: collapsed ? STRIP_H.collapsed : STRIP_H.open }}
       transition={instant(ENTER, reduced)}

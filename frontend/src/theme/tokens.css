@@ -85,6 +85,18 @@
   --bw-glass-side: var(--kit-sidebar-background-light-active-fill-0);
   --bw-glass-menu: var(--kit-liquid-glass-light-menus-fill-0);
   --bw-blur: 40px;
+  /* 유리의 가장자리. 스크롤 엣지 이펙트가 켜질 때만 보이는 선이라 --bw-border
+   * (잉크 12%) 와 값이 겹치지만 뜻이 다르다 — 저건 콘텐츠의 헤어라인이고
+   * 이건 떠 있는 면의 경계다. 하나로 합치면 한쪽을 조정할 때 다른 쪽이 따라온다. */
+  --bw-glass-edge: color-mix(in srgb, #000000 12%, transparent);
+  /* 구분선 — 킷 Separators. 킷은 라이트 한 벌만 내보내고, 다크 값은 창 테두리
+   * (Windows/Dark/No Sidebar/Active border 흰 20%) 에서 온다. 헤어라인보다
+   * 진하다: 영역과 영역을 가르는 선이지 행과 행을 가르는 선이 아니다. */
+  --bw-sep: var(--kit-separators-light);
+  /* 표준 재질 — 콘텐츠 레이어용. HIG 는 유리를 기능 레이어로 제한하고
+   * "use standard materials … such as app backgrounds" 라고 적는다.
+   * 알럿·알림처럼 글자가 많고 떠 있는 면이 이걸 쓴다. */
+  --bw-mat: var(--kit-materials-light-regular-fill-0);
 
   /* Semantic direction (§9) — red up / blue down (Toss convention). These are
    * used as change-number TEXT, so both must clear 4.5:1, not just the 3:1 mark
@@ -138,6 +150,24 @@
    * overshoot [OWNER, 2026-08-06] and it is the row reorder, which is a
    * motion/react spring (physics, not a bezier) — a CSS token for it would be
    * defined and unreferenced, which is the trap --radius-card fell into. */
+  /* ── 셸 기하 — 킷에서 실측한 값 [2026-08-07] ──────────────────────────────
+   * 테마 불변이라 :root 에만 산다.
+   *
+   * 사이드바 폭 240 은 킷이 세 크기 모두에 같은 값을 준다 (Small · Medium ·
+   * Large 전부 240 너비). 행 높이는 그 셋이 갈리는 곳이고 — 24/32/40 —
+   * HIG §6.5 는 그게 **사용자가 시스템 설정에서 고르는 값**이라 하나만 박으면
+   * 설정을 무시하는 것이라고 적는다. 웹에는 그 설정을 읽을 길이 없으니 하나를
+   * 골라야 하는데, 이 제품의 본문은 13px(킷 06 Body)이고 킷이 13pt 에 붙여 둔
+   * 행은 Medium 32 다. 목업은 Large 40 을 썼지만 그건 15pt 의 칸이라 여기서는
+   * 글자와 행이 어긋난다. 32 를 쓴다.
+   *
+   * 툴바 52 는 킷에 없다 — 킷은 툴바 **컨트롤**(Medium 24)만 주고 바 자체의
+   * 높이·여백은 주지 않는다 (§6.4). 24 + 상하 14 = 52 [OWNER, 목업]. */
+  --bw-sidebar: 240px;
+  --bw-sb-header: 20px; /* KIT Sidebars Light Large Header 240x20 */
+  --bw-sb-item: 32px; /* KIT Sidebars Light Medium Items 240x32 */
+  --bw-toolbar: 52px;
+
   --bw-motion-fast: 120ms; /* hover tint, focus ring, chip state */
   --bw-motion-base: 220ms; /* every entrance */
   --bw-motion-exit: 160ms; /* every exit — exits run shorter than entrances */
@@ -198,6 +228,9 @@
   --bw-glass-bar-tint: var(--kit-liquid-glass-dark-regular-large-fill-1);
   --bw-glass-side: var(--kit-sidebar-background-dark-active-fill-0);
   --bw-glass-menu: var(--kit-liquid-glass-dark-menus-fill-0);
+  --bw-glass-edge: color-mix(in srgb, #ffffff 14%, transparent);
+  --bw-sep: color-mix(in srgb, #ffffff 20%, transparent);
+  --bw-mat: var(--kit-materials-dark-regular-fill-0);
 
   /* Direction — lighter red/blue clear 4.5:1 on the dark tile (#0064ff is
    * only ~3.4:1 there, on the surfaces as of the 2026-08-05 pass). */
@@ -345,12 +378,16 @@
   --bw-ctl-active: color-mix(in srgb, var(--bw-ink) 16%, transparent);
   --bw-ctl-disabled: color-mix(in srgb, var(--bw-ink) 4%, transparent);
 
-  /* The default button: ink, not accent. The kit paints this one with the
-   * system accent; this product already owns a blue and spends it on
-   * direction, so the prominent control is ink here. */
-  --bw-ctl-prominent: var(--bw-ink);
-  --bw-ctl-prominent-hover: color-mix(in srgb, var(--bw-ink) 95%, #000000);
-  --bw-ctl-prominent-active: color-mix(in srgb, var(--bw-ink) 90%, #000000);
+  /* 기본 버튼 = 액센트 [OWNER, 2026-08-07 — 목업 `.btn.prominent`].
+   *
+   * 앞 주석은 "킷은 시스템 액센트로 칠하지만 이 제품은 파랑을 방향에 쓰므로
+   * 여기서는 잉크"라고 적었다. 그 전제가 사라졌다 — 액센트가 돌아왔고 그건
+   * 파랑도 빨강도 아니다. 잉크 채움은 이제 잉크 채움대로 남을 이유가 없다.
+   * 라벨은 --bw-on-accent(잉크 85%) 다: 주황 채움 위 흰 글자는 2.31:1 이고
+   * 검정 85% 는 7.61:1 이다. 흰 라벨을 쓰면 안 된다. */
+  --bw-ctl-prominent: var(--bw-accent);
+  --bw-ctl-prominent-hover: color-mix(in srgb, var(--bw-accent) 92%, #000000);
+  --bw-ctl-prominent-active: color-mix(in srgb, var(--bw-accent) 84%, #000000);
 
   --bw-shadow-popover: 0 18px 46px color-mix(in srgb, #000000 25%, transparent);
 }
@@ -369,10 +406,11 @@
   --bw-ctl-idle: color-mix(in srgb, var(--bw-ink) 7%, transparent);
   --bw-ctl-hover: color-mix(in srgb, var(--bw-ink) 11%, transparent);
 
-  /* toward white in dark, toward black in light — a press always goes darker
-   * than its rest state relative to the surface it sits on */
-  --bw-ctl-prominent-hover: color-mix(in srgb, var(--bw-ink) 95%, #ffffff);
-  --bw-ctl-prominent-active: color-mix(in srgb, var(--bw-ink) 90%, #ffffff);
+  /* prominent 삼형제는 여기 없다. 잉크 채움이던 시절에는 방향이 테마마다
+   * 뒤집혀서(다크 잉크는 흰색이라 검게 섞으면 도로 밝아진다) 다크에 따로
+   * 적어야 했지만, 액센트는 두 테마 모두 검정 쪽으로 섞어야 표면에서
+   * 멀어진다. 공식이 같으므로 :root 하나로 끝난다 — 값은 --bw-accent 가
+   * 이미 테마별로 다르다. */
 
   --bw-shadow-popover: 0 18px 46px color-mix(in srgb, #000000 55%, transparent);
 }

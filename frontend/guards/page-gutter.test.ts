@@ -25,8 +25,11 @@ describe("the page gutter", () => {
      * attempt here was `PAGE_X.replace("px-", "pr-")` — names a rule that was
      * never generated, and the padding silently does not exist. Both edges get
      * their own spelled-out literal for that reason. */
-    expect(PAGE_X).toBe("px-20");
-    expect(PAGE_R).toBe("pr-20");
+    /* 80 → 24 [2026-08-07]: 왼쪽 경계가 창이 아니라 240px 사이드바가 되면서
+     * 콘텐츠를 창 가장자리에서 밀어낼 이유가 사라졌다. 값이 아니라 "하나의
+     * 상수를 모두가 쓴다" 가 이 가드의 주장이므로 숫자만 옮긴다. */
+    expect(PAGE_X).toBe("px-6");
+    expect(PAGE_R).toBe("pr-6");
     const gutter = code("ui/pageGutter.ts");
     expect(gutter).not.toMatch(/\.replace\(/);
     expect(gutter).not.toMatch(/\$\{/);

@@ -55,12 +55,28 @@ implemented speculatively — leave explicit extension points instead.
   that responds to hover/selection — informs both the interaction grammar and
   the achromatic visual model (§9).
 
-## 2. Core layout — list-first, two panes
+## 2. Core layout — sidebar, then two panes
 
-[OWNER, Session 12] The wall and the band-card column are both retired. One
-screen, two panes, no navigation: a dense instrument **table on the left** that
-is always visible, and a **preview pane on the right** that responds to the
-table. Reference: the Toss ranking table.
+[OWNER, Session 12] The wall and the band-card column are both retired. A dense
+instrument **table** that is always visible, and a **preview pane on its right**
+that responds to it. Reference: the Toss ranking table.
+
+**사이드바 [OWNER, 2026-08-07].** "list-first 가로 탭 스트립" 은 폐기됐다. 표
+안에 있던 세그먼티드 탭 여덟 개가 폭 **240px 좌측 사이드바**로 섰다 (킷
+Sidebars, 행 Medium 32 — `ui/Sidebar.tsx`, 정의는 `ui/tabs.ts`). 두 그룹으로
+갈린다: **종목군**(행을 거르는 탭 여섯)과 **도구**(자기 화면을 그리는 탭 둘).
+연구실은 여전히 맨 끝이고, 확신의 순서라는 규칙에서 "오른쪽" 이 "아래" 로
+바뀌었을 뿐이다.
+
+"no navigation" 은 그대로다 — 사이드바는 페이지를 옮기지 않는다. 같은 화면의
+같은 필터를 세로로 세운 것이고, URL 도 상태도 바뀌지 않았다.
+
+**툴바 [2026-08-07].** 높이 52 (킷 툴바 컨트롤 24 + 상하 14; 킷은 바 자체의
+높이를 주지 않는다). 격자 행이 아니라 **떠 있는 레이어**이고 (Z_TOOLBAR),
+사이드바와 본문 위를 절대 배치로 지나간다. 표면은 Liquid Glass 다 —
+"이 셸은 머티리얼을 안 쓴다" 도 같은 날 폐기됐다. 다만 유리는 **기능
+레이어 전용**이다 (HIG Materials §6.1): 툴바·사이드바·팝오버·메뉴가 쓰고,
+본문 카드와 커서 패널은 불투명하게 남는다.
 
 **Width [Session 15].** The surface spans the viewport (a small margin, no
 max-width — the earlier cap was a casual-app leftover). Panes split by content
@@ -653,12 +669,17 @@ but below modals, which dim the screen and must never be paintable-over.
 
 ### The page gutter [OWNER, 2026-07-31]
 
-**80px off the window edge, on every surface that reaches it** — the header
-band, the tab strip, the table's scroll container, the preview pane's outer
-edge, the bottom strip. Defined once in `ui/pageGutter.ts` (`PAGE_X`,
-`PAGE_R`, `PAGE_X_PX`), because those five reach the edge independently and
-four agreeing while the fifth does not is invisible until they are on screen
-together.
+**24px off the edge, on every surface that reaches it** — the toolbar, the
+table's scroll container, the preview pane's outer edge, the bottom strip.
+Defined once in `ui/pageGutter.ts` (`PAGE_X`, `PAGE_R`, `PAGE_X_PX`), and
+mirrored for the simulation tab in `sim/ui/layout.ts`, because they reach the
+edge independently and four agreeing while the fifth does not is invisible
+until they are on screen together.
+
+**80 → 24 [2026-08-07].** 80 은 표면이 full-bleed 이던 시절의 값이다. 이제
+왼쪽 경계는 창이 아니라 240px 사이드바이고, 사이드바가 이미 자기 몫의 분리를
+한다 — 80 을 그대로 두면 첫 열까지 320px 이 빈다. 목업(`defense.html`)의
+`.content` 가 18px 이고, 240 + 24 = 264 로 그 배치와 같은 자리에 온다.
 
 The app sat at 20px before this: a card's inset applied to a full-bleed
 surface. The 전체 columns landed on a much wider margin first and the rest of
@@ -1393,10 +1414,13 @@ it is now the filter-chip set, not physical bands.
 
 ## 3. Global chrome
 
-- **Header band** (full-bleed chrome, §H — this replaced the "top status strip"
-  in the list-first redesign): the Sauron / KRW IRS wordmark, the change-log
+- **Toolbar** (floating glass chrome, §2 — was the "header band", and before
+  that the "top status strip"): the Sauron / KRW IRS wordmark, the change-log
   trigger, the **data-freshness indicator** (Pass C — the "data timestamps" this
   bullet once promised, now with business-day staleness), and the theme toggle.
+  HIG Toolbars says not to title a window with the app name; the wordmark stays
+  because this product is one window and the sidebar says which view is open.
+  [OWNER 판단 대기, 2026-08-07 — 목업도 같은 자리에 같은 워드마크를 둔다]
   The global comparison-basis selector was **deleted** (§4). Compact risk
   numbers (total DV01, day P&L) remain **Band 3 / [TBD]** — owner-gated, a slot
   only.

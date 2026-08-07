@@ -121,10 +121,14 @@ function Toggle({ side, onSide }: { side: Side; onSide: (s: Side) => void }) {
           key={sd}
           type="button"
           onClick={() => onSide(sd)}
+          /* 세그먼티드 문법 [2026-08-07] — 선택은 액센트 채움 + on-accent
+             라벨(주황 위 흰 글자는 2.31:1), 나머지는 요소 불투명도가 아니라
+             잉크 층위. 시뮬레이션의 방향 세그먼트가 같은 페이/리시브를 같은
+             모양으로 그리고 있어, 한 창 안에서 둘이 달라 보이면 안 된다. */
           className={
             sd === side
-              ? "bg-ink px-2.5 py-0.5 text-page"
-              : "px-2.5 py-0.5 opacity-50 hover:opacity-90"
+              ? "bg-accent px-2.5 py-0.5 font-medium text-on-accent"
+              : "px-2.5 py-0.5 text-ink-2 transition-colors hover:text-ink"
           }
         >
           {sd === "pay" ? "페이" : "리시브"}

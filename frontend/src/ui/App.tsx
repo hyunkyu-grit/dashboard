@@ -38,8 +38,9 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { classify } from "./gloss";
 import { diagramSpec } from "./payReceiveModel";
 import { BacktestWindow, BOOKABLE_GROUPS } from "./BacktestWindow";
-import { InstrumentTable, type TabId } from "./InstrumentTable";
-import { Z_MODAL } from "./layers";
+import { InstrumentTable } from "./InstrumentTable";
+import type { TabId } from "./tabs";
+import { Z_MODAL, Z_TOOLBAR } from "./layers";
 import {
   EASE_OUT,
   ENTER,
@@ -49,6 +50,7 @@ import {
   scrollIntoViewSafely,
 } from "./motion";
 import { PreviewPane } from "./PreviewPane";
+import { Sidebar } from "./Sidebar";
 import { clearBtPatch, mergeQuery } from "./urlState";
 import { PAGE_R, PAGE_X, PAGE_X_PX } from "./pageGutter";
 import { buildRows, type Row } from "./rows";
@@ -204,26 +206,36 @@ function Header({
 }) {
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
-  // Full-bleed chrome band (§H, Session 16): full window width, its own band at
-  // the top, an opaque bg + a hairline along the bottom and nothing else — no
-  // card, no radius. It is chrome, not content.
   return (
     <header
-      /* macOS toolbar band: 40px tall, and the surface is the kit's Scroll Edge
-         Effect (light #ffffff at 85 percent, dark #1e1e1e at 55) rather than an
-         opaque strip. The effect is a LAYER, not a property of the header —
-         `opacity` on the header itself would fade the title with it, so it is
-         painted behind the content the same way the row selection band is.
-         An earlier pass here argued this treatment was pointless because
-         nothing scrolls under the band. The kit ships it as its own component,
-         so the argument was wrong. */
-      className={`relative flex h-10 shrink-0 items-center gap-3 border-b border-edge ${PAGE_X}`}
+      /* 툴바 — 킷 Titlebars and Toolbars/Medium, Liquid Glass 위에 [2026-08-07].
+         높이 52 = 컨트롤 24 + 상하 14. 킷은 바 자체의 높이를 주지 않는다 (§6.4).
+
+         **셸 위에 떠 있다.** 격자 행을 차지하지 않고 절대 배치로 사이드바와
+         본문 위를 지나간다 — HIG Materials 가 유리를 "floats above the content
+         layer" 라고 쓰는 그대로다.
+
+         ⚠ 지금은 그 밑을 지나가는 것이 없다. 사이드바는 항목 여덟 개라 스크롤이
+         안 생기고, 본문 기둥은 위쪽을 이 바 높이만큼 비운다. 그래서 유리가
+         합성하는 것은 움직이는 콘텐츠가 아니라 바탕면이고, 눈에는 살짝 밝은
+         띠로만 보인다 — 목업의 주석이 경계하던 "장식이 된 유리" 가 이 상태다.
+         진짜로 비추게 하려면 표의 **스크롤 컨테이너**가 바 밑에서 시작해야
+         하는데, 그 위에 스크리너 칩이라는 고정 머리가 있어서 머리를 함께
+         스크롤시키든 바 밑으로 넣든 배치를 바꿔야 한다. 이번 일은 표면이라
+         거기까지 가지 않았다. [미해결, 2026-08-07]
+
+         HIG Toolbars: "Reduce the use of toolbar backgrounds and tinted
+         controls" — 불투명 띠 대신 유리를 두고, 아래 경계는 헤어라인 하나다.
+         앞 판의 `.kit-scroll-edge` 레이어는 여기서 은퇴한다: 그건 유리가 없을
+         때 유리 흉내를 내던 것이고, 이제 진짜 유리가 그 자리에 있다. */
+      className={`absolute inset-x-0 top-0 ${Z_TOOLBAR} flex h-toolbar items-center gap-3 border-b border-glass-edge bg-glass-bar backdrop-blur-[40px] backdrop-saturate-[1.8] ${PAGE_X}`}
     >
-      {/* -z-10: an absolutely positioned sibling paints ABOVE static ones, so
-          without this the band covers the title it sits behind. */}
-      <span aria-hidden className="kit-scroll-edge absolute inset-0 -z-10 backdrop-blur-xl" />
+      {/* HIG Toolbars: "Don't title windows with your app name." 그런데 이건
+          창 제목이 아니라 제품의 워드마크이고, 이 제품은 창이 하나다 — 무엇을
+          보고 있는지는 사이드바가 말한다. 그 규칙과 부딪히는 자리라 남겨 둔다.
+          [OWNER 판단 필요 — 목업도 같은 자리에 같은 워드마크를 둔다] */}
       <span className="text-[17px] font-bold text-ink">Sauron</span>
-      <span className="text-[13px] opacity-45">KRW IRS</span>
+      <span className="text-[13px] text-ink-2">KRW IRS</span>
       <span className="flex-1" />
       <DataFreshness />
       {/* TOOLBAR BUTTON GROUP, observed in the kit (Titlebars and Toolbars -
@@ -534,16 +546,24 @@ export function App() {
         now run the same duration and curve, so the fold reads as one motion.
         The reduced-motion blanket in globals.css zeroes this transition with
         `!important`, which reaches an inline style. */}
-    <div
-      className="flex h-screen flex-col overflow-hidden bg-tile"
-      style={{
-        paddingBottom: stripCollapsed ? STRIP_H.collapsed : STRIP_H.open,
-        transitionProperty: "padding-bottom",
-        transitionDuration: `${MOTION.base}s`,
-        transitionTimingFunction: `cubic-bezier(${EASE_OUT.join(",")})`,
-      }}
-    >
+    <div className="relative flex h-screen overflow-hidden bg-tile">
         <Header events={summary?.events ?? []} onFocus={focusFromChangeLog} />
+
+        {/* 사이드바 — 창 높이를 끝까지 쓴다. 지표 바가 그 오른쪽에서 시작하므로
+            (BottomStrip) 아래쪽을 비워 줄 필요가 없다. */}
+        <Sidebar tab={tab} onTab={onTab} rows={rows} />
+
+        {/* 본문 기둥. 지표 바의 높이만큼 바닥을 비우는 것은 여기다 — 예전에는
+            루트가 그 패딩을 들고 있어서 사이드바까지 같이 짧아졌다. */}
+        <div
+          className="flex min-w-0 flex-1 flex-col pt-toolbar"
+          style={{
+            paddingBottom: stripCollapsed ? STRIP_H.collapsed : STRIP_H.open,
+            transitionProperty: "padding-bottom",
+            transitionDuration: `${MOTION.base}s`,
+            transitionTimingFunction: `cubic-bezier(${EASE_OUT.join(",")})`,
+          }}
+        >
 
         {/* A failure must LOOK different from a wait, and carry a way out
             (stability session, Pass B). Before this, both rendered the same
@@ -587,7 +607,6 @@ export function App() {
                   forwards={forwards}
                   curveBanner={summary.curveBanner}
                   filter={tab}
-                  onFilter={onTab}
                   activeId={(wide ? active : pinned)?.id ?? null}
                   pinnedId={pinned?.id ?? null}
                   onHover={handleHover}
@@ -645,6 +664,7 @@ export function App() {
             )}
           </div>
         )}
+      </div>
 
       {/* single-column preview: a bottom sheet opened by a row click */}
       <AnimatePresence>

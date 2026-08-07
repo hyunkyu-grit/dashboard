@@ -85,10 +85,16 @@ function PositionRow({
             aria-label="상품 종류"
             value={kind}
             onChange={(e) => {
-              // 종류를 바꾸면 그 종류의 첫 상품으로 간다. 예전 id를 들고
-              // 있으면 종류와 id가 어긋난 줄이 생긴다.
+              /* 종류를 바꾸면 그 종류의 첫 상품으로 간다. 예전 id를 들고
+                 있으면 종류와 id가 어긋난 줄이 생긴다.
+                 "첫" 은 **주요의 첫 번째**다 [2026-08-07]. 목록 순서상의 첫
+                 번째는 조합이 만들어 낸 것이고(버터플라이면 6M-9M-1Y 가 아니라
+                 6M-9M-1.5Y 같은 것이 앞설 수 있다), 기본값이 곧 아무도 고르지
+                 않았을 때 평가되는 상품이다. 주요가 없으면 목록의 첫 번째로
+                 떨어진다 — 옛 백엔드가 플래그를 안 보내는 경우가 그렇다. */
               const k = e.target.value as keyof InstrumentCatalog;
-              const first = catalog?.[k]?.[0]?.id;
+              const list = catalog?.[k] ?? [];
+              const first = (list.find((o) => o.key) ?? list[0])?.id;
               if (first) onPatch({ seriesId: first });
             }}
             className="h-6 rounded-control-sm border border-field bg-tile px-2 text-body text-ink-1"
@@ -101,6 +107,14 @@ function PositionRow({
           </select>
         </Field>
 
+        {/* 주요가 먼저, 그 다음이 전체 [OWNER, 2026-08-07 — "56개를 스크롤해서
+            고르는 건 고르는 게 아니다"].
+            고를 수 있는 것은 하나도 줄지 않았다. 이 제품은 이미 표에서 주요/전체를
+            가르고 있고(모니터의 각 탭), 판정도 백엔드의 같은 곳에서 나온다 —
+            없던 큐레이션을 만든 게 아니라 있는 것을 여기에도 적용한 것이다.
+            `<optgroup>` 인 이유: 네이티브 팝업 버튼의 문법이라 키보드 이동과
+            타이핑 검색이 그대로 살아 있고, 새 메커니즘을 만들지 않는다.
+            버터플라이 56개에서 주요 4개가 맨 위로 온다. */}
         <Field label="상품">
           <select
             aria-label="상품"
@@ -108,11 +122,24 @@ function PositionRow({
             onChange={(e) => onPatch({ seriesId: e.target.value })}
             className="h-6 rounded-control-sm border border-field bg-tile px-2 text-body text-ink-1"
           >
-            {(catalog?.[kind] ?? []).map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
+            {[true, false].map((wantKey) => {
+              const group = (catalog?.[kind] ?? []).filter(
+                (o) => Boolean(o.key) === wantKey,
+              );
+              if (group.length === 0) return null;
+              return (
+                <optgroup
+                  key={String(wantKey)}
+                  label={wantKey ? "주요" : "전체"}
+                >
+                  {group.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
           </select>
         </Field>
 

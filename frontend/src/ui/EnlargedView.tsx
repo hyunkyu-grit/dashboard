@@ -67,6 +67,13 @@ function SixBasisReadout({
   const delta = basis === "now" ? 0 : s.deltas[basis];
   return (
     <div className="mt-3">
+      {/* 세그먼티드 컨트롤이다 — 배타 선택 넷이 한 칸에 든다 [2026-08-07].
+          모양은 이미 그랬고 두 가지가 킷과 달랐다.
+          1. 선택 칸이 잉크 채움이었다. 킷은 여기를 **액센트**로 칠한다
+             (Segmented Control/Active, On). 라벨도 같이 on-accent 로 간다 —
+             주황 위 흰 글자는 2.31:1 이다.
+          2. 안 고른 칸이 `opacity-50` 이었다. 요소 불투명도는 배경까지 같이
+             내려서 칸이 뚫려 보인다(§G). 잉크 층위(ink-2)가 그 자리다. */}
       <div className="flex overflow-hidden rounded-control border border-edge text-[13px]">
         {TIME_BASES.map((b) => (
           <button
@@ -75,8 +82,8 @@ function SixBasisReadout({
             onClick={() => setBasis(b)}
             className={
               b === basis
-                ? "flex-1 bg-ink px-2 py-1 text-center text-page"
-                : "flex-1 px-2 py-1 text-center opacity-50 hover:opacity-90"
+                ? "flex-1 bg-accent px-2 py-1 text-center font-medium text-on-accent"
+                : "flex-1 px-2 py-1 text-center text-ink-2 transition-colors hover:text-ink"
             }
           >
             {BASIS_LABELS[b]}
@@ -168,10 +175,12 @@ function ChartTypeToggle({
           key={c.id}
           type="button"
           onClick={() => onChartType(c.id)}
+          /* 위 기준 세그먼티드와 같은 문법 — 선택은 액센트 채움 + on-accent
+             라벨, 나머지는 요소 불투명도가 아니라 잉크 층위. */
           className={
             c.id === chartType
-              ? "bg-ink px-3 py-1 text-page"
-              : "px-3 py-1 opacity-50 hover:opacity-90"
+              ? "bg-accent px-3 py-1 font-medium text-on-accent"
+              : "px-3 py-1 text-ink-2 transition-colors hover:text-ink"
           }
         >
           {c.label}

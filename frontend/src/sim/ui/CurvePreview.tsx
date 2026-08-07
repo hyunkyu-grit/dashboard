@@ -102,7 +102,7 @@ export function CurvePreview() {
 
   // 스토어의 테마를 구독한다 — 렌더 시점에 DOM을 읽으면 테마가 바뀌어도
   // 리렌더가 일어나지 않아 농도가 옛 테마 값에 머문다.
-  // 기준선은 파랑, 예상선은 회색 [OWNER, 2026-08-06]. 자산군은 그 위에
+  // 기준선은 액센트, 예상선은 회색 [OWNER, 2026-08-06 · 색만 2026-08-07]. 자산군은 그 위에
   // 농도로 얹는다 — 두 계열이니 두 단계면 충분하다.
   const theme = useUiStore((s) => s.theme);
   const ramp = SERIES_OPACITY[theme];
@@ -224,8 +224,14 @@ export function CurvePreview() {
         </label>
       )}
 
+      {/* 색을 부르지 않는다 [2026-08-07]. "파란 실선" 이라고 적혀 있었는데
+          기준선이 액센트 주황으로 옮겨가면서 문장이 화면과 어긋났다. 색 이름을
+          주황으로 바꾸는 대신 없앤다 — 실선과 파선이 이미 둘을 가르고, HIG §6.2
+          가 "Avoid relying solely on color to differentiate between objects"
+          라고 적는 자리가 정확히 여기다. 시나리오 쪽 "회색" 은 남긴다: 그건
+          물러난 상태를 말하는 말이지 어느 선인지 짚는 말이 아니다. */}
       <p className="pt-2 text-callout text-ink-2">
-        파란 실선이 {baseDate} 기준이고, 회색 파선이 시나리오예요.
+        실선이 {baseDate} 기준이고, 회색 파선이 시나리오예요.
         {series.length > 1 && ` 진한 쪽이 ${series[0].label}이에요.`}
       </p>
     </div>

@@ -166,11 +166,21 @@ export function resolve(scope: string, name: string, depth = 0): string {
     const p = +mix[2] / 100;
     const a = parse(literal(scope, mix[1], depth));
     const b = parse(literal(scope, mix[3], depth));
-    /* srgb mixing is premultiplied by weight, alpha included — which is how
-     * `color-mix(… var(--bw-ink) 12%, transparent)` becomes a 12% hairline. */
-    return `rgb(${[0, 1, 2].map((i) => a[i] * p + b[i] * (1 - p)).join(" ")} / ${
-      a[3] * p + b[3] * (1 - p)
-    })`;
+    /* CSS Color 5 §3.3: 두 색을 **premultiplied** 로 바꿔 섞고, 결과를 다시
+     * **un-premultiply** 한다. 앞 판은 premultiply 만 하고 되돌리지 않았고,
+     * 그래서 `color-mix(in srgb, var(--bw-ink) 55%, transparent)` 를
+     * `rgb(140 140 140 / 0.55)` 로 읽었다 — 옳은 답은 `rgb(255 255 255 / 0.55)`
+     * 다. 알파가 붙은 토큰 전부가 실제보다 어둡게 측정됐다는 뜻이고, 그 방향은
+     * 테마마다 반대다: 라이트에서는 대비를 **부풀리고**(잉크가 더 어두워지니까)
+     * 다크에서는 **깎았다**. 이 모듈이 존재하는 이유가 "가드가 조용히 틀린
+     * 색을 재는 것" 을 끝내는 것이므로, 이건 고쳐야 하는 종류의 defect다.
+     *
+     * 되돌리기는 알파가 0일 때만 나눌 수 없다 — 그 경우 색은 보이지 않으므로
+     * 채널 값이 무엇이든 상관없고, transparent 의 (0,0,0) 을 그대로 둔다. */
+    const alpha = a[3] * p + b[3] * (1 - p);
+    const pre = [0, 1, 2].map((i) => a[i] * a[3] * p + b[i] * b[3] * (1 - p));
+    const rgb = alpha === 0 ? [0, 0, 0] : pre.map((c) => c / alpha);
+    return `rgb(${rgb.join(" ")} / ${alpha})`;
   }
 
   try {

@@ -19,6 +19,7 @@ import {
   type Group,
   type Row,
 } from "../src/ui/rows";
+import { INSTRUMENT_TABS, TOOL_TABS } from "../src/ui/tabs";
 
 const table = code("ui/InstrumentTable.tsx");
 const overview = code("ui/OverviewColumns.tsx");
@@ -250,13 +251,36 @@ describe("the 전체 overview", () => {
 describe("the tab set", () => {
   it("butterfly is its own tab, between 스프레드 and 포워드", () => {
     expect(GROUP_LABEL.fly).toBe("버터플라이");
-    // 연구실 rides at the FAR RIGHT [OWNER, 2026-08-04] — the incubation
-    // surface; its last-place position is pinned by guards/regret-list.
-    // 시뮬레이션 sits just inside it (2026-08-07): finished work, so it goes
-    // to the LEFT of the incubation surface, and the two must not swap.
-    const order = ["all", "outright", "spread", "fly", "forward", "vol", "sim", "lab"];
-    const found = [...table.matchAll(/\{ id: "(\w+)", label:/g)].map((m) => m[1]);
-    expect(found).toEqual(order);
+    /* 연구실 rides at the FAR RIGHT [OWNER, 2026-08-04] — the incubation
+     * surface; its last position is pinned by guards/regret-list.
+     * 시뮬레이션 sits just inside it (2026-08-07): finished work, so it goes
+     * to the LEFT of the incubation surface, and the two must not swap.
+     *
+     * 탭이 사이드바가 되면서 "오른쪽"이 "아래"가 됐다 [2026-08-07]. 순서가
+     * 확신의 순서라는 규칙은 그대로이고 축만 돌았다. 정의도 표에서 나가
+     * ui/tabs.ts 로 갔으므로 소스를 정규식으로 긁는 대신 배열을 그대로
+     * import 한다 — 표의 텍스트를 읽던 것이 애초에 우회로였다. */
+    const found = [...INSTRUMENT_TABS, ...TOOL_TABS].map((t) => t.id);
+    expect(found).toEqual([
+      "all",
+      "outright",
+      "spread",
+      "fly",
+      "forward",
+      "vol",
+      "sim",
+      "lab",
+    ]);
+  });
+
+  it("종목군과 도구가 갈려 있다 — 사이드바의 두 그룹", () => {
+    /* 행을 거르는 탭과 자기 화면을 그리는 탭은 하는 일이 다르다. 가로
+     * 스트립일 때는 여덟 개가 한 줄이라 그 차이를 말할 자리가 없었는데,
+     * 세로가 되면서 헤더가 생겼다. 섞이면 헤더가 거짓말이 된다. */
+    expect(INSTRUMENT_TABS.every((t) => t.id !== "sim" && t.id !== "lab")).toBe(
+      true,
+    );
+    expect(TOOL_TABS.map((t) => t.id)).toEqual(["sim", "lab"]);
   });
 });
 

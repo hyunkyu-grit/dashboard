@@ -64,10 +64,17 @@ const BUTTON_BASE =
  * 없다 (시뮬레이션은 아무것도 지우지 않는다).
  */
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
-  // 04 Prominent. 킷은 여기에 #0088FF를 쓰지만 이 제품은 잉크다 — 파란 "실행"
-  // 버튼 옆에 파란 "−25.1억"이 놓이면 같은 색이 두 가지를 뜻하게 된다.
+  /* 04 Prominent = 액센트 [OWNER, 2026-08-07]. 앞 주석은 "킷은 #0088FF를 쓰지만
+   * 이 제품은 잉크다 — 파란 실행 버튼 옆에 파란 −25.1억이 놓이면 한 색이 두
+   * 가지를 뜻한다" 였다. 그 논리는 그대로 맞고, 답이 잉크에서 액센트로 바뀐다:
+   * 주황은 부호가 아니므로 무엇과도 충돌하지 않는다.
+   *
+   * 라벨은 `text-on-accent`다. `text-page`가 아니다 — 채움 주황 위의 흰 글자는
+   * 2.31:1이고 킷 Labels/1 Primary(검정 85%)는 7.61:1이다. 잉크 채움이던
+   * 시절에는 page가 맞는 답이었고(잉크 위 흰 글자), 채움이 바뀌면 라벨도 같이
+   * 바뀌어야 한다. */
   primary:
-    "bg-prominent text-page hover:bg-prominent-hover active:bg-prominent-active " +
+    "bg-prominent text-on-accent hover:bg-prominent-hover active:bg-prominent-active " +
     // 킷 그대로: Bordered Default의 비활성은 채움 교체가 아니라 opacity 0.4다
     // (Light/Content Area/Bordered Default/3 Rg/Active, Off, 4 Disabled → op=0.4).
     // 채움을 물리면 주 버튼이 보조 버튼의 비활성과 구별되지 않아, 무엇이 꺼져
@@ -255,7 +262,9 @@ export function Segmented<T extends string>({
             onClick={() => onChange(o.value)}
             className={cn(
               "relative px-2 text-body transition-colors",
-              active ? "text-page" : "text-ink-2 hover:text-ink-1",
+              // 선택된 칸은 액센트 채움이므로 라벨도 on-accent다 (BUTTON_VARIANT
+              // primary와 같은 이유 — 주황 위 흰 글자는 2.31:1).
+              active ? "text-on-accent" : "text-ink-2 hover:text-ink-1",
             )}
           >
             {/* 구분선: 1×14, 상하 5씩 파임 (24 칸의 실측). 선택된 칸에 붙은

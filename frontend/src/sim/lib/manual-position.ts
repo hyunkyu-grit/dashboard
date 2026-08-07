@@ -39,6 +39,15 @@ export const KIND_ORDER: InstrumentKind[] = ["outright", "spread", "fly", "forwa
 export interface InstrumentOption {
   id: string;
   label: string;
+  /** 모니터의 표가 쓰는 **주요** 블록에 드는가. 판정은 백엔드 한 곳에서 한다
+   * (`app/derive.is_key`, `app/forwards.KEY_FORWARDS`) — 프론트가 자기 목록을
+   * 들면 두 화면의 "주요 스프레드"가 갈릴 수 있고, 그 순간 비교가 끝난다.
+   *
+   * 고를 수 있는 것을 줄이지 않는다. 106개가 그대로 다 있고 이 플래그는
+   * **순서와 묶음**만 정한다 [OWNER, 2026-08-07 — "자유도를 줄이는 것이 기능을
+   * 줄이는 것과 다르다"]. 옛 백엔드가 이 필드를 안 보내면 undefined 라 전부
+   * 전체 묶음으로 떨어진다: 목록이 사라지는 것보다 안전한 실패다. */
+  key?: boolean;
 }
 
 export type InstrumentCatalog = Record<InstrumentKind, InstrumentOption[]>;

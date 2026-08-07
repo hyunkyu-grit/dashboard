@@ -32,6 +32,21 @@
   --color-glass-bar: var(--bw-glass-bar);
   --color-glass-side: var(--bw-glass-side);
   --color-glass-menu: var(--bw-glass-menu);
+  /* 떠 있는 면의 가장자리(--color-glass-edge)와 영역 구분선(--color-sep)은
+   * 콘텐츠 헤어라인(--color-edge)과 다른 것이다. 셋을 한 토큰으로 합치면
+   * 스크롤 엣지를 만질 때 표의 행 선이 같이 움직인다. */
+  --color-glass-edge: var(--bw-glass-edge);
+  --color-sep: var(--bw-sep);
+  /* 콘텐츠 레이어의 표준 재질 — 유리가 아니다 (HIG §6.1) */
+  --color-mat: var(--bw-mat);
+
+  /* 셸 기하. `--spacing-*` 네임스페이스라 `w-sidebar` `h-toolbar` 로 나온다 —
+   * Tailwind 는 소스 텍스트를 읽으므로 이 이름들이 컴포넌트에 글자 그대로
+   * 있어야 규칙이 생긴다. 값은 theme/tokens.css 에 있고 근거도 거기 있다. */
+  --spacing-sidebar: var(--bw-sidebar);
+  --spacing-toolbar: var(--bw-toolbar);
+  --spacing-sb-header: var(--bw-sb-header);
+  --spacing-sb-item: var(--bw-sb-item);
   /* reference-line hues [OWNER, 2026-08-04] — CD / 기준금리 overlays only */
   --color-ref-cd: var(--bw-ref-cd);
   --color-ref-policy: var(--bw-ref-policy);
@@ -134,24 +149,28 @@
   opacity: 1;
 }
 
-/* Focus is the ACCENT (the kit draws every focus ring in System Colors/8 Blue),
- * and this product's blue is the one it uses [OWNER, 2026-08-06 — "같은
- * 파랑해도 돼"]. §9's palette cut said every non-directional state is ink; that
- * cut is now narrower — selection and focus may carry the blue, everything else
- * stays ink. --bw-down inverts with the theme (#0064ff / #4c93ff) and measures
- * 4.63:1 and 5.49:1 against its own page, so the ring clears the 3:1 non-text
- * floor on both surfaces. ::selection stays ink: text selection is not a
- * control state and the kit does not draw it.
+/* 포커스 링 = 액센트 [OWNER, 2026-08-07 — 목업]. 2026-08-06 의 "선택·포커스는
+ * 파랑" 은 그 파랑이 액센트 자리를 대신 메우고 있어서 나온 결정이었고, 액센트가
+ * 돌아오면서 그 이유가 사라졌다. 킷도 포커스 링을 자기 액센트로 그린다
+ * (Global/Focus Ring · Content Area Input Fields "03 - Focus Ring").
  *
- * In @layer base so a component that asks for `outline-none` gets it: unlayered
- * CSS outranks every Tailwind utility regardless of order, and this rule was
- * unlayered — it drew a ring around the command bar's input, which sets
- * outline-none because the field spans the popover and the ring only showed as
- * a stray line where the surface clipped it. */
+ * 킷의 문법은 두 겹이다 — 3.5px @25% 바깥 + 1px @15% 안쪽. 여기서는 안쪽 1px 을
+ * **--bw-accent-fg** 로 그린다. 목업은 둘 다 채움 주황을 쓰는데, 채움 주황은
+ * 흰 배경에서 2.31:1 로 비텍스트 3:1 하한에도 못 미친다 — 1px 링은 가는 마크다.
+ * 전경 주황은 4.53:1 (다크 7.47:1) 이라 하한을 넘고, 색상은 그대로다.
+ * 바깥 헤일로는 채움 주황이어도 된다: 링을 두껍게 보이게 하는 후광이지
+ * 경계를 나르는 선이 아니다. [측정 2026-08-07]
+ *
+ * @layer base 인 이유는 그대로다 — 레이어 없는 CSS 는 순서와 무관하게 Tailwind
+ * 유틸리티를 이겨서, `outline-none` 을 건 명령 바 입력에 테두리를 그었다.
+ * outline 이 아니라 box-shadow 인 이유: 두 겹을 한 속성으로 그려야 하고,
+ * outline 은 하나뿐이다. */
 @layer base {
   :focus-visible {
-    outline: 2px solid var(--bw-down);
-    outline-offset: 1px;
+    outline: none;
+    box-shadow:
+      0 0 0 1px var(--bw-accent-fg),
+      0 0 0 4.5px color-mix(in srgb, var(--bw-accent) 25%, transparent);
   }
 }
 ::selection {
