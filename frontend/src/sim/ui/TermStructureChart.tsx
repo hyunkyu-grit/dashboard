@@ -27,14 +27,20 @@ import { onThemeChange } from "@/sim/theme/bridge";
 export interface TermSeries {
   key: string;
   label: string;
-  /** 기준선 색 (파랑 계열). */
-  baseColor: string;
+  /** 기준선 색. */
+  baseColor?: string;
   /** 예상선 색 (회색 계열). */
-  shockedColor: string;
+  shockedColor?: string;
+  /** 예상선 파선 패턴. 시나리오 케이스가 여럿일 때 **색이 아니라 이것이**
+   * 어느 케이스인지 말한다 — 흑백으로도 남아야 한다(§5). */
+  shockedDash?: string;
   /** 각 pillar에 정렬. undefined = 이 계열이 그 테너를 안 가짐(선이 건너뜀),
-   * null = 가지지만 그 날 값이 없음(구멍). */
-  basePct: (number | null | undefined)[];
-  shockedPct: (number | null | undefined)[];
+   * null = 가지지만 그 날 값이 없음(구멍).
+   *
+   * 둘 다 **선택**이다: 케이스를 여럿 겹쳐 그릴 때 기준선은 하나뿐이므로,
+   * 케이스 계열은 예상선만 갖고 기준 계열은 기준선만 갖는다. */
+  basePct?: (number | null | undefined)[];
+  shockedPct?: (number | null | undefined)[];
 }
 
 export interface TermStructureChartProps {
@@ -75,7 +81,8 @@ export function TermStructureChart({ pillars, series, onHover }: TermStructureCh
 
   const values: number[] = [];
   for (const s of series) {
-    for (const v of [...s.basePct, ...s.shockedPct]) if (typeof v === "number") values.push(v);
+    for (const v of [...(s.basePct ?? []), ...(s.shockedPct ?? [])])
+      if (typeof v === "number") values.push(v);
   }
   if (values.length === 0) {
     return (
@@ -152,18 +159,24 @@ export function TermStructureChart({ pillars, series, onHover }: TermStructureCh
           <line x1={x(hover)} x2={x(hover)} y1={PAD.top} y2={PAD.top + plotH} stroke={t.zeroLine} strokeWidth={1} />
         )}
 
+        {/* 예상선이 먼저, 기준선이 나중이다 — 겹치는 구간에서 기준선이 위로
+            온다. 기준은 사실이고 예상은 가정이니, 가려야 한다면 가정이 가린다.
+            계열이 나뉜 지금은 **호출자가 기준 계열을 마지막에 놓아** 그 순서를
+            지킨다(CurvePreview 의 series 조립). */}
         {series.map((s) => (
           <g key={s.key}>
-            {/* 예상선을 먼저 그린다 — 겹치는 구간에서 기준선이 위로 온다.
-                기준은 사실이고 예상은 가정이니, 가려야 한다면 가정이 가린다. */}
-            <path
-              d={path(s.shockedPct)}
-              fill="none"
-              stroke={s.shockedColor}
-              strokeWidth={1.5}
-              strokeDasharray="4 3"
-            />
-            <path d={path(s.basePct)} fill="none" stroke={s.baseColor} strokeWidth={2} />
+            {s.shockedPct && (
+              <path
+                d={path(s.shockedPct)}
+                fill="none"
+                stroke={s.shockedColor}
+                strokeWidth={1.5}
+                strokeDasharray={s.shockedDash ?? "4 3"}
+              />
+            )}
+            {s.basePct && (
+              <path d={path(s.basePct)} fill="none" stroke={s.baseColor} strokeWidth={2} />
+            )}
           </g>
         ))}
 

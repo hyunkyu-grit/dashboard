@@ -45,7 +45,11 @@ import {
   lerpDefaultBp,
   waypointClampMax,
 } from "@/sim/lib/waypoints";
-import { ANCHOR_TENOR_CHOICES, type AnchorTenor } from "@/sim/types/simulation-port";
+import {
+  ANCHOR_TENOR_CHOICES,
+  SCENARIO_CASES,
+  type AnchorTenor,
+} from "@/sim/types/simulation-port";
 
 import { CurvePreview } from "./CurvePreview";
 import { PositionsPanel } from "./PositionsPanel";
@@ -92,6 +96,7 @@ export function ConfigureStage() {
   const manualPositions = useSimulationDataStore((s) => s.manualPositions);
   const { latestDataDate, legsByRow, marketUnavailable } = useBook();
   const catalog = useInstrumentCatalog();
+  const activeCase = useSimulationDataStore((s) => s.activeCase);
 
   const anchor: AnchorTenor = params.anchorTenor ?? "3Y";
   const anchorError = anchorConversionError(params);
@@ -108,6 +113,10 @@ export function ConfigureStage() {
   // 안다 — 값이 같은지로 추론하면 우연히 직선 위에 놓인 편집이 지워진다.
   // 스토어에서 최신 상태를 직접 읽는 이유는 웨이포인트에 대한 낡은 클로저를
   // 피하기 위해서다.
+  // 케이스 전환도 이 효과를 깨운다 [트레이더 피드백 2, 2026-08-07]. 전환은 대개
+  // baseShockBp 를 바꾸므로 저절로 걸리지만, **두 케이스의 목표가 우연히 같으면**
+  // 걸리지 않는다 — 그 경우 기간을 그 사이에 바꿨다면 마감일이 지난 웨이포인트를
+  // 그대로 물고 들어온다. 활성 케이스 자체를 의존성에 넣으면 그 틈이 없다.
   useEffect(() => {
     const { params: p, patchParams: patch } = useSimulationDataStore.getState();
     const target = toNum(p.baseShockBp);
@@ -128,7 +137,7 @@ export function ConfigureStage() {
       waypoints: next,
       touchedWaypointDays: p.touchedWaypointDays.filter((d) => grid.includes(d)),
     });
-  }, [params.simDays, params.baseShockBp]);
+  }, [params.simDays, params.baseShockBp, activeCase]);
 
   const baseDate = inputs.baseDate;
   const endDate = addDaysIso(baseDate, params.simDays);
@@ -205,6 +214,8 @@ export function ConfigureStage() {
           legsByRow={legsByRow}
           marketUnavailable={marketUnavailable}
         />
+
+        <CaseSection />
 
         <Section title="목표 금리">
           <div className="flex flex-col gap-4 pb-4 pt-3">
@@ -292,6 +303,39 @@ export function ConfigureStage() {
         <CurvePreview />
       </div>
     </div>
+  );
+}
+
+/** 시나리오 케이스 — 아래 네 구획(목표 금리·경로 설계·커브 스프레드·금통위
+ * 이벤트)이 **어느 케이스의 것인지**를 정한다 [트레이더 피드백 2, 2026-08-07].
+ *
+ * 이 구획이 그 넷보다 위에 오는 이유는 순서가 곧 질문의 순서이기 때문이다:
+ * 어느 케이스를 쓰는지 정하고, 그 다음에 그 케이스의 숫자를 넣는다. 아래에
+ * 두면 숫자를 다 넣고 나서야 "이게 어느 케이스였지" 를 묻게 된다.
+ *
+ * 기간·앵커 테너·포지션은 넷이 공유한다. 그래서 이 구획이 기간(위)과 목표
+ * 금리(아래) 사이에 앉는 것이 구조적으로도 맞다 — 위는 공유, 아래는 케이스별. */
+function CaseSection() {
+  const activeCase = useSimulationDataStore((s) => s.activeCase);
+  const setActiveCase = useSimulationDataStore((s) => s.setActiveCase);
+
+  return (
+    <Section title="시나리오">
+      <div className="flex flex-col gap-2 pb-4 pt-3">
+        <Segmented
+          options={SCENARIO_CASES.map((c) => ({ value: c.id, label: c.label }))}
+          value={activeCase}
+          onChange={setActiveCase}
+          label="시나리오 케이스"
+        />
+        {/* 방향 관행을 적어 둔다. 주식의 불/베어와 반대라, 적어 두지 않으면
+            Bull 칸에 +100bp 를 넣는 일이 생긴다. */}
+        <p className="text-callout text-ink-2">
+          아래 네 구획이 이 케이스의 값이에요. 불은 금리 하락, 베어는 상승이에요
+          (채권시장 관행). 기간과 앵커 테너, 포지션은 네 케이스가 같이 써요.
+        </p>
+      </div>
+    </Section>
   );
 }
 

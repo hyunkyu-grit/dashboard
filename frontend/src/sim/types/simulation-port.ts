@@ -83,6 +83,75 @@ export interface ScenarioParams {
   anchorTenor?: AnchorTenor;
 }
 
+/* ── 시나리오 케이스 ─────────────────────────────────────────────────────────
+ * [트레이더 피드백 2, 2026-08-07: "Base Case 뿐만 아니라 Bull/Bear/Crisis를
+ *  추가하고 싶다"]
+ *
+ * 케이스는 **금리 시나리오만** 담는다. 기간·앵커 테너·포지션·기준일은 넷이
+ * 공유한다 — 그것들이 케이스마다 다르면 네 개를 나란히 놓고 비교한다는 말이
+ * 성립하지 않는다. 같은 북, 같은 지평, 다른 금리 경로. 그것이 케이스다.
+ *
+ * `ScenarioParams` 를 갈아엎지 않았다. `params` 는 여전히 **지금 편집 중인**
+ * 케이스의 살아 있는 값이고, 케이스를 바꿀 때만 스토어가 아래 필드를 저장·복원
+ * 한다. 그래서 buildSimulateRequest 도, 경로 설계 폼도, 골든 픽스처도 그대로다. */
+export type CaseId = "base" | "bull" | "bear" | "crisis";
+
+/** 케이스가 소유하는 필드 — 나머지 `ScenarioParams` 는 넷이 공유한다. */
+export type ScenarioCase = Pick<
+  ScenarioParams,
+  | "baseShockBp"
+  | "waypoints"
+  | "touchedWaypointDays"
+  | "spread1y"
+  | "spread10y"
+  | "spreadCd"
+  | "irsSpread"
+  | "shortEndEvents"
+>;
+
+export const CASE_KEYS = [
+  "baseShockBp",
+  "waypoints",
+  "touchedWaypointDays",
+  "spread1y",
+  "spread10y",
+  "spreadCd",
+  "irsSpread",
+  "shortEndEvents",
+] as const satisfies readonly (keyof ScenarioCase)[];
+
+/** 케이스 필드만 뽑아낸다 — 공유 필드가 케이스에 섞여 들어가면 케이스를 바꿀 때
+ * 기간이나 앵커까지 따라 움직인다. */
+export function caseFromParams(params: ScenarioParams): ScenarioCase {
+  const out = {} as Record<string, unknown>;
+  for (const k of CASE_KEYS) out[k] = params[k];
+  return out as ScenarioCase;
+}
+
+export const SCENARIO_CASES: readonly { id: CaseId; label: string }[] = [
+  { id: "base", label: "Base" },
+  { id: "bull", label: "Bull" },
+  { id: "bear", label: "Bear" },
+  { id: "crisis", label: "Crisis" },
+];
+
+/** 씨앗 값. 방향은 **채권시장 관행**이다 — 불은 금리 하락, 베어는 상승.
+ * (주식의 불/베어와 반대 방향이라 화면에도 그렇게 적어 둔다.)
+ * 어디까지나 씨앗이고, 네 칸 다 사용자가 고쳐 쓴다. */
+const seedCase = (bp: number, days: number): ScenarioCase => ({
+  baseShockBp: String(bp),
+  waypoints: [
+    { day: 0, bp: 0 },
+    { day: days, bp },
+  ],
+  touchedWaypointDays: [],
+  spread1y: "0",
+  spread10y: "0",
+  spreadCd: "0",
+  irsSpread: "0",
+  shortEndEvents: [],
+});
+
 export interface SimulationDataPort {
   /** Ambient, host-provided inputs. */
   inputs: SimulationInputs;
@@ -137,6 +206,15 @@ export const DEFAULT_SCENARIO_PARAMS: ScenarioParams = {
   spreadCd: "0",
   touchedWaypointDays: [],
   anchorTenor: "3Y",
+};
+
+/** 케이스 넷의 씨앗. **Base 는 기존 기본값 그대로다** — 케이스가 생기기 전에
+ * 이 화면을 쓰던 사람이 처음 보는 값이 달라지면 안 된다. */
+export const DEFAULT_CASES: Record<CaseId, ScenarioCase> = {
+  base: caseFromParams(DEFAULT_SCENARIO_PARAMS),
+  bull: seedCase(-50, DEFAULT_SCENARIO_PARAMS.simDays),
+  bear: seedCase(100, DEFAULT_SCENARIO_PARAMS.simDays),
+  crisis: seedCase(250, DEFAULT_SCENARIO_PARAMS.simDays),
 };
 
 export const EMPTY_SIMULATION_INPUTS: SimulationInputs = {

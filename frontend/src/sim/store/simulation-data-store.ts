@@ -17,10 +17,14 @@ import { create } from "zustand";
 import type { SimulateRequest, SimulateResponse } from "../api/simulate-dto";
 import { newManualPosition, type ManualPosition } from "../lib/manual-position";
 import {
+  DEFAULT_CASES,
   DEFAULT_SCENARIO_PARAMS,
   EMPTY_SIMULATION_INPUTS,
+  caseFromParams,
   type AnchorTenor,
+  type CaseId,
   type RunStatus,
+  type ScenarioCase,
   type ScenarioParams,
   type SimulationInputs,
 } from "../types/simulation-port";
@@ -49,6 +53,21 @@ interface SimulationDataState {
    * stage navigation (module-level store) and NEVER enters the payload. */
   previewMode: "curve" | "path";
   setPreviewMode: (mode: "curve" | "path") => void;
+
+  /* ── 시나리오 케이스 [트레이더 피드백 2, 2026-08-07] ──────────────────────
+   * `params` 는 **지금 편집 중인** 케이스의 살아 있는 값이고, `cases` 는 나머지
+   * 셋을 재워 둔다. 활성 케이스의 항목은 그래서 낡아 있다 — 읽는 쪽은 활성
+   * 케이스면 `params` 를 보고, 아닌 것만 `cases` 를 본다(`caseParams`).
+   * 매 타건마다 두 곳에 쓰는 대신 전환 시점에만 옮긴다: 쓰기 경로가 하나면
+   * 두 값이 어긋날 자리가 없다. */
+  cases: Record<CaseId, ScenarioCase>;
+  activeCase: CaseId;
+  /** 편집 대상을 바꾼다. 지금 값을 그 자리에 저장하고 다음 케이스를 꺼내 온다. */
+  setActiveCase: (id: CaseId) => void;
+  /** 커브 미리보기에 **겹쳐 그릴** 케이스들. 활성 케이스는 언제나 그려지므로
+   * 여기 없어도 된다 — 편집 중인 것이 안 보이는 상태는 만들지 않는다. */
+  overlayCases: CaseId[];
+  toggleOverlayCase: (id: CaseId) => void;
 
   /** SIM2-6 — the staged flow's screen, MOVED here from SimulationFlow's
    * component state so leaving the tab and returning restores EXACTLY what
@@ -139,6 +158,28 @@ export const useSimulationDataStore = create<SimulationDataState>((set) => ({
   previewMode: "curve",
   setPreviewMode: (mode) => set({ previewMode: mode }),
 
+  cases: DEFAULT_CASES,
+  activeCase: "base",
+  setActiveCase: (id) =>
+    set((s) =>
+      id === s.activeCase
+        ? {}
+        : {
+            // 나가는 케이스를 먼저 저장한다. 순서가 뒤바뀌면 같은 케이스를
+            // 두 번 누를 때 방금 편집한 값이 씨앗으로 덮인다.
+            cases: { ...s.cases, [s.activeCase]: caseFromParams(s.params) },
+            activeCase: id,
+            params: { ...s.params, ...s.cases[id] },
+          },
+    ),
+  overlayCases: [],
+  toggleOverlayCase: (id) =>
+    set((s) => ({
+      overlayCases: s.overlayCases.includes(id)
+        ? s.overlayCases.filter((x) => x !== id)
+        : [...s.overlayCases, id],
+    })),
+
   stage: "configure",
   setStage: (stage) => set({ stage }),
 
@@ -162,7 +203,15 @@ export const useSimulationDataStore = create<SimulationDataState>((set) => ({
 
   setInputs: (inputs) => set((state) => ({ inputs: { ...state.inputs, ...inputs } })),
   patchParams: (patch) => set((state) => ({ params: { ...state.params, ...patch } })),
-  resetParams: () => set({ params: DEFAULT_SCENARIO_PARAMS }),
+  // 케이스도 같이 되돌린다 — 셋만 씨앗으로 남고 하나는 편집된 상태는
+  // "초기화" 라고 부를 수 없다.
+  resetParams: () =>
+    set({
+      params: DEFAULT_SCENARIO_PARAMS,
+      cases: DEFAULT_CASES,
+      activeCase: "base",
+      overlayCases: [],
+    }),
 
   markRunning: () => set({ status: "running", error: null }),
   // SIM2-6: arrival LANDS the flow on Results (even if the tab was left and
@@ -179,6 +228,16 @@ export const useSimulationDataStore = create<SimulationDataState>((set) => ({
 // Portfolio or Backtest tabs later need simulation output, they select it here;
 // they never import the simulation components.
 // ---------------------------------------------------------------------------
+
+/** 케이스 하나를 **완전한 `ScenarioParams`** 로 되살린다 — 공유 필드(기간·앵커·
+ * σ)는 현재 값에서, 케이스 필드는 그 케이스에서. 활성 케이스는 `params` 자체가
+ * 최신이므로 그대로 돌려준다(`cases` 항목은 전환 시점의 스냅샷이라 낡았다).
+ *
+ * 미리보기가 다른 케이스를 그리려면 `buildSimulateRequest` 에 넘길 것이 필요한데,
+ * 그 함수는 부분 파라미터를 모른다. 여기서 한 번만 조립한다. */
+export function caseParams(s: SimulationDataState, id: CaseId): ScenarioParams {
+  return id === s.activeCase ? s.params : { ...s.params, ...s.cases[id] };
+}
 
 export const selectSimulationResults = (s: SimulationDataState): SimulateResponse | null => s.lastRun;
 export const selectSimulationStatus = (s: SimulationDataState): RunStatus => s.status;

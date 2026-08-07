@@ -31,7 +31,13 @@ import { withAlpha } from "@/sim/theme/bridge";
 import { getSimChartTheme } from "@/sim/lib/chart-theme";
 import { useSimulationPort } from "@/sim/hooks/use-simulation";
 import { useSwapInputQuotes } from "@/sim/hooks/use-input-curves";
-import { buildScenarioOverlay, isShapedScenario, type BaseQuote } from "@/sim/lib/input-curve-preview";
+import {
+  buildScenarioOverlay,
+  isShapedScenario,
+  type BaseQuote,
+  type ScenarioOverlayPreview,
+} from "@/sim/lib/input-curve-preview";
+import { SCENARIO_CASES, type CaseId } from "@/sim/types/simulation-port";
 import { buildSimulateRequest } from "@/sim/lib/scenario-curves";
 import { MAX_TENOR_YEARS } from "@/sim/lib/components";
 
@@ -49,20 +55,68 @@ import { MAX_TENOR_YEARS } from "@/sim/lib/components";
  * 만 받는다. 사라진 것은 참조선이지 앵커가 아니다. */
 const FAMILIES = [{ key: "IRS", label: "IRS" }] as const;
 
+/* 케이스별 파선 패턴 [트레이더 피드백 2, 2026-08-07].
+ *
+ * 넷을 가르는 것은 **색이 아니라 이것**이다. §5(monochrome-first)가 그렇게
+ * 적고 있고, 이 화면에서는 실질적인 이유도 있다: 액센트는 기준선이 이미
+ * 쓰고 있고, 빨강·파랑은 이 제품에서 부호를 뜻한다. 시나리오는 부호가 아니다.
+ *
+ * 패턴을 눈에 띄게 벌린다 — 4 3 과 5 3 은 화면에서 같은 선이다. */
+const CASE_DASH: Record<CaseId, string> = {
+  base: "4 3",
+  bull: "1 3",
+  bear: "9 4",
+  crisis: "9 3 2 3",
+};
+
 export function CurvePreview() {
   const { params, inputs } = useSimulationPort();
   const baseDate = inputs.baseDate;
 
   const swapQ = useSwapInputQuotes(baseDate);
 
-  const [visible, setVisible] = useState<Record<string, boolean>>({ IRS: true });
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
   // 어느 미리보기를 보고 있는지는 포트 스토어에 산다 — 단계를 오가도 유지된다.
   const previewMode = useSimulationDataStore((s) => s.previewMode);
   const setPreviewMode = useSimulationDataStore((s) => s.setPreviewMode);
 
-  const req = useMemo(() => buildSimulateRequest(inputs, params), [inputs, params]);
+  /* 겹쳐 그릴 케이스. 활성 케이스는 **언제나** 들어간다 — 편집 중인 것이
+     화면에 없는 상태는 만들지 않는다. 순서는 SCENARIO_CASES 를 따른다:
+     토글을 누른 순서로 그리면 같은 조합인데 겹침 순서가 달라진다. */
+  const activeCase = useSimulationDataStore((s) => s.activeCase);
+  const overlayCases = useSimulationDataStore((s) => s.overlayCases);
+  const toggleOverlayCase = useSimulationDataStore((s) => s.toggleOverlayCase);
+  const cases = useSimulationDataStore((s) => s.cases);
+  /* 배열은 매 렌더 새 객체라 그대로 의존성에 넣으면 아래 memo 가 매번 깨진다.
+     내용을 문자열로 접어서 넣는다 — 순서가 고정돼 있으므로 같은 조합이면 같은 키다. */
+  const overlayKey = overlayCases.join(",");
+  const drawnCases = useMemo(
+    () => SCENARIO_CASES.filter((c) => c.id === activeCase || overlayCases.includes(c.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeCase, overlayKey],
+  );
+
+  /* 케이스마다 하나씩. 활성 케이스는 `params` 가 최신이고, 나머지는 저장된
+     케이스 필드를 공유 필드 위에 얹는다 (store 의 caseParams 와 같은 규칙).
+     여기서도 요청 빌더를 지난다 — 미리보기가 실행과 다른 규칙을 쓰면 미리보기가
+     아니라 두 번째 모델이 된다. */
+  const reqs = useMemo(
+    () =>
+      drawnCases.map((c) => ({
+        id: c.id,
+        label: c.label,
+        req: buildSimulateRequest(
+          inputs,
+          c.id === activeCase ? params : { ...params, ...cases[c.id] },
+        ),
+      })),
+    [inputs, params, cases, activeCase, drawnCases],
+  );
+
+  /** 활성 케이스의 요청 — 시계열 미리보기와 스크러버가 이걸 본다. 겹쳐 그리기는
+   * 커브 단면에만 있다: 시계열은 이미 축이 시간이라 네 선을 얹으면 읽히지 않는다. */
+  const req = reqs.find((r) => r.id === activeCase)?.req ?? reqs[0].req;
   const shaped = useMemo(() => isShapedScenario(req), [req]);
   const [day, setDay] = useState<number | null>(null);
   const shownDay = shaped ? (day ?? params.simDays) : params.simDays;
@@ -85,20 +139,28 @@ export function CurvePreview() {
     // 축을 30Y까지 늘리면 실제로 읽는 3M~10Y 구간이 왼쪽 절반으로 압축된다.
     const cap = (q: BaseQuote[]) => q.filter((x) => x.t <= MAX_TENOR_YEARS);
     const out: { key: string; quotes: BaseQuote[] }[] = [];
-    if (visible.IRS && availability.IRS.ok && swapQ.data)
-      out.push({ key: "IRS", quotes: cap(swapQ.data) });
+    if (availability.IRS.ok && swapQ.data) out.push({ key: "IRS", quotes: cap(swapQ.data) });
     return out;
-  }, [visible.IRS, availability, swapQ.data]);
+  }, [availability, swapQ.data]);
 
-  /** 켜져 있는데 그 날 호가가 없는 계열. 침묵하지 않고 이름을 말한다. */
-  const missing = FAMILIES.filter(
-    (f) => visible[f.key] && availability[f.key].ready && !availability[f.key].ok,
-  );
+  /* 계열 토글이 있던 자리를 케이스 토글이 가져갔다 [트레이더 피드백 2].
+     계열이 IRS 하나뿐이라 그 토글이 만들 수 있는 유일한 다른 상태가 **빈 차트**
+     였고, 그건 조작할 것이 있는 척하는 컨트롤이다. 아래 `missing` 배너는 남는다 —
+     그건 사용자가 끈 것이 아니라 그날 호가가 없는 것을 말한다. */
 
-  const overlay = useMemo(
-    () => (families.length > 0 ? buildScenarioOverlay(req, shownDay, families) : null),
-    [req, shownDay, families],
+  /** 그 날 호가가 없는 계열. 침묵하지 않고 이름을 말한다. */
+  const missing = FAMILIES.filter((f) => availability[f.key].ready && !availability[f.key].ok);
+
+  /** 케이스마다 하나씩. 기둥(pillars)은 families 가 정하므로 넷이 같다 —
+   * 첫 번째 것을 축으로 쓴다. */
+  const overlays = useMemo(
+    () =>
+      families.length > 0
+        ? reqs.map((r) => ({ id: r.id, label: r.label, ov: buildScenarioOverlay(r.req, shownDay, families) }))
+        : [],
+    [reqs, shownDay, families],
   );
+  const overlay = overlays.find((o) => o.id === activeCase)?.ov ?? overlays[0]?.ov ?? null;
 
   // 스토어의 테마를 구독한다 — 렌더 시점에 DOM을 읽으면 테마가 바뀌어도
   // 리렌더가 일어나지 않아 농도가 옛 테마 값에 머문다.
@@ -107,16 +169,27 @@ export function CurvePreview() {
   const theme = useUiStore((s) => s.theme);
   const ramp = SERIES_OPACITY[theme];
   const t = getSimChartTheme();
-  const series: TermSeries[] = (overlay?.series ?? []).map((s, i) => ({
-    key: s.key,
-    label: FAMILIES.find((f) => f.key === s.key)?.label ?? s.key,
-    baseColor: withAlpha(t.line, ramp[i]),
-    // 예상은 아직 일어나지 않은 일이라 물러난다. 잉크를 절반 아래로 내리면
-    // 두 테마 모두에서 회색으로 읽힌다.
-    shockedColor: withAlpha(t.ink, ramp[i] * 0.5),
-    basePct: s.basePct,
-    shockedPct: s.shockedPct,
-  }));
+  /* 계열 조립. 기준선은 **하나뿐**이다 — 케이스가 넷이어도 시장 커브는 하나고,
+     같은 선을 네 번 겹쳐 그리면 굵기만 이상해진다. 그래서 케이스 계열은 예상선만
+     갖고, 기준 계열을 따로 하나 만들어 **맨 뒤에** 놓는다(차트가 순서대로
+     칠하므로 마지막이 위로 온다 — 기준이 위라는 규칙은 그대로다). */
+  const series: TermSeries[] = [
+    ...overlays.map((o) => ({
+      key: o.id,
+      label: o.label,
+      // 예상은 아직 일어나지 않은 일이라 물러난다. 편집 중인 케이스만 조금 더
+      // 진하다 — 지금 손대고 있는 선이 어느 것인지가 화면에서 읽혀야 한다.
+      shockedColor: withAlpha(t.ink, ramp[0] * (o.id === activeCase ? 0.85 : 0.45)),
+      shockedDash: CASE_DASH[o.id],
+      shockedPct: o.ov.series[0]?.shockedPct,
+    })),
+    {
+      key: "__base",
+      label: "기준",
+      baseColor: withAlpha(t.line, ramp[0]),
+      basePct: overlay?.series[0]?.basePct,
+    },
+  ];
 
   const loading = swapQ.isPending;
   /** 그릴 것이 하나도 없을 때만 차트 자리를 통째로 문장으로 바꾼다. 한 계열만
@@ -140,45 +213,49 @@ export function CurvePreview() {
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 pb-2">
         <div className="flex items-center gap-1.5">
           <ModeToggle mode={previewMode} onChange={setPreviewMode} />
-          {FAMILIES.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              aria-pressed={visible[f.key]}
-              onClick={() => setVisible((v) => ({ ...v, [f.key]: !v[f.key] }))}
-              // 이 칩들은 다중선택 **토글**이고, 킷에 그 변형이 따로 있다
-              // (Buttons/Content Area/Toggle). 실측·육안 확인:
-              //
-              //   Off  채움 잉크 5%     라벨 Labels/Primary
-              //   On   채움 강조색 6%   라벨·글리프 **강조색 전체**
-              //
-              // 즉 킷에서 켜짐을 말하는 것은 채움이 아니라 **색**이다. 채움은
-              // 5%→6%로 사실상 그대로다.
-              //
-              // 우리는 강조색을 부호에 쓰므로 색을 신호로 못 쓴다. 대신 같은
-              // 자리(라벨)에서 **농도와 굵기**로 말한다 — 채움이 아니라 글자가
-              // 상태를 진다는 구조는 킷과 같고, 수단만 다르다. 앞서는 반대로
-              // 채움 농도(8%↔16%)로 말하고 있었는데, 그건 Bordered 버튼의
-              // 문법이지 Toggle의 문법이 아니다.
-              //
-              // 대가가 하나 있다: 킷은 꺼짐도 라벨이 Primary(85%)인데 우리는
-              // 잉크 2단계(50%)로 내렸다. 색이 아니라 농도로 말하려면 꺼짐이
-              // 물러나 줘야 한다. 즉 off 채움 5%만 킷 값이고 **라벨 농도는
-              // 우리가 정한 것**이다. 여기서는 그게 맞기도 하다 — 꺼짐은
-              // "이 계열을 차트에서 숨겼다"는 뜻이라 물러나는 게 사실이다.
-              className={
-                "h-6 rounded-control-sm px-4 text-callout transition-colors " +
-                (visible[f.key]
-                  ? "bg-ink-4 font-medium text-ink"
-                  : "bg-ink-5 text-ink-2 hover:bg-ink-4 hover:text-ink-1")
-              }
-            >
-              {f.label}
-            </button>
-          ))}
+          {SCENARIO_CASES.map((c) => {
+            const on = c.id === activeCase || overlayCases.includes(c.id);
+            const locked = c.id === activeCase;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                aria-pressed={on}
+                disabled={locked}
+                title={locked ? "편집 중인 케이스라 항상 그려요" : undefined}
+                onClick={() => toggleOverlayCase(c.id)}
+                // 아래 계열 칩과 같은 문법이다 (킷 Buttons/Content Area/Toggle을
+                // 농도로 옮긴 것). 다른 것은 하나 — 칩 안에 **자기 파선 견본**을
+                // 그린다. 차트에서 넷을 가르는 것이 파선이므로, 어느 패턴이 어느
+                // 케이스인지 말하는 자리가 있어야 한다. 별도 범례를 두면 차트
+                // 밖에 또 하나의 목록이 생긴다.
+                className={
+                  "flex h-6 items-center gap-1.5 rounded-control-sm px-2.5 text-callout transition-colors " +
+                  (on
+                    ? "bg-ink-4 font-medium text-ink"
+                    : "bg-ink-5 text-ink-2 hover:bg-ink-4 hover:text-ink-1")
+                }
+              >
+                <svg width="14" height="6" aria-hidden className="shrink-0">
+                  <line
+                    x1="0"
+                    y1="3"
+                    x2="14"
+                    y2="3"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeDasharray={CASE_DASH[c.id]}
+                  />
+                </svg>
+                {c.label}
+              </button>
+            );
+          })}
         </div>
         <span className="text-callout text-ink-2">
-          {hoverIdx !== null && overlay ? readout(overlay, series, hoverIdx) : `${baseDate} · D+${shownDay}`}
+          {hoverIdx !== null && overlays.length > 0
+            ? readout(overlays, hoverIdx)
+            : `${baseDate} · D+${shownDay}`}
         </span>
       </div>
 
@@ -232,7 +309,9 @@ export function CurvePreview() {
           물러난 상태를 말하는 말이지 어느 선인지 짚는 말이 아니다. */}
       <p className="pt-2 text-callout text-ink-2">
         실선이 {baseDate} 기준이고, 회색 파선이 시나리오예요.
-        {series.length > 1 && ` 진한 쪽이 ${series[0].label}이에요.`}
+        {drawnCases.length > 1
+          ? " 파선 모양이 케이스를 갈라요 — 위 칩과 같은 모양이에요."
+          : " 위 칩을 눌러 다른 케이스를 겹쳐 볼 수 있어요."}
       </p>
     </div>
   );
@@ -260,20 +339,21 @@ function ModeToggle({
   );
 }
 
+/** 호버한 테너에서 **그려진 케이스마다** 한 조각씩. 파선이 어느 케이스인지
+ * 말한다면, 이 줄은 그 케이스가 그 테너에서 얼마인지를 말한다. */
 function readout(
-  overlay: { pillars: { label: string }[]; series: { key: string; basePct: (number | null | undefined)[]; shockedPct: (number | null | undefined)[] }[] },
-  series: TermSeries[],
+  overlays: { id: CaseId; label: string; ov: ScenarioOverlayPreview }[],
   i: number,
 ): string {
-  const tenor = overlay.pillars[i]?.label ?? "";
+  const tenor = overlays[0]?.ov.pillars[i]?.label ?? "";
   const parts: string[] = [];
-  for (const s of series) {
-    const src = overlay.series.find((o) => o.key === s.key);
+  for (const o of overlays) {
+    const src = o.ov.series[0];
     const base = src?.basePct[i];
     const shocked = src?.shockedPct[i];
     if (typeof base !== "number" || typeof shocked !== "number") continue;
     const d = (shocked - base) * 100;
-    parts.push(`${s.label} ${shocked.toFixed(3)}% (${d >= 0 ? "+" : ""}${d.toFixed(1)}bp)`);
+    parts.push(`${o.label} ${shocked.toFixed(3)}% (${d >= 0 ? "+" : ""}${d.toFixed(1)}bp)`);
   }
   return parts.length > 0 ? `${tenor} · ${parts.join(" · ")}` : tenor;
 }

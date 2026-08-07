@@ -433,7 +433,13 @@ export function Section({
   if (bare) return <div className={className}>{children}</div>;
   return (
     <GroupBox
-      className={className}
+      /* `shrink-0` — 이 구획들은 세로로 스크롤하는 칼럼 안에 산다. flex 자식은
+         기본이 `flex-shrink: 1` 이라, 내용이 칼럼보다 길어지면 스크롤이 생기는
+         대신 **박스들이 눌린다**: 박스에 `overflow-hidden` 이 걸려 있어서
+         눌린 만큼이 잘려 나가고, 화면에서는 안내 문장이 반쯤 잘린 채로 보인다.
+         구획이 하나 늘 때마다 조금씩 더 눌리므로 오래 눈치채기 어려웠다.
+         (2026-08-07, 시나리오 구획을 넣으면서 드러났다.) */
+      className={`shrink-0 ${className ?? ""}`}
       header={
         title || aside ? (
           <>
