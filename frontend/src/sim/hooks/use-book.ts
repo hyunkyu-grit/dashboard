@@ -128,17 +128,35 @@ export function useBook() {
     [legsByRow],
   ) as unknown as Position[];
 
+  /* 무한 렌더 루프를 끊는 것 [2026-08-07].
+   *
+   * `useQueries`는 매 렌더마다 **새 배열**을 돌려준다. 그래서 legsByRow도
+   * enginePositions도 내용이 같아도 신원이 매번 달라지고, 그것을 아래
+   * useEffect의 의존성에 그대로 넣으면:
+   *
+   *   렌더 → 효과 실행 → setInputs → 스토어 변경 → 리렌더 → 효과 실행 → …
+   *
+   * React가 "Maximum update depth exceeded"로 끊어 주기 전까지 멈추지 않는다.
+   * 화면에서는 시뮬레이션 탭이 통째로 에러 경계에 잡혀 "표를 그리지 못했어요"만
+   * 남았다. 포지션이 하나도 없어도 걸린다 — 빈 배열도 매번 새 빈 배열이다.
+   *
+   * 그래서 효과는 **내용**에 걸린다. 직렬화가 비싸 보이지만 다리 수는 상품당
+   * 세 개를 넘지 않고, 진짜 비용은 여기가 아니라 setInputs가 부르는 리렌더다.
+   * 신원 대신 내용을 보는 것이 이 자리에서는 더 싸다. */
+  const positionsKey = useMemo(() => JSON.stringify(enginePositions), [enginePositions]);
+
   useEffect(() => {
     if (!baseDate) return;
     setInputs({
       baseDate,
-      positions: enginePositions,
+      // positionsKey가 바뀌었을 때만 여기 온다 — 그 시점의 배열을 그대로 쓴다.
+      positions: JSON.parse(positionsKey) as Position[],
       // 브릿지는 par 커브를 싣지 않는다 — 백엔드가 기준일의 IRS 스냅샷에서
       // 가져오고, 그날 호가가 없으면 조용한 0 대신 명시적으로 제외한다.
       irsParRates: [],
       dailyShockCurves: { bondCurves: {}, swapCurve: [] },
     });
-  }, [baseDate, enginePositions, setInputs]);
+  }, [baseDate, positionsKey, setInputs]);
 
   return {
     /* 기준일을 아직 모르는 동안만 대기다. 북은 여기 없다 — 게이트가 아니다. */

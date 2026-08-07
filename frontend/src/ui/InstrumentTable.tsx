@@ -628,8 +628,9 @@ export function InstrumentTable({
           active tab — one at a time, click again clears. Not a sidebar.
           Hidden on 전체, which is no longer a list: the chips filter ROWS, and
           there are no rows there to filter — only three fixed 주요 sets. Hidden
-          on 연구실 for the same reason. */}
-      {!isOverview && !isLab && (
+          on 연구실 and 시뮬레이션 for the same reason — neither is a row list,
+          and a filter that visibly does nothing when clicked reads as broken. */}
+      {!isOverview && !isLab && !isSim && (
       <div className="mt-2 flex flex-wrap gap-1.5">
         {SCREENERS.map((sc) => {
           const on = screener === sc.id;
@@ -667,7 +668,7 @@ export function InstrumentTable({
         })}
       </div>
       )}
-      {activeScreener && !isOverview && !isLab && (
+      {activeScreener && !isOverview && !isLab && !isSim && (
         <p className="mt-1.5 text-[12px] opacity-55">{activeScreener.description}</p>
       )}
 

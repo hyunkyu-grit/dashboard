@@ -251,8 +251,12 @@ export function ConfigureStage() {
             시뮬레이션 실행
           </Button>
           {inputs.positions.length === 0 && (
+            /* 예전에는 "data 폴더에 Portfolio Data.xlsx를 넣으면 포지션을
+               읽어와요"였다. 그 워크북은 설계상 삭제됐고(직접 입력이 원천),
+               없는 파일을 넣으라는 안내는 사용자를 존재하지 않는 해결책으로
+               보낸다. 위 포지션 구획을 가리키는 것이 실제로 할 일이다. */
             <p className="mt-2 text-center text-body text-ink-2">
-              data 폴더에 Portfolio Data.xlsx를 넣으면 포지션을 읽어와요.
+              위 포지션 구획에서 상품을 추가하면 실행할 수 있어요.
             </p>
           )}
         </div>
