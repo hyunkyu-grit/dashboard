@@ -66,9 +66,9 @@ from irs_pricer.engine import curve_cache
 from . import instruments as instruments_mod
 from . import payloads
 from .backtest import BacktestError, Position, run_backtest
-from .cache import cached, data_hash
+from .cache import cached, sql_data_hash
 from .curves import build_basis_curves
-from .dataset import load_dataset
+from .dataset import load_dataset_sql
 from .derive import basis_dates, derived_ids
 from .dv01 import build_dv01_table
 from .events import detect_event_clusters
@@ -78,7 +78,13 @@ from .regret import regret_payload
 from .staleness import dataset_freshness
 from .volatility import volatility_payload
 
-DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "irsdata.xlsx"
+# `DATA_PATH`(data/irsdata.xlsx)는 없어졌다 [OWNER, 2026-08-07] — IRS 종가는
+# 이제 MySQL 에서 온다. 파일 자체는 남아 있고 정적 트리 빌드와 테스트가 계속
+# 읽지만, **서버는 더 이상 열지 않는다**. 상수를 지운 이유는 남겨 두면 다음
+# 사람이 "여기가 출처" 라고 읽기 때문이다.
+#
+# 기준금리는 아직 워크북이다. 이 테이블에 없는 데이터이고, 옮기는 것은 별개의
+# 결정이다.
 POLICY_PATH = Path(__file__).resolve().parents[2] / "data" / "bokbaserate.xlsx"
 
 @asynccontextmanager
@@ -209,7 +215,18 @@ async def runtime_error_handler(request: Request, exc: RuntimeError) -> JSONResp
     logging.getLogger("irs_pricer").exception("Unhandled runtime error")
     return JSONResponse(status_code=500, content={"detail": f"계산 오류: {exc}"})
 
-_dataset = load_dataset(DATA_PATH)
+# IRS 종가의 출처는 **MySQL** 이다 [OWNER, 2026-08-07 — "무조건 SQL 쪽이 정답임"].
+#
+# `data/irsdata.xlsx` 는 지웠거나 옮기지 않았다 — 백테스트의 정적 트리 빌드
+# (scripts/build_static.py)와 테스트가 아직 그 파일을 읽고, 대조 스크립트
+# (scripts/check_mysql.py)도 그것을 기준으로 두 출처를 비교한다. 서버가 읽는
+# 것만 옮겼다.
+#
+# 대조 근거는 dataset.py 의 `load_dataset_sql` 주석에 있다: 3M~10Y 는 2,616일이
+# 소수점 끝까지 일치했고, 1D(콜금리)만 80.8% 어긋났다(다른 계열). 오너가 SQL 을
+# 정답으로 정했으므로 1D 도 그대로 받는다 — 과거 짧은 끝 커브가 달라지고 그건
+# 의도된 변경이다.
+_dataset = load_dataset_sql()
 _bases = basis_dates(_dataset)
 # The policy step, resolved ONCE against this dataset's as-of date — the carry
 # bound depends on both files, so it cannot be decided by policy.py alone (see
@@ -225,7 +242,9 @@ _dv01_table = build_dv01_table(_curves["now"], derived_ids)
 # historical curve once and reprice all forwards (~13s) — over a file that
 # changes once a day. Persist them keyed by the data-file hash; recompute only
 # when the data changes (loudly logged).
-_data_hash = data_hash(DATA_PATH, _dataset.asof)
+# 바이트가 없으므로 **테이블 워터마크**가 캐시 키다 (cache.sql_data_hash) —
+# CLAUDE.md 가 이 이동에서 잊지 말라고 못 박은 자리다.
+_data_hash = sql_data_hash(_dataset.asof)
 _forwards = cached("forwards", _data_hash, lambda: forwards_payload(_dataset, _curves))
 # 라고 할 때 살걸: a 20-day event replay plus ~2 valuations per line — a
 # couple of seconds over a file that changes once a day, so it caches the

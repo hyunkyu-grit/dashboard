@@ -273,6 +273,26 @@ def load_dataset(xlsx_path: Path, today: dt.date | None = None) -> Dataset:
                 f"order, with no repeats"
             )
 
+    return _finalize(dates, series, tenor_order, order_rows, today)
+
+
+def _finalize(
+    dates: list[dt.date],
+    series: dict[str, list[float | None]],
+    tenor_order: list[str],
+    order_rows: list[int],
+    today: dt.date,
+) -> Dataset:
+    """파싱이 끝난 뒤의 **공통 규칙** — 전일종가 컷, 빈칸·공백 검사, 경고.
+
+    2026-08-07 에 `load_dataset` 의 꼬리에서 떼어냈다. 출처가 둘이 되었기
+    때문이다(엑셀 · MySQL). 이 부분이 두 벌이 되면 두 출처가 서로 다른 날을
+    "오늘" 로 자르거나 한쪽만 빈 칼럼을 통과시키는 일이 생기고, 그건 화면에서
+    구별되지 않는다. 파싱은 출처마다 다르고 **판정은 하나**다.
+
+    `order_rows` 는 오류 문장에 찍히는 행 번호다 — 엑셀은 시트 행, DB 는 정렬된
+    결과의 순번이다.
+    """
     warnings: list[str] = []
 
     # ── 전일종가 rule [OWNER, 2026-08-05] ───────────────────────────────────
@@ -337,3 +357,76 @@ def load_dataset(xlsx_path: Path, today: dt.date | None = None) -> Dataset:
     missing = [t for t in SPEC_NODE_ORDER if t not in series]
     return Dataset(dates=dates, series=series, tenor_order=ordered,
                    missing_nodes=missing, warnings=warnings)
+
+
+# ── MySQL ─────────────────────────────────────────────────────────────────────
+#
+# 출처가 DB 로 옮겨간다 [OWNER, 2026-08-07 — "무조건 SQL 쪽이 정답임"].
+#
+# 대조 결과가 그 판단의 근거다 (backend/scripts/check_mysql.py, 39,220개 값):
+#   3M~10Y   불일치 0~1건 / 2,616 — 사실상 완전 일치. 그 "1건" 은 전부 xlsx 의
+#            **마지막 행**(2026-08-05)이고, 다른 2,615일이 소수점 끝까지 맞는
+#            모양이라 그 행이 종가가 아니라 장중 스냅샷이었다는 뜻이다.
+#   1D       불일치 2,105건 / 2,606 (80.8%), 최대 61.4bp — **다른 계열**이다.
+#            오너가 SQL 을 정답으로 정했으므로 그대로 받는다. 과거 짧은 끝
+#            커브가 달라지고, 그건 의도된 변경이다.
+#
+# DB 컬럼 → 테너. `_tenor_id()` 가 한글 라벨에 하는 일을 컬럼명에 대해 하는
+# 것이고, 매핑이 1:1 이라 함수가 아니라 표다.
+SQL_COLUMN_TENOR: dict[str, str] = {
+    "call_rate": "1D",   # 콜금리
+    "cd_rate": "3M",     # CD 91일 — 스펙의 3M 노드 (IRS 3M = CD91)
+    "irs_6m": "6M",
+    "irs_9m": "9M",
+    "irs_1y": "1Y",
+    "irs_18m": "1.5Y",
+    "irs_2y": "2Y",
+    "irs_3y": "3Y",
+    "irs_4y": "4Y",
+    "irs_5y": "5Y",
+    "irs_6y": "6Y",
+    "irs_7y": "7Y",
+    "irs_8y": "8Y",
+    "irs_9y": "9Y",
+    "irs_10y": "10Y",
+}
+
+
+def load_dataset_sql(today: dt.date | None = None) -> Dataset:
+    """`mkt_irs_close` 를 읽어 `Dataset` 을 만든다. 엑셀 로더와 **같은 판정**을
+    지난다 (`_finalize`) — 전일종가 컷도, 빈 칼럼 거부도, 경고도.
+
+    엑셀 로더와 다른 것은 파싱뿐이다: 시트의 병합 셀·한글 라벨 대신 컬럼 하나가
+    테너 하나다. 그래서 여기에는 라벨 해석도, 중복 칼럼 검사도 없다 — 컬럼명이
+    유일하다는 것을 DB 가 보장한다.
+    """
+    from .mysqldb import irs_close_rows  # 지연 import: 엑셀 경로는 DB 를 안 켠다
+
+    today = today or market_today()
+    rows = irs_close_rows()            # 날짜 오름차순
+    if not rows:
+        raise DataFileError("mkt_irs_close 가 비어 있다")
+
+    dates: list[dt.date] = []
+    series: dict[str, list[float | None]] = {t: [] for t in SQL_COLUMN_TENOR.values()}
+    for r in rows:
+        d = r["irs_date"]
+        if not isinstance(d, dt.date):
+            raise DataFileError(f"irs_date 가 날짜가 아니다: {d!r}")
+        dates.append(d)
+        for col, tenor in SQL_COLUMN_TENOR.items():
+            v = r.get(col)
+            series[tenor].append(None if v is None else float(v))
+
+    # 엑셀 로더가 시트 행에 대해 하는 검사와 같은 것 — 정렬은 SQL 이 하지만,
+    # 같은 날짜가 두 번 있으면 여기서 잡힌다 (이 테이블에는 PK 가 없다).
+    for i in range(1, len(dates)):
+        if dates[i] <= dates[i - 1]:
+            raise DataFileError(
+                f"mkt_irs_close: {dates[i - 1]} 다음에 {dates[i]} — 날짜가 "
+                "오름차순이어야 하고 중복이 없어야 한다"
+            )
+
+    tenor_order = list(SQL_COLUMN_TENOR.values())
+    order_rows = list(range(1, len(dates) + 1))
+    return _finalize(dates, series, tenor_order, order_rows, today)

@@ -65,6 +65,35 @@ def data_hash(path: Path, asof: "object | None" = None) -> str:
     return f"{digest}:v{SCHEMA_VERSION}{tail}"
 
 
+def sql_data_hash(asof: "object | None" = None) -> str:
+    """`data_hash` 의 MySQL 판 — 해시할 **바이트가 없을 때**의 캐시 키.
+
+    CLAUDE.md 가 이 이동에서 유일하게 못 박아 둔 것이 이 자리다:
+
+        `app/cache.py` keys the disk cache on a HASH OF THE XLSX BYTES. With
+        the source in MySQL that key has nothing to hash, and a cache keyed to
+        the wrong data is worse than no cache (this project's recurring defect
+        is silent staleness). It has to become a table watermark —
+        `MAX(updated_at)` plus a row count.
+
+    그 지시대로 **테이블 워터마크**(마지막 날짜 + 행 수)가 바이트 해시를 대신
+    한다. 행이 늘거나 마지막 날짜가 밀리면 키가 바뀌고 캐시가 무효가 된다.
+    `asof` 는 엑셀 판과 같은 이유로 붙는다 — 같은 테이블도 전일종가 컷 때문에
+    날이 바뀌면 다른 데이터셋이 된다.
+
+    **못 잡는 것**: 이 테이블에는 `updated_at` 이 없다(컬럼이 irs_date + 값 15개
+    뿐, PK 도 인덱스도 없음). 과거 행의 값이 조용히 수정되면 날짜도 행 수도 안
+    바뀌므로 이 키는 그대로다. 잡으려면 값 전체의 해시가 필요하고 그건 매번
+    2,600행 × 16열을 읽는 일이라, 그 비용을 치를지는 별도 판단으로 남긴다.
+    [미해결, 2026-08-07]
+    """
+    from .mysqldb import watermark
+
+    last, rows = watermark()
+    tail = f":{asof.isoformat()}" if asof is not None else ""
+    return f"sql:{last}:{rows}:v{SCHEMA_VERSION}{tail}"
+
+
 def cached(
     name: str,
     current_hash: str,
