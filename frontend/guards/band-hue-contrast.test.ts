@@ -25,108 +25,18 @@
  *
  * So the blocks are cut on BRACE BALANCE now, and assembled the way the
  * cascade actually assembles them — every applicable block in source order,
- * last declaration wins. `:root` and `[data-theme="dark"]` are both (0,1,0),
- * so source order is the whole tie-break, and reproducing it is what lets the
- * boost tier be measured as its own tier instead of leaking into the base one. */
+ * last declaration wins. That reader lives in `_tokens.ts`, because the same
+ * wrong slice had been written three times (here, palette, tint-contrast). */
 
 import { describe, expect, it } from "vitest";
 
-import { css as cssOf } from "./_source";
-
-const css = cssOf("theme/tokens.css");
-/* The token layer now points into the vendored kit (--bw-accent: var(--kit-…)),
- * so the guard has to be able to follow it there. kit.css is one flat :root with
- * explicit -light-/-dark- names, so a plain lookup is enough. */
-const kitCss = cssOf("theme/kit.css");
-
-type Block = { selector: string; body: string };
-
-/** Rule blocks at one nesting level, cut on brace balance. Nested rules stay
- * inside the parent's body, so an `@media` arrives whole and can be re-cut. */
-function blocks(text: string): Block[] {
-  const out: Block[] = [];
-  let i = 0;
-  while (i < text.length) {
-    const open = text.indexOf("{", i);
-    if (open === -1) break;
-    const selector = text.slice(i, open).trim();
-    let depth = 1;
-    let j = open + 1;
-    while (j < text.length && depth > 0) {
-      if (text[j] === "{") depth += 1;
-      else if (text[j] === "}") depth -= 1;
-      j += 1;
-    }
-    out.push({ selector, body: text.slice(open + 1, j - 1) });
-    i = j;
-  }
-  return out;
-}
-
-const TOP = blocks(css);
-
-const applies = (selector: string, theme: Theme) =>
-  selector === ":root" ||
-  (theme === "dark" && selector === '[data-theme="dark"]');
-
-type Theme = "light" | "dark";
-
-/** Everything the cascade would apply for one theme, in source order. With
- * `boost`, the `prefers-contrast: more` rules join at their real position —
- * which is why they can override the base and not the other way round. */
-function tier(theme: Theme, boost = false): string {
-  const parts: string[] = [];
-  for (const b of TOP) {
-    if (b.selector.startsWith("@")) {
-      if (!boost || !b.selector.includes("prefers-contrast")) continue;
-      for (const inner of blocks(b.body)) {
-        if (applies(inner.selector, theme)) parts.push(inner.body);
-      }
-      continue;
-    }
-    if (applies(b.selector, theme)) parts.push(b.body);
-  }
-  return parts.join("\n");
-}
-
-/** Resolves `var(--bw-x)` / `var(--kit-x)` hops before reading the hex, and
- * takes the LAST declaration in the tier — the one the cascade lands on. */
-function hex(scope: string, name: string, depth = 0): string {
-  const re = new RegExp(`(?<![-\\w])${name}:\\s*([^;]+);`, "g");
-  let v: string | null = null;
-  for (const m of scope.matchAll(re)) v = m[1].trim();
-  if (v === null) throw new Error(`missing ${name}`);
-  if (/^#[0-9a-fA-F]{6}$/.test(v)) return v;
-  const alias = v.match(/^var\(\s*(--[a-z0-9-]+)\s*\)$/);
-  if (alias && depth < 4) {
-    /* kit names never resolve inside tokens.css — the kit is one flat :root
-     * carrying explicit -light-/-dark- names, so the theme is already in the
-     * name by the time we get here. */
-    return hex(alias[1].startsWith("--kit-") ? kitCss : scope, alias[1], depth + 1);
-  }
-  throw new Error(`unresolvable ${name}: ${v}`);
-}
-
-function chan(c: number): number {
-  const s = c / 255;
-  return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-}
-function relLum(h: string): number {
-  return (
-    0.2126 * chan(parseInt(h.slice(1, 3), 16)) +
-    0.7152 * chan(parseInt(h.slice(3, 5), 16)) +
-    0.0722 * chan(parseInt(h.slice(5, 7), 16))
-  );
-}
-function contrast(a: string, b: string): number {
-  const la = relLum(a);
-  const lb = relLum(b);
-  const [hi, lo] = la > lb ? [la, lb] : [lb, la];
-  return (hi + 0.05) / (lo + 0.05);
-}
-
-const TEXT_FLOOR = 4.5;
-const GRAPHIC_FLOOR = 3;
+import {
+  GRAPHIC_FLOOR,
+  TEXT_FLOOR,
+  TIERS,
+  ratio,
+  tier,
+} from "./_tokens";
 
 /* Every surface a direction figure is ever painted on, enumerated both ways
  * (consumers of bg-*, then consumers of text-up/text-down) in the 2026-08-05
@@ -145,16 +55,6 @@ const GRAPHIC_FLOOR = 3;
  * TEXT genuinely renders on it in five places, not zero. */
 const SURFACES = ["--bw-tile", "--bw-page", "--bw-popover"] as const;
 
-/* The four tiers that can reach a screen. The boost pair is not decoration:
- * a user who asks the OS for more contrast gets these and nothing else, so
- * they carry the same floors. */
-const TIERS: [string, string][] = [
-  ["light", tier("light")],
-  ["dark", tier("dark")],
-  ["light + prefers-contrast", tier("light", true)],
-  ["dark + prefers-contrast", tier("dark", true)],
-];
-
 describe("chart stroke clears the 3:1 graphical floor (§9)", () => {
   /* Measured 2026-08-07 after the stroke moved to the accent foreground:
    *   light 4.53 tile / 4.26 page · dark 6.78 / 7.47
@@ -163,9 +63,8 @@ describe("chart stroke clears the 3:1 graphical floor (§9)", () => {
    * whole reason --bw-accent and --bw-accent-fg are two tokens. */
   for (const [name, scope] of TIERS) {
     it(`the chart stroke is not washed out on ${name}`, () => {
-      const line = hex(scope, "--bw-line");
-      expect(contrast(line, hex(scope, "--bw-tile"))).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
-      expect(contrast(line, hex(scope, "--bw-page"))).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
+      expect(ratio(scope, "--bw-line", "--bw-tile")).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
+      expect(ratio(scope, "--bw-line", "--bw-page")).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
     });
   }
 
@@ -175,8 +74,8 @@ describe("chart stroke clears the 3:1 graphical floor (§9)", () => {
   for (const token of ["--bw-ref-cd", "--bw-ref-policy"]) {
     for (const [name, scope] of TIERS) {
       it(`${token} clears the stroke floor on ${name}`, () => {
-        expect(contrast(hex(scope, token), hex(scope, "--bw-tile"))).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
-        expect(contrast(hex(scope, token), hex(scope, "--bw-page"))).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
+        expect(ratio(scope, token, "--bw-tile")).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
+        expect(ratio(scope, token, "--bw-page")).toBeGreaterThanOrEqual(GRAPHIC_FLOOR);
       });
     }
   }
@@ -187,7 +86,7 @@ describe("direction colours clear the 4.5:1 TEXT floor on every surface they sit
     for (const token of ["--bw-up", "--bw-down"]) {
       for (const surface of SURFACES) {
         it(`${name} ${token} is legible as text on ${surface}`, () => {
-          expect(contrast(hex(scope, token), hex(scope, surface))).toBeGreaterThanOrEqual(TEXT_FLOOR);
+          expect(ratio(scope, token, surface)).toBeGreaterThanOrEqual(TEXT_FLOOR);
         });
       }
     }
@@ -211,9 +110,7 @@ describe("prefers-contrast: more never lowers contrast (§9, 2026-08-06 a11y pas
     for (const token of TOKENS) {
       for (const surface of SURFACES) {
         it(`${theme} ${token} gains on ${surface}`, () => {
-          expect(contrast(hex(more, token), hex(more, surface))).toBeGreaterThan(
-            contrast(hex(base, token), hex(base, surface)),
-          );
+          expect(ratio(more, token, surface)).toBeGreaterThan(ratio(base, token, surface));
         });
       }
     }
