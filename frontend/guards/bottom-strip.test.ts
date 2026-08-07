@@ -39,18 +39,21 @@ describe("the anchors are a level, a slope and a forward", () => {
 
 describe("it is chrome, not content", () => {
   it("fixed to the viewport bottom, above the card", () => {
-    /* `inset-x-0` 이 아니라 `left-sidebar right-0` 이다 [2026-08-07]. 사이드바가
-       창 높이를 끝까지 쓰는 기둥이 되면서 이 띠가 그 위를 가로지르면 기둥이
-       잘려 보인다 — macOS 의 사이드바도 창 바닥까지 내려간다. "뷰포트 바닥에
-       고정된 크롬" 이라는 주장은 그대로고, 왼쪽 끝이 창이 아니라 사이드바의
-       오른쪽 모서리가 됐을 뿐이다. */
-    expect(strip).toMatch(/fixed bottom-0 left-sidebar right-0 z-40/);
+    /* 왼쪽 끝이 창이 아니라 **사이드바의 오른쪽 모서리**다 [2026-08-07].
+       사이드바가 창 높이를 끝까지 쓰는 기둥이 되면서, 이 띠가 그 위를
+       가로지르면 기둥이 잘려 보인다 — macOS 의 사이드바도 창 바닥까지
+       내려간다. 사이드바를 접으면 창 끝까지 간다.
+       두 클래스가 **글자 그대로** 있어야 한다: Tailwind 는 소스 텍스트를
+       읽으므로 런타임에 조립된 이름은 생성된 적 없는 규칙을 가리킨다. */
+    expect(strip).toMatch(/fixed bottom-0 right-0 z-40/);
+    expect(strip).toContain('"left-sidebar"');
+    expect(strip).toContain('"left-0"');
     /* ONCE, not twice. It was twice while the two states were separate
        subtrees returned from separate branches; pass B made collapse/expand
        animate, which needs both contents mounted inside ONE fixed container
        so the height can interpolate between them. The two inner layers are
        absolutely positioned within it. */
-    expect(strip.match(/fixed bottom-0 left-sidebar right-0 z-40/g)).toHaveLength(1);
+    expect(strip.match(/fixed bottom-0 right-0 z-40/g)).toHaveLength(1);
     expect(strip.match(/absolute inset-x-0 top-0/g)).toHaveLength(2);
   });
 

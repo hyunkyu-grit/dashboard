@@ -98,6 +98,18 @@
    * 알럿·알림처럼 글자가 많고 떠 있는 면이 이걸 쓴다. */
   --bw-mat: var(--kit-materials-light-regular-fill-0);
 
+  /* 창 신호등 — 닫기만 [OWNER, 2026-08-07 — "팝업창에 해당하는 것에 신호등을
+   * 넣고 기본으로는 신호등 넣지마"]. 떠 있는 창(백테스트)에만 붙는다. 셸의
+   * 툴바에는 없다: 브라우저 안의 화면이라 창을 소유하지 않고, 닫을 수도 옮길
+   * 수도 없는 신호등은 그림이다.
+   *
+   * 값은 킷의 것이고 **실제 macOS 와 미묘하게 다르다** (#FF5F57 아님).
+   * Design.MD §1.1 이 "기억으로 쓰면 틀린다" 고 적어 뒀고, 이 값은 `.sketch`
+   * 페이지 JSON 을 직접 파싱해 읽은 것이라 토큰 export 에는 없다 — 그래서
+   * 여기에 하드코딩한다. 비활성은 라이트 검정 15% / 다크 흰 17%. */
+  --bw-wc-close: #ff5c60;
+  --bw-wc-inactive: color-mix(in srgb, #000000 15%, transparent);
+
   /* Semantic direction (§9) — red up / blue down (Toss convention). These are
    * used as change-number TEXT, so both must clear 4.5:1, not just the 3:1 mark
    * floor. Up was #f04452 (3.71:1 on white — the one colour covering most of
@@ -231,6 +243,7 @@
   --bw-glass-edge: color-mix(in srgb, #ffffff 14%, transparent);
   --bw-sep: color-mix(in srgb, #ffffff 20%, transparent);
   --bw-mat: var(--kit-materials-dark-regular-fill-0);
+  --bw-wc-inactive: color-mix(in srgb, #ffffff 17%, transparent);
 
   /* Direction — lighter red/blue clear 4.5:1 on the dark tile (#0064ff is
    * only ~3.4:1 there, on the surfaces as of the 2026-08-05 pass). */

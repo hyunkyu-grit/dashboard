@@ -91,6 +91,7 @@ import {
 } from "./motion";
 import { CHART_PAD, type ChartMark, PreviewChart } from "./PreviewChart";
 import { GROUP_LABEL, type Group, type Row } from "./rows";
+import { WindowControls } from "./WindowControls";
 import { useCdReference } from "./useCdReference";
 
 /* Money, the way a Korean desk reads it: 억 / 만, never 12 raw digits.
@@ -1612,22 +1613,18 @@ export function BacktestWindow({
         onPointerDown={onHeaderPointerDown}
         onPointerMove={onHeaderPointerMove}
         onPointerUp={onHeaderPointerUp}
-        className="flex shrink-0 cursor-grab touch-none select-none items-baseline gap-2 border-b border-edge bg-popover px-5 py-3"
+        className="flex shrink-0 cursor-grab touch-none select-none items-center gap-2 border-b border-edge bg-popover px-5 py-3"
       >
+        {/* 신호등이 **맨 앞**이다 [OWNER, 2026-08-07]. macOS 는 창 컨트롤을
+            leading edge 에 두고, 그건 오른쪽 끝의 × 를 옮긴 것이 아니라 이
+            표면이 창이라는 선언이다. 닫기 하나만 두는 이유는
+            ui/WindowControls.tsx 에 적혀 있다. */}
+        <WindowControls onClose={onClose} />
         <span className="text-[17px] font-bold">백테스트</span>
-        <span className="text-[13px] opacity-50">
+        <span className="text-[13px] text-ink-2">
           그때 들어갔으면 지금 얼마였을까
         </span>
         <span className="flex-1" />
-        <button
-          type="button"
-          onClick={onClose}
-          onPointerDown={(e) => e.stopPropagation()}
-          title="닫기"
-          className="cursor-pointer rounded-control px-2 text-[15px] opacity-50 hover:opacity-100"
-        >
-          ×
-        </button>
       </div>
       <div className="min-h-[420px] flex-1 overflow-y-auto p-6 pt-4">
         <ErrorBoundary fallback="백테스트 화면을 그리지 못했어요">

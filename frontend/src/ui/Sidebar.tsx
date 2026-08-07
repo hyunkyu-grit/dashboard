@@ -1,164 +1,165 @@
 "use client";
 
-/* 좌측 사이드바 — 가로 탭 스트립을 대신한다 [OWNER, 2026-08-07].
+/* 좌측 사이드바 — 이 제품의 **유일한** 탐색 [OWNER, 2026-08-07].
  *
- * 정보구조는 그대로다. 여덟 개의 탭이 그대로 여덟 개의 항목이고, 고르는 것도
- * 같고, 고른 뒤에 나오는 화면도 같다. 바뀐 것은 그것들이 어디에 어떻게 놓이냐
- * 하나뿐이다. DESIGN §2 의 "list-first 가로 탭 스트립" 은 폐기됐다.
+ * 최상위가 섹션 넷이고, Backtest 아래에 종목군 다섯이 접힌다.
+ *
+ *   Main         기존 전체 — 3열 오버뷰
+ *   Backtest  ▾  기존 자산군. 여기서 하는 일이 행 → 차트 → 백테스트다.
+ *     아웃라이트 · 스프레드 · 버터플라이 · 포워드 · 변동성
+ *   Simulation   기존 시뮬레이션
+ *   Lab          기존 연구실
+ *
+ * 구조는 `Codex\mockups` 가 이미 그려 둔 것을 조합했다 — sauron.html 의
+ * `.sidebar`/`.sb-item`/`.gl` 에, defense.html 의 디스클로저 그룹
+ * (`.sb-header.disc` + `.disclosure` + `.sb-sub`). 새 패턴은 없다.
+ *
+ * 앱 이름은 없다 [OWNER — "sauron은 예명이야"].
  *
  * ── 킷 ────────────────────────────────────────────────────────────────────
- * Sidebars/Light/Medium. 폭 240(세 크기 공통), 헤더 20, 항목 32.
- * HIG Sidebars: 사이드바도 Liquid Glass 레이어에 뜨지만 "appears more opaque in
- * larger elements like sidebars to preserve legibility" — 그래서 툴바(70%)보다
- * 불투명한 Sidebar/Background/Active(80%)를 쓴다. 킷이 그렇게 두 벌을 준다.
- *
- * HIG 가 요구하는 것 중 지킨 것:
- *   · 계층은 두 단계까지 — 여기는 그룹 헤더 + 항목, 두 단계다.
- *   · 아이콘은 앱 액센트 색.
- *   · 하단에 중요한 것을 두지 않는다 — 창을 내리면 아래가 잘린다.
- *     그래서 여기 바닥에는 아무것도 없다.
- *   · 기본으로 숨기지 않는다. 접는 장치를 두지 않았다 — 항목이 여덟 개라
- *     접을 이유가 없고, 접기는 그 자체로 사용자가 틀릴 수 있는 칸이다. */
+ * Sidebars/Light/Medium. 폭 240(세 크기 공통), 항목 32, 중첩은 16 들여쓰기.
+ * HIG Sidebars: "In general, show no more than two levels of hierarchy" —
+ * 정확히 두 단계다. 사이드바도 유리 레이어에 뜨지만 "appears more opaque in
+ * larger elements like sidebars to preserve legibility" 라 툴바(70%)보다
+ * 불투명한 Sidebar/Background/Active(80%)를 쓴다.
+ * 하단에는 아무것도 두지 않는다 ("Avoid putting critical information or actions
+ * at the bottom of a sidebar" — 창을 내리면 아래가 잘린다). */
 
+import { Fragment } from "react";
+
+import type { Group } from "./rows";
+import { GROUP_TABS, SECTIONS, type SectionId } from "./tabs";
 import { Z_SIDEBAR } from "./layers";
-import type { Row } from "./rows";
-import {
-  INSTRUMENT_TABS,
-  TOOL_TABS,
-  type TabDef,
-  type TabId,
-} from "./tabs";
 
-/* 그룹 헤더 — 위계를 **크기와 굵기로** 만든다.
- *
- * 킷도 목업도 여기에 Labels/2 Secondary(잉크 50%)를 쓴다. 그런데 유리 사이드바
- * 위에서 그게 라이트 **3.07:1** 이다 [측정 2026-08-07, guards/glass-contrast].
- * 이 제품은 라벨을 4.5:1 에 묶어 두고 있고, 이건 내가 방금 새로 넣은 글자다 —
- * 원래 가로 스트립에는 그룹 헤더가 없었다. 이미 있던 미달 자리를 물려받는 것과
- * 새 미달 자리를 만드는 것은 다르다.
- *
- * 그래서 흐리게 하는 대신 **작게** 한다. 11px(킷 08 Subheadline) semibold 에
- * 잉크 85% — 항목은 13px regular 이므로 둘은 여전히 다른 층위이고, 헤더 쪽이
- * 14.6:1 로 읽힌다. 위계를 명도로만 만들면 대비와 맞바꾸게 되는데 크기로
- * 만들면 그 거래가 없다. 킷의 타입 스케일 안에 있고 10px 최소도 넘는다. */
-const GROUP_HEADER =
-  "mt-3 flex h-sb-header items-center px-2 text-[11px] font-semibold text-ink-1";
-
-/** 다리 수 글리프. 아웃라이트 한 점 · 스프레드 두 점 · 버터플라이 세 점.
- * 새 그림이 아니라 이 제품이 이미 쓰는 사실을 14px 로 옮긴 것이다. 다리 수가
- * 상품을 가르지 않는 탭(전체·포워드·변동성·도구)은 칸을 비운다. */
-function Legs({ n }: { n: 1 | 2 | 3 }) {
-  // 세로 가운데 한 줄. 3다리는 가운데가 벨리라 크게 그린다 — 버터플라이는
-  // 1:2:1 이고 그 2가 벨리다.
-  const r = [2, 2, 2];
-  if (n === 3) r[1] = 3;
-  return (
-    <svg viewBox="0 0 14 14" className="size-3.5 shrink-0" aria-hidden>
-      {Array.from({ length: n }, (_, i) => (
-        <circle
-          key={i}
-          cx={n === 1 ? 7 : 7 + (i - (n - 1) / 2) * 4.5}
-          cy={7}
-          r={r[i]}
-          fill="currentColor"
-        />
-      ))}
-    </svg>
-  );
-}
-
+/** 항목 하나. 최상위와 중첩이 같은 칸(32)을 쓰고 들여쓰기로만 갈린다 — 킷의
+ * Level 0 / L1+ 가 그렇게 되어 있다. */
 function Item({
-  tab,
+  label,
+  glyph,
   on,
-  count,
   onPick,
+  sub,
+  disclosure,
 }: {
-  tab: TabDef;
+  label: string;
+  glyph: string;
   on: boolean;
-  count?: number;
-  onPick: (id: TabId) => void;
+  onPick: () => void;
+  sub?: boolean;
+  /** Backtest 에만 붙는 접기 삼각형. 항목 자체와 **다른 버튼**이다 — 누르면
+   * 섹션이 바뀌는 것과 접히는 것은 다른 일이고, 하나에 둘을 걸면 접으려다
+   * 화면이 바뀐다. */
+  disclosure?: { open: boolean; onToggle: () => void };
 }) {
   return (
     <li>
-      <button
-        type="button"
-        aria-current={on ? "page" : undefined}
-        onClick={() => onPick(tab.id)}
-        /* 선택은 액센트 채움 + 잉크 라벨. 흰 라벨은 채움 주황 위에서 2.31:1 이라
-           쓸 수 없다 — --bw-on-accent 는 킷 Labels/1 Primary(검정 85%)이고
-           7.61:1 이다.
-           호버는 잉크 5%. 목업은 3%(킷 Fills/4)를 쓰는데 이 제품에서 3% 상태
-           표시는 화면에서 안 보인다는 것이 이미 측정돼 있다 — 5%가 하한이다. */
-        className={`flex h-sb-item w-full items-center gap-2 rounded-control px-2 text-left transition-colors ${
-          on
-            ? "bg-accent font-semibold text-on-accent"
-            : "text-ink hover:bg-ink-5"
-        }`}
-      >
-        {/* HIG Sidebars: "By default, sidebar icons use your app's accent color." */}
-        <span className={on ? "text-on-accent" : "text-accent-fg"}>
-          {tab.legs ? <Legs n={tab.legs} /> : <span className="block size-3.5" />}
-        </span>
-        <span className="min-w-0 truncate">{tab.label}</span>
-        {count !== undefined && (
-          /* 배지는 종목군에만 단다. 이 자리에 맞는 사실이 있는 탭이 그것들뿐이다 —
-             "포워드 9개" 는 고르기 전에 알면 쓸모가 있고, "시뮬레이션 1개" 는
-             아무 뜻도 없다. defense.html 은 모든 항목에 배지를 달았지만 그건
-             모든 항목이 목록인 화면이었다. */
+      <div className="flex items-center">
+        {disclosure && (
+          <button
+            type="button"
+            aria-expanded={disclosure.open}
+            aria-label={`종목군 ${disclosure.open ? "접기" : "펼치기"}`}
+            onClick={disclosure.onToggle}
+            className="flex size-4 shrink-0 items-center justify-center text-[8px] text-ink-2 transition-transform hover:text-ink"
+            style={{ transform: disclosure.open ? undefined : "rotate(-90deg)" }}
+          >
+            ▼
+          </button>
+        )}
+        <button
+          type="button"
+          aria-current={on ? "page" : undefined}
+          onClick={onPick}
+          /* 선택은 액센트 채움 + 잉크 라벨. 흰 라벨은 채움 주황 위에서 2.31:1
+             이라 쓸 수 없다 — `--bw-on-accent` 는 킷 Labels/1 Primary(검정 85%)
+             이고 7.61:1 이다.
+             호버는 잉크 5%. 목업은 3%(킷 Fills/4)인데 이 제품에서 3% 상태
+             표시는 화면에서 안 보인다는 것이 이미 측정돼 있다. */
+          className={`flex h-sb-item min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-left transition-colors ${
+            sub ? "text-[13px]" : ""
+          } ${
+            on ? "bg-accent font-semibold text-on-accent" : "text-ink hover:bg-ink-5"
+          }`}
+        >
+          {/* HIG Sidebars: "By default, sidebar icons use your app's accent
+              color." 문자는 목업이 고른 것 그대로. */}
           <span
-            className={`ml-auto shrink-0 tabular-nums ${
-              on ? "text-on-accent/70" : "text-ink-2"
+            aria-hidden
+            className={`w-3.5 shrink-0 text-center text-[10px] ${
+              on ? "text-on-accent" : "text-accent-fg"
             }`}
           >
-            {count}
+            {glyph}
           </span>
-        )}
-      </button>
+          <span className="min-w-0 truncate">{label}</span>
+        </button>
+      </div>
     </li>
   );
 }
 
 export function Sidebar({
-  tab,
-  onTab,
-  rows,
+  section,
+  group,
+  onSection,
+  onGroup,
+  groupsOpen,
+  onGroupsOpen,
 }: {
-  tab: TabId;
-  onTab: (id: TabId) => void;
-  rows: Row[];
+  section: SectionId;
+  /** 지금 켜져 있는 종목군. Backtest 섹션이 아니면 null. */
+  group: Group | null;
+  onSection: (s: SectionId) => void;
+  onGroup: (g: Group) => void;
+  groupsOpen: boolean;
+  onGroupsOpen: (v: boolean) => void;
 }) {
-  /* 종목군 항목에만 부른다 — 도구 쪽은 배지를 안 단다. 그래서 여기에는 "이 탭이
-     행 목록인가" 를 다시 묻는 분기가 없다. 한 번 넣었다가 지웠는데, 부르는 쪽이
-     이미 그걸 정하고 있어서 죽은 가지였다. */
-  const count = (t: TabDef): number | undefined =>
-    (t.id === "all"
-      ? rows.length
-      : rows.filter((r) => r.group === t.id).length) || undefined;
-
   return (
     <nav
-      aria-label="종목군과 도구"
+      aria-label="탐색"
       /* 위쪽을 툴바 높이만큼 비운다 — 툴바는 격자 행을 차지하지 않고 이 위를
-         지나가는 레이어라, 비우지 않으면 첫 헤더가 바 밑에 깔린다. */
+         지나가는 레이어라, 비우지 않으면 첫 항목이 바 밑에 깔린다. */
       className={`${Z_SIDEBAR} w-sidebar shrink-0 overflow-y-auto border-r border-sep bg-glass-side px-2 pb-3 pt-toolbar backdrop-blur-[40px] backdrop-saturate-[1.8]`}
     >
-      <h2 className={GROUP_HEADER}>종목군</h2>
-      <ul className="list-none">
-        {INSTRUMENT_TABS.map((t) => (
-          <Item
-            key={t.id}
-            tab={t}
-            on={tab === t.id}
-            count={count(t)}
-            onPick={onTab}
-          />
-        ))}
-      </ul>
-      <h2 className={GROUP_HEADER}>도구</h2>
-      <ul className="list-none">
-        {TOOL_TABS.map((t) => (
-          <Item key={t.id} tab={t} on={tab === t.id} onPick={onTab} />
-        ))}
+      <ul className="mt-2 list-none">
+        {SECTIONS.map((s) => {
+          const isBacktest = s.id === "backtest";
+          return (
+            <Fragment key={s.id}>
+              <Item
+                label={s.label}
+                glyph={s.glyph}
+                /* Backtest 는 종목군이 켜져 있을 때 **자신은 안 켜진다** —
+                   켜진 것은 그 아래 한 줄이고, 부모까지 같이 칠하면 무엇이
+                   골라졌는지가 두 개가 된다. */
+                on={section === s.id && !(isBacktest && group !== null)}
+                onPick={() => onSection(s.id)}
+                disclosure={
+                  isBacktest
+                    ? { open: groupsOpen, onToggle: () => onGroupsOpen(!groupsOpen) }
+                    : undefined
+                }
+              />
+              {isBacktest && groupsOpen && (
+                <li>
+                  {/* 중첩 목록. 킷의 L1+ 는 16 들여쓰기다. */}
+                  <ul className="list-none pl-4">
+                    {GROUP_TABS.map((t) => (
+                      <Item
+                        key={t.id}
+                        label={t.label}
+                        glyph={t.glyph}
+                        on={group === t.id}
+                        onPick={() => onGroup(t.id)}
+                        sub
+                      />
+                    ))}
+                  </ul>
+                </li>
+              )}
+            </Fragment>
+          );
+        })}
       </ul>
     </nav>
   );

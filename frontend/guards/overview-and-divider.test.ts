@@ -19,7 +19,7 @@ import {
   type Group,
   type Row,
 } from "../src/ui/rows";
-import { INSTRUMENT_TABS, TOOL_TABS } from "../src/ui/tabs";
+import { GROUP_TABS, SECTIONS, sectionOf, tabForSection } from "../src/ui/tabs";
 
 const table = code("ui/InstrumentTable.tsx");
 const overview = code("ui/OverviewColumns.tsx");
@@ -260,27 +260,40 @@ describe("the tab set", () => {
      * 확신의 순서라는 규칙은 그대로이고 축만 돌았다. 정의도 표에서 나가
      * ui/tabs.ts 로 갔으므로 소스를 정규식으로 긁는 대신 배열을 그대로
      * import 한다 — 표의 텍스트를 읽던 것이 애초에 우회로였다. */
-    const found = [...INSTRUMENT_TABS, ...TOOL_TABS].map((t) => t.id);
-    expect(found).toEqual([
-      "all",
+    expect(GROUP_TABS.map((t) => t.id)).toEqual([
       "outright",
       "spread",
       "fly",
       "forward",
       "vol",
-      "sim",
-      "lab",
     ]);
   });
 
-  it("종목군과 도구가 갈려 있다 — 사이드바의 두 그룹", () => {
-    /* 행을 거르는 탭과 자기 화면을 그리는 탭은 하는 일이 다르다. 가로
-     * 스트립일 때는 여덟 개가 한 줄이라 그 차이를 말할 자리가 없었는데,
-     * 세로가 되면서 헤더가 생겼다. 섞이면 헤더가 거짓말이 된다. */
-    expect(INSTRUMENT_TABS.every((t) => t.id !== "sim" && t.id !== "lab")).toBe(
-      true,
-    );
-    expect(TOOL_TABS.map((t) => t.id)).toEqual(["sim", "lab"]);
+  it("탐색이 두 층이다 — 섹션 넷, 그 중 Backtest 아래에만 종목군", () => {
+    /* [OWNER, 2026-08-07 · 2차] 툴바에 섹션을 올렸다가 되돌렸다. 둘 다
+     * 사이드바에 있고, 위가 섹션 아래가 종목군이다 — HIG Sidebars 가 허용하는
+     * 두 단계 그대로. 탐색이 두 곳에 나뉘면 무엇이 무엇의 하위인지가 사라진다. */
+    expect(SECTIONS.map((s) => s.id)).toEqual([
+      "main",
+      "backtest",
+      "simulation",
+      "lab",
+    ]);
+    // 종목군은 섹션 이름을 쓰지 않는다 — 둘이 겹치면 한 목록에 같은 말이 둘이다
+    const sectionIds = new Set<string>(SECTIONS.map((s) => s.id));
+    expect(GROUP_TABS.some((t) => sectionIds.has(t.id))).toBe(false);
+  });
+
+  it("섹션과 탭이 서로를 정확히 되돌린다", () => {
+    /* `tab` 하나가 상태이고 섹션은 거기서 유도된다. 왕복이 안 맞으면 화면에
+     * 없는 조합(Backtest 인데 종목군 없음)이 표현 가능해진다. */
+    expect(sectionOf("all")).toBe("main");
+    expect(sectionOf("sim")).toBe("simulation");
+    expect(sectionOf("lab")).toBe("lab");
+    for (const t of GROUP_TABS) expect(sectionOf(t.id)).toBe("backtest");
+    // Backtest 는 마지막으로 보던 종목군으로 돌아간다
+    expect(tabForSection("backtest", "spread")).toBe("spread");
+    expect(tabForSection("main", "spread")).toBe("all");
   });
 });
 

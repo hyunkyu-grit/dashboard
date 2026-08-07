@@ -39,6 +39,9 @@
   --color-sep: var(--bw-sep);
   /* 콘텐츠 레이어의 표준 재질 — 유리가 아니다 (HIG §6.1) */
   --color-mat: var(--bw-mat);
+  /* 창 신호등. 떠 있는 창에만 쓰인다 (ui/WindowControls.tsx) */
+  --color-wc-close: var(--bw-wc-close);
+  --color-wc-inactive: var(--bw-wc-inactive);
 
   /* 셸 기하. `--spacing-*` 네임스페이스라 `w-sidebar` `h-toolbar` 로 나온다 —
    * Tailwind 는 소스 텍스트를 읽으므로 이 이름들이 컴포넌트에 글자 그대로

@@ -74,20 +74,14 @@ describe("유리 위의 글자는 뒤의 면까지 합쳐서 재야 한다", () 
   }
 });
 
-describe("사이드바의 그룹 헤더는 흐림이 아니라 크기로 물러난다", () => {
-  /* 종목군 / 도구. 킷도 목업도 여기에 Labels/2 Secondary(잉크 50%)를 쓰는데,
+describe("사이드바가 이차 잉크를 라벨로 쓰지 않는다", () => {
+  /* 사이드바 항목의 라벨. 킷도 목업도 이차 잉크(50%)를 여러 자리에 쓰는데,
    * 유리 사이드바 위에서 그 값이 **라이트 3.07:1** 이다 [측정 2026-08-07].
-   * 이 제품이 라벨에 두는 바닥은 4.5 이고, 이 글자는 2026-08-07 에 새로
-   * 생겼다 — 가로 탭 스트립에는 그룹 헤더가 없었다. 이미 미달인 자리를
-   * 물려받는 것과 새 미달 자리를 만드는 것은 다르다.
+   * 이 제품이 라벨에 두는 바닥은 4.5 다.
    *
-   * 그래서 잉크 85% 를 쓰고 크기를 11px 로 내렸다(ui/Sidebar.tsx GROUP_HEADER).
-   * 항목이 13px 이므로 위계는 그대로이고, 그 위계를 명도로 사지 않는다.
+   * 측정 [2026-08-07, 바탕면 기준]: ink-1 은 light 14.62 · dark 19.04.
    *
-   * 측정 [2026-08-07, 바탕면 기준]: light 14.62 · dark 19.04.
-   *
-   * ink-2 를 쓰면 안 된다는 것이 이 테스트의 주장이다. 값이 아니라 **어느
-   * 토큰이 이 자리에 오느냐** 를 잡는다. */
+   * 값이 아니라 **어느 토큰이 라벨 자리에 오느냐** 를 잡는다. */
   for (const [name, scope] of TIERS) {
     const side = () =>
       over(
@@ -95,35 +89,31 @@ describe("사이드바의 그룹 헤더는 흐림이 아니라 크기로 물러�
         parse(resolve(scope, "--bw-tile")),
       );
 
-    it(`${name}: 헤더에 쓰는 잉크가 본문 바닥을 넘는다`, () => {
-      expect(contrast(resolve(scope, "--bw-ink-1"), side())).toBeGreaterThanOrEqual(
+    it(`${name}: 라벨에 쓰는 잉크가 본문 바닥을 넘는다`, () => {
+      expect(contrast(resolve(scope, "--bw-ink"), side())).toBeGreaterThanOrEqual(
         TEXT_FLOOR,
       );
     });
 
-    it(`${name}: ink-2 는 이 자리에 못 온다 — 라이트에서 바닥 미달`, () => {
+    it(`${name}: ink-2 는 라벨 자리에 못 온다 — 라이트에서 바닥 미달`, () => {
       if (!name.startsWith("light")) return;
       expect(contrast(resolve(scope, "--bw-ink-2"), side())).toBeLessThan(TEXT_FLOOR);
     });
   }
 
-  it("사이드바가 실제로 ink-1 을 쓴다", () => {
-    /* 위 두 주장은 토큰의 성질일 뿐이고, 컴포넌트가 무엇을 쓰는지는 소스에서
-     * 봐야 한다. Tailwind 는 소스 텍스트를 읽으므로 클래스가 글자 그대로 있다. */
-    /* 선언 하나만 떼어서 본다. `[\s\S]*?` 로 파일 전체를 훑으면 아래쪽 배지의
-       `text-ink-2` 까지 걸려서, 부정 단언이 늘 참이 된다 — 처음에 그렇게 썼고
-       그래서 실패했다. */
+  it("사이드바가 라벨에 ink-2 를 쓰지 않는다", () => {
+    /* 토큰의 성질만으로는 부족하다 — 컴포넌트가 무엇을 쓰는지는 소스에서 봐야
+     * 한다. Tailwind 는 소스 텍스트를 읽으므로 클래스가 글자 그대로 있다.
+     *
+     * `text-ink-2` 는 딱 한 곳 허용된다: 디스클로저 삼각형. 그건 글자가 아니라
+     * 마크라 3:1 만 넘으면 되고, 잉크 50%는 유리 위에서 3.07:1 이다.
+     *
+     * 앞 판은 `const GROUP_HEADER` 하나만 검사했는데 헤더가 둘이라 두 번째가
+     * 옛 클래스를 그대로 들고 통과했다. 이제 파일 전체에서 개수를 센다. */
     const sidebar = code("ui/Sidebar.tsx");
-    const decl = /const GROUP_HEADER =([^;]*);/.exec(sidebar)?.[1];
-    expect(decl).toBeDefined();
-    expect(decl).toContain("text-ink-1");
-    expect(decl).not.toContain("text-ink-2");
-
-    /* 그리고 **두 헤더가 다** 그 상수를 쓴다. 상수만 검사하다가 실제로 놓쳤다:
-       종목군은 옮겼는데 도구는 옛 클래스를 그대로 들고 있었고, 위 단언은 그걸
-       통과시켰다. 헤더가 둘이면 둘 다 세야 한다. */
-    const heads = sidebar.match(/<h2 className=\{GROUP_HEADER\}>/g) ?? [];
-    expect(heads).toHaveLength(2);
-    expect(sidebar).not.toMatch(/<h2 className="/);
+    const hits = [...sidebar.matchAll(/text-ink-2/g)];
+    expect(hits.length, "ink-2 는 디스클로저 글리프 한 곳만").toBeLessThanOrEqual(1);
+    expect(sidebar).toContain("text-on-accent");
+    expect(sidebar).toContain("text-ink hover:bg-ink-5");
   });
 });

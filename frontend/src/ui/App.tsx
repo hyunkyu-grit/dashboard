@@ -39,7 +39,13 @@ import { classify } from "./gloss";
 import { diagramSpec } from "./payReceiveModel";
 import { BacktestWindow, BOOKABLE_GROUPS } from "./BacktestWindow";
 import { InstrumentTable } from "./InstrumentTable";
-import type { TabId } from "./tabs";
+import {
+  DEFAULT_GROUP,
+  sectionOf,
+  tabForSection,
+  type SectionId,
+  type TabId,
+} from "./tabs";
 import { Z_MODAL, Z_TOOLBAR } from "./layers";
 import {
   EASE_OUT,
@@ -53,7 +59,7 @@ import { PreviewPane } from "./PreviewPane";
 import { Sidebar } from "./Sidebar";
 import { clearBtPatch, mergeQuery } from "./urlState";
 import { PAGE_R, PAGE_X, PAGE_X_PX } from "./pageGutter";
-import { buildRows, type Row } from "./rows";
+import { buildRows, type Group, type Row } from "./rows";
 import { useIsWide } from "./useIsWide";
 import { useMeasure } from "./useMeasure";
 
@@ -151,58 +157,17 @@ function PreviewSheet({
   );
 }
 
-/** Dataset freshness in the chrome (§ Pass C). The file is static, so without
- * this the product shows yesterday's curve as today's silently. Loudness scales
- * with age (KR business days): same-day is quiet (just the date), one day behind
- * is a visible chip, more than that is a red-outlined chip that says so in
- * words. Monochrome-first: the border + weight + words carry the meaning; the
- * red is a layer (§5). Polls so the age advances even on a long-lived tab. */
-function DataFreshness() {
-  const { data } = useQuery({
-    queryKey: ["health"],
-    queryFn: fetchHealth,
-    refetchInterval: 5 * 60_000,
-    staleTime: 60_000,
-  });
-  const f = data?.freshness;
-  if (!f) return null;
-
-  const asOf = `${f.asOf} 기준`;
-  const title = `데이터 최신일 ${f.asOf} · 오늘 ${f.today} · ${f.ageBusinessDays}영업일 경과`;
-
-  if (f.level === "stale") {
-    return (
-      <span
-        title={title}
-        className="rounded-control border border-up px-2 py-0.5 text-[12px] font-semibold text-up"
-      >
-        데이터 {f.ageBusinessDays}영업일 지연 — 최신 커브가 아닐 수 있어요 · {f.asOf}
-      </span>
-    );
-  }
-  if (f.level === "behind") {
-    return (
-      <span
-        title={title}
-        className="rounded-control border border-edge px-2 py-0.5 text-[12px] text-ink"
-      >
-        {asOf} · {f.ageBusinessDays}영업일 지연
-      </span>
-    );
-  }
-  return (
-    <span title={title} className="text-[12px] opacity-45">
-      {asOf}
-    </span>
-  );
-}
 
 function Header({
   events,
   onFocus,
+  sidebarOpen,
+  onSidebarOpen,
 }: {
   events: EventCluster[];
   onFocus: (id: string) => void;
+  sidebarOpen: boolean;
+  onSidebarOpen: (v: boolean) => void;
 }) {
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
@@ -215,29 +180,38 @@ function Header({
          본문 위를 지나간다 — HIG Materials 가 유리를 "floats above the content
          layer" 라고 쓰는 그대로다.
 
-         ⚠ 지금은 그 밑을 지나가는 것이 없다. 사이드바는 항목 여덟 개라 스크롤이
-         안 생기고, 본문 기둥은 위쪽을 이 바 높이만큼 비운다. 그래서 유리가
-         합성하는 것은 움직이는 콘텐츠가 아니라 바탕면이고, 눈에는 살짝 밝은
-         띠로만 보인다 — 목업의 주석이 경계하던 "장식이 된 유리" 가 이 상태다.
-         진짜로 비추게 하려면 표의 **스크롤 컨테이너**가 바 밑에서 시작해야
-         하는데, 그 위에 스크리너 칩이라는 고정 머리가 있어서 머리를 함께
-         스크롤시키든 바 밑으로 넣든 배치를 바꿔야 한다. 이번 일은 표면이라
-         거기까지 가지 않았다. [미해결, 2026-08-07]
+         HIG Toolbars 의 세 영역:
+           leading   사이드바 토글
+           center    (비어 있다)
+           trailing  변화 로그 · 테마
+         Main/Backtest/Simulation/Lab 은 **사이드바에 있다** [OWNER, 2026-08-07 —
+         "상단에 저거 넣지마"]. 한 번 여기 세그먼티드로 올렸다가 되돌렸다:
+         탐색이 두 곳에 나뉘면 무엇이 무엇의 하위인지가 사라진다.
+         **창 신호등은 여기 없다** [OWNER, 2026-08-07 — "기본으로는 신호등 넣지
+         마"]. 이건 브라우저 안의 화면이라 창을 소유하지 않는다. 신호등은 진짜로
+         닫고 옮길 수 있는 것, 즉 떠 있는 창(백테스트·크게 보기)에만 붙는다.
+         **앱 이름도 없다** [OWNER — "sauron은 예명이야"]. 그래서 HIG 의
+         "Don't title windows with your app name" 과 부딪힐 일 자체가 없어졌다.
+         데이터 신선도는 최하단 지표 바로 내려갔다 [OWNER].
 
          HIG Toolbars: "Reduce the use of toolbar backgrounds and tinted
-         controls" — 불투명 띠 대신 유리를 두고, 아래 경계는 헤어라인 하나다.
-         앞 판의 `.kit-scroll-edge` 레이어는 여기서 은퇴한다: 그건 유리가 없을
-         때 유리 흉내를 내던 것이고, 이제 진짜 유리가 그 자리에 있다. */
+         controls" — 불투명 띠 대신 유리를 두고, 아래 경계는 헤어라인 하나다. */
       className={`absolute inset-x-0 top-0 ${Z_TOOLBAR} flex h-toolbar items-center gap-3 border-b border-glass-edge bg-glass-bar backdrop-blur-[40px] backdrop-saturate-[1.8] ${PAGE_X}`}
     >
-      {/* HIG Toolbars: "Don't title windows with your app name." 그런데 이건
-          창 제목이 아니라 제품의 워드마크이고, 이 제품은 창이 하나다 — 무엇을
-          보고 있는지는 사이드바가 말한다. 그 규칙과 부딪히는 자리라 남겨 둔다.
-          [OWNER 판단 필요 — 목업도 같은 자리에 같은 워드마크를 둔다] */}
-      <span className="text-[17px] font-bold text-ink">Sauron</span>
-      <span className="text-[13px] text-ink-2">KRW IRS</span>
+      {/* HIG Toolbars: "Elements that let people … show or hide a sidebar
+          appear at the far leading edge." 킷 툴바 버튼은 24×24 무테이고,
+          호버·눌림에서만 면이 생긴다. */}
+      <button
+        type="button"
+        onClick={() => onSidebarOpen(!sidebarOpen)}
+        aria-pressed={sidebarOpen}
+        aria-label={sidebarOpen ? "사이드바 숨기기" : "사이드바 보이기"}
+        title={sidebarOpen ? "사이드바 숨기기" : "사이드바 보이기"}
+        className="flex size-6 shrink-0 items-center justify-center rounded-control text-[13px] text-ink-1 transition-colors hover:bg-ink-6 active:bg-ink-4"
+      >
+        ◧
+      </button>
       <span className="flex-1" />
-      <DataFreshness />
       {/* TOOLBAR BUTTON GROUP, observed in the kit (Titlebars and Toolbars -
           Medium - Buttons, sizes 1 through 6): adjacent toolbar controls do not
           sit as separate pills. They share ONE 24px capsule and are divided by
@@ -343,6 +317,29 @@ export function App() {
     setPinned(null);
     setHovered(null);
   }, []);
+
+  /* 두 층의 탐색 [OWNER, 2026-08-07 · 2차]. 툴바가 섹션을, 사이드바가 종목군을
+   * 고른다. 상태는 여전히 `tab` 하나이고 섹션은 거기서 유도된다 — 둘로 쪼개면
+   * "Backtest 인데 종목군이 없음" 같은, 화면에 없는 조합이 표현 가능해진다.
+   *
+   * `lastGroup` 만 따로 든다. Backtest 를 다시 누를 때 늘 아웃라이트로
+   * 되돌리면, 스프레드를 보다 Main 을 한 번 들른 사람이 자리를 잃는다. */
+  const section = sectionOf(tab);
+  const [lastGroup, setLastGroup] = useState<Group>(DEFAULT_GROUP);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [groupsOpen, setGroupsOpen] = useState(true);
+
+  const onSection = useCallback(
+    (s: SectionId) => onTab(tabForSection(s, lastGroup)),
+    [onTab, lastGroup],
+  );
+  const onGroup = useCallback(
+    (g: Group) => {
+      setLastGroup(g);
+      onTab(g);
+    },
+    [onTab],
+  );
 
   const wide = useIsWide();
 
@@ -506,6 +503,10 @@ export function App() {
     (id: string) => {
       const row = rows.find((r) => r.id === id);
       if (!row) return;
+      // 변화 로그에서 뛰어들면 그 종목의 종목군으로 간다 — Backtest 섹션이
+      // 되고, `lastGroup` 도 같이 옮겨야 다음에 Backtest 를 눌렀을 때 여기로
+      // 돌아온다.
+      setLastGroup(row.group);
       setTab(row.group);
       setPinned(row);
       requestAnimationFrame(() =>
@@ -547,11 +548,28 @@ export function App() {
         The reduced-motion blanket in globals.css zeroes this transition with
         `!important`, which reaches an inline style. */}
     <div className="relative flex h-screen overflow-hidden bg-tile">
-        <Header events={summary?.events ?? []} onFocus={focusFromChangeLog} />
+        <Header
+          events={summary?.events ?? []}
+          onFocus={focusFromChangeLog}
+          sidebarOpen={sidebarOpen}
+          onSidebarOpen={setSidebarOpen}
+        />
 
         {/* 사이드바 — 창 높이를 끝까지 쓴다. 지표 바가 그 오른쪽에서 시작하므로
-            (BottomStrip) 아래쪽을 비워 줄 필요가 없다. */}
-        <Sidebar tab={tab} onTab={onTab} rows={rows} />
+            (BottomStrip) 아래쪽을 비워 줄 필요가 없다.
+            Backtest 가 아닌 섹션에서는 아무 종목군도 켜지 않는다. 그래도 목록은
+            남겨 둔다 — 누르면 그 종목군으로 가는 것이 곧 Backtest 로 가는
+            것이고, 사라졌다 나타나는 기둥은 화면을 두 번 흔든다. */}
+        {sidebarOpen && (
+          <Sidebar
+            section={section}
+            group={section === "backtest" ? (tab as Group) : null}
+            onSection={onSection}
+            onGroup={onGroup}
+            groupsOpen={groupsOpen}
+            onGroupsOpen={setGroupsOpen}
+          />
+        )}
 
         {/* 본문 기둥. 지표 바의 높이만큼 바닥을 비우는 것은 여기다 — 예전에는
             루트가 그 패딩을 들고 있어서 사이드바까지 같이 짧아졌다. */}
@@ -746,6 +764,7 @@ export function App() {
             onPin={setPinned}
             collapsed={stripCollapsed}
             onCollapsed={setStripCollapsed}
+            sidebarOpen={sidebarOpen}
           />
         </ErrorBoundary>
       )}

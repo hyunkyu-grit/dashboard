@@ -25,6 +25,7 @@ import { useSyncExternalStore } from "react";
 
 import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 
+import { DataFreshness } from "./DataFreshness";
 import { ENTER, FAST, instant } from "./motion";
 import { PAGE_X } from "./pageGutter";
 import type { Row } from "./rows";
@@ -63,11 +64,14 @@ export function BottomStrip({
   onPin,
   collapsed,
   onCollapsed,
+  sidebarOpen,
 }: {
   rows: Row[];
   onPin: (row: Row) => void;
   collapsed: boolean;
   onCollapsed: (v: boolean) => void;
+  /** 사이드바가 펼쳐져 있나 — 이 띠의 왼쪽 끝이 거기서 시작한다. */
+  sidebarOpen: boolean;
 }) {
   const anchors = ANCHOR_IDS.map((id) => rows.find((r) => r.id === id)).filter(
     (r): r is Row => !!r,
@@ -95,8 +99,11 @@ export function BottomStrip({
     <motion.div
       /* 사이드바 오른쪽에서 시작한다 [2026-08-07]. 사이드바는 창 높이를 끝까지
          쓰는 기둥이고, 그 위를 이 띠가 가로지르면 기둥이 잘려 보인다. macOS 의
-         사이드바도 창 바닥까지 내려간다. */
-      className="fixed bottom-0 left-sidebar right-0 z-40 overflow-hidden border-t border-edge bg-tile"
+         사이드바도 창 바닥까지 내려간다. 사이드바를 접으면 창 끝까지 간다 —
+         Tailwind 는 소스 텍스트를 읽으므로 두 클래스가 글자 그대로 있어야 한다. */
+      className={`fixed bottom-0 right-0 z-40 overflow-hidden border-t border-edge bg-tile ${
+        sidebarOpen ? "left-sidebar" : "left-0"
+      }`}
       initial={false}
       animate={{ height: collapsed ? STRIP_H.collapsed : STRIP_H.open }}
       transition={instant(ENTER, reduced)}
@@ -152,6 +159,13 @@ export function BottomStrip({
         >
           ▾
         </button>
+        {/* 데이터 신선도는 여기가 자리다 [OWNER, 2026-08-07 — "최하단으로 빼고"].
+            툴바에 있던 것을 내렸다. 앵커들과 같은 성질의 사실이고 — 지금 보고
+            있는 숫자가 언제 것이냐 — 앵커가 왼쪽 무리라면 이건 반대쪽 끝이다.
+            HIG 가 "바닥에 중요한 걸 두지 마라" 라고 하는 것은 **사이드바** 고,
+            이 띠는 창 바닥에 고정된 상태 표시줄이라 그 규칙 밖이다. */}
+        <span className="flex-1" />
+        <DataFreshness />
       </motion.div>
     </motion.div>
   );

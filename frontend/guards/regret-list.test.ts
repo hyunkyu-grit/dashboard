@@ -25,7 +25,7 @@ import { code, identifiers } from "./_source";
 import type { RegretEntry } from "../src/lib/api";
 import { directionLabel, fmtKrw } from "../src/ui/BacktestWindow";
 import { RegretLine } from "../src/ui/RegretLab";
-import { INSTRUMENT_TABS, TOOL_TABS } from "../src/ui/tabs";
+import { SECTIONS } from "../src/ui/tabs";
 
 const entry = (over: Partial<RegretEntry> = {}): RegretEntry => ({
   date: "2026-07-27",
@@ -94,15 +94,15 @@ describe("라고 할 때 살걸 — served, not derived (§16)", () => {
 });
 
 describe("연구실 — the incubation tab stays FAR RIGHT", () => {
-  it("lab is the LAST entry of the tab list [OWNER, 2026-08-04]", () => {
+  it("Lab is the LAST section [OWNER, 2026-08-04]", () => {
     /* Tab order is the product's order of confidence: experiments enter at
      * the far edge and GRADUATE toward the front on trader feedback. A lab tab
      * that drifted forward without that feedback is the violation.
      *
      * 2026-08-07: 탭 스트립이 사이드바가 되면서 "맨 오른쪽"이 "맨 아래"가
-     * 됐다 — 규칙은 그대로고 축만 돌았다. 정의는 ui/tabs.ts 로 옮겼으므로
-     * 소스를 정규식으로 긁지 않고 배열을 직접 읽는다. */
-    const ids = [...INSTRUMENT_TABS, ...TOOL_TABS].map((t) => t.id);
+     * 됐고, 이름도 연구실 → Lab 이 됐다 [OWNER]. 규칙은 그대로고 축만 돌았다.
+     * 정의는 ui/tabs.ts 이므로 소스를 정규식으로 긁지 않고 배열을 직접 읽는다. */
+    const ids = SECTIONS.map((s) => s.id);
     expect(ids.length).toBeGreaterThan(1);
     expect(ids[ids.length - 1]).toBe("lab");
   });
