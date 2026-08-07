@@ -646,12 +646,19 @@ export function InstrumentTable({
            outer margins. */
         /* 행 목록일 때는 **그룹박스 안**이라 좌우 거터도 아래 여백도 박스가
            갖는다 — 여기서 또 주면 테두리 안쪽에 빈 띠가 두 겹 생긴다. */
+        /* 오버뷰가 거터를 **되찾았다** [2026-08-07]. `justify-evenly` + max-content
+           일 때는 남는 폭을 네 등분해서 바깥 여백을 스스로 만들었고, 그래서
+           컨테이너 패딩을 주면 그 여백에 더해져 좌우가 안쪽 간격보다 넓어졌다.
+           1fr 로 바꾸면서 나눠 줄 남는 폭이 없어졌으므로 바깥 여백은 이제
+           컨테이너가 진다 — 안 주면 박스가 사이드바와 창 가장자리에 붙는다. */
         className={`min-h-0 flex-1 overflow-y-auto overflow-x-auto ${
-          isOverview || isSim
+          isSim
             ? "flex flex-col pb-8 pt-3"
-            : isLab
-              ? `${PAGE_X} pb-8 pt-3`
-              : "px-3 pb-3 pt-1 [scrollbar-gutter:stable]"
+            : isOverview
+              ? `flex flex-col pb-8 pt-3 ${PAGE_X}`
+              : isLab
+                ? `${PAGE_X} pb-8 pt-3`
+                : "px-3 pb-3 pt-1 [scrollbar-gutter:stable]"
         }`}
       >
         {isSim ? (

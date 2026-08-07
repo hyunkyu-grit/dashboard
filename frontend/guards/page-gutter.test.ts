@@ -56,14 +56,15 @@ describe("the page gutter", () => {
     expect(code("ui/BottomStrip.tsx")).not.toMatch(/className="[^"]*\bpx-3\b/);
   });
 
-  it("the 전체 overview takes NO gutter — its own distribution supplies it", () => {
-    /* `justify-evenly` splits the leftover into four equal gaps: edge, column,
-     * column, edge. Container padding sits OUTSIDE the box those gaps are
-     * computed in, so adding it would make the two outer margins wider than
-     * the inner ones — the exact asymmetry `evenly` is there to remove. */
+  it("the 전체 overview TAKES the gutter now — its columns no longer supply it", () => {
+    /* 뒤집혔다 [2026-08-07]. `justify-evenly` + max-content 는 남는 폭을 네
+     * 등분해 바깥 여백을 스스로 만들었고, 그래서 컨테이너 패딩이 금지였다.
+     * 열이 `minmax(0,1fr)` 이 되면서 나눠 줄 남는 폭이 사라졌으므로 — 그게
+     * 잘림을 고친 방법이다 — 바깥 여백은 컨테이너가 져야 한다. 안 주면 박스가
+     * 사이드바와 창 가장자리에 붙는다. */
     const overview = code("ui/OverviewColumns.tsx");
-    expect(overview).toContain("justify-evenly");
-    expect(overview).not.toMatch(/PAGE_X/);
+    expect(overview).not.toContain("justify-evenly");
+    expect(overview).not.toMatch(/PAGE_X/); // 여전히 열 자신은 거터를 모른다
     /* 거터를 누가 갖느냐가 2026-08-07 에 갈렸다. 행 목록은 **그룹박스** 안에
      * 들어갔고 거터는 그 박스를 감싸는 래퍼(`Boxed`)가 갖는다 — 스크롤
      * 컨테이너가 또 주면 테두리 안쪽에 빈 띠가 두 겹 생긴다. 오버뷰·시뮬레이션은
@@ -72,6 +73,8 @@ describe("the page gutter", () => {
     expect(table).toMatch(/<GroupBox className="h-full">/);
     expect(table).toMatch(/`min-h-0 flex-1 pb-3 pt-3 \$\{PAGE_X\}`/);
     expect(table).toMatch(/isLab\s*\?\s*`\$\{PAGE_X\}/);
+    // 오버뷰도 이제 컨테이너에서 거터를 받는다
+    expect(table).toMatch(/isOverview\s*\r?\n?\s*\?\s*`flex flex-col pb-8 pt-3 \$\{PAGE_X\}`/);
   });
 
   it("the scrollbar gutter is off on the overview and on for the table", () => {
@@ -81,6 +84,7 @@ describe("the page gutter", () => {
      * that shows up as a wider RIGHT margin than left. */
     const table = code("ui/InstrumentTable.tsx");
     expect(table).toMatch(/"px-3 pb-3 pt-1 \[scrollbar-gutter:stable\]"/);
-    expect(table).toMatch(/isOverview \|\| isSim\s*$|isOverview \|\| isSim/m);
+    // 오버뷰·시뮬레이션·연구실은 그 예약 폭을 쓰지 않는다 — 셋 다 다른 팔이다
+    expect(table).toMatch(/isSim\s*\r?\n?\s*\? "flex flex-col pb-8 pt-3"/);
   });
 });

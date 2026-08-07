@@ -212,24 +212,25 @@ describe("the 전체 overview", () => {
     expect(overview).not.toContain("onAvail");
   });
 
-  it("sits left / centre / right with EQUAL outer and inner gaps", () => {
-    /* `evenly`, not `between`: `between` pins the outer columns to the window
-     * edge, so the two separations came to 138px against a 20px margin.
-     * `evenly` splits the leftover four ways — edge, column, column, edge —
-     * which is the only distribution that makes those equal. The gutter guard
-     * (guards/page-gutter.test.ts) holds the other half of this: the
-     * container must add NO padding, or it lands on the outer two only. */
-    expect(overview).toContain("justify-evenly");
+  it("세 열이 폭을 나눠 진다 — 아무도 잘리지 않는다", () => {
+    /* `max-content` + `justify-evenly` 였다 [OWNER, 2026-07-31 — 좌/중/우 고정,
+     * 바깥 여백 = 안쪽 간격]. 그 배치는 폭이 남을 때만 성립한다: 세 열이 각자
+     * 필요한 만큼 요구하므로 합이 화면보다 넓으면 셸의 `overflow-hidden` 에
+     * **잘리고** 스크롤바도 안 생겨 오른쪽 열에 닿을 방법이 없다.
+     * [OWNER, 2026-08-07 — "100%에서 잘린다"]
+     *
+     * `minmax(0,1fr)` 는 남는 폭을 나누는 것이 아니라 **모자란 폭을 나눠
+     * 진다** — 셋이 같이 좁아진다. sauron.html `.ov` 가 그 값이다. 바깥 여백은
+     * 이제 컨테이너의 거터가 지므로 `justify-*` 는 할 일이 없다. */
+    expect(overview).toMatch(/lg:grid-cols-3/);
+    expect(overview).not.toContain("max-content");
+    expect(overview).not.toContain("justify-evenly");
     expect(overview).not.toContain("justify-between");
-    expect(overview).not.toContain("justify-start");
   });
 
-  it("columns hug their content — the gap between them is the grid gap", () => {
-    /* Equal thirds put ~145px of trailing slack between one column's last
-     * number and the next column's first: the widest gap on screen, three
-     * times over, in the place with nothing in it. */
-    expect(overview).toMatch(/lg:grid-cols-\[repeat\(3,max-content\)\]/);
-    expect(overview).not.toMatch(/repeat\(3,minmax\(0,1fr\)\)/);
+  it("열 사이는 목업의 14px 간격이다", () => {
+    // sauron.html `.ov { gap: 14px }`
+    expect(overview).toMatch(/gap-3\.5/);
   });
 
   it("the charts sit on the floor of the column", () => {
@@ -250,7 +251,7 @@ describe("the 전체 overview", () => {
      * their layout and neither is the table, so they take the same arm.
      * 그 팔이 그룹박스 도입으로 세 갈래가 됐다 — 오버뷰·시뮬(박스 없음),
      * 연구실(박스 없음, 거터 있음), 행 목록(박스 안). */
-    expect(table).toMatch(/isOverview \|\| isSim\s*\r?\n?\s*\? "flex flex-col pb-8 pt-3"/);
+    expect(table).toMatch(/isOverview\s*\r?\n?\s*\?\s*`flex flex-col pb-8 pt-3/);
   });
 });
 

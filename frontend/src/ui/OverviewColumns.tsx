@@ -393,7 +393,18 @@ export function OverviewColumns({
    * Below the two-pane breakpoint they stack: three full instrument tables
    * side by side on a laptop half-screen is unreadable at any type size. */
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 justify-evenly gap-y-8 lg:grid-cols-[repeat(3,max-content)]">
+    /* `max-content` → **`minmax(0,1fr)`** [OWNER, 2026-08-07 — "100%에서
+       잘린다"].
+       max-content 는 세 열이 각자 필요한 만큼 요구하고, 합이 화면보다 넓으면
+       셸의 `overflow-hidden` 에 **잘린다** — 스크롤바도 안 생기니 오른쪽 열에
+       닿을 방법이 없었다. 그게 이 탭의 결함이었다.
+       sauron.html 이 그 자리에 적어 둔 것이 정확히
+       `.ov { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px }`
+       이다. 1fr 은 남는 폭을 나누는 것이 아니라 **모자란 폭을 나눠 진다** —
+       셋이 같이 좁아지고 아무도 잘리지 않는다.
+       `justify-evenly` 는 함께 은퇴한다: 트랙이 폭을 다 쓰므로 나눠 줄 여백이
+       없고, 바깥 여백은 이제 스크롤 컨테이너의 거터가 진다. */
+    <div className="grid min-h-0 flex-1 grid-cols-1 gap-3.5 lg:grid-cols-3">
       {OVERVIEW_GROUPS.map((g) => (
         <Column key={g} group={g} rows={rows} asOf={asOf} policy={policy} />
       ))}
