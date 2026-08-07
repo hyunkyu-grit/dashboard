@@ -96,7 +96,16 @@ export function ResultsStage({ onEdit }: { onEdit: () => void }) {
     /* 구획이 그룹박스가 되면서 사이를 **간격**이 가른다 [2026-08-07]. 예전에는
        각 Section 이 위쪽 헤어라인을 그렸고 부모는 간격이 없었다 — 박스끼리
        붙어 있으면 테두리 둘이 2px 선 하나로 보인다. */
-    <div className={`flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pb-8 pt-3 ${PAGE_X}`}>
+    /* `overflow-anchor: none` [2026-08-07]. 결과가 스태거로 들어오는 동안
+       내용의 높이가 계단식으로 자라는데, 크롬의 스크롤 앵커링이 "보이던 것을
+       제자리에" 두려고 스크롤을 따라 내린다 — 창으로 띄우고 나서 첫 화면이
+       127px 내려간 채로 열리는 것으로 드러났다. 인라인일 때는 스크롤 컨테이너가
+       화면만큼 길어서 눈에 안 띄었다.
+       앵커링을 끄는 것이 맞는 이유: 여기서는 지킬 "보던 위치" 가 없다. 결과는
+       방금 도착한 것이고 맨 위부터 읽는다. */
+    <div
+      className={`flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pb-8 pt-3 [overflow-anchor:none] ${PAGE_X}`}
+    >
       <motion.div
         className="flex flex-col gap-3"
         initial="hidden"

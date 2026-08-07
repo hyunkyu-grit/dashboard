@@ -72,13 +72,8 @@ import { fmtDelta, fmtLevel } from "@/lib/format";
 import { AnimatedNumber } from "./AnimatedNumber";
 import { loadBacktestMemory, saveBacktestMemory } from "./backtestMemory";
 import { ErrorBoundary } from "./ErrorBoundary";
-import {
-  clampWindowPos,
-  initialWindowPos,
-  rememberWindowPos,
-  WINDOW_W,
-  type WinPos,
-} from "./floatingWindow";
+import { WINDOW_W } from "./floatingWindow";
+import { useFloatingWindow } from "./useFloatingWindow";
 import { Z_WINDOW } from "./layers";
 import { LinkedLegsChart } from "./LinkedLegsChart";
 import {
@@ -1463,35 +1458,10 @@ export function BacktestWindow({
    * every move derives the new position from that snapshot, clamped against
    * the viewport read AT THE EVENT. Pointer capture keeps the moves flowing
    * to the header even when the cursor outruns it. No effects involved. */
-  const [pos, setPos] = useState<WinPos>(() =>
-    typeof window === "undefined"
-      ? { left: 0, top: 56 }
-      : initialWindowPos({ w: window.innerWidth, h: window.innerHeight }),
-  );
-  const dragRef = useRef<{ px: number; py: number; base: WinPos } | null>(null);
-  const onHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { px: e.clientX, py: e.clientY, base: pos };
-  };
-  const onHeaderPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const d = dragRef.current;
-    if (!d) return;
-    setPos(
-      rememberWindowPos(
-        clampWindowPos(
-          {
-            left: d.base.left + e.clientX - d.px,
-            top: d.base.top + e.clientY - d.py,
-          },
-          { w: window.innerWidth, h: window.innerHeight },
-        ),
-      ),
-    );
-  };
-  const onHeaderPointerUp = () => {
-    dragRef.current = null;
-  };
+  // 기계는 `useFloatingWindow` 로 나갔다 [2026-08-07] — 시뮬레이션 결과 창이
+  // 같은 것을 쓴다. 두 벌이면 한쪽만 클램프를 고치는 날이 오고, 그 창은 끌어서
+  // 되돌릴 수 없는 곳으로 나간다.
+  const { pos, dragHandlers } = useFloatingWindow("backtest");
 
   /* Dialog keyboard convention: Escape closes the window (the × was the only
    * way out). One press peels ONE layer: this handler yields while the
@@ -1610,9 +1580,7 @@ export function BacktestWindow({
           clamp keeps on-screen. The close button opts out of starting a
           drag; there is no resize and no minimize on purpose. */}
       <div
-        onPointerDown={onHeaderPointerDown}
-        onPointerMove={onHeaderPointerMove}
-        onPointerUp={onHeaderPointerUp}
+        {...dragHandlers}
         className="flex shrink-0 cursor-grab touch-none select-none items-center gap-2 border-b border-edge bg-popover px-5 py-3"
       >
         {/* 신호등이 **맨 앞**이다 [OWNER, 2026-08-07]. macOS 는 창 컨트롤을

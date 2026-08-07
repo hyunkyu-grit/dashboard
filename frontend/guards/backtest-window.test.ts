@@ -170,13 +170,34 @@ describe("mechanics, pinned in source", () => {
   });
 
   it("drag is the header's alone, with event-time snapshots and a clamp", () => {
-    expect((win.match(/onPointerDown=\{onHeaderPointerDown\}/g) ?? []).length).toBe(1);
-    expect(win).toMatch(/setPointerCapture/);
-    expect(win).toMatch(/base: pos/); // position snapshotted AT the event
-    expect(win).toMatch(/clampWindowPos/);
-    // no resize, no minimize
-    expect(win).not.toMatch(/resize/i);
-    expect(win).not.toMatch(/minimi[zs]e/i);
+    /* 기계가 `ui/useFloatingWindow.ts` 로 나갔다 [2026-08-07] — 시뮬레이션
+     * 결과 창이 같은 것을 쓴다. 두 벌이면 한쪽만 클램프를 고치는 날이 오고,
+     * 그 창은 끌어서 되돌릴 수 없는 곳으로 나간다.
+     *
+     * 주장은 그대로다. 창 쪽에서는 **끌 수 있는 면이 헤더 하나뿐**임을 보고,
+     * 훅 쪽에서 스냅샷과 클램프를 본다. */
+    expect((win.match(/\{\.\.\.dragHandlers\}/g) ?? []).length).toBe(1);
+    expect(win).toMatch(/useFloatingWindow\("backtest"\)/);
+
+    const hook = code("ui/useFloatingWindow.ts");
+    expect(hook).toMatch(/setPointerCapture/);
+    expect(hook).toMatch(/base: pos/); // position snapshotted AT the event
+    expect(hook).toMatch(/clampWindowPos/);
+
+    // no resize, no minimize — 창에도 훅에도 없다
+    for (const src of [win, hook]) {
+      expect(src).not.toMatch(/resize/i);
+      expect(src).not.toMatch(/minimi[zs]e/i);
+    }
+  });
+
+  it("두 창이 서로의 자리를 훔치지 않는다", () => {
+    /* 위치 기억이 모듈 변수 **하나**였다. 창이 하나뿐일 때는 맞는 모양이었지만,
+     * 시뮬레이션 결과 창이 생기면서 틀린 모양이 됐다 — 하나를 옮기면 다른
+     * 하나가 다음에 열릴 때 거기로 따라간다. */
+    const geom = code("ui/floatingWindow.ts");
+    expect(geom).toMatch(/new Map<WindowKey, WinPos>/);
+    expect(geom).toMatch(/key: WindowKey/);
   });
 
   it("reduced motion renders without a transition (instant)", () => {

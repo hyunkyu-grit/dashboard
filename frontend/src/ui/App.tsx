@@ -336,6 +336,7 @@ export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [groupsOpen, setGroupsOpen] = useState(true);
 
+
   const onSection = useCallback(
     (s: SectionId) => onTab(tabForSection(s, lastGroup)),
     [onTab, lastGroup],
@@ -771,6 +772,11 @@ export function App() {
           </ErrorBoundary>
         )}
       </AnimatePresence>
+
+      {/* 시뮬레이션 결과 창은 **여기 없다** — 시뮬레이션 서브트리 안에서 뜬다
+          (sim/ui/SimulationFlow.tsx). App 이 띄우려면 그 스토어를 정적으로
+          물어야 하고, 그러면 시뮬레이션 번들이 첫 바이트에 실린다
+          (guards/lazy-chart.test.ts 가 잡는다). 그 대가는 아래 주석에 있다. */}
 
       <CommandBar onJump={scrollTo} />
 

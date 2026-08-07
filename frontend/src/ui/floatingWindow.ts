@@ -44,17 +44,30 @@ export function defaultWindowPos(viewport: { w: number; h: number }): WinPos {
   );
 }
 
-let remembered: WinPos | null = null;
+/* 창마다 자기 자리를 기억한다 [2026-08-07].
+ *
+ * 전에는 모듈 변수 하나였다. 창이 하나뿐일 때는 맞는 모양이었지만 시뮬레이션
+ * 결과 창이 생기면서 틀린 모양이 됐다 — 하나를 옮기면 다른 하나가 다음에 열릴
+ * 때 거기로 따라간다. "reader가 놓아 둔 자리로 돌아온다" 는 약속이 창마다
+ * 성립해야 하므로 키를 받는다.
+ *
+ * 여전히 localStorage 가 아니다: 다른 모니터에서 복원된 위치는 아무도 못 찾는
+ * 창이 된다. */
+export type WindowKey = "backtest" | "simulation";
 
-/** The session's position, or the default for this viewport. */
-export function initialWindowPos(viewport: { w: number; h: number }): WinPos {
-  return remembered
-    ? clampWindowPos(remembered, viewport)
-    : defaultWindowPos(viewport);
+const remembered = new Map<WindowKey, WinPos>();
+
+/** The session's position for this window, or the default for this viewport. */
+export function initialWindowPos(
+  viewport: { w: number; h: number },
+  key: WindowKey,
+): WinPos {
+  const seen = remembered.get(key);
+  return seen ? clampWindowPos(seen, viewport) : defaultWindowPos(viewport);
 }
 
 /** Record where the reader put it (already clamped by the caller). */
-export function rememberWindowPos(pos: WinPos): WinPos {
-  remembered = pos;
+export function rememberWindowPos(pos: WinPos, key: WindowKey): WinPos {
+  remembered.set(key, pos);
   return pos;
 }
