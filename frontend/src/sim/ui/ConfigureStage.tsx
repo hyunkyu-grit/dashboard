@@ -47,6 +47,7 @@ import {
 import { ANCHOR_TENOR_CHOICES, type AnchorTenor } from "@/sim/types/simulation-port";
 
 import { CurvePreview } from "./CurvePreview";
+import { PositionsPanel } from "./PositionsPanel";
 
 const ANCHOR_OPTIONS = ANCHOR_TENOR_CHOICES.map((t) => ({ value: t, label: t }));
 
@@ -87,11 +88,17 @@ export function ConfigureStage() {
   // 쓰면 북 브릿지가 다음 렌더에서 도로 덮어쓴다 — 브릿지가 그 필드의 주인이다.
   const setUserBaseDate = useSimulationDataStore((s) => s.setUserBaseDate);
   const userBaseDate = useSimulationDataStore((s) => s.userBaseDate);
-  const { latestDataDate } = useBook();
+  const manualPositions = useSimulationDataStore((s) => s.manualPositions);
+  const { latestDataDate, parQuotes, bookError } = useBook();
 
   const anchor: AnchorTenor = params.anchorTenor ?? "3Y";
   const anchorError = anchorConversionError(params);
-  const canRun = inputs.positions.length > 0 && status !== "running" && !anchorError;
+  /* `inputs.positions`가 아니라 손입력 줄을 직접 본다. 둘은 대개 같지만,
+   * 기준일에 이미 만기가 지난 줄은 브릿지가 걸러내므로 다를 수 있다 — 그
+   * 경우 "포지션은 넣었는데 실행이 안 된다"가 되고, 사유는 아래 각 행의
+   * 에러 문구가 말한다. 여기서는 실행 가능한 줄이 하나라도 있으면 된다. */
+  const runnable = inputs.positions.length > 0;
+  const canRun = runnable && status !== "running" && !anchorError;
 
   // 지평이나 목표가 바뀌면 30일 간격의 중간 웨이포인트를 다시 만든다.
   // **손대지 않은** 중간점은 {simDays, baseShockBp}를 향한 직선 위의 값으로
@@ -161,8 +168,13 @@ export function ConfigureStage() {
           </div>
           <div className="flex items-center justify-between gap-3 pb-4">
             <span className="text-body text-ink-2">
+              {/* 넣은 줄과 평가되는 줄이 다를 수 있다(기준일에 만기가 지난
+                  줄은 빠진다). 다르면 그 사실을 말한다 — 조용히 줄어든 건수는
+                  결과를 잘못 읽게 만든다. */}
               {inputs.positions.length > 0
-                ? `스왑 ${inputs.positions.length.toLocaleString()}건을 평가해요`
+                ? manualPositions.length > inputs.positions.length
+                  ? `스왑 ${inputs.positions.length}건을 평가해요 — ${manualPositions.length - inputs.positions.length}건은 기준일에 이미 만기예요`
+                  : `스왑 ${inputs.positions.length}건을 평가해요`
                 : "평가할 포지션이 없어요"}
             </span>
             {/* "오늘로"가 아니라 "최신 데이터로"다. 오늘은 대개 워크북에 없는
@@ -180,6 +192,10 @@ export function ConfigureStage() {
             </p>
           )}
         </Section>
+
+        {/* 포지션이 금리 경로보다 위에 온다. 순서가 질문의 순서다 — 무엇을
+            평가할지 먼저 정하고, 그 다음에 어떤 경로에 둘지 정한다. */}
+        <PositionsPanel baseDate={baseDate} parQuotes={parQuotes} bookError={bookError} />
 
         <Section title="목표 금리">
           <div className="flex flex-col gap-4 pb-4 pt-3">
