@@ -10,10 +10,9 @@
  * 여기서 수식을 다시 쓰지 않는다 — 미리보기가 실행 결과와 다른 규칙을 쓰면
  * 미리보기가 아니라 두 번째 모델이 된다.
  *
- * ─ 범위: 스왑만 ─────────────────────────────────────────────────────────
- * 계열은 IRS와 국고 둘이다. IRS는 실제로 값이 매겨지는 커브고, 국고는 그 커브가
- * 파생되는 앵커(전송 페이로드에서 swapCurve = 국채 커브 + irsSpread)라 설계한
- * 목표가 어디에 꽂히는지 보려면 같이 있어야 한다.
+ * ─ 범위: 스왑만, 계열도 IRS 하나 ─────────────────────────────────────────
+ * 실제로 값이 매겨지는 커브만 그린다. 국고 참조선은 원천 워크북과 함께
+ * 사라졌다 — 아래 FAMILIES의 주석이 그 경위를 적어 뒀다.
  *
  * 시간축 스크러버는 시나리오가 **시간에 대해 모양을 가질 때만** 나온다. 직선
  * 경로에서는 어느 날을 봐도 같은 비율의 평행 이동이라, 스크러버가 조작할 것이
@@ -31,24 +30,32 @@ import { useUiStore } from "@/state/ui";
 import { withAlpha } from "@/sim/theme/bridge";
 import { getSimChartTheme } from "@/sim/lib/chart-theme";
 import { useSimulationPort } from "@/sim/hooks/use-simulation";
-import { useSectorInputQuotes, useSwapInputQuotes } from "@/sim/hooks/use-input-curves";
+import { useSwapInputQuotes } from "@/sim/hooks/use-input-curves";
 import { buildScenarioOverlay, isShapedScenario, type BaseQuote } from "@/sim/lib/input-curve-preview";
 import { buildSimulateRequest } from "@/sim/lib/scenario-curves";
 import { MAX_TENOR_YEARS } from "@/sim/lib/components";
 
-const FAMILIES = [
-  { key: "IRS", label: "IRS" },
-  { key: "국고채", label: "국고" },
-] as const;
+/* IRS 하나뿐이다 [OWNER, 2026-08-07].
+ *
+ * 국고 계열이 여기 있었고 뺐다. 그 선의 원천은 `Credit Matrix Data.xlsx`
+ * (42MB)였는데, 시장 데이터가 이 리포의 `irsdata.xlsx` 하나로 정리되면서
+ * 그 워크북이 삭제됐다. 남겨 뒀다면 /api/credit-curve/series가 500을 내고
+ * 아래 `missing` 배너가 "국고 호가가 없어요"를 영원히 띄웠을 것이다 —
+ * 그건 정보가 아니라 소음이고, 진짜로 하루치 커버리지가 빈 날을 말하려고
+ * 만든 배너를 못 쓰게 만든다.
+ *
+ * 시나리오의 앵커는 여전히 국고다. 그것은 시장 국고 커브를 읽지 않는다 —
+ * lib/scenario-curves.ts의 `tenorSpreadAt`이 사용자가 정한 spread1y/spread10y
+ * 만 받는다. 사라진 것은 참조선이지 앵커가 아니다. */
+const FAMILIES = [{ key: "IRS", label: "IRS" }] as const;
 
 export function CurvePreview() {
   const { params, inputs } = useSimulationPort();
   const baseDate = inputs.baseDate;
 
   const swapQ = useSwapInputQuotes(baseDate);
-  const bondQ = useSectorInputQuotes("국고채", baseDate);
 
-  const [visible, setVisible] = useState<Record<string, boolean>>({ IRS: true, 국고채: true });
+  const [visible, setVisible] = useState<Record<string, boolean>>({ IRS: true });
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
   // 어느 미리보기를 보고 있는지는 포트 스토어에 산다 — 단계를 오가도 유지된다.
@@ -61,17 +68,17 @@ export function CurvePreview() {
   const shownDay = shaped ? (day ?? params.simDays) : params.simDays;
 
   // 계열별 가용성. **호가가 하나도 없는 것과 요청이 실패한 것은 다르다** —
-  // 크레딧 매트릭스는 실패 대신 빈 배열을 돌려주므로, 에러만 보면 국고 계열이
-  // 통째로 사라져도 화면은 아무 말도 하지 않는다. 실제로 그랬다: 워크북의
-  // 커버리지가 IRS보다 하루 짧은 날, 국고 선만 조용히 없어졌다.
+  // 로더가 실패 대신 빈 배열을 돌려주는 경로가 있어서, 에러만 보면 한 계열이
+  // 통째로 사라져도 화면이 아무 말도 안 한다. 실제로 그랬다: 워크북의
+  // 커버리지가 하루 짧은 날 선 하나가 조용히 없어졌다. 계열이 하나 남은
+  // 지금도 규칙은 같다 — 그날 IRS 호가가 없으면 아래 배너가 이름을 말한다.
   const availability = useMemo(() => {
     const has = (q: BaseQuote[] | undefined) =>
       Array.isArray(q) && q.some((x) => typeof x.rate === "number");
     return {
       IRS: { ready: !swapQ.isPending, ok: has(swapQ.data) },
-      국고채: { ready: !bondQ.isPending, ok: has(bondQ.data) },
     } as Record<string, { ready: boolean; ok: boolean }>;
-  }, [swapQ.isPending, swapQ.data, bondQ.isPending, bondQ.data]);
+  }, [swapQ.isPending, swapQ.data]);
 
   const families = useMemo(() => {
     // 10년에서 끊는다 — 북에 그보다 긴 스왑이 없다(lib/components MAX_TENOR_YEARS).
@@ -80,10 +87,8 @@ export function CurvePreview() {
     const out: { key: string; quotes: BaseQuote[] }[] = [];
     if (visible.IRS && availability.IRS.ok && swapQ.data)
       out.push({ key: "IRS", quotes: cap(swapQ.data) });
-    if (visible.국고채 && availability.국고채.ok && bondQ.data)
-      out.push({ key: "국고채", quotes: cap(bondQ.data) });
     return out;
-  }, [visible.IRS, visible.국고채, availability, swapQ.data, bondQ.data]);
+  }, [visible.IRS, availability, swapQ.data]);
 
   /** 켜져 있는데 그 날 호가가 없는 계열. 침묵하지 않고 이름을 말한다. */
   const missing = FAMILIES.filter(
@@ -113,7 +118,7 @@ export function CurvePreview() {
     shockedPct: s.shockedPct,
   }));
 
-  const loading = swapQ.isPending || bondQ.isPending;
+  const loading = swapQ.isPending;
   /** 그릴 것이 하나도 없을 때만 차트 자리를 통째로 문장으로 바꾼다. 한 계열만
    * 없으면 나머지는 그리고 없는 쪽을 아래에서 이름으로 말한다. */
   const nothingToDraw = !loading && families.length === 0;

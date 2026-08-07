@@ -11,6 +11,12 @@ from pathlib import Path
 from ..core.errors import NonBusinessDayError
 from ..core.market_data import MarketSnapshot
 from .csv_loader import common_dates as common_dates_csv, load_fixing_history_csv, load_market_snapshot_csv
+from .irsdata import (
+    IRSDATA_FILE,
+    common_dates_irsdata,
+    load_fixing_history_irsdata,
+    load_market_snapshot_irsdata,
+)
 from .total_data import common_dates_xl, load_fixing_history_xl, load_market_snapshot_xl
 from .true_data import common_dates_xlsx, load_fixing_history_xlsx, load_market_snapshot_xlsx
 
@@ -39,12 +45,23 @@ def _detect_source_type(source: Path) -> str:
     if not source.is_dir():
         if source.suffix.lower() == ".csv":
             return "csv"
+        if source.name == IRSDATA_FILE:
+            return "irsdata"
         if source.name == TRUE_DATA_FILE:
             return "true_data"
         if source.name == TOTAL_DATA_FILE:
             return "total_data"
         return "csv"
-        
+
+    # irsdata.xlsx FIRST [OWNER, 2026-08-07] — this repo's own workbook is the
+    # market source now, and it is the one that will still be there: the other
+    # four were deleted with this ruling. The order matters only while a folder
+    # holds both, which is the moment a stale True Data.xlsx would silently keep
+    # winning and reprice everything by the 1.25-3.75bp the two series differ by
+    # (see loaders/irsdata.py).
+    if (source / IRSDATA_FILE).exists():
+        return "irsdata"
+
     try:
         from .cache import _disk_cache_path
         if _disk_cache_path(source / TRUE_DATA_FILE).exists():
@@ -54,12 +71,12 @@ def _detect_source_type(source: Path) -> str:
     except Exception as e:
         logger.debug(f"Cache path detection failed: {e}")
         pass
-        
+
     if (source / TRUE_DATA_FILE).exists():
         return "true_data"
     if (source / TOTAL_DATA_FILE).exists():
         return "total_data"
-        
+
     return "csv"
 
 
@@ -68,7 +85,10 @@ def load_market_snapshot(source: Path | str, valuation_date: date) -> MarketSnap
     source = Path(source)
     source_type = _detect_source_type(source)
     
-    if source_type == "true_data":
+    if source_type == "irsdata":
+        target = source if source.is_dir() else source.parent
+        return load_market_snapshot_irsdata(target, valuation_date)
+    elif source_type == "true_data":
         target = source if source.is_dir() else source.parent
         return load_market_snapshot_xlsx(target, valuation_date)
     elif source_type == "total_data":
@@ -84,7 +104,10 @@ def load_fixing_history(source: Path | str) -> dict[date, float]:
     source = Path(source)
     source_type = _detect_source_type(source)
 
-    if source_type == "true_data":
+    if source_type == "irsdata":
+        target = source if source.is_dir() else source.parent
+        return load_fixing_history_irsdata(target)
+    elif source_type == "true_data":
         target = source if source.is_dir() else source.parent
         return load_fixing_history_xlsx(target)
     elif source_type == "total_data":
@@ -115,7 +138,10 @@ def list_available_dates(source: Path | str) -> list[date]:
     source = Path(source)
     source_type = _detect_source_type(source)
     
-    if source_type == "true_data":
+    if source_type == "irsdata":
+        target = source if source.is_dir() else source.parent
+        return common_dates_irsdata(target)
+    elif source_type == "true_data":
         target = source if source.is_dir() else source.parent
         return common_dates_xlsx(target)
     elif source_type == "total_data":

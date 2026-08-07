@@ -1,12 +1,27 @@
 """
-Load BOK (Bank of Korea) 기준금리 (base rate) history from "BOK Base Rate.xlsx".
+Load BOK (Bank of Korea) 기준금리 (base rate) history.
 
 Layout: rows 0-2 are headers (title row, then column labels "일자"/"종가"/
-"수정일시"/"적용일자"), data starts at row 3, most recent date first -- same
-shape as Call Rate Data.xlsx/True Data.xlsx's date-indexed block. The source
+"수정일시"/"적용일자"), data starts at row 3, most recent date first. The source
 already carries one row per calendar day (repeating the same rate on every
 day between BOK policy changes), so this is a plain date->rate lookup, not a
 step-function/forward-fill computation.
+
+THE FILE IS `bokbaserate.xlsx` NOW [OWNER, 2026-08-07], not "BOK Base Rate.xlsx".
+
+Those two are the SAME BYTES — md5 2cab5907…, 640,795 bytes both — under two
+names. The simulation shipped one; this monitor already tracked the other in git
+and loads it from `app/policy.py`. When the simulation's five workbooks were
+deleted, this loader went looking for a name that no longer existed and
+`all_rates()` returned {} — which is not an error, by design, so
+`funding_basis.base_rate_at()` silently fell back to the POLICY CONSTANT for
+every date. The historical staircase became a flat 2.75% line and nothing said
+so. Four funding tests caught it (2021-11-24 read 2.75% where the series says
+0.75%), which is the only reason it is not still true.
+
+That failure mode is the point of the fallback and also its cost: absence is a
+legitimate state here, so a wrong PATH looks exactly like a missing file. Keep
+the two names in sync, or keep them equal.
 """
 
 from __future__ import annotations
@@ -21,7 +36,7 @@ from .cache import get_cached
 
 logger = logging.getLogger(__name__)
 
-XLSX_NAME = "BOK Base Rate.xlsx"
+XLSX_NAME = "bokbaserate.xlsx"
 _HEADER_ROWS = 3
 _COL_DATE = 0
 _COL_RATE = 1

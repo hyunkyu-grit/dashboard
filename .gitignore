@@ -12,13 +12,15 @@ data/.cache/
 # It appeared as an untracked file during a data refresh and a `git add -A`
 # would have committed it. It is not data and it disappears when Excel closes.
 ~$*.xls*
-# The simulation workbooks, which came over with irs_pricer. UNTRACKED, unlike
-# this repo's own irsdata/bokbaserate — they total ~50 MB and `Credit Matrix
-# Data.xlsx` alone is 42 MB. xlsx is already compressed, so git cannot delta
-# them: every refresh would store a fresh full copy and the history would grow
-# by 50 MB a day. simulation_project ignored them for exactly this reason and
-# that rationale survives the move. The owner drops them into data/ directly;
-# core/data_watch.py notices the change and clears the derived caches.
+# The five simulation workbooks that came over with irs_pricer were ignored
+# here (~50 MB, `Credit Matrix Data.xlsx` alone 42 MB). They are DELETED now
+# [OWNER, 2026-08-07] — the simulation reads this repo's own tracked
+# `data/irsdata.xlsx`, and four of the five had already been measured to make
+# no difference to a swap-only run. Their patterns are gone with them: an
+# ignore rule for a file the project does not have is a rule nobody can
+# evaluate. The originals still sit in simulation_project/data if one is
+# ever needed back.
+#
 # Archives that APPEAR IN data/ ON THEIR OWN. `AS_data.zip` (24 MB, holding
 # four of the workbooks) showed up during a test run on 2026-08-07, alongside
 # three workbooks going missing — including a tracked one. Nothing in this repo
@@ -27,11 +29,6 @@ data/.cache/
 # direction (the workbooks move to MySQL shortly, which ends the question).
 # Ignored so `git add -A` cannot sweep one into a commit.
 data/*.zip
-data/BOK Base Rate.xlsx
-data/Call Rate Data.xlsx
-data/Credit Matrix Data.xlsx
-data/Portfolio Data.xlsx
-data/True Data.xlsx
 
 .vercel
 .env*

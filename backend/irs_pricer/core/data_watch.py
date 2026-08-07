@@ -36,13 +36,17 @@ logger = logging.getLogger(__name__)
 # The workbooks the loaders actually read. Globbing the whole folder would also
 # pick up the .cache/ pickles the loaders write themselves, and those change as
 # a RESULT of a read — the stamp would never settle.
+#
+# TWO NAMES NOW [OWNER, 2026-08-07]. The simulation's five workbooks were
+# deleted; market data comes from this repo's own `irsdata.xlsx` and the BOK
+# series from its `bokbaserate.xlsx` (see loaders/irsdata.py, loaders/base_rate.py).
+# The old five are gone from this tuple rather than left as harmless misses:
+# a watch list naming files the project does not have reads as "these are
+# expected", and the next person adds a sixth instead of asking why none of
+# them are there.
 WATCHED = (
-    "Portfolio Data.xlsx",
-    "True Data.xlsx",
-    "Total Data.xlsx",
-    "Credit Matrix Data.xlsx",
-    "BOK Base Rate.xlsx",
-    "Call Rate Data.xlsx",
+    "irsdata.xlsx",
+    "bokbaserate.xlsx",
 )
 
 _lock = threading.Lock()

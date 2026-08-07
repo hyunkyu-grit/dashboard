@@ -42,9 +42,18 @@ export interface ManualPosition {
   maturityDate: string;
 }
 
-/** 시장 스냅샷이 주는 테너들(19개) 중 사람이 실제로 고르는 것들.
- * 화면의 드롭다운이자, 만기일 산술의 정의역이다. */
-export const TENORS = ["1Y", "2Y", "3Y", "4Y", "5Y", "7Y", "10Y", "15Y", "20Y"] as const;
+/** 고를 수 있는 테너. 화면의 드롭다운이자 만기일 산술의 정의역이다.
+ *
+ * **10Y에서 끝나는 것은 데이터의 사실이다** [2026-08-07]. 시장 소스가
+ * `data/irsdata.xlsx`(원화 IRS 종합코드)로 바뀌었고 이 워크북은 10Y까지만
+ * 싣는다 — 이전 소스(True Data.xlsx)는 30Y까지 있었다. 15Y·20Y를 여기 남겨
+ * 두면 고를 수는 있는데 커브를 못 세워서 그 스왑만 조용히 제외된다.
+ * 고를 수 있는 것과 가격되는 것은 같아야 한다.
+ *
+ * 1.5Y도 워크북에 있지만 뺐다 — 사람이 "1년 반짜리 스왑"을 넣는 일이 드물고,
+ * 필요하면 만기일을 직접 고치면 된다. 넣으려면 여기 한 줄이면 되고,
+ * loaders/irsdata.py의 `_NODE_QUOTES`가 이미 그 핀을 싣고 있다. */
+export const TENORS = ["1Y", "2Y", "3Y", "4Y", "5Y", "6Y", "7Y", "8Y", "9Y", "10Y"] as const;
 export type TenorLabel = (typeof TENORS)[number];
 
 export const DEFAULT_TENOR: TenorLabel = "3Y";
