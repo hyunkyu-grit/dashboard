@@ -3,10 +3,10 @@
  *
  * Slimmed from krw-fi-pms's api-client.ts, which carried ~40 endpoints for
  * seven screens. This app has one screen, so the client covers exactly what the
- * backend serves: market data, the credit curve, and the book. `/api/simulate`
- * is deliberately NOT here — it has its own transport in
- * `sim/api/simulation-api.ts`, because it is the only call whose base origin is
- * independently overridable and whose runtime is measured in minutes.
+ * backend serves: market data and the book. `/api/simulate` is deliberately
+ * NOT here — it has its own transport in `sim/api/simulation-api.ts`, because
+ * it is the only call whose runtime is measured in minutes. (That module also
+ * carried its own base origin once; it does not any more — see API_BASE below.)
  *
  * The error-shape handling below is carried over verbatim in behaviour, and the
  * reasons are worth keeping: a network failure and an HTTP error are different
@@ -14,10 +14,7 @@
  * array of Pydantic error objects rather than a string.
  */
 import type {
-  CreditSeriesRequest,
-  CreditSeriesResponse,
   DateRangeResponse,
-  InstrumentTaxonomyOut,
   MarketDataResponse,
   ParsedPosition,
   PositionsSummary,
@@ -95,19 +92,10 @@ async function apiGet<T>(path: string): Promise<T> {
   return handleResponse<T>(res);
 }
 
-async function apiPost<T>(path: string, payload: unknown): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    throw new ApiError(NETWORK_ERROR_MESSAGE, 0);
-  }
-  return handleResponse<T>(res);
-}
+/* `apiPost` stood here and is DELETED [2026-08-07]. Its only caller was
+ * creditCurveApi.series, removed above; every remaining call in this module is
+ * a GET. The simulation's one POST lives in sim/api/simulation-api.ts and does
+ * its own fetch — it needs an AbortSignal, which this helper never took. */
 
 export const marketDataApi = {
   dateRange: () => apiGet<DateRangeResponse>("/api/market-data/range"),
@@ -115,11 +103,16 @@ export const marketDataApi = {
     apiGet<MarketDataResponse>(`/api/market-data/${valuationDate}`),
 };
 
-export const creditCurveApi = {
-  taxonomy: () => apiGet<InstrumentTaxonomyOut>("/api/credit-curve/taxonomy"),
-  series: (req: CreditSeriesRequest) =>
-    apiPost<CreditSeriesResponse>("/api/credit-curve/series", req),
-};
+/* `creditCurveApi` (taxonomy + series) stood here and is DELETED
+ * [OWNER, 2026-08-07]. It read /api/credit-curve/*, backed by
+ * `Credit Matrix Data.xlsx` — the 42 MB workbook removed when the market
+ * source became this repo's own irsdata.xlsx. Its only caller was the 국고
+ * reference line in CurvePreview, gone with it.
+ *
+ * The backend routes still exist and would now 500. That is exactly why this
+ * export could not simply be left unused: guards/live-routes-proxied reads the
+ * paths named in this file to decide what the deployed site must forward, so a
+ * dead declaration here would have demanded a rewrite to a broken endpoint. */
 
 /** The book, parsed server-side from `data/Portfolio Data.xlsx`. Replaces the
  * source app's upload screen + localStorage ledger entirely. */

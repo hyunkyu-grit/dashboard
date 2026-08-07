@@ -143,11 +143,7 @@ export function positionError(p: ManualPosition, parPct: number | null): string 
  * 답하려는 질문이 정확히 그것이다. 직접 적은 금리는 그대로 존중한다(기존
  * 포지션은 par에 있지 않다).
  */
-export function toEnginePosition(
-  p: ManualPosition,
-  parPct: number | null,
-  baseDate: string,
-): Position {
+export function toEnginePosition(p: ManualPosition, parPct: number | null): Position {
   const coupon = p.fixedRatePct === "" ? (parPct ?? 0) : p.fixedRatePct;
   return {
     id: p.id,

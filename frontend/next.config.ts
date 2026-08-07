@@ -40,12 +40,21 @@ const nextConfig: NextConfig = {
   // the dark floating dev indicator is not part of the product and sat over
   // the bottom-left of the table during layout checks (carry session, Pass D)
   devIndicators: false,
-  /* The backtest's route to a deployed backend (§backtest).
+  /* The LIVE routes to a deployed backend (§backtest, 시뮬레이션).
    *
-   * Every other endpoint is a committed JSON file the deployed site serves
-   * itself. The backtest cannot be: its answer depends on inputs the reader
-   * chooses, so it needs the live FastAPI app. That app is not on Vercel —
-   * Vercel runs the frontend and a backend runs behind it [OWNER].
+   * Most endpoints are a committed JSON file the deployed site serves itself.
+   * These cannot be: their answers depend on inputs the reader chooses, so
+   * they need the live FastAPI app. That app is not on Vercel — Vercel runs
+   * the frontend and a backend runs behind it [OWNER].
+   *
+   * The simulation's four joined this list on 2026-08-07 and it is worth
+   * saying why they were missing: `/api/backtest` was the only live route when
+   * this was written, and the simulation arrived working — in DEV, where
+   * `.env.development.local` sets NEXT_PUBLIC_API_BASE to an absolute
+   * localhost:8100 and no rewrite is involved at all. Deployed, API_BASE is
+   * the empty string by design, every simulation call goes same-origin, and
+   * without a rule here all four would have 404'd on a site that looked fine
+   * locally. Nothing would have said so except an error panel in the tab.
    *
    * A REWRITE, not `NEXT_PUBLIC_API_BASE`. The env var would be inlined into
    * the browser bundle, and `guards/production-env.test.ts` exists to forbid
@@ -67,6 +76,19 @@ const nextConfig: NextConfig = {
     if (!origin) return [];
     return [
       { source: "/api/backtest", destination: `${origin}/api/backtest` },
+      // 시뮬레이션. `/api/market-data/:path*` covers both `range` and the
+      // per-date snapshot; `/api/positions` is the book, which is optional now
+      // (its failure is a notice, not a gate) but must still be REACHABLE or
+      // the notice reports a missing backend as missing data.
+      { source: "/api/simulate", destination: `${origin}/api/simulate` },
+      { source: "/api/market-data/:path*", destination: `${origin}/api/market-data/:path*` },
+      { source: "/api/positions", destination: `${origin}/api/positions` },
+      { source: "/api/positions/:path*", destination: `${origin}/api/positions/:path*` },
+      // `/api/credit-curve/*` is deliberately ABSENT. Its workbook (Credit
+      // Matrix Data.xlsx) was deleted with the data consolidation, nothing in
+      // the frontend calls it any more, and a rule pointing at an endpoint
+      // that would 500 is worse than no rule: it turns "we do not ask this"
+      // into "we ask this and it breaks".
     ];
   },
   async headers() {

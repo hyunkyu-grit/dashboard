@@ -90,7 +90,7 @@ export function useBook() {
       baseDate
         ? manualPositions
             .filter((p) => isLive(p, baseDate))
-            .map((p) => toEnginePosition(p, parRatePct(parQuotes, p.tenor), baseDate))
+            .map((p) => toEnginePosition(p, parRatePct(parQuotes, p.tenor)))
         : [],
     [manualPositions, parQuotes, baseDate],
   );

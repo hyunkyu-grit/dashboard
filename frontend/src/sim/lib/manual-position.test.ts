@@ -94,24 +94,24 @@ describe("실행 가능성", () => {
 
 describe("엔진 페이로드 변환", () => {
   it("빈 금리는 시장 par로 채운다 — 진입 MtM 0인 신규 거래", () => {
-    expect(toEnginePosition(row(), 3.4225, "2026-07-16").couponRate).toBeCloseTo(3.4225, 6);
+    expect(toEnginePosition(row(), 3.4225).couponRate).toBeCloseTo(3.4225, 6);
   });
 
   it("직접 적은 금리는 par가 있어도 그대로 존중한다", () => {
     // 기존 포지션은 par에 있지 않다. 여기서 par로 덮으면 사용자가 넣은
     // 포지션이 아닌 다른 포지션을 평가하게 된다.
-    expect(toEnginePosition(row({ fixedRatePct: 1.91 }), 3.4225, "2026-07-16").couponRate).toBe(
+    expect(toEnginePosition(row({ fixedRatePct: 1.91 }), 3.4225).couponRate).toBe(
       1.91,
     );
   });
 
   it("명목은 억에서 원으로 한 번만 변환된다", () => {
-    expect(toEnginePosition(row({ notionalEok: 100 }), 3.4, "2026-07-16").notional).toBe(1e10);
+    expect(toEnginePosition(row({ notionalEok: 100 }), 3.4).notional).toBe(1e10);
   });
 
   it("백엔드가 채우는 필드는 비워서 보낸다", () => {
     // 여기서 계산해 보내면 swap_inputs.py와 두 개의 진실이 생긴다.
-    const p = toEnginePosition(row(), 3.4, "2026-07-16");
+    const p = toEnginePosition(row(), 3.4);
     expect(p.remainingDays).toBe(0);
     expect(p.currentFloatRate).toBe(0);
     expect(p.krdMap).toEqual({});
@@ -119,12 +119,12 @@ describe("엔진 페이로드 변환", () => {
   });
 
   it("부호 관례는 백엔드와 같다 — +1 수취, −1 지급", () => {
-    expect(toEnginePosition(row({ direction: -1 }), 3.4, "2026-07-16").direction).toBe(-1);
-    expect(toEnginePosition(row({ direction: -1 }), 3.4, "2026-07-16").name).toMatch(/지급/);
+    expect(toEnginePosition(row({ direction: -1 }), 3.4).direction).toBe(-1);
+    expect(toEnginePosition(row({ direction: -1 }), 3.4).name).toMatch(/지급/);
   });
 
   it("원화 IRS는 분기 정산", () => {
-    expect(toEnginePosition(row(), 3.4, "2026-07-16").frequency).toBe(4);
+    expect(toEnginePosition(row(), 3.4).frequency).toBe(4);
   });
 });
 
