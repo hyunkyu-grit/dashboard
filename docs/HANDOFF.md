@@ -28,11 +28,11 @@
 |---|---|
 | Frontend (Next.js, App Router, TS, Tailwind v4) | `:3100` |
 | Backend (FastAPI + ported curve engine) | `:8100` |
-| Data | `data/irsdata.xlsx` — daily KRW IRS closes, 2016→present |
-| Git remote | **none** (no `gh`, no credentials) |
+| Data | **MySQL** `miraebond2.kro.kr:4004/sim_portfolio`, table `mkt_irs_close` (2026-08-07). `data/irsdata.xlsx` is no longer read by the server — it survives only as a test fixture |
+| Git remote | `origin` = `wwoo1116-cell/swap_monitor` (**push is owner-only**), `mirror` = `D:\Backups\braveworld.git` |
 | Backup | mirror to `D:\Backups\braveworld.git` |
 
-There is no private remote. **After every commit, run the mirror:**
+**After every commit, run the mirror:**
 
 ```powershell
 powershell -File scripts/mirror-to-d.ps1
@@ -192,9 +192,57 @@ rule:
 
 ---
 
-## 6. Current state (as of the 2026-08-06 session)
+## 6. Current state (as of the 2026-08-07 session)
 
-### Latest — the motion line: diagnose (pass A) → timing system (pass B), 2026-08-06
+### Latest — 트레이더 피드백 다섯 건 + 활자 사다리 (2026-08-07, HEAD `0fc36c5`)
+
+`main`은 origin보다 **42 앞서 있고 아직 푸시하지 않았다** — 푸시는 오너 몫이다.
+같은 날 앞쪽에서 셸(사이드바 2단 탐색·그룹박스·MySQL 전환)이 끝났고, 그 위에
+트레이더 피드백 다섯 건이 순서대로 올라갔다.
+
+| | | |
+|---|---|---|
+| `50ed6c5` | 1 | 시뮬레이션 결과가 백테스트처럼 **떠 있는 창**으로. URL 파라미터는 없다 — 결과는 방금 계산한 실행이라 링크로 복원되지 않고, 파라미터를 두면 **빈 창을 복원**하게 된다 |
+| `4a2ef65` | 5 | 일별 PnL·KRD가 **창 하단 접이식 서랍**(`ui/WindowDrawer.tsx`). 두 창이 같은 컴포넌트를 쓴다 — 서랍이 두 벌이면 "둘 다에 존재한다"가 곧 거짓이 된다 |
+| `d35367c` | 2 | 시나리오 케이스 **Base/Bull/Bear/Crisis** + 커브 겹쳐 보기 |
+| `08da811` | 3·4 | 다리별 **진입 금리 덮어쓰기**(기본 par) · **CD**를 금통위 이벤트로 |
+| `0fc36c5` | — | 활자 사다리 한 칸 위로 — **자리가 있는 곳만** |
+
+읽고 나면 다시 유도하지 않아도 되는 것들:
+
+- **케이스는 금리 시나리오만 담는다.** 기간·앵커 테너·포지션·기준일은 넷이
+  공유한다 — 그것들이 케이스마다 다르면 나란히 비교한다는 말이 성립하지 않는다.
+  `ScenarioParams`를 갈아엎지 않았다: `params`는 여전히 **편집 중인 케이스의
+  살아 있는 값**이고, 스토어는 **전환 시점에만** 케이스 필드를 저장·복원한다
+  (`caseFromParams` / `caseParams`). 쓰기 경로가 하나라 두 값이 어긋날 자리가
+  없고, 요청 빌더도 골든 픽스처도 그대로다.
+- **케이스를 가르는 것은 색이 아니라 파선 모양이다**(§5 monochrome-first).
+  액센트는 기준선이 쓰고 있고 빨강·파랑은 이 제품에서 부호를 뜻한다. 어느
+  패턴이 어느 케이스인지는 토글 칩 안에 그 패턴의 견본을 그려 말한다.
+- **CD 스프레드가 커브 스프레드에 있을 때는 3M 마디에 닿은 적이 없다.** 엔진
+  `_cum_shock_r`(chart.py)은 τ ≤ 0.25에서 이벤트 계단의 누적 bp를 그대로 쓰고
+  터미널 쇼크 노드를 쳐다보지 않는다 — 이벤트가 하나라도 있으면 사용자가 넣은
+  CD 스프레드는 정확히 CD가 사는 마디에서 버려졌다. 그래서 손잡이를 이벤트
+  안으로 내렸다(`shortEndEvents[].cdSpreadBp`), 그리고 wire의
+  `fundingEvents[].shiftBp`는 **기준금리 변동 + CD 추가**다.
+- **par는 서버가 준 자리에 그대로 남는다.** 덮어쓰기는 `enginePositions`를
+  만드는 곳에서만 얹는다 — 여기서 덮어쓰면 par가 사라져 되돌리기도 비교도 할 수
+  없다. 옮긴 줄은 진입 MtM이 0이 아니고, 화면이 그 사실을 말한다.
+- **`text-body`·`text-callout`·`text-headline`은 69군데에서 쓰이면서 CSS를 한 줄도
+  만들지 않고 있었다.** Tailwind는 `--text-*`가 있어야 그 이름의 유틸리티를 낸다.
+  셋 다 body의 13px를 물려받아 같은 크기였다 — 위계가 있다고 믿으면서 없었다.
+  이제 실제로 낸다(callout 13 / body 14 / headline 15).
+- **표 영역은 활자를 못 키운다.** `OverviewColumns`·`InstrumentTable`·
+  `RangeCells`의 칸 폭은 `ch`로 쓰여 있고 `ch`는 그 요소 자신의 font-size로
+  풀린다 — 여기서는 **글자 크기가 곧 표의 폭**이다. 실측: 메인 개요 한 칼럼이
+  13px에서 670px를 요구하는데 상자가 668px다(이미 −2px). 14px면 707px, 39px가
+  삐져나온다. 사다리를 올릴 때 이 셋만 되돌린 이유가 그것이다.
+- **활자를 만질 때는 넘침을 재고 나서 커밋한다.** 이번에 쓴 방법: 모든 화면에서
+  `scrollWidth - clientWidth`(그리고 세로)를 훑어 `overflow: hidden|clip|visible`인
+  요소만 걸러낸다. 일괄로 올린 뒤 걸린 곳만 되돌리는 것이 "자리가 있는 곳만"의
+  실행 방법이다.
+
+### Before that — the motion line: diagnose (pass A) → timing system (pass B), 2026-08-06
 
 Pass A wrote no code. It measured the product against the reference's motion
 properties and produced the rulings pass B needed; the full report lives
@@ -1469,6 +1517,31 @@ Korean sentence to three numbers.
 ---
 
 ## 7. Open / provisional (confirm or override with the owner)
+
+### OPEN AFTER 2026-08-07 (트레이더 피드백 + 활자)
+
+- **백테스트에 KRD가 없다.** 응답은 `points`(일별 손익)와 포지션별 기록만 든다.
+  서랍의 KRD 탭은 **숨기지 않고 비워** 두고 이유를 적어 뒀다 — 없다는 사실이
+  화면에서 보여야 "왜 한쪽에만 있지"를 묻지 않는다. 채우려면 백엔드에 테너별
+  범프 재평가(`dv01.py`의 `build_dv01_table` 같은 것)를 붙여야 하고, 그건 별도
+  결정이다.
+- **CD를 이벤트로 내리면서 진 빚 둘** (둘 다 산술은 테스트로 못 박아 뒀다):
+  - wire의 `fundingEvents`를 엔진이 **1D 노드에도** 먹인다 → 오버나이트가 CD
+    추가만큼 따라 움직인다. 갈라내려면 포팅된 `chart.py`를 고쳐야 해서 안 했다.
+  - 같은 배열을 `fundingStepping`이 켜지면 조달비용 계단으로도 쓴다 → 조달비용이
+    기준금리가 아니라 CD만큼 걸음을 한다. 이 화면에 그 토글이 없고 값이
+    구조적으로 false라 지금은 닿지 않는다. 되살리면 먼저 이 자리를 고쳐야 한다.
+- **메인 개요가 −2px 넘친다.** 이번 변경 이전부터 그렇다(13px에서 670 필요 /
+  668 가용). 표 활자를 키우려면 개요에서 열을 하나 덜어내야 하는데, 그건 활자가
+  아니라 **내용의 결정**이라 가져오지 않았다. 어느 열을 뺄지가 오너 몫이다.
+- **1D(콜금리)는 xlsx와 다른 계열이다.** MySQL 전환 때 실측: 3M~10Y는 1e-9까지
+  일치하는데 1D는 80.8%가 다르고 최대 61bp다. [OWNER "무조건 SQL 쪽이 정답"]으로
+  그대로 받았다. 숫자가 예전과 다른 이유를 다시 묻게 되면 여기다.
+- **`main`이 origin보다 42 앞서 있다.** 푸시는 오너만 한다. 미러도 아직이다.
+- 실행은 **활성 케이스 하나**다. 네 케이스를 한 번에 돌려 결과를 비교하는 것은
+  결과창 자체가 달라지는 일이라 별건으로 남겨 뒀다.
+- 조건 폼의 **필터 문법**(`.filters` — checkbox/radio/slider/switch를 `.fgroup`
+  행으로)은 2026-08-07에 "이거 끝나고"로 미뤄 둔 그대로다.
 
 ### OPEN AFTER THE TOSS LINE (surface `0a8448e` → register `8a43034` → geometry)
 
