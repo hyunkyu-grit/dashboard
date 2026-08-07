@@ -53,6 +53,7 @@ import {
   resolveLine,
   resolveRefCd,
   resolveRefPolicy,
+  resolveFont,
   resolveTheme,
   withAlpha,
 } from "@/theme/bridge";
@@ -83,7 +84,15 @@ function buildOptions(width: number, height: number) {
   const options = {
     width,
     height,
-    layout: { background: { color: t.tile }, textColor: t.ink, attributionLogo: false },
+    /* `fontFamily` 는 캔버스라 필수다 — 안 주면 lightweight-charts 가 자기
+       기본 스택으로 축 라벨을 그려서 화면에서 이 숫자들만 Pretendard 가 아니게
+       된다. 값은 theme/bridge 를 거친다(색과 같은 길). */
+    layout: {
+      background: { color: t.tile },
+      textColor: t.ink,
+      fontFamily: resolveFont(),
+      attributionLogo: false,
+    },
     grid: { vertLines: { visible: false }, horzLines: { color: t.border } },
     rightPriceScale: { borderColor: t.border },
     // LWC's own time axis is hidden: the date strip below renders our sparse

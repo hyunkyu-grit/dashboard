@@ -281,17 +281,11 @@ export function CurveView({
 
   return (
     <div>
-      <div className="mb-1 flex items-baseline justify-between">
-        <span className="text-[15px] font-semibold">IRS 커브</span>
-        {/* the solid line's DAY and the dashed one's, in the level header's
-            grammar (pass M) — the pane no longer claims "지금" either. */}
-        <span
-          className="text-[12px] tabular-nums opacity-40"
-          title={levelHeadTitle(summary.asof)}
-        >
-          {levelHeadText(summary.asof)} · 어제
-        </span>
-      </div>
+      {/* 제목 줄이 없어졌다 [2026-08-07]. 이 뷰는 이제 **그룹박스 안**에 있고
+          박스 헤더가 "무엇을 보고 있나 · 언제 것인가" 를 적는다 (App.tsx).
+          같은 사실을 박스 위와 안에 두 번 적으면 제목이 둘이 된다 —
+          sauron.html 의 오른쪽 박스도 헤더 하나만 갖는다.
+          실선/파선의 날짜 구분은 헤더의 부기가 이어받았다. */}
       <NodeLine
         nodes={nodes}
         unit="%"

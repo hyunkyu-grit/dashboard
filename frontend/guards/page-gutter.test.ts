@@ -64,12 +64,14 @@ describe("the page gutter", () => {
     const overview = code("ui/OverviewColumns.tsx");
     expect(overview).toContain("justify-evenly");
     expect(overview).not.toMatch(/PAGE_X/);
-    // and the table's container applies the gutter only when NOT the overview
-    // (nor 시뮬레이션, which joined it 2026-08-07 — it owns its own layout and
-    // its two panes carry their own PAGE_L / PAGE_R)
-    expect(code("ui/InstrumentTable.tsx")).toMatch(
-      /isOverview \|\| isSim \? "flex flex-col" : `\$\{PAGE_X\}/,
-    );
+    /* 거터를 누가 갖느냐가 2026-08-07 에 갈렸다. 행 목록은 **그룹박스** 안에
+     * 들어갔고 거터는 그 박스를 감싸는 래퍼(`Boxed`)가 갖는다 — 스크롤
+     * 컨테이너가 또 주면 테두리 안쪽에 빈 띠가 두 겹 생긴다. 오버뷰·시뮬레이션은
+     * 박스가 없어 예전 그대로고, 연구실만 여전히 스크롤 컨테이너가 거터를 든다. */
+    const table = code("ui/InstrumentTable.tsx");
+    expect(table).toMatch(/<GroupBox className="h-full">/);
+    expect(table).toMatch(/`min-h-0 flex-1 pb-3 pt-3 \$\{PAGE_X\}`/);
+    expect(table).toMatch(/isLab\s*\?\s*`\$\{PAGE_X\}/);
   });
 
   it("the scrollbar gutter is off on the overview and on for the table", () => {
@@ -78,6 +80,7 @@ describe("the page gutter", () => {
      * no filters and nothing to scroll — the 16px it reserves is blank space
      * that shows up as a wider RIGHT margin than left. */
     const table = code("ui/InstrumentTable.tsx");
-    expect(table).toMatch(/isOverview \|\| isSim \? "flex flex-col" : `.*scrollbar-gutter:stable/);
+    expect(table).toMatch(/"px-3 pb-3 pt-1 \[scrollbar-gutter:stable\]"/);
+    expect(table).toMatch(/isOverview \|\| isSim\s*$|isOverview \|\| isSim/m);
   });
 });

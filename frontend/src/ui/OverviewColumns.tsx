@@ -48,6 +48,7 @@ import {
 import { dirClass, fmtDelta, levelHeadText, levelHeadTitle } from "@/lib/format";
 
 import { levelText } from "./cells";
+import { GroupBox, GroupBoxTitle } from "./GroupBox";
 import { ALL_COLUMNS, BASIS_HEAD, gridTemplate } from "./columns";
 import { ErrorState, LoadingState } from "./DataState";
 import { PreviewChart } from "./PreviewChart";
@@ -271,14 +272,22 @@ function Column({
   const selected = shown.find((r) => r.id === selectedId) ?? shown[0] ?? null;
 
   return (
-    // h-full + the grid's default `stretch`: every column is the container's
-    // full height, which is what gives `mt-auto` on the chart a floor to sit on
-    <div className="flex h-full min-w-0 flex-col">
-      {/* the column's title IS the tab's 주요 divider heading — same words,
-          so the two surfaces name the same block the same way */}
-      <div className="mb-1.5 text-[13px] font-semibold opacity-60">
-        주요 {GROUP_LABEL[group]}
-      </div>
+    /* 열 하나 = **그룹박스** 하나 [OWNER, 2026-08-07]. sauron.html 의 `.ov` 가
+       3열 그리드이고 `.ov .groupbox { min-height: 0 }` 을 따로 적어 둔 것이
+       그 뜻이다 — 오버뷰의 표와 차트도 박스 안에 있다.
+       제목은 박스 **헤더**로 올라갔다. 예전에는 열 위에 떠 있는 13px 텍스트
+       줄이었는데, 그건 이 리포가 만든 문법이고 킷에는 그 자리에 헤더가 있다.
+       h-full + 그리드 기본 `stretch`: 모든 열이 컨테이너 높이를 채우고, 그게
+       차트의 `mt-auto` 에 바닥을 준다. */
+    <GroupBox
+      className="h-full"
+      header={
+        /* 열의 제목은 탭의 주요 구분 제목과 같은 말이다 — 두 표면이 같은
+           블록을 같은 이름으로 부른다. */
+        <GroupBoxTitle>주요 {GROUP_LABEL[group]}</GroupBoxTitle>
+      }
+    >
+      <div className="flex min-h-0 flex-1 flex-col px-3 pb-3 pt-2">
       {/* The type size sits HERE, on the wrapper both grids inherit from —
           never on a ch-track grid container. The template is written in `ch`,
           which resolves against the element's OWN font size, so a size set on
@@ -304,7 +313,8 @@ function Column({
           them; pinned to the floor they share one baseline and the slack
           moves above the charts where it reads as separation, not emptiness. */}
       <ColumnChartSlot row={selected} policy={policy} />
-    </div>
+      </div>
+    </GroupBox>
   );
 }
 

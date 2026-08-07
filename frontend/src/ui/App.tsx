@@ -21,6 +21,7 @@ import {
   fetchVolatility,
   fetchWallSummary,
 } from "@/lib/api";
+import { levelHeadText } from "@/lib/format";
 import { syncUiFromDom, useUiStore } from "@/state/ui";
 import { CommandBar } from "@/wall/CommandBar";
 import { getTile } from "@/wall/tileRegistry";
@@ -35,6 +36,12 @@ import { CurveView } from "./CurveView";
 import { ErrorState, LoadingState } from "./DataState";
 import { EnlargedView } from "./EnlargedView";
 import { ErrorBoundary } from "./ErrorBoundary";
+import {
+  GroupBox,
+  GroupBoxGap,
+  GroupBoxNote,
+  GroupBoxTitle,
+} from "./GroupBox";
 import { classify } from "./gloss";
 import { diagramSpec } from "./payReceiveModel";
 import { BacktestWindow, BOOKABLE_GROUPS } from "./BacktestWindow";
@@ -608,8 +615,11 @@ export function App() {
             {/* left pane: content-sized in two panes; full width in one column
                 OR while the forward matrix mode is open (§F). */}
             <div
+              /* 두 박스는 **간격**으로 갈린다 — 세로 헤어라인이 아니라.
+                 그룹박스가 자기 테두리를 갖는 순간 그 사이의 선은 세 번째
+                 경계가 된다 (sauron.html `.split { gap: 14 }`). */
               className={`flex min-w-0 flex-col ${
-                wide && !fullWidth ? "shrink-0 border-r border-edge" : "flex-1"
+                wide && !fullWidth ? "shrink-0" : "flex-1"
               }`}
               style={wide && !fullWidth ? { width: TABLE_W } : undefined}
             >
@@ -641,43 +651,53 @@ export function App() {
                 open; else takes the leftover width, floored at 600px, and the
                 idle curve fills its full height (§ layout / §F). */}
             {wide && !fullWidth && (
-              <div
-                ref={paneRef}
-                className={`relative min-w-[600px] flex-1 overflow-y-auto overflow-x-hidden py-5 pl-8 ${PAGE_R}`}
-              >
-                <ErrorBoundary region="pane" fallback="이 화면을 그리지 못했어요">
-                  {paneW > 0 &&
-                    (previewRow ? (
-                      <PreviewPane
-                        row={previewRow}
-                        onOpen={openBacktest}
-                        onEnlarge={openEnlarged}
-                        width={paneW - PANE_PAD}
-                        height={Math.max(360, paneH - PANE_PAD)}
-                        policy={summary.policy}
-                      />
-                    ) : (
-                      <CurveView
-                        summary={summary}
-                        width={paneW - PANE_PAD}
-                        height={Math.max(300, paneH - PANE_PAD)}
-                      />
-                    ))}
-                </ErrorBoundary>
-                {/* what is selected, stated in the pane's corner (strip
-                    session, Pass A — all that survives of the removed pin
-                    gesture): the pinned instrument and its curve MODE, e.g.
-                    `3Mx2Y · 스티프닝`. Sticky so it stays in the corner while
-                    the pane scrolls; nothing animates. */}
-                {pinned && (
-                  // §G: a sticky element carries an opaque bg and mutes via a
-                  // TEXT alpha (text-ink-2), never element opacity — opacity
-                  // would sink the bg and let the chart bleed through it.
-                  <div className="pointer-events-none sticky bottom-0 -mb-2 bg-tile pt-1 text-[11px] text-ink-2">
-                    {pinned.label}
-                    {pinnedMode ? ` · ${pinnedMode}` : ""}
+              /* sauron.html `.split` 의 오른쪽 — **헤더 있는 그룹박스**다.
+                 헤더: 제목 · gap · 부기. 무엇을 보고 있는지가 박스 위쪽에
+                 적히므로, 하단 sticky 코너 라벨은 없어졌다(같은 사실을 두 번
+                 적던 자리다). */
+              <div className={`flex min-w-[600px] flex-1 flex-col py-3 ${PAGE_R} pl-3`}>
+                <GroupBox
+                  className="h-full"
+                  header={
+                    <>
+                      <GroupBoxTitle>
+                        {pinned ? pinned.label : previewRow ? previewRow.label : "IRS 커브"}
+                      </GroupBoxTitle>
+                      <GroupBoxGap />
+                      {/* 부기 = 커브 모드가 있으면 그것, 없으면 데이터의 날.
+                          CurveView 가 제목 줄에서 적던 "…· 어제"(실선/파선의
+                          날 구분)를 이 자리가 이어받았다. */}
+                      <GroupBoxNote>
+                        {pinnedMode ?? `${levelHeadText(summary.asof)} · 어제`}
+                      </GroupBoxNote>
+                    </>
+                  }
+                >
+                  <div
+                    ref={paneRef}
+                    className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3"
+                  >
+                    <ErrorBoundary region="pane" fallback="이 화면을 그리지 못했어요">
+                      {paneW > 0 &&
+                        (previewRow ? (
+                          <PreviewPane
+                            row={previewRow}
+                            onOpen={openBacktest}
+                            onEnlarge={openEnlarged}
+                            width={paneW - PANE_PAD}
+                            height={Math.max(360, paneH - PANE_PAD)}
+                            policy={summary.policy}
+                          />
+                        ) : (
+                          <CurveView
+                            summary={summary}
+                            width={paneW - PANE_PAD}
+                            height={Math.max(300, paneH - PANE_PAD)}
+                          />
+                        ))}
+                    </ErrorBoundary>
                   </div>
-                )}
+                </GroupBox>
               </div>
             )}
           </div>

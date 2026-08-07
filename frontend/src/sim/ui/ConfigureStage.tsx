@@ -139,8 +139,12 @@ export function ConfigureStage() {
        패널 사이는 세로 헤어라인 하나. */
     <div className="flex min-h-0 flex-1">
       <div className="flex w-[520px] shrink-0 flex-col border-r border-edge">
-        <div className={`min-h-0 flex-1 overflow-y-auto pb-6 pr-6 ${PAGE_L}`}>
-          <Section title="기간" first>
+        {/* 구획이 그룹박스가 되면서 사이를 간격이 가른다 (ResultsStage 와 같은
+            이유 — 박스끼리 붙으면 테두리 둘이 한 선으로 보인다). */}
+        <div
+          className={`flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pb-6 pr-6 pt-3 ${PAGE_L}`}
+        >
+          <Section title="기간">
             <div className="grid grid-cols-2 gap-3 pb-4 pt-3">
             <Field label="시작일" hint="평가 기준일">
               <Input

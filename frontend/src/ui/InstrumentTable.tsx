@@ -53,6 +53,7 @@ import {
 } from "./rows";
 import { SCREENERS } from "./screener";
 import type { TabId } from "./tabs";
+import { GroupBox } from "./GroupBox";
 import { columnCue } from "./tint";
 import { LoadingState } from "./DataState";
 
@@ -190,10 +191,20 @@ function TableRow({
          moves onto the kit's. The fill is unchanged, so no number is invented.
          `isolate` + `-z-10`: a bare pseudo-element paints above the cells and
          would grey out the numbers it is meant to sit behind. */
+      /* 선택은 **액센트 채움**이다 [OWNER, 2026-08-07 · 목업]:
+         `tbody tr[aria-selected="true"] { background: var(--accent);
+          color: var(--on-accent) }`.
+         앞 판은 킷 Sidebars/Items/Selected 의 잉크 5.5% 밴드를 썼다. 그건
+         **사이드바 행**의 규칙이고 표 행의 규칙이 아니었다 — 목업이 표에는
+         꽉 찬 주황을 준다. 고른 것이 화면에서 즉시 보여야 하는 자리다.
+         행 안의 방향색은 globals.css 의 `.bw-row-selected` 가 덮는다: 행이
+         나르는 내용을 행 자신이 닿을 수 없다(메뉴 행과 같은 이유).
+         호버는 잉크 5% 띠. `isolate` + `-z-10` 이 없으면 가상 요소가 셀 위에
+         칠해져 숫자를 지운다. */
       className={`relative isolate grid h-12 cursor-pointer items-center border-b border-edge ${
         active
-          ? ""
-          : "before:pointer-events-none before:absolute before:inset-y-0 before:left-1 before:right-1 before:-z-10 before:rounded-control-lg before:content-[''] hover:before:bg-page/50"
+          ? "bw-row-selected bg-accent text-on-accent"
+          : "before:pointer-events-none before:absolute before:inset-y-0 before:left-1 before:right-1 before:-z-10 before:rounded-control-lg before:content-[''] hover:before:bg-ink-5"
       }`}
     >
       {/* Measured off the kit (Sidebars - Items - Level 0 - Selected): the
@@ -202,12 +213,9 @@ function TableRow({
           effective, running the FULL row height and bleeding out past the
           row's own padding rather than sitting inset from it. The first pass
           here guessed r=6, 8 percent and a 3px vertical inset. */}
-      {active && (
-        <span
-          aria-hidden
-          className="kit-row-selected pointer-events-none absolute inset-y-0 left-1 right-1 !h-auto"
-        />
-      )}
+      {/* 별도의 선택 밴드는 없어졌다 — 행 자신이 채워진다. 앞 판은 잉크 5.5%
+          밴드를 `left-1 right-1` 로 인셋해서 그렸는데, 목업의 표 행은 셀
+          경계까지 꽉 찬 주황이다. */}
       <div role="cell" className="relative z-10 pl-3 font-semibold">
         {/* the pin bar moves in to left-2 so it lands ON the selection band's
             left edge rather than floating outside it */}
@@ -618,6 +626,7 @@ export function InstrumentTable({
           horizontally instead of clipping content flush against the card
           edge; pb-8 keeps the last row off the card's bottom edge and clear
           of anything floating there. */}
+      <Boxed on={!isOverview && !isSim && !isLab}>
       <div
         ref={scrollRef}
         /* `flex flex-col` only for the overview: it lets the three-column grid
@@ -635,8 +644,14 @@ export function InstrumentTable({
            produce. `px-5` is dropped for the same reason: it sits outside the
            content box the gaps are computed in, so it would add itself to both
            outer margins. */
-        className={`min-h-0 flex-1 overflow-y-auto overflow-x-auto pb-8 pt-3 ${
-          isOverview || isSim ? "flex flex-col" : `${PAGE_X} [scrollbar-gutter:stable]`
+        /* 행 목록일 때는 **그룹박스 안**이라 좌우 거터도 아래 여백도 박스가
+           갖는다 — 여기서 또 주면 테두리 안쪽에 빈 띠가 두 겹 생긴다. */
+        className={`min-h-0 flex-1 overflow-y-auto overflow-x-auto ${
+          isOverview || isSim
+            ? "flex flex-col pb-8 pt-3"
+            : isLab
+              ? `${PAGE_X} pb-8 pt-3`
+              : "px-3 pb-3 pt-1 [scrollbar-gutter:stable]"
         }`}
       >
         {isSim ? (
@@ -774,6 +789,31 @@ export function InstrumentTable({
           </div>
         )}
       </div>
+      </Boxed>
+    </div>
+  );
+}
+
+/** 행 목록일 때만 그룹박스로 감싼다 [OWNER, 2026-08-07].
+ *
+ * sauron.html 의 `.split` 왼쪽이 그것이다 — **헤더 없는** 그룹박스 안에
+ * `.tablewrap` 이 들어간다. 헤더가 없는 이유는 표의 `thead` 가 이미 그 일을
+ * 하기 때문이고, 붙이면 제목 줄이 둘이 된다.
+ *
+ * 전체(오버뷰)·시뮬레이션·연구실은 감싸지 않는다: 오버뷰는 자기 열 셋을 각각
+ * 박스로 두고(OverviewColumns), 나머지 둘은 자기 화면을 그린다. 여기서 한 번
+ * 더 감싸면 박스 안의 박스가 된다. */
+function Boxed({
+  on,
+  children,
+}: {
+  on: boolean;
+  children: React.ReactNode;
+}) {
+  if (!on) return <>{children}</>;
+  return (
+    <div className={`min-h-0 flex-1 pb-3 pt-3 ${PAGE_X}`}>
+      <GroupBox className="h-full">{children}</GroupBox>
     </div>
   );
 }

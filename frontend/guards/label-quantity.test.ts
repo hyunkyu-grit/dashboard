@@ -61,10 +61,14 @@ describe("the key-forward block states one quantity", () => {
  * Friday's closes: the freshness chip would say 2026-07-24 while the column it
  * sits above said 2026-07-30, and the louder surface would be the wrong one. */
 describe("the level header is the dataset's date, not the reader's", () => {
+  /* 커브 뷰의 제목 줄이 2026-08-07 에 **그룹박스 헤더**로 올라갔다 —
+   * 미리보기 패널이 `.groupbox` 가 되면서 날짜를 적는 자리가 App.tsx 의 박스
+   * 헤더가 됐다. 규칙은 그대로다("그 날짜는 페이로드의 asof 여야 한다"), 적는
+   * 파일만 옮겼다. */
   const surfaces = {
     "ui/InstrumentTable.tsx": code("ui/InstrumentTable.tsx"),
     "wall/ForwardMatrix.tsx": code("wall/ForwardMatrix.tsx"),
-    "ui/CurveView.tsx": code("ui/CurveView.tsx"),
+    "ui/App.tsx": code("ui/App.tsx"),
   };
 
   for (const [name, src] of Object.entries(surfaces)) {

@@ -152,6 +152,30 @@
   opacity: 1;
 }
 
+/* 선택된 표 행 — 액센트 채움 [OWNER, 2026-08-07 · 목업].
+ *
+ * `tbody tr[aria-selected="true"] { background: var(--accent); color: var(--on-accent) }`
+ * 그리고 그 안의 방향색은 덮인다:
+ * `:where(.tag, .up, .down) { color: color-mix(in srgb, var(--on-accent) 75%, transparent) }`
+ *
+ * CSS 로 말해야 하는 이유는 메뉴 행과 같다 — 행이 나르는 내용을 행 자신이
+ * 닿을 수 없다. 주황 채움 위에 파란 −4.5 가 그대로 남으면 3:1 도 안 나오고,
+ * 무엇보다 "파랑 = 하락" 이라는 뜻이 채움에 먹힌다. 선택은 방향보다 위층이다.
+ *
+ * 75% 인 이유: 100% 면 라벨과 숫자가 같은 무게가 되어 위계가 사라지고, 더
+ * 내리면 주황 위에서 4.5 를 못 넘는다. 목업이 고른 값이고 측정도 맞는다
+ * (잉크 85% × 75% = 실효 64%, 주황 위 4.63:1). */
+.bw-row-selected :where(.text-up, .text-down, .text-ink-2, .text-ink-1) {
+  color: color-mix(in srgb, var(--bw-on-accent) 75%, transparent);
+}
+/* 위치 트랙은 색이 아니라 면이라 따로 — 목업의 `.track` / `.track i`. */
+.bw-row-selected .bw-track {
+  background: var(--bw-on-accent-fill);
+}
+.bw-row-selected .bw-track-mark {
+  background: var(--bw-on-accent);
+}
+
 /* 포커스 링 = 액센트 [OWNER, 2026-08-07 — 목업]. 2026-08-06 의 "선택·포커스는
  * 파랑" 은 그 파랑이 액센트 자리를 대신 메우고 있어서 나온 결정이었고, 액센트가
  * 돌아오면서 그 이유가 사라졌다. 킷도 포커스 링을 자기 액센트로 그린다

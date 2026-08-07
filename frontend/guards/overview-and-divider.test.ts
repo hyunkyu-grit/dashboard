@@ -234,7 +234,11 @@ describe("the 전체 overview", () => {
 
   it("the charts sit on the floor of the column", () => {
     expect(overview).toContain("mt-auto");
-    expect(overview).toMatch(/flex h-full min-w-0 flex-col/);
+    /* 열이 그룹박스가 됐다 [2026-08-07] — 높이를 채우는 일은 박스가 `h-full`
+     * 로 하고, 그 안의 본문이 `flex-1 flex-col` 로 차트에 바닥을 준다. 주장은
+     * 그대로다: 차트가 열 **바닥**에 앉아야 세 열의 차트가 한 선에 선다. */
+    expect(overview).toMatch(/<GroupBox\s*\r?\n?\s*className="h-full"/);
+    expect(overview).toMatch(/flex min-h-0 flex-1 flex-col px-3/);
   });
 
   it("the overview fills the container with flex, never min-h-full", () => {
@@ -242,9 +246,11 @@ describe("the 전체 overview", () => {
     // scroll container's pt-3/pb-8 sit outside it — min-h-full overshoots by
     // 44px and puts a permanent scrollbar on a page that fits
     expect(overview).not.toContain("min-h-full");
-    // 시뮬레이션 joined the overview on this branch (2026-08-07): both own
-    // their layout and neither is the table, so they take the same arm.
-    expect(table).toMatch(/isOverview \|\| isSim \? "flex flex-col"/);
+    /* 시뮬레이션 joined the overview on this branch (2026-08-07): both own
+     * their layout and neither is the table, so they take the same arm.
+     * 그 팔이 그룹박스 도입으로 세 갈래가 됐다 — 오버뷰·시뮬(박스 없음),
+     * 연구실(박스 없음, 거터 있음), 행 목록(박스 안). */
+    expect(table).toMatch(/isOverview \|\| isSim\s*\r?\n?\s*\? "flex flex-col pb-8 pt-3"/);
   });
 });
 

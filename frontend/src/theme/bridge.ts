@@ -55,6 +55,25 @@ export function resolveTheme(): ResolvedTheme {
   return out;
 }
 
+/** 캔버스가 쓸 서체 스택 [2026-08-07].
+ *
+ * 캔버스는 CSS 를 상속하지 않는다. lightweight-charts 의 `layout.fontFamily`
+ * 를 안 주면 라이브러리 기본값(`-apple-system, BlinkMacSystemFont,
+ * 'Trebuchet MS', Roboto, Ubuntu, sans-serif`)으로 축 라벨과 크로스헤어 값을
+ * 그린다 — 화면의 나머지는 Pretendard 인데 차트 숫자만 다른 서체였고, 그
+ * 상태로 오래 있었다. HTML/SVG 는 상속하므로 멀쩡했던 것이 오히려 발견을
+ * 늦췄다.
+ *
+ * 색과 같은 길을 지난다: 캔버스에 가는 값은 전부 이 브릿지를 거친다 — 컴포넌트가
+ * 직접 문자열을 적으면 그 자리가 토큰 체계 밖으로 나간다. `--font-sans` 를
+ * 그대로 읽으므로 서체를 바꿀 곳은 여전히 한 군데(globals.css)다. */
+export function resolveFont(): string {
+  if (typeof window === "undefined") return "";
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue("--font-sans")
+    .trim();
+}
+
 /* The band sub-palette resolvers (resolveBandHue) and the navy lockup resolver
  * (resolveBrand) were removed with the palette cut — nothing referenced them and
  * the palette is red/blue/grey now. The sub-palette stays defined-but-unused in

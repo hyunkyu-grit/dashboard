@@ -93,9 +93,12 @@ export function ResultsStage({ onEdit }: { onEdit: () => void }) {
   }
 
   return (
-    <div className={`min-h-0 flex-1 overflow-y-auto pb-8 ${PAGE_X}`}>
+    /* 구획이 그룹박스가 되면서 사이를 **간격**이 가른다 [2026-08-07]. 예전에는
+       각 Section 이 위쪽 헤어라인을 그렸고 부모는 간격이 없었다 — 박스끼리
+       붙어 있으면 테두리 둘이 2px 선 하나로 보인다. */
+    <div className={`flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pb-8 pt-3 ${PAGE_X}`}>
       <motion.div
-        className="flex flex-col"
+        className="flex flex-col gap-3"
         initial="hidden"
         animate="shown"
         /* The stagger routes through instant() like everything else —
@@ -122,7 +125,7 @@ export function ResultsStage({ onEdit }: { onEdit: () => void }) {
         )}
 
         <motion.div variants={ARRIVE_ITEM}>
-        <Section title="성분 누적 경로" first>
+        <Section title="성분 누적 경로">
           <p className="pb-1 text-body text-ink-2">
             설계한 금리 경로대로 갔을 때 손익이 어떻게 쌓이는지예요. 평가는 커브가
             움직여서 생기는 몫이고, 캐리는 시간이 지나서 생기는 몫이에요.

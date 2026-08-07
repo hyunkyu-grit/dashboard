@@ -13,6 +13,11 @@ import { forwardRef, useId, type ButtonHTMLAttributes, type InputHTMLAttributes 
 import { motion, useReducedMotion } from "motion/react";
 
 import { AnimatedNumber } from "@/ui/AnimatedNumber";
+import {
+  GroupBox,
+  GroupBoxGap,
+  GroupBoxTitle,
+} from "@/ui/GroupBox";
 /* This product's motion, not the simulation's own (2026-08-07). Two tokens the
  * simulation had do not exist here, and both were removed rather than added:
  *
@@ -400,32 +405,43 @@ export function Field({
  * 캔버스 픽셀을 거의 칠하지 않는다.
  *
  * 라운드와 테두리는 **실제로 떠 있는 것**에만 쓴다 → FloatingCard. */
+/** 구획 하나 = 킷의 **Group Box** [OWNER, 2026-08-07].
+ *
+ * 헤어라인으로 갈린 `<section>` 이었다. 그건 이 리포가 자기 문법으로 만든
+ * 것이고, 킷에는 그 자리에 오는 컴포넌트가 따로 있다 — `Group Boxes` 이고
+ * 목업 둘이 본문의 모든 구획을 그것으로 감싼다. 모니터 쪽과 같은 상자를 쓰게
+ * 되어 두 화면이 한 문법이 된다.
+ *
+ * `first` 는 없어졌다: 위 헤어라인이 없으므로 첫 구획을 예외로 둘 이유가 없다.
+ * 구획 사이는 선이 아니라 **간격**으로 갈린다(부모의 `gap`). */
 export function Section({
   title,
   aside,
   children,
   className,
-  first,
 }: {
   title?: string;
   aside?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
-  /** 첫 구획은 위 헤어라인을 생략한다 — 헤더의 경계선과 겹쳐 두 줄이 된다. */
-  first?: boolean;
 }) {
   return (
-    <section className={cn(!first && "border-t border-edge", className)}>
-      {(title || aside) && (
-        <div className="flex items-baseline justify-between gap-3 pb-1 pt-5">
-          {/* Headline은 킷에서 **Default가 이미 Bold**다 (Emphasized는 Heavy).
-              다른 단계는 Regular가 기본이라 Headline만 다르다. */}
-          {title && <h2 className="text-headline font-bold tracking-tight">{title}</h2>}
-          {aside}
-        </div>
-      )}
-      {children}
-    </section>
+    <GroupBox
+      className={className}
+      header={
+        title || aside ? (
+          <>
+            {/* 킷 04 Title3 Emphasized — 그룹박스 헤더의 제목이다. 앞 판은
+                Headline(13/Bold)을 썼는데 그건 본문 안의 소제목 단계다. */}
+            {title && <GroupBoxTitle>{title}</GroupBoxTitle>}
+            <GroupBoxGap />
+            {aside}
+          </>
+        ) : undefined
+      }
+    >
+      <div className="min-h-0 px-3 pb-3">{children}</div>
+    </GroupBox>
   );
 }
 

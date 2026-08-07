@@ -24,6 +24,7 @@ import {
 
 import { getSimChartTheme } from "@/sim/lib/chart-theme";
 import { onThemeChange } from "@/sim/theme/bridge";
+import { resolveFont } from "@/theme/bridge";
 
 export type LinePoint = { time: number; value: number } | { time: number };
 
@@ -75,7 +76,14 @@ export function LineChart({ series, formatValue, zeroLine = false, onCrosshair }
 
     const t = getSimChartTheme();
     const chart = createChart(box, {
-      layout: { background: { color: t.background }, textColor: t.axis, attributionLogo: false },
+      /* `fontFamily` 는 캔버스라 필수다 — 안 주면 lightweight-charts 가 자기
+         기본 스택으로 축 라벨을 그려서 이 숫자들만 Pretendard 가 아니게 된다. */
+      layout: {
+        background: { color: t.background },
+        textColor: t.axis,
+        fontFamily: resolveFont(),
+        attributionLogo: false,
+      },
       grid: { horzLines: { color: t.grid }, vertLines: { visible: false } },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.12, bottom: 0.12 } },
       timeScale: {

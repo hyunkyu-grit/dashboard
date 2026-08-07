@@ -46,12 +46,19 @@ describe("no gesture in the right pane", () => {
   });
 });
 
-describe("what survived: the pane's corner label", () => {
-  it("names the pinned instrument and its mode", () => {
+describe("what survived: the pane names what it is showing", () => {
+  it("the pinned instrument and its mode reach the pane's header", () => {
+    /* 2026-08-07: 하단 sticky **코너 라벨**이 그룹박스의 **헤더**가 됐다.
+     * 미리보기 패널이 `.groupbox` 로 들어가면서 제목 줄이 생겼고, 같은 사실을
+     * 박스 위와 아래에 두 번 적을 이유가 없다 (sauron.html 의 오른쪽 박스가
+     * 정확히 제목·gap·부기다).
+     *
+     * 이 가드가 지키는 것은 자리가 아니라 **사실이 남아 있느냐** 다: 고정된
+     * 종목의 이름과 그 커브 모드가 화면에 적혀야 한다. */
     expect(app).toContain("pinnedMode");
     expect(app).toMatch(/diagramSpec\(classify\(pinned\), "pay"\)\?\.term/);
-    // rendered as `label · mode`
-    expect(app).toMatch(/\$\{pinnedMode\}/);
+    expect(app).toMatch(/<GroupBoxTitle>[\s\S]*?pinned\.label/);
+    expect(app).toMatch(/<GroupBoxNote>[\s\S]*?pinnedMode/);
   });
 });
 

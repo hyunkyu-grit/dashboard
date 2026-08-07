@@ -107,6 +107,12 @@
    * Design.MD §1.1 이 "기억으로 쓰면 틀린다" 고 적어 뒀고, 이 값은 `.sketch`
    * 페이지 JSON 을 직접 파싱해 읽은 것이라 토큰 export 에는 없다 — 그래서
    * 여기에 하드코딩한다. 비활성은 라이트 검정 15% / 다크 흰 17%. */
+  /* 액센트 채움 위에 얹히는 **면** — 선택된 행의 위치 트랙 같은 것.
+   * 글자가 아니라 배경이라 `--bw-on-accent`(잉크)가 아니라 밝은 쪽이다:
+   * 목업의 `tbody tr[aria-selected] .track { background: rgb(255 255 255 / .4) }`.
+   * 두 테마 모두 액센트가 주황이므로 흰색 한 벌로 끝난다. */
+  --bw-on-accent-fill: color-mix(in srgb, #ffffff 40%, transparent);
+
   --bw-wc-close: #ff5c60;
   --bw-wc-inactive: color-mix(in srgb, #000000 15%, transparent);
 
