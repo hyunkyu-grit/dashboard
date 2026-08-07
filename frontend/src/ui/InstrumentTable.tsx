@@ -8,6 +8,7 @@
  * registry so the command bar can scroll to them. */
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
@@ -52,6 +53,23 @@ import {
 } from "./rows";
 import { SCREENERS } from "./screener";
 import { columnCue } from "./tint";
+import { LoadingState } from "./DataState";
+
+/* The simulation arrives with its tab, not with the app.
+ *
+ * Statically imported it rode in on the first byte of every visit: ~5,000
+ * lines of scenario UI plus lightweight-charts, which its two charts import
+ * and which guards/lazy-chart.test.ts already keeps off the first-load path
+ * for the monitor's own chart (196 KB, measured — see
+ * docs/diagnostics/perf-baseline.md). Most visits open the wall and never
+ * touch 시뮬레이션.
+ *
+ * `ssr: false` for the same reason DetailChart takes it: the charts
+ * underneath need a real canvas, which the server has not. */
+const SimulationFlow = dynamic(
+  () => import("@/sim/ui/SimulationFlow").then((m) => m.SimulationFlow),
+  { ssr: false, loading: () => <LoadingState what="시뮬레이션" className="h-[420px]" /> },
+);
 
 /** The 52주 column's name in noun form — what the hidden-column note calls it
  * when the ladder drops it. The header itself renders the three sub-labels. */
@@ -60,11 +78,16 @@ const RANGE_COL_NAME = "52주 레인지";
 /** The position track's noun for the same note (pass N). */
 const SLIDER_COL_NAME = "52주 내 위치";
 
-/** A tab is a row filter, the overview, or the 연구실 — the incubation
- * surface pinned to the FAR RIGHT [OWNER, 2026-08-04]. Tab order is the
- * product's order of confidence: an experiment that earns trader feedback
- * graduates leftward into the main tabs. */
-export type TabId = Group | "all" | "lab";
+/** A tab is a row filter, the overview, the 시뮬레이션, or the 연구실 — the
+ * incubation surface pinned to the FAR RIGHT [OWNER, 2026-08-04]. Tab order is
+ * the product's order of confidence: an experiment that earns trader feedback
+ * graduates leftward into the main tabs.
+ *
+ * 시뮬레이션 sits between the row filters and 연구실 (2026-08-07). It is not a
+ * row filter — it renders its own screen and the table does not appear under
+ * it, the same shape 전체 and 연구실 already have — but it is finished work,
+ * not an experiment, so it goes to the LEFT of the incubation surface. */
+export type TabId = Group | "all" | "sim" | "lab";
 
 const FILTERS: { id: TabId; label: string }[] = [
   { id: "all", label: "전체" },
@@ -73,6 +96,7 @@ const FILTERS: { id: TabId; label: string }[] = [
   { id: "fly", label: GROUP_LABEL.fly },
   { id: "forward", label: GROUP_LABEL.forward },
   { id: "vol", label: GROUP_LABEL.vol },
+  { id: "sim", label: "시뮬레이션" },
   { id: "lab", label: "연구실" },
 ];
 
@@ -344,6 +368,11 @@ export function InstrumentTable({
   // 연구실: same shell, its own body; row machinery (sort, screeners,
   // dividers) has nothing to work on there and stays hidden.
   const isLab = filter === "lab";
+  // 시뮬레이션: the same arrangement as 연구실 — the shell and tab strip stay,
+  // the body is the simulation's own stage machine. It owns its scrolling, so
+  // it is the one body that must not sit inside the shared scroll container's
+  // horizontal padding (see the container's className below).
+  const isSim = filter === "sim";
   const divided = DIVIDED.includes(filter as Group);
   const activeScreener = SCREENERS.find((s) => s.id === screener) ?? null;
 
@@ -699,10 +728,12 @@ export function InstrumentTable({
            content box the gaps are computed in, so it would add itself to both
            outer margins. */
         className={`min-h-0 flex-1 overflow-y-auto overflow-x-auto pb-8 pt-3 ${
-          isOverview ? "flex flex-col" : `${PAGE_X} [scrollbar-gutter:stable]`
+          isOverview || isSim ? "flex flex-col" : `${PAGE_X} [scrollbar-gutter:stable]`
         }`}
       >
-        {isLab ? (
+        {isSim ? (
+          <SimulationFlow />
+        ) : isLab ? (
           <RegretLab regret={regret ?? []} onFocus={onLabFocus ?? (() => {})} />
         ) : isOverview ? (
           <OverviewColumns rows={rows} asOf={asOf} policy={policy} />

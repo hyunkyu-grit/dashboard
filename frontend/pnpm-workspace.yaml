@@ -1,3 +1,7 @@
 allowBuilds:
+  # msw's postinstall copies its browser service worker into public/. The only
+  # thing using msw here is the simulation's API contract test, which runs
+  # msw/node — no worker, no browser. false, like the other two.
+  msw: false
   sharp: false
   unrs-resolver: false

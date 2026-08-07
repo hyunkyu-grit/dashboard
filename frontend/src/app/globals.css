@@ -27,6 +27,37 @@
   /* reference-line hues [OWNER, 2026-08-04] — CD / 기준금리 overlays only */
   --color-ref-cd: var(--bw-ref-cd);
   --color-ref-policy: var(--bw-ref-policy);
+  /* ── The simulation tab's utilities ──────────────────────────────────────
+   * Added with the simulation port (2026-08-07). Tailwind's colour namespace
+   * is flat and shared, so the names the simulation's components already
+   * write — text-ink-1, bg-ctl-hover, border-field — have to exist HERE or
+   * they silently generate nothing (no error, just an unstyled screen).
+   *
+   * Only names this product did not already have are below. The nine it DID
+   * have (page/tile/popover/ink/edge/edge-live/up/down/line) keep the
+   * mappings above, pointed at --bw-*: that is what makes the simulation
+   * inherit this product's palette rather than carry a second one. See the
+   * simulation block in theme/tokens.css.
+   *
+   * The ink scale is the kit's fills ladder, and the ctl/prominent ramp is
+   * the simulation's token answer to controls that this product dresses with
+   * generated .kit-* classes instead. Both answers to the same kit live here
+   * for now; unifying them is a design pass, not a merge step. */
+  --color-ink-1: var(--sim-ink-1);
+  --color-ink-2: var(--sim-ink-2);
+  --color-ink-3: var(--sim-ink-3);
+  --color-ink-4: var(--sim-ink-4);
+  --color-ink-5: var(--sim-ink-5);
+  --color-ink-6: var(--sim-ink-6);
+  --color-ctl: var(--sim-ctl-idle);
+  --color-ctl-hover: var(--sim-ctl-hover);
+  --color-ctl-active: var(--sim-ctl-active);
+  --color-ctl-disabled: var(--sim-ctl-disabled);
+  --color-prominent: var(--sim-ctl-prominent);
+  --color-prominent-hover: var(--sim-ctl-prominent-hover);
+  --color-prominent-active: var(--sim-ctl-prominent-active);
+  --color-field: var(--sim-field-border);
+  --shadow-popover: var(--sim-shadow-popover);
   /* Floating-surface radius scale (§9, geometry pass 2026-08-05). Three steps,
    * smallest first: popover 12 (dropdown, command palette), card 16 (the
    * backtest window), sheet 20 (both bottom sheets, top corners only). These

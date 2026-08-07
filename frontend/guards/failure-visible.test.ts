@@ -144,24 +144,88 @@ describe("the API base is configurable", () => {
     expect(paths).toMatch(/\$\{API_BASE\}\/api\//);
   });
 
-  it("NO module outside lib/ builds an API path by hand", () => {
+  it("NO module outside a lib/ builds an API path by hand", () => {
     /* This listed three components and missed the one that mattered.
      * `DetailChart.tsx` had its own `fetch(`${API_BASE}/api/series/${id}?res=full`)`
      * for the line mode; the static conversion turned that into a 404 while the
      * candle modes kept working, because those already went through
-     * `fetchCandles`. A partial list of files is not a guard — it is a guess. */
+     * `fetchCandles`. A partial list of files is not a guard — it is a guess.
+     *
+     * The crude substring check that replaced the list held until the
+     * simulation arrived with a directory literally named `api/` (2026-08-07):
+     * `from "../api/simulate-dto"` contains `/api/`, so a dozen modules that
+     * merely import a DTO read as offenders. A guard that cries on fifteen
+     * innocent files gets its expectation edited rather than its finding
+     * fixed, so the check is narrowed by exactly one thing — MODULE
+     * SPECIFIERS come out. Nothing else does: `walk(".", "code")` has already
+     * stripped comments (that is what "code" means, see _source.ts), and
+     * re-stripping them here is the hand-rolled duplication
+     * guards/guard-hygiene.test.ts exists to stop. The bite assertions below
+     * are what keep the narrowing honest. */
+    const scannable = (text: string) =>
+      text.replace(/^\s*import\s[\s\S]*?from\s*["'][^"']*["'];?$/gm, "");
     const hasApiPath = (text: string) =>
       text.includes("/api/") || text.includes("localhost:8100");
     const offenders = walk(".", "code")
-      .filter(([p]) => !p.startsWith("lib/"))
-      .filter(([, text]) => hasApiPath(text))
+      /* Transport layers, at ANY depth. `lib/` is this app's; the simulation
+       * brought `sim/lib/api-client.ts` (market data, credit curve, book) and
+       * `sim/api/simulation-api.ts` (the one POST). Both are the role the rule
+       * already blesses at the top level — a module whose JOB is URL
+       * construction, so the base stays configurable in one place.
+       *
+       * Tests are excluded because a test that ASSERTS a URL is not a module
+       * that builds one, and nothing in a test ships. */
+      .filter(([p]) => !/(^|\/)(lib|api)\//.test(p))
+      .filter(([p]) => !/\.test\.tsx?$/.test(p))
+      .filter(([, text]) => hasApiPath(scannable(text)))
       .map(([p]) => p);
     expect(offenders).toEqual([]);
 
     // and the check bites: the exact line that shipped the bug must trip it
     expect(
-      hasApiPath('fetch(`${API_BASE}/api/series/${encodeURIComponent(id)}?res=full`)'),
+      hasApiPath(
+        scannable('fetch(`${API_BASE}/api/series/${encodeURIComponent(id)}?res=full`)'),
+      ),
     ).toBe(true);
+    // ...and stripping must not have opened a hole big enough to drive the
+    // second base origin through. `sim/api/simulation-api.ts` carried its own
+    // NEXT_PUBLIC_SIMULATION_API_BASE_URL until the merge; a fetch is a fetch
+    // whatever file it sits in.
+    expect(hasApiPath(scannable('res = await fetch(`${SIM_BASE}/api/simulate`, {'))).toBe(true);
+    // but a module specifier is not a call
+    expect(hasApiPath(scannable('import type { X } from "@/sim/api/simulate-dto";'))).toBe(
+      false,
+    );
+    expect(hasApiPath(scannable('import { simulationApi } from "../api/simulation-api";'))).toBe(
+      false,
+    );
+  });
+
+  it("there is exactly ONE base origin, and only lib/staticPaths decides it", () => {
+    /* The rule above lost some bite when `api/` joined `lib/` as an allowed
+     * transport layer, so the thing that actually went wrong is pinned here
+     * directly rather than inferred from a path substring.
+     *
+     * What went wrong: `sim/api/simulation-api.ts` shipped a SECOND base —
+     * `NEXT_PUBLIC_SIMULATION_API_BASE_URL ?? API_BASE` — from when the
+     * simulation was its own service on :8200. Its own docblock recorded the
+     * question ("single-backend vs two-backend ... confirm before S6") and it
+     * was never answered, so setting this repo's documented env var moved the
+     * monitor's calls and left the simulation's pointed somewhere else. One
+     * backend was the answer [OWNER, 2026-08-07].
+     *
+     * A base is read from the environment. So: exactly one module may read an
+     * API-base env var, and it is the one this suite already pins above. */
+    const readers = walk(".", "code")
+      .filter(([, text]) => /process\.env\.NEXT_PUBLIC_[A-Z_]*API_BASE/.test(text))
+      .map(([p]) => p);
+    expect(readers).toEqual(["lib/staticPaths.ts"]);
+
+    // and no module hardcodes a backend origin instead of deriving one
+    const hardcoded = walk(".", "code")
+      .filter(([, text]) => /https?:\/\/(localhost|127\.0\.0\.1):\d+/.test(text))
+      .map(([p]) => p);
+    expect(hardcoded).toEqual([]);
   });
 
   it("lib/api.ts itself goes through the URL builders", () => {

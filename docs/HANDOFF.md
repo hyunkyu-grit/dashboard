@@ -168,8 +168,12 @@ rule:
   The single sanctioned drop-shadow is the chart tooltip overlay.
 - **Volatility is built** [Session 14] — relative ATR (mean ATR 5 / mean ATR
   60), close-only form; see DESIGN §4/§16 and `## Provisional`. Not a placeholder.
-- Band 3 and any strategy/scenario tooling are **owner-gated**; leave reserved
-  regions, build nothing speculative.
+- Band 3 is **owner-gated**; leave reserved regions, build nothing speculative.
+- Scenario tooling was gated with it and is now **OPEN and built** [OWNER,
+  2026-08-07]: the 시뮬레이션 tab. The gate did its job — nothing speculative
+  was built here, and what landed came in whole from simulation_project on the
+  owner's instruction rather than being invented. Band 3 is unaffected and
+  still closed.
 
 ---
 

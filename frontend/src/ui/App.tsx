@@ -301,8 +301,14 @@ export function App() {
    * would be a fourth chart answering a question nobody asked, in space the
    * three columns need. Same mechanism as the matrix mode — one flag that
    * both widens the left pane and hides the right one, so the two can never
-   * disagree about who owns the width. */
-  const fullWidth = matrixOpen || tab === "all";
+   * disagree about who owns the width.
+   *
+   * 시뮬레이션 joins them (2026-08-07) for the stronger version of the same
+   * reason: the preview pane previews the HOVERED ROW, and the simulation has
+   * no rows. Left beside it, the pane would hold whatever row was hovered on
+   * the tab before — a chart of an instrument the reader is no longer looking
+   * at, next to a scenario that has nothing to do with it. */
+  const fullWidth = matrixOpen || tab === "all" || tab === "sim";
 
   // ~120ms hover delay so crossing the table does not strobe the preview (§2).
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);

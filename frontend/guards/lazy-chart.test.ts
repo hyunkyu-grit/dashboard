@@ -27,6 +27,21 @@ import { code, stripComments, walk } from "./_source";
 const LIB = "lightweight-charts";
 const OWNER = "wall/DetailChart.tsx";
 
+/* The simulation brought a second and third importer with it (2026-08-07).
+ * The RULE did not change — the library must not sit on the first-load path —
+ * but there are now two ways it is kept off, and both are pinned below:
+ *
+ *   wall/DetailChart.tsx   reached only via dynamic() from ui/EnlargedView
+ *   sim/ui/LineChart.tsx   \ reached only via dynamic() from ui/InstrumentTable,
+ *   sim/ui/TermStructureChart.tsx  which loads the whole 시뮬레이션 tab lazily
+ *
+ * Listing the simulation's two charts individually would have been the
+ * "partial list of files" this suite already rejects once. What is pinned
+ * instead is the ENTRANCE: every importer must live under a subtree whose one
+ * doorway is a dynamic import, and that doorway is asserted to exist. */
+const SIM_SUBTREE = "sim/";
+const SIM_DOORWAY = "ui/InstrumentTable.tsx";
+
 /** Does this text import `spec` for its VALUE (not merely its types)? */
 function valueImports(text: string, spec: string): boolean {
   const re = new RegExp(
@@ -39,11 +54,34 @@ function valueImports(text: string, spec: string): boolean {
 describe("lightweight-charts stays off the first-load path", () => {
   const files = walk(".", "code");
 
-  it("is imported by exactly one module", () => {
+  it("is imported only by the popup chart and inside the simulation subtree", () => {
     const owners = files
       .filter(([, text]) => valueImports(text, LIB))
       .map(([path]) => path);
-    expect(owners).toEqual([OWNER]);
+    const strays = owners.filter((p) => p !== OWNER && !p.startsWith(SIM_SUBTREE));
+    expect(strays).toEqual([]);
+    // and the popup chart is still an importer — if it stopped being one, the
+    // filter above would pass vacuously with the library anywhere it liked
+    expect(owners).toContain(OWNER);
+  });
+
+  it("the simulation subtree is entered ONLY through a dynamic import", () => {
+    /* This is what earns sim/ its blanket allowance above. If any module
+     * outside the subtree imports into it for a value, the subtree is on the
+     * first-load path and so is the library, whatever the doorway does. */
+    const doorway = code(SIM_DOORWAY);
+    expect(doorway).toMatch(/dynamic\(/);
+    expect(doorway).toMatch(/import\(\s*["']@\/sim\/ui\/SimulationFlow["']\s*\)/);
+    expect(doorway).toMatch(/ssr:\s*false/);
+    // a blank rectangle where the tab will be is the failure Pass B was about
+    expect(doorway).toMatch(/loading:/);
+    expect(doorway).toMatch(/LoadingState/);
+
+    const intruders = files
+      .filter(([path]) => !path.startsWith(SIM_SUBTREE))
+      .filter(([, text]) => /import\s+(?!type\b)[^;]*?from\s*["']@\/sim\//s.test(text))
+      .map(([path]) => path);
+    expect(intruders).toEqual([]);
   });
 
   it("no module statically imports the chart component", () => {

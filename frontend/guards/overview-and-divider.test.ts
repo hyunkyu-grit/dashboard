@@ -241,7 +241,9 @@ describe("the 전체 overview", () => {
     // scroll container's pt-3/pb-8 sit outside it — min-h-full overshoots by
     // 44px and puts a permanent scrollbar on a page that fits
     expect(overview).not.toContain("min-h-full");
-    expect(table).toMatch(/isOverview \? "flex flex-col"/);
+    // 시뮬레이션 joined the overview on this branch (2026-08-07): both own
+    // their layout and neither is the table, so they take the same arm.
+    expect(table).toMatch(/isOverview \|\| isSim \? "flex flex-col"/);
   });
 });
 
@@ -250,7 +252,9 @@ describe("the tab set", () => {
     expect(GROUP_LABEL.fly).toBe("버터플라이");
     // 연구실 rides at the FAR RIGHT [OWNER, 2026-08-04] — the incubation
     // surface; its last-place position is pinned by guards/regret-list.
-    const order = ["all", "outright", "spread", "fly", "forward", "vol", "lab"];
+    // 시뮬레이션 sits just inside it (2026-08-07): finished work, so it goes
+    // to the LEFT of the incubation surface, and the two must not swap.
+    const order = ["all", "outright", "spread", "fly", "forward", "vol", "sim", "lab"];
     const found = [...table.matchAll(/\{ id: "(\w+)", label:/g)].map((m) => m[1]);
     expect(found).toEqual(order);
   });

@@ -62,8 +62,10 @@ describe("the page gutter", () => {
     expect(overview).toContain("justify-evenly");
     expect(overview).not.toMatch(/PAGE_X/);
     // and the table's container applies the gutter only when NOT the overview
+    // (nor 시뮬레이션, which joined it 2026-08-07 — it owns its own layout and
+    // its two panes carry their own PAGE_L / PAGE_R)
     expect(code("ui/InstrumentTable.tsx")).toMatch(
-      /isOverview \? "flex flex-col" : `\$\{PAGE_X\}/,
+      /isOverview \|\| isSim \? "flex flex-col" : `\$\{PAGE_X\}/,
     );
   });
 
@@ -73,6 +75,6 @@ describe("the page gutter", () => {
      * no filters and nothing to scroll — the 16px it reserves is blank space
      * that shows up as a wider RIGHT margin than left. */
     const table = code("ui/InstrumentTable.tsx");
-    expect(table).toMatch(/isOverview \? "flex flex-col" : `.*scrollbar-gutter:stable/);
+    expect(table).toMatch(/isOverview \|\| isSim \? "flex flex-col" : `.*scrollbar-gutter:stable/);
   });
 });

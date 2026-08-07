@@ -26,10 +26,32 @@ from prior sessions. Update its "Current state" / "Open" sections when you finis
     previously read "no portfolio valuation / MtM / scenario / trade code";
     the owner lifted it for this feature and directed that the frozen code be
     brought over rather than rewritten.
-  - Still NOT ported: anything DB-backed. krw-fi-pms's service layer reaches
-    for a SQLAlchemy `Session`, trade/trace repositories and booked positions.
-    braveworld has no database — it reads one xlsx — so the service layer is
-    written here and only the engine modules come across.
+  - the **scenario simulation** — `backend/irs_pricer/` and `frontend/src/sim/`
+    [OWNER, 2026-08-07]. It came from simulation_project (:8200/:3200), which
+    had itself ported it from krw-fi-pms; the owner directed that it become a
+    TAB here rather than a second site. Its four routers are registered on
+    this repo's app in `app/main.py`, which stays the single uvicorn entry
+    point (`app.main:app`, :8100). simulation_project is left running as the
+    comparison copy until the merged surface has been seen working.
+  - Still NOT ported: anything DB-backed — **for now**. krw-fi-pms's service
+    layer reaches for a SQLAlchemy `Session`, trade/trace repositories and
+    booked positions. braveworld reads workbooks; the simulation's own
+    pyproject dropped sqlalchemy/pymysql/alembic on the way over for the same
+    reason.
+    **This is scheduled to change [OWNER, 2026-08-07].** Both halves move onto
+    MySQL — the existing `infomax` database at miraebond2.kro.kr:4004 — once
+    the middle-office account arrives. krw-fi-pms already has the schema this
+    will be built from (`tenor_pillar`, `market_data`, `trade_specification`,
+    `npv_pnl_trace`), and `market_data`'s own docstring says it "replaces
+    True/Total Data.xlsx + CSV + Call Rate + BOK Base Rate" — the four
+    workbooks the simulation reads today, plus this repo's `irsdata.xlsx`,
+    all fitting one table. Nothing depends on a database yet and the loaders
+    it will replace are left whole, so the seam stays where it is.
+    **The one thing that must not be forgotten when it lands:** `app/cache.py`
+    keys the disk cache on a HASH OF THE XLSX BYTES. With the source in MySQL
+    that key has nothing to hash, and a cache keyed to the wrong data is worse
+    than no cache (this project's recurring defect is silent staleness). It
+    has to become a table watermark — `MAX(updated_at)` plus a row count.
   - **Nothing in krw-fi-pms may be modified**, and its DESIGN.md / Marquee
     rulings are still not to be read or ported. That part is unchanged.
 - **Band 3 is owner-gated (§13).** Do not design or build it without the owner.
