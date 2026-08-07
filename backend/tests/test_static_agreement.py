@@ -132,14 +132,17 @@ def test_the_static_tree_is_current_for_this_data_file():
     exactly the staleness this test exists to catch."""
     import datetime as dt
 
-    from app.cache import data_hash
-    from app.dataset import load_dataset
+    from app.cache import sql_data_hash
+    from app.dataset import load_dataset_sql
 
-    xlsx = REPO / "data" / "irsdata.xlsx"
+    # 출처가 MySQL 이다 [OWNER, 2026-08-07]. 해시할 바이트가 없으므로 키가
+    # **테이블 워터마크**(MAX(irs_date), COUNT(*))다 — `sql_data_hash`.
+    # 그래서 이 검사는 이제 DB 를 한 번 읽는다. 이 파일은 어차피 :8100 이
+    # 떠 있어야 도는 파일이라(모듈 독스트링) 오프라인 조건이 새로 붙지 않는다.
     m = static("api/manifest.json")
-    assert m["dataHash"] == data_hash(xlsx, load_dataset(xlsx).asof), (
-        "the committed static tree was built from a different data file or "
-        "on a different day — re-run backend/scripts/build_static.py"
+    assert m["dataHash"] == sql_data_hash(load_dataset_sql().asof), (
+        "the committed static tree was built from different data or on a "
+        "different day — re-run backend/scripts/build_static.py"
     )
     assert m["asof"] == get(f"{BASE}/api/health")["asof"]
     # the tree never claims today: its asof is a COMPLETED close

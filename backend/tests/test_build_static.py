@@ -29,7 +29,7 @@ sys.path.insert(0, str(REPO / "backend" / "scripts"))
 
 import build_static as B  # noqa: E402
 
-from app.dataset import load_dataset  # noqa: E402
+from app.dataset import load_dataset_sql  # noqa: E402
 from app.static_paths import (  # noqa: E402
     UnsafeId,
     UnsafePath,
@@ -39,7 +39,14 @@ from app.static_paths import (  # noqa: E402
     slug,
 )
 
-DATA = REPO / "data" / "irsdata.xlsx"
+# 이 파일은 **빌드 결과**를 검사한다. 빌드가 읽는 것과 같은 출처를 읽어야
+# 비교가 성립하고, 2026-08-07 부터 그것은 MySQL 이다 [OWNER — "그냥 모든 걸
+# MySQL로"]. `DATA`(irsdata.xlsx)는 그래서 없어졌다.
+#
+# 얼린 파일을 픽스처로 쓰는 다른 테스트들과 다른 이유: 저쪽은 xlsx 를 **입력**
+# 으로 받아 로더의 동작을 본다(네트워크에 매이지 않아야 하고 값이 매일 바뀌면
+# 안 된다). 여기는 파이프라인이 만든 것을 그 파이프라인의 입력과 맞춰 보는
+# 것이라, 입력이 옮겨가면 같이 옮겨가야 한다.
 
 
 # ── ids → filenames ─────────────────────────────────────────────────────────
@@ -255,7 +262,7 @@ def test_a_known_gap_is_an_absent_point_not_a_null(two_builds):
     blank must produce NO point, matching the live API. A null would render as
     a gap in the chart; a NaN would not parse at all."""
     a, _ = two_builds
-    ds = load_dataset(DATA)
+    ds = load_dataset_sql()
     gaps = {
         tenor: [d for d, v in zip(ds.dates, ds.series[tenor]) if v is None]
         for tenor in ("1D", "3M")
@@ -277,15 +284,18 @@ def test_a_known_gap_is_an_absent_point_not_a_null(two_builds):
 
 def test_the_manifest_reuses_the_existing_hash_scheme(two_builds):
     """Not a second scheme: two hashing schemes drift and only one gets
-    checked. cache.py's data_hash is file bytes + SCHEMA_VERSION."""
-    from app.cache import SCHEMA_VERSION, data_hash
+    checked. 그 스킴이 2026-08-07 에 파일 바이트에서 **테이블 워터마크**로
+    바뀌었다 (`cache.sql_data_hash`) — 출처가 MySQL 이라 해시할 바이트가 없다.
+    서버(app/main.py)와 빌드가 같은 함수를 쓴다는 것이 이 테스트의 주장이고,
+    그 주장은 스킴이 바뀌어도 그대로다."""
+    from app.cache import SCHEMA_VERSION, sql_data_hash
 
     a, _ = two_builds
     m = json.loads((a / "api" / "manifest.json").read_text("utf-8"))
-    ds = load_dataset(DATA)
-    # v7: the key carries the dataset's effective asof too — same bytes read
-    # on different days are different datasets under the 전일종가 cutoff
-    assert m["dataHash"] == data_hash(DATA, ds.asof)
+    ds = load_dataset_sql()
+    # the key carries the dataset's effective asof too — the same table read
+    # on different days is a different dataset under the 전일종가 cutoff
+    assert m["dataHash"] == sql_data_hash(ds.asof)
     assert f":v{SCHEMA_VERSION}:" in m["dataHash"]
     assert m["schemaVersion"] == SCHEMA_VERSION
     assert m["asof"] == ds.asof.isoformat()

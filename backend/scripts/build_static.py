@@ -45,9 +45,10 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "backend"))
 
 from app import payloads  # noqa: E402
-from app.cache import SCHEMA_VERSION, cached, data_hash  # noqa: E402
+from app.cache import SCHEMA_VERSION, cached, sql_data_hash  # noqa: E402
 from app.curves import build_basis_curves, par_rates_at_index  # noqa: E402
-from app.dataset import load_dataset  # noqa: E402
+from app.dataset import load_dataset_sql  # noqa: E402
+from app.mysqldb import IRS_CLOSE_TABLE  # noqa: E402
 from app.derive import (  # noqa: E402
     basis_dates,
     derived_ids,
@@ -78,7 +79,9 @@ from app.staleness import _BEHIND_AT as BEHIND_AT  # noqa: E402
 from app.staleness import _STALE_AT as STALE_AT  # noqa: E402
 from app.volatility import volatility_payload  # noqa: E402
 
-DATA = REPO / "data" / "irsdata.xlsx"
+# IRS 종가는 **MySQL** 이다 [OWNER, 2026-08-07 — "그냥 모든 걸 MySQL로"].
+# `DATA`(irsdata.xlsx)는 없어졌다. 값이 바뀐다 — 1D 가 다른 계열이라 과거 짧은
+# 끝 커브와 거기서 파생되는 백테스트·포워드 수치가 전부 갈린다. 의도된 것이다.
 POLICY = REPO / "data" / "bokbaserate.xlsx"
 OUT_ROOT = REPO / "frontend" / "public"
 
@@ -302,7 +305,7 @@ def build(out_root: Path, quiet: bool = False) -> dict:
     t0 = time.perf_counter()
     say = (lambda *_a: None) if quiet else (lambda *a: print(*a, flush=True))
 
-    dataset = load_dataset(DATA)
+    dataset = load_dataset_sql()
     bases = basis_dates(dataset)
     curves = build_basis_curves(dataset)
     events = detect_event_clusters(dataset)
@@ -318,7 +321,7 @@ def build(out_root: Path, quiet: bool = False) -> dict:
         for p in (par_rates_at_index(dataset, i) for i in range(len(dataset.dates)))
     ]
 
-    hash_ = data_hash(DATA, dataset.asof)
+    hash_ = sql_data_hash(dataset.asof)
     fwd = cached("forwards", hash_, lambda: forwards_payload(dataset, curves))
     regret = cached("regret", hash_, lambda: regret_payload(dataset))
 
@@ -415,7 +418,7 @@ def main() -> int:
                     help="output root (default: frontend/public)")
     ap.add_argument("--quiet", action="store_true")
     a = ap.parse_args()
-    print(f"building static API from {DATA.name} → {a.out}")
+    print(f"building static API from mysql:{IRS_CLOSE_TABLE} → {a.out}")
     build(a.out, quiet=a.quiet)
     return 0
 
