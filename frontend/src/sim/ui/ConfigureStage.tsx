@@ -183,11 +183,12 @@ export function ConfigureStage() {
           </div>
           <div className="flex items-center justify-between gap-3 pb-4">
             <span className="text-body text-ink-2">
-              {/* 상품 수와 다리 수는 다르다 — 스프레드 하나가 두 다리, 플라이
-                  하나가 세 다리다. 실제로 평가되는 것은 다리 쪽이라 둘 다
-                  말한다. */}
+              {/* 한 줄로 [OWNER, 2026-08-10 — "포지션 N개를 평가해요가 나을
+                  거 같음"]. 상품 수와 다리 수가 다르다는 것(스프레드는 두 다리,
+                  플라이는 세 다리)은 여전히 사실이지만, 이 줄이 답할 질문은
+                  "지금 뭘 평가하고 있나"이지 다리 회계가 아니다. */}
               {inputs.positions.length > 0
-                ? `상품 ${manualPositions.length}개 · 스왑 ${inputs.positions.length}다리를 평가해요`
+                ? `포지션 ${manualPositions.length}개를 평가해요`
                 : "평가할 포지션이 없어요"}
             </span>
             {/* "오늘로"가 아니라 "최신 데이터로"다. 오늘은 대개 워크북에 없는
@@ -328,12 +329,12 @@ function CaseSection() {
           onChange={setActiveCase}
           label="시나리오 케이스"
         />
-        {/* 방향 관행을 적어 둔다. 주식의 불/베어와 반대라, 적어 두지 않으면
-            Bull 칸에 +100bp 를 넣는 일이 생긴다. */}
-        <p className="text-callout text-ink-2">
-          아래 네 구획이 이 케이스의 값이에요. 불은 금리 하락, 베어는 상승이에요
-          (채권시장 관행). 기간과 앵커 테너, 포지션은 네 케이스가 같이 써요.
-        </p>
+        {/* [OWNER, 2026-08-10] 한 줄로 줄였다. 방향 관행 경고("주식의 불/베어와
+            반대")는 이제 케이스 색이 대신 말한다 — 불/베어가 이 화면의 방향색
+            그대로다(tokens.css --bw-case-bull/bear, CurvePreview 주석). 문장이
+            했던 일을 색이 하게 되면서 문장은 무엇을 하는 화면인지만 말하면
+            된다. */}
+        <p className="text-callout text-ink-2">네가지 시나리오 반영을 통해서 시뮬레이션을 진행할 수 있어요.</p>
       </div>
     </Section>
   );
@@ -438,8 +439,16 @@ function SpreadSection() {
             </Field>
           ))}
         </div>
+        {/* [OWNER, 2026-08-10] "짧은 쪽(CD·오버나이트)" → "1년 이하"를 거쳐
+            보간 구조를 명시하는 문장으로 — "1년과 CD 91D, 1D Call 사이가
+            보간된다고 생각해야 함. 6M 9M은 보간되는거임". 엔진 그대로다
+            (path-matrix.ts cumBpAt): 1D·3M(=CD 91D)은 이벤트가 그대로 정하고,
+            0.25~1.0 구간은 이벤트 값과 1Y 목표 사이를 테너 비중으로 선형
+            보간한다 — 6M은 그 중간, 9M은 1Y에 더 가깝게. 1Y부터는 목표만
+            본다. */}
         <p className="pt-1.5 text-callout text-ink-2">
-          짧은 쪽(CD·오버나이트)은 아래 금통위 이벤트가 정해요.
+          1D·CD(91D)는 기준금리 이벤트가 그대로 정하고, 6M·9M은 그 값과 1Y
+          목표 사이를 보간해요.
         </p>
         <p className="pb-2 pt-4 text-body text-ink-2">IRS 스프레드 (국채 대비)</p>
         <NumberField
@@ -463,17 +472,19 @@ function PolicyEventSection() {
 
   return (
     <Collapsible
-      title="금통위 이벤트"
+      title="기준금리 이벤트"
       summary={events.length > 0 ? `${events.length}건` : "없음"}
       open={open}
       onToggle={() => setOpen((v) => !v)}
     >
       <div className="px-4 pb-4">
         {/* 두 칸이 무엇인지 먼저 말한다 — 행에는 자리가 없고, 라벨 없이 bp 칸
-            둘이 나란히 서면 어느 쪽이 CD 인지 물어볼 곳이 없다. */}
+            둘이 나란히 서면 어느 쪽이 CD 인지 물어볼 곳이 없다.
+            제목·문구 모두 [OWNER, 2026-08-10] — "금통위"는 기관명이고 트레이더가
+            실제로 조작하는 것은 기준금리 그 자체다. */}
         <p className="pb-2 text-callout text-ink-2">
-          기준금리가 얼마 움직이는지, CD가 그보다 얼마 더 움직이는지예요. CD의 그날
-          이동은 둘의 합이에요.
+          기준금리 이벤트. 기준금리가 얼마나 움직이는지, CD는 기준금리 대비
+          얼마나 움직이는지 알려주세요.
         </p>
         {events.length === 0 ? (
           <p className="pb-3 text-body text-ink-2">등록된 이벤트가 없어요.</p>

@@ -27,22 +27,18 @@
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef } from "react";
 
-import { useSimulationPort } from "@/sim/hooks/use-simulation";
 import { ErrorBoundary } from "@/ui/ErrorBoundary";
-import { WindowDrawer } from "@/ui/WindowDrawer";
-import { WINDOW_W } from "@/ui/floatingWindow";
+import { SIM_WINDOW_W } from "@/ui/floatingWindow";
 import { Z_WINDOW } from "@/ui/layers";
 import { ENTER, EXIT, instant } from "@/ui/motion";
 import { useFloatingWindow } from "@/ui/useFloatingWindow";
 import { WindowControls } from "@/ui/WindowControls";
 
 import { ResultsStage } from "./ResultsStage";
-import { DailyPnlTable, KrdGrid } from "./ResultsTables";
 
 export function SimulationWindow({ onClose }: { onClose: () => void }) {
-  const { lastRun } = useSimulationPort();
   const reduced = useReducedMotion() === true;
-  const { pos, dragHandlers } = useFloatingWindow("simulation");
+  const { pos, dragHandlers } = useFloatingWindow("simulation", SIM_WINDOW_W);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   /* Esc 는 **한 겹만** 벗긴다. 이 창이 열려 있으면 여기서 멈추고, 위에 확대
@@ -66,7 +62,10 @@ export function SimulationWindow({ onClose }: { onClose: () => void }) {
          그림자. 배경 막(backdrop)은 없다 — 뒤의 조건 화면이 계속 살아 있어야
          하고, 그게 이 창을 만든 이유다. */
       className={`fixed ${Z_WINDOW} flex max-h-[88vh] flex-col overflow-hidden rounded-card border border-edge-live bg-popover shadow-window`}
-      style={{ left: pos.left, top: pos.top, width: WINDOW_W }}
+      /* 백테스트(928)보다 넓다 [OWNER, 2026-08-10 — "결과창 좀 키워서"].
+         min() 은 뷰포트가 좁을 때를 위한 것 — 위치 클램프(useFloatingWindow)는
+         SIM_WINDOW_W 기준이라 그 경우 left 가 0 에 앵커되고 폭만 줄어든다. */
+      style={{ left: pos.left, top: pos.top, width: `min(${SIM_WINDOW_W}px, calc(100vw - 16px))` }}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, transition: instant(EXIT, reduced) }}
@@ -93,23 +92,14 @@ export function SimulationWindow({ onClose }: { onClose: () => void }) {
         </ErrorBoundary>
       </div>
 
-      {/* 대사용 숫자는 하단 서랍에 [트레이더 피드백 5, 2026-08-07]. 둘 다
-          2026-08-06 에 "지금 당장은 필요없을 듯" 으로 감췄던 표인데, 실제
-          트레이딩 시스템과 맞춰 보려면 있어야 한다는 것이 이번 피드백이다.
-          본문에 되돌리지 않고 서랍에 두는 이유: 매번 보는 숫자가 아니라
-          대사할 때 보는 숫자다. */}
-      {lastRun && (
-        <WindowDrawer
-          tabs={[
-            {
-              id: "pnl",
-              label: "일별 PnL",
-              content: <DailyPnlTable run={lastRun} />,
-            },
-            { id: "krd", label: "KRD", content: <KrdGrid run={lastRun} /> },
-          ]}
-        />
-      )}
+      {/* 서랍은 없앴다 [OWNER, 2026-08-10 — "일별 PnL탭 없애고, KRD의
+          컴포넌트를 위로 올리기"]. 일별 대사 표(KrdDailyTable)는 이제
+          ResultsStage 본문의 마지막 구획이다 — 손익 렌즈가 스왑평가·스왑캐리·
+          그날 손익까지 다 실으면서 일별 PnL 탭(DailyPnlTable)은 같은 숫자의
+          부분집합이 됐고, 부분집합을 별도 탭으로 두면 "어느 쪽이 진짜냐"는
+          질문만 만든다. DailyPnlTable 은 ResultsTables.tsx 에 남아 있다(감춘 표
+          복원 경로). 트레이더 피드백 5("서랍에 둘 다")는 이 지시로 대체됐다 —
+          백테스트 창의 서랍은 그대로다. */}
     </motion.div>
   );
 }

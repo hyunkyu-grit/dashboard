@@ -6,8 +6,11 @@
  * 모양을 묻는 데 답하고 이 표는 "그날 얼마였나" 에 답한다 — 트레이딩 시스템과
  * 맞춰 볼 때 필요한 것은 후자다.
  *
- * 계산하지 않는다. `pnl`(누적)과 `d`(그날의 변화)는 둘 다 서버가 준 값이고,
- * 여기서 차분을 다시 뜨면 서버와 어긋날 수 있는 두 번째 정의가 생긴다 (§16).
+ * **누적 열은 없앴다** [OWNER, 2026-08-10 — "PnL와 KRD는 시스템과 대사가
+ * 목적이므로 Cumulative가 아니라 매일매일을 적어주면 됨"]. `pnl`(누적)은
+ * 여전히 서버가 주지만 표에서는 안 읽는다 — 대사는 그날그날 트레이딩
+ * 시스템의 일별 기록과 맞춰 보는 일이고, 누적은 그 비교에 쓰이지 않는다.
+ * `d`(그날의 변화)만 계산 없이 그대로 옮긴다 (§16).
  *
  * 최신이 위다. 대사는 보통 어제·오늘을 보는 일이라 맨 아래로 스크롤해야
  * 시작할 수 있으면 매번 그 스크롤을 해야 한다. */
@@ -35,10 +38,7 @@ export function BacktestDailyPnl({ points }: { points: BacktestPoint[] }) {
             날짜
           </th>
           <th scope="col" className="py-1 text-right font-medium">
-            누적 손익
-          </th>
-          <th scope="col" className="py-1 text-right font-medium">
-            그날 변화
+            그날 손익
           </th>
         </tr>
       </thead>
@@ -46,11 +46,9 @@ export function BacktestDailyPnl({ points }: { points: BacktestPoint[] }) {
         {rows.map((p) => (
           <tr key={p.t} className="border-t border-edge">
             <td className="py-1">{p.t}</td>
-            <td className="py-1 text-right font-medium">{fmtKrw(p.pnl)}</td>
-            {/* 방향색은 부호가 고정된 자리에서만 — 그날의 변화가 그렇다.
-                누적은 부호가 있어도 "지금까지" 라 방향이 아니다. */}
+            {/* 방향색은 부호가 고정된 자리에서만 — 그날의 변화가 그렇다. */}
             <td
-              className={`py-1 text-right ${
+              className={`py-1 text-right font-medium ${
                 p.d === null
                   ? "text-ink-3"
                   : p.d > 0

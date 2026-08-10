@@ -69,6 +69,24 @@ interface SimulationDataState {
   overlayCases: CaseId[];
   toggleOverlayCase: (id: CaseId) => void;
 
+  /* ── 네 케이스 실행 결과 [OWNER, 2026-08-10 — "실행결과 나란히"] ─────────
+   * 실행 한 번이 네 케이스를 전부 돌리고 결과를 여기 담는다. `lastRun` 은
+   * 그중 **결과 창이 보고 있는 케이스**(resultCase)의 것과 언제나 같다 —
+   * 결과 화면의 모든 소비자(워터폴·성분 커브·서랍 표)가 lastRun 하나를
+   * 읽으므로, 케이스 전환은 lastRun 을 갈아끼우는 것으로 끝난다. 소비자를
+   * 하나하나 케이스-인지형으로 고치는 것보다 어긋날 자리가 적다. */
+  caseRuns: Partial<Record<CaseId, { request: SimulateRequest; result: SimulateResponse }>>;
+  resultCase: CaseId;
+  /** 결과 창의 케이스 탭 — 그 케이스의 실행 결과로 lastRun 을 바꿔 끼운다.
+   * 결과가 없는 케이스는 무시한다(탭 자체가 그려지지 않지만, 프로그램적
+   * 호출도 막는다). */
+  setResultCase: (id: CaseId) => void;
+  /** 실행 완료 — 네 케이스 결과를 담고 primary 케이스를 결과 창에 띄운다. */
+  ingestCaseResults: (
+    runs: Partial<Record<CaseId, { request: SimulateRequest; result: SimulateResponse }>>,
+    primary: CaseId,
+  ) => void;
+
   /** SIM2-6 — the staged flow's screen, MOVED here from SimulationFlow's
    * component state so leaving the tab and returning restores EXACTLY what
    * was on screen (the s17 ES precedent). ingestResult lands on "results"
@@ -180,6 +198,28 @@ export const useSimulationDataStore = create<SimulationDataState>((set) => ({
         : [...s.overlayCases, id],
     })),
 
+  caseRuns: {},
+  resultCase: "base",
+  setResultCase: (id) =>
+    set((s) => {
+      const hit = s.caseRuns[id];
+      if (!hit) return {};
+      return { resultCase: id, lastRun: hit.result, lastRunRequest: hit.request };
+    }),
+  ingestCaseResults: (runs, primary) =>
+    set(() => {
+      const hit = runs[primary];
+      return {
+        caseRuns: runs,
+        resultCase: primary,
+        lastRun: hit?.result ?? null,
+        lastRunRequest: hit?.request ?? null,
+        status: "success",
+        error: null,
+        stage: "results",
+      };
+    }),
+
   stage: "configure",
   setStage: (stage) => set({ stage }),
 
@@ -216,6 +256,10 @@ export const useSimulationDataStore = create<SimulationDataState>((set) => ({
   markRunning: () => set({ status: "running", error: null }),
   // SIM2-6: arrival LANDS the flow on Results (even if the tab was left and
   // remounted mid-flight — the request outlives the component).
+  // ⚠ 단일 실행 경로 — caseRuns 를 갱신하지 않는다. 지금은 호출자가 없다
+  // (runCurrent 가 ingestCaseResults 로 넘어갔다). 이 경로로 결과를 넣으면
+  // 결과 창의 케이스 탭이 낡은 caseRuns 를 보여주게 되므로, 되살릴 일이
+  // 있으면 caseRuns 도 함께 정리할 것.
   ingestResult: (request, result) =>
     set({ status: "success", error: null, lastRun: result, lastRunRequest: request, stage: "results" }),
   markError: (message) => set({ status: "error", error: message }),

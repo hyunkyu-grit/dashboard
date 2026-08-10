@@ -4,7 +4,8 @@
  * 인풋 커브 미리보기 — 설계한 시나리오가 커브를 **실행 전에** 어떻게 움직이는지
  * 보여준다.
  *
- * 겹치는 두 선은 같은 계열의 기준(실선)과 시나리오(파선)다. 시나리오 값은
+ * 겹치는 선은 같은 계열의 기준(**파선**, 액센트색 — "현재 금리 상황")과
+ * 시나리오(실선, 케이스별 고유색)다 [OWNER, 2026-08-10]. 시나리오 값은
  * 요청이 실제로 쓰는 기계에서 나온다: `buildSimulateRequest`로 페이로드를 만들고
  * `buildScenarioOverlay`가 그 요청의 경로 평가기로 테너별 누적 bp를 얹는다.
  * 여기서 수식을 다시 쓰지 않는다 — 미리보기가 실행 결과와 다른 규칙을 쓰면
@@ -23,6 +24,8 @@ import { useMemo, useState } from "react";
 
 import { Segmented } from "@/sim/ui/primitives";
 import { useSimulationDataStore } from "@/sim/store/simulation-data-store";
+import { CaseChips } from "./CaseChips";
+import { HoverPanel } from "./HoverPanel";
 import { PathPreview } from "./PathPreview";
 import { TermStructureChart, type TermSeries } from "@/sim/ui/TermStructureChart";
 import { SERIES_OPACITY } from "@/sim/theme/ramp";
@@ -35,9 +38,8 @@ import {
   buildScenarioOverlay,
   isShapedScenario,
   type BaseQuote,
-  type ScenarioOverlayPreview,
 } from "@/sim/lib/input-curve-preview";
-import { SCENARIO_CASES, type CaseId } from "@/sim/types/simulation-port";
+import { SCENARIO_CASES } from "@/sim/types/simulation-port";
 import { buildSimulateRequest } from "@/sim/lib/scenario-curves";
 import { MAX_TENOR_YEARS } from "@/sim/lib/components";
 
@@ -55,19 +57,26 @@ import { MAX_TENOR_YEARS } from "@/sim/lib/components";
  * 만 받는다. 사라진 것은 참조선이지 앵커가 아니다. */
 const FAMILIES = [{ key: "IRS", label: "IRS" }] as const;
 
-/* 케이스별 파선 패턴 [트레이더 피드백 2, 2026-08-07].
+/* 케이스 색 [OWNER, 2026-08-10 — 트레이더 피드백, 이 세션에서 세 번 더 조정].
  *
- * 넷을 가르는 것은 **색이 아니라 이것**이다. §5(monochrome-first)가 그렇게
- * 적고 있고, 이 화면에서는 실질적인 이유도 있다: 액센트는 기준선이 이미
- * 쓰고 있고, 빨강·파랑은 이 제품에서 부호를 뜻한다. 시나리오는 부호가 아니다.
+ * 파선으로 넷을 가르던 [트레이더 피드백 2, 2026-08-07] 방식은 폐기했다 —
+ * "빨강·파랑은 부호, 액센트는 기준선"이라 케이스에 쓸 색이 없다고 봤던
+ * 판단이었는데, 트레이더가 파선만으로는 넷을 빨리 못 갈랐다. 케이스는 색
+ * 하나로만 가른다. 파선은 이제 **기준(현재) 선의 것**이다 [OWNER, 2026-08-10
+ * — "현재 금리 상황은 파선으로"]: 시나리오(실선)가 주인공, 현재는 참조.
  *
- * 패턴을 눈에 띄게 벌린다 — 4 3 과 5 3 은 화면에서 같은 선이다. */
-const CASE_DASH: Record<CaseId, string> = {
-  base: "4 3",
-  bull: "1 3",
-  bear: "9 4",
-  crisis: "9 3 2 3",
-};
+ * 최종 색은 **이 트레이더의 책상 관행**이다 — 이 제품의 부호색(--bw-up=빨강
+ * 상승/--bw-down=파랑 하락)과 정반대로 읽는다 [OWNER — "상승=파랑(안 좋음),
+ * 하락=빨강(좋음)"]. 불(하락, 좋음)이 빨강, 베어(상승, 나쁨)가 파랑이다
+ * (tokens.css --bw-case-bull/bear — 부호 토큰과 값만 같고 var() 별칭은 아니다,
+ * 방향색이 바뀌어도 케이스 색이 따라 움직이면 안 되므로). 케이스 이름 자체가
+ * 방향을 고정하고 있어서(CaseSection 문구: "불은 금리 하락, 베어는 상승") 이
+ * 반대 읽기가 케이스 안에서는 거짓말이 아니다 — 다만 이 화면의 다른 곳(변동
+ * bp 등)에서 빨강/파랑을 보면 그건 여전히 부호(상승/하락)를 뜻하니 헷갈리지
+ * 말 것. 크라이시스는 톤다운한 보라(킷 퍼플을 회색으로 눌렀다 — tokens.css
+ * 주석에 실측치), 베이스는 방향이 없어 중립 회색(--bw-ref-cd)이다. 기준(오늘)
+ * 선은 그대로 액센트 주황이다 — "현재 그래프는 오렌지인데 나머지는
+ * 이렇다"[OWNER]. */
 
 export function CurvePreview() {
   const { params, inputs } = useSimulationPort();
@@ -76,6 +85,8 @@ export function CurvePreview() {
   const swapQ = useSwapInputQuotes(baseDate);
 
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
+  const [chartWidth, setChartWidth] = useState(0);
 
   // 어느 미리보기를 보고 있는지는 포트 스토어에 산다 — 단계를 오가도 유지된다.
   const previewMode = useSimulationDataStore((s) => s.previewMode);
@@ -86,7 +97,6 @@ export function CurvePreview() {
      토글을 누른 순서로 그리면 같은 조합인데 겹침 순서가 달라진다. */
   const activeCase = useSimulationDataStore((s) => s.activeCase);
   const overlayCases = useSimulationDataStore((s) => s.overlayCases);
-  const toggleOverlayCase = useSimulationDataStore((s) => s.toggleOverlayCase);
   const cases = useSimulationDataStore((s) => s.cases);
   /* 배열은 매 렌더 새 객체라 그대로 의존성에 넣으면 아래 memo 가 매번 깨진다.
      내용을 문자열로 접어서 넣는다 — 순서가 고정돼 있으므로 같은 조합이면 같은 키다. */
@@ -114,8 +124,10 @@ export function CurvePreview() {
     [inputs, params, cases, activeCase, drawnCases],
   );
 
-  /** 활성 케이스의 요청 — 시계열 미리보기와 스크러버가 이걸 본다. 겹쳐 그리기는
-   * 커브 단면에만 있다: 시계열은 이미 축이 시간이라 네 선을 얹으면 읽히지 않는다. */
+  /** 활성 케이스의 요청 — 시간축 스크러버가 이걸 본다(그 손잡이는 편집 중인
+   * 케이스 하나만 따라간다). 시계열 미리보기 자체는 `reqs`를 받아 넷을 다
+   * 겹쳐 그린다 [OWNER, 2026-08-10] — "시계열은 축이 이미 시간이라 못
+   * 읽는다"던 판단은 폐기했다. */
   const req = reqs.find((r) => r.id === activeCase)?.req ?? reqs[0].req;
   const shaped = useMemo(() => isShapedScenario(req), [req]);
   const [day, setDay] = useState<number | null>(null);
@@ -177,10 +189,10 @@ export function CurvePreview() {
     ...overlays.map((o) => ({
       key: o.id,
       label: o.label,
-      // 예상은 아직 일어나지 않은 일이라 물러난다. 편집 중인 케이스만 조금 더
-      // 진하다 — 지금 손대고 있는 선이 어느 것인지가 화면에서 읽혀야 한다.
-      shockedColor: withAlpha(t.ink, ramp[0] * (o.id === activeCase ? 0.85 : 0.45)),
-      shockedDash: CASE_DASH[o.id],
+      // 케이스 색 [OWNER, 2026-08-10]. 예상은 아직 일어나지 않은 일이라
+      // 물러난다는 원칙은 남는다 — 편집 중인 케이스만 완전 농도, 나머지는
+      // 옅게. 색 자체는 잉크가 아니라 케이스 고유색이다.
+      shockedColor: withAlpha(t.case[o.id], o.id === activeCase ? 0.9 : 0.55),
       shockedPct: o.ov.series[0]?.shockedPct,
     })),
     {
@@ -199,11 +211,14 @@ export function CurvePreview() {
   if (previewMode === "path") {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center justify-between gap-2 pb-2">
-          <ModeToggle mode={previewMode} onChange={setPreviewMode} />
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 pb-2">
+          <div className="flex items-center gap-1.5">
+            <ModeToggle mode={previewMode} onChange={setPreviewMode} />
+            <CaseChips />
+          </div>
           <span className="text-callout text-ink-2">{baseDate} 기준</span>
         </div>
-        <PathPreview req={req} baseDate={baseDate} anchor={params.anchorTenor ?? "3Y"} />
+        <PathPreview reqs={reqs} activeCase={activeCase} baseDate={baseDate} anchor={params.anchorTenor ?? "3Y"} />
       </div>
     );
   }
@@ -213,53 +228,22 @@ export function CurvePreview() {
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 pb-2">
         <div className="flex items-center gap-1.5">
           <ModeToggle mode={previewMode} onChange={setPreviewMode} />
-          {SCENARIO_CASES.map((c) => {
-            const on = c.id === activeCase || overlayCases.includes(c.id);
-            const locked = c.id === activeCase;
-            return (
-              <button
-                key={c.id}
-                type="button"
-                aria-pressed={on}
-                disabled={locked}
-                title={locked ? "편집 중인 케이스라 항상 그려요" : undefined}
-                onClick={() => toggleOverlayCase(c.id)}
-                // 아래 계열 칩과 같은 문법이다 (킷 Buttons/Content Area/Toggle을
-                // 농도로 옮긴 것). 다른 것은 하나 — 칩 안에 **자기 파선 견본**을
-                // 그린다. 차트에서 넷을 가르는 것이 파선이므로, 어느 패턴이 어느
-                // 케이스인지 말하는 자리가 있어야 한다. 별도 범례를 두면 차트
-                // 밖에 또 하나의 목록이 생긴다.
-                className={
-                  "flex h-6 items-center gap-1.5 rounded-control-sm px-2.5 text-callout transition-colors " +
-                  (on
-                    ? "bg-ink-4 font-medium text-ink"
-                    : "bg-ink-5 text-ink-2 hover:bg-ink-4 hover:text-ink-1")
-                }
-              >
-                <svg width="14" height="6" aria-hidden className="shrink-0">
-                  <line
-                    x1="0"
-                    y1="3"
-                    x2="14"
-                    y2="3"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeDasharray={CASE_DASH[c.id]}
-                  />
-                </svg>
-                {c.label}
-              </button>
-            );
-          })}
+          <CaseChips />
         </div>
         <span className="text-callout text-ink-2">
-          {hoverIdx !== null && overlays.length > 0
-            ? readout(overlays, hoverIdx)
-            : `${baseDate} · D+${shownDay}`}
+          {baseDate} · D+{shownDay}
         </span>
       </div>
 
-      <div className="min-h-[240px] flex-1">
+      <div
+        className="relative min-h-[240px] flex-1"
+        onMouseMove={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setCursor({ x: e.clientX - r.left, y: e.clientY - r.top });
+          setChartWidth(r.width);
+        }}
+        onMouseLeave={() => setCursor(null)}
+      >
         {loading ? (
           <div className="flex h-full items-center justify-center">
             <p className="text-body text-ink-2">호가를 읽는 중이에요</p>
@@ -274,7 +258,32 @@ export function CurvePreview() {
             </p>
           </div>
         ) : (
-          <TermStructureChart pillars={overlay?.pillars ?? []} series={series} onHover={setHoverIdx} />
+          <>
+            <TermStructureChart pillars={overlay?.pillars ?? []} series={series} onHover={setHoverIdx} />
+            {/* 커서 바로 옆 읽기판 [OWNER, 2026-08-10 — "상단에 적지 말고 커서
+                옆에"]. 위 헤더의 텍스트 한 줄은 정적 정보(기준일·D+n)만 남고,
+                호버 값은 커서를 따라다니는 패널로 옮겼다 — 시계열형
+                (PathPreview)이 이미 이 패턴이었다. */}
+            <HoverPanel
+              at={hoverIdx !== null && cursor ? cursor : null}
+              width={chartWidth}
+              title={overlays[0]?.ov.pillars[hoverIdx ?? -1]?.label ?? ""}
+              rows={overlays.map((o) => {
+                const src = o.ov.series[0];
+                const shocked = hoverIdx !== null ? src?.shockedPct[hoverIdx] : undefined;
+                const base = hoverIdx !== null ? src?.basePct[hoverIdx] : undefined;
+                const d = typeof shocked === "number" && typeof base === "number" ? (shocked - base) * 100 : null;
+                return {
+                  label: o.label,
+                  value:
+                    typeof shocked === "number"
+                      ? `${shocked.toFixed(3)}% (${d !== null && d >= 0 ? "+" : ""}${d?.toFixed(1) ?? "—"}bp)`
+                      : "—",
+                  color: t.case[o.id],
+                };
+              })}
+            />
+          </>
         )}
       </div>
 
@@ -301,16 +310,14 @@ export function CurvePreview() {
         </label>
       )}
 
-      {/* 색을 부르지 않는다 [2026-08-07]. "파란 실선" 이라고 적혀 있었는데
-          기준선이 액센트 주황으로 옮겨가면서 문장이 화면과 어긋났다. 색 이름을
-          주황으로 바꾸는 대신 없앤다 — 실선과 파선이 이미 둘을 가르고, HIG §6.2
-          가 "Avoid relying solely on color to differentiate between objects"
-          라고 적는 자리가 정확히 여기다. 시나리오 쪽 "회색" 은 남긴다: 그건
-          물러난 상태를 말하는 말이지 어느 선인지 짚는 말이 아니다. */}
+      {/* 기준/시나리오는 파선/실선이 가른다 [OWNER, 2026-08-10 — "현재 금리
+          상황은 파선으로"] — HIG §6.2 "avoid relying solely on color"가 이
+          축에서는 도로 성립한다. 시나리오 넷 사이는 여전히 색만 가른다(위 칩
+          견본이 그 범례다). */}
       <p className="pt-2 text-callout text-ink-2">
-        실선이 {baseDate} 기준이고, 회색 파선이 시나리오예요.
+        파선이 {baseDate} 현재이고, 실선이 시나리오예요.
         {drawnCases.length > 1
-          ? " 파선 모양이 케이스를 갈라요 — 위 칩과 같은 모양이에요."
+          ? " 색이 케이스를 갈라요 — 위 칩과 같은 색이에요."
           : " 위 칩을 눌러 다른 케이스를 겹쳐 볼 수 있어요."}
       </p>
     </div>
@@ -337,23 +344,4 @@ function ModeToggle({
       ]}
     />
   );
-}
-
-/** 호버한 테너에서 **그려진 케이스마다** 한 조각씩. 파선이 어느 케이스인지
- * 말한다면, 이 줄은 그 케이스가 그 테너에서 얼마인지를 말한다. */
-function readout(
-  overlays: { id: CaseId; label: string; ov: ScenarioOverlayPreview }[],
-  i: number,
-): string {
-  const tenor = overlays[0]?.ov.pillars[i]?.label ?? "";
-  const parts: string[] = [];
-  for (const o of overlays) {
-    const src = o.ov.series[0];
-    const base = src?.basePct[i];
-    const shocked = src?.shockedPct[i];
-    if (typeof base !== "number" || typeof shocked !== "number") continue;
-    const d = (shocked - base) * 100;
-    parts.push(`${o.label} ${shocked.toFixed(3)}% (${d >= 0 ? "+" : ""}${d.toFixed(1)}bp)`);
-  }
-  return parts.length > 0 ? `${tenor} · ${parts.join(" · ")}` : tenor;
 }

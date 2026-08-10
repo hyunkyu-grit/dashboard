@@ -14,6 +14,7 @@
 import { useRef, useState, type PointerEvent } from "react";
 
 import {
+  WINDOW_W,
   clampWindowPos,
   initialWindowPos,
   rememberWindowPos,
@@ -21,11 +22,11 @@ import {
   type WinPos,
 } from "./floatingWindow";
 
-export function useFloatingWindow(key: WindowKey) {
+export function useFloatingWindow(key: WindowKey, winW: number = WINDOW_W) {
   const [pos, setPos] = useState<WinPos>(() =>
     typeof window === "undefined"
       ? { left: 0, top: 56 }
-      : initialWindowPos({ w: window.innerWidth, h: window.innerHeight }, key),
+      : initialWindowPos({ w: window.innerWidth, h: window.innerHeight }, key, winW),
   );
   const drag = useRef<{ px: number; py: number; base: WinPos } | null>(null);
 
@@ -42,6 +43,7 @@ export function useFloatingWindow(key: WindowKey) {
         clampWindowPos(
           { left: d.base.left + e.clientX - d.px, top: d.base.top + e.clientY - d.py },
           { w: window.innerWidth, h: window.innerHeight },
+          winW,
         ),
         key,
       ),

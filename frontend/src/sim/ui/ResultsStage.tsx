@@ -21,11 +21,13 @@ import { Button, Chip, Section } from "@/sim/ui/primitives";
 import { PAGE_X } from "@/sim/ui/layout";
 import { directionVar } from "@/sim/theme/tint";
 import { COMPONENTS, visibleTotal } from "@/sim/lib/components";
+import { getSimChartTheme } from "@/sim/lib/chart-theme";
 import { useSimulationPort } from "@/sim/hooks/use-simulation";
 import { useSimulationDataStore } from "@/sim/store/simulation-data-store";
+import { SCENARIO_CASES } from "@/sim/types/simulation-port";
 
 import { ComponentCurves } from "./ComponentCurves";
-import { FundingNote } from "./ResultsTables";
+import { FundingNote, KrdDailyTable } from "./ResultsTables";
 import { Waterfall, type WaterfallItem } from "./Waterfall";
 
 /** 구획 하나가 도착하는 모양 — 짧은 페이드 + 상승.
@@ -49,10 +51,22 @@ const ANCHOR_YEARS = { "1Y": 1, "3Y": 3, "5Y": 5, "10Y": 10 } as const;
 export function ResultsStage({ onEdit }: { onEdit: () => void }) {
   const { lastRun, lastRunRequest } = useSimulationPort();
   const lastRunAnchorTenor = useSimulationDataStore((s) => s.lastRunAnchorTenor);
+  // 네 케이스 결과 [OWNER, 2026-08-10]. 탭 전환은 lastRun 자체를 갈아 끼우므로
+  // (store setResultCase), 아래의 모든 구획은 케이스를 몰라도 된다.
+  const caseRuns = useSimulationDataStore((s) => s.caseRuns);
+  const resultCase = useSimulationDataStore((s) => s.resultCase);
+  const setResultCase = useSimulationDataStore((s) => s.setResultCase);
   // above the `lastRun` guard — hooks may not sit behind an early return
   const reduced = useReducedMotion() === true;
   const ARRIVE_ITEM = arriveItem(reduced);
   if (!lastRun) return null;
+
+  const ranCases = SCENARIO_CASES.filter((c) => caseRuns[c.id]);
+  const t = getSimChartTheme();
+  const totalOf = (id: (typeof SCENARIO_CASES)[number]["id"]): number | null => {
+    const d = caseRuns[id]?.result.totalReturnDecomposition;
+    return d ? visibleTotal(d) : null;
+  };
 
   const decomp = lastRun.totalReturnDecomposition ?? null;
   const swapExclusion = (lastRun.exclusions ?? []).find((x) => x.assetClass === "swap") ?? null;
@@ -116,6 +130,44 @@ export function ResultsStage({ onEdit }: { onEdit: () => void }) {
          * 60ms apart, four times over. */
         variants={{ shown: { transition: instant({ staggerChildren: ARRIVE_STAGGER }, reduced) } }}
       >
+        {/* 케이스 탭 [OWNER, 2026-08-10 — "실행결과 나란히"]. 실행 하나가 네
+            케이스를 전부 돌렸다. 탭 하나가 케이스 하나이고, 탭 안에 그 케이스의
+            토탈이 같이 산다 — 여기서 이미 넷이 나란히 읽히고, 누르면 아래 전체
+            (칩·커브·워터폴·서랍)가 그 케이스의 결과로 갈아 끼워진다. */}
+        {ranCases.length > 1 && (
+          <motion.div variants={ARRIVE_ITEM} className="flex flex-wrap items-center gap-1.5 pt-4">
+            {ranCases.map((c) => {
+              const on = c.id === resultCase;
+              const total = totalOf(c.id);
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setResultCase(c.id)}
+                  className={
+                    "flex h-7 items-center gap-1.5 rounded-control-sm px-2.5 text-callout transition-colors " +
+                    (on
+                      ? "bg-ink-4 font-medium text-ink"
+                      : "bg-ink-5 text-ink-2 hover:bg-ink-4 hover:text-ink-1")
+                  }
+                >
+                  <svg width="14" height="6" aria-hidden className="shrink-0">
+                    <line x1="0" y1="3" x2="14" y2="3" stroke={t.case[c.id]} strokeWidth="1.5" />
+                  </svg>
+                  {c.label}
+                  <span
+                    className="tabular-nums"
+                    style={total === null ? undefined : { color: directionVar(total) }}
+                  >
+                    {total === null ? "—" : formatKrwAxisSigned(total)}
+                  </span>
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+
         <motion.div variants={ARRIVE_ITEM} className="flex flex-wrap items-center justify-between gap-2 py-4">
           <div className="flex flex-wrap items-center gap-1.5">
             {chips.map((c) => (
@@ -126,6 +178,71 @@ export function ResultsStage({ onEdit }: { onEdit: () => void }) {
             조건 수정
           </Button>
         </motion.div>
+
+        {/* 케이스 비교 — 성분까지 나란히. 위 탭이 토탈만 갈랐다면 이 표는
+            "어느 성분이 갈랐나"에 답한다. 행이 성분, 열이 케이스 — 케이스끼리
+            비교하는 화면이므로 눈이 가로로 훑는 방향에 케이스를 둔다. */}
+        {ranCases.length > 1 && (
+          <motion.div variants={ARRIVE_ITEM}>
+            <Section title="케이스 비교">
+              <p className="pb-1 text-body text-ink-2">
+                같은 포지션이 네 경로에서 각각 어디에 도착하는지예요.
+              </p>
+              <table className="w-full max-w-[640px] text-body">
+                <thead>
+                  <tr>
+                    <th className="py-2 text-left font-normal text-ink-2">성분</th>
+                    {ranCases.map((c) => (
+                      <th key={c.id} className="py-2 text-right font-normal text-ink-2">
+                        <span className="inline-flex items-center gap-1.5">
+                          <svg width="14" height="6" aria-hidden>
+                            <line x1="0" y1="3" x2="14" y2="3" stroke={t.case[c.id]} strokeWidth="1.5" />
+                          </svg>
+                          {c.label}
+                        </span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {COMPONENTS.map(({ key, label }) => (
+                    <tr key={key} className="border-t border-edge">
+                      <td className="py-2 text-ink-2">{label}</td>
+                      {ranCases.map((c) => {
+                        const d = caseRuns[c.id]?.result.totalReturnDecomposition;
+                        const v = d ? ((d[key] as number | null | undefined) ?? null) : null;
+                        return (
+                          <td
+                            key={c.id}
+                            className="py-2 text-right tabular-nums"
+                            style={v === null ? undefined : { color: directionVar(v) }}
+                          >
+                            {v === null ? "—" : formatKrwAxisSigned(v)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                  <tr className="border-t border-edge">
+                    <td className="py-2 font-medium">토탈</td>
+                    {ranCases.map((c) => {
+                      const v = totalOf(c.id);
+                      return (
+                        <td
+                          key={c.id}
+                          className="py-2 text-right font-medium tabular-nums"
+                          style={v === null ? undefined : { color: directionVar(v) }}
+                        >
+                          {v === null ? "—" : formatKrwAxisSigned(v)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tbody>
+              </table>
+            </Section>
+          </motion.div>
+        )}
 
         {swapExclusion && (
           <p className="border-t border-edge py-3 text-body text-ink-1">
@@ -195,8 +312,20 @@ export function ResultsStage({ onEdit }: { onEdit: () => void }) {
         </Section>
         </motion.div>
 
+        {/* 일별 대사 — 서랍에서 본문으로 [OWNER, 2026-08-10 — "일별 PnL탭
+            없애고, KRD의 컴포넌트를 위로 올리기"]. 세 렌즈(KRD·Δbp·손익)가
+            대사에 필요한 전부를 실으면서 별도 일별 PnL 탭은 같은 숫자의
+            부분집합이 됐다 — 표 하나가 서랍 두 탭을 대체한다. */}
+        <motion.div variants={ARRIVE_ITEM}>
+          <Section title="일별 대사">
+            <KrdDailyTable run={lastRun} />
+          </Section>
+        </motion.div>
+
         {/* 감춘 표 넷 [OWNER, 2026-08-06 — "지금 당장은 필요없을 듯"]:
          *   ContributionTable · KrdGrid · SettlementTable · DailyPnlTable
+         *   (DailyPnlTable 은 2026-08-10 에 서랍째 은퇴 — 일별 대사 표의
+         *   손익 렌즈가 같은 값을 싣는다)
          *
          * 컴포넌트는 ResultsTables.tsx에 그대로 있다. 되살리려면 위 import에
          * 이름을 되돌리고 여기에 네 줄을 다시 놓으면 된다 — 백엔드 계약도,

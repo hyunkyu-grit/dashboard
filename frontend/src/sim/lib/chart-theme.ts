@@ -17,6 +17,7 @@
 
 import {
   assertNoCssVars,
+  resolveCaseColor,
   resolveDirection,
   resolveInk,
   resolveLine,
@@ -25,6 +26,7 @@ import {
 } from "@/sim/theme/bridge";
 import { currentTheme } from "@/sim/theme/bridge";
 import { EDGE_OPACITY, SERIES_OPACITY, SERIES_WIDTH } from "@/sim/theme/ramp";
+import type { CaseId } from "@/sim/types/simulation-port";
 
 export interface SimChartTheme {
   background: string;
@@ -50,6 +52,8 @@ export interface SimChartTheme {
   /** 방향색의 옅은 채움 (막대 몸통) */
   upFill: string;
   downFill: string;
+  /** 시나리오 케이스 색 [OWNER, 2026-08-10] — tokens.css --bw-case-* */
+  case: Record<CaseId, string>;
 }
 
 /** 서버 렌더용 자리표시자.
@@ -77,6 +81,7 @@ const SSR_PLACEHOLDER: SimChartTheme = {
   down: "transparent",
   upFill: "transparent",
   downFill: "transparent",
+  case: { base: "transparent", bull: "transparent", bear: "transparent", crisis: "transparent" },
 };
 
 export function getSimChartTheme(): SimChartTheme {
@@ -103,6 +108,12 @@ export function getSimChartTheme(): SimChartTheme {
     down,
     upFill: withAlpha(up, 0.22),
     downFill: withAlpha(down, 0.22),
+    case: {
+      base: resolveCaseColor("base"),
+      bull: resolveCaseColor("bull"),
+      bear: resolveCaseColor("bear"),
+      crisis: resolveCaseColor("crisis"),
+    },
   };
 
   assertNoCssVars(out, "simChartTheme");

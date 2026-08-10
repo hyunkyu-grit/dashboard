@@ -8,8 +8,14 @@
  * 둘뿐이다 [OWNER, 2026-08-06].
  *
  * ─ 선을 어떻게 가르나 ────────────────────────────────────────────────────
- * 색조가 아니라 **잉크 농도**다. 부호가 오가는 선을 부호색으로 칠하면 색이
- * 거짓말을 한다 — 스왑평가는 시나리오에 따라 부호가 바뀐다.
+ * **최종(마지막 날) 부호로 방향색**을 칠한다 [OWNER, 2026-08-10 — "성분
+ * 누적 경로의 그래프는 최종적으로 상승인 선은 빨간색으로, 하락인 선은
+ * 파란색으로"]. 이전 규칙("색조가 아니라 잉크 농도 — 부호가 오가는 선을
+ * 부호색으로 칠하면 색이 거짓말을 한다")은 폐기했다. 절충: 기간 중 부호가
+ * 바뀌는 선(스왑평가는 시나리오에 따라 바뀔 수 있다)은 **끝에서의** 사실만
+ * 정확히 말한다 — 중간 구간에서 반대 부호였던 순간은 이 색이 말해 주지
+ * 않는다. 범례 값 색(directionVar, 아래)은 원래도 시점별로 다시 계산되니
+ * 영향 없다 — 바뀐 것은 선 자체의 고정색뿐이다.
  *
  * 범례는 **마지막 값 순서**로 세운다. 차트 오른쪽 끝의 세로 순서와 범례의
  * 위아래 순서가 같아지므로, 어느 선이 무엇인지가 색 없이도 눈으로 풀린다.
@@ -79,13 +85,14 @@ export function ComponentCurves() {
         if (typeof v === "number") data.push({ time, value: v });
         else data.push({ time });
       }
-      return { id: key, label, color: t.seriesColors[i], width: t.seriesWidths[i], data };
+      const color = finalOf(key) >= 0 ? t.up : t.down;
+      return { id: key, label, color, width: t.seriesWidths[i], data };
     });
 
-    const rows: LegendRow[] = ordered.map(({ key, label }, i) => ({
+    const rows: LegendRow[] = ordered.map(({ key, label }) => ({
       key,
       label,
-      color: t.seriesColors[i],
+      color: finalOf(key) >= 0 ? t.up : t.down,
       final: finalOf(key),
       excluded: swapExcluded && (key === "swapMtm" || key === "swapCarry"),
     }));

@@ -1894,6 +1894,46 @@ lives only in the token layer (raw-hex lint); SVG lines take the stroke colour
 via `currentColor`; canvas lines resolve it to hex through the theme bridge and
 pass `assertNoCssVars()`.
 
+#### Scenario case hues — a fourth, bounded exception [OWNER, 2026-08-10]
+
+The "two hues and nothing else" rule above predates the 2026-08-07 accent
+reinstatement (`palette.test.ts`'s own header: "THE ACCENT IS BACK") and is
+now stale in that respect — read `theme/tokens.css` and `guards/palette.test.ts`
+as the current source, this section as history.
+
+A second exception, narrower in scope than the accent's: the simulation
+screen's four scenario cases (Base/Bull/Bear/Crisis, `frontend/src/sim/`) each
+carry their own shade — `--bw-case-base/bull/bear/crisis` in tokens.css. Not a
+new palette in the end, but a DELIBERATELY REVERSED reading of this same
+screen's own direction pair: bull (하락, good) takes --bw-up's hex, bear
+(상승, bad) takes --bw-down's — literal copies, NOT `var()` aliases, because
+the meaning is flipped from what --bw-up/--bw-down mean everywhere else in
+the product (there, red=increase, full stop) [OWNER — first stated as the
+CONVENTIONAL reading ("금리가 오르는 건 안 좋은 거고 하락하는 게 좋은거"),
+then corrected minutes later in the same conversation to the reverse this
+trader actually uses: "상승=파랑(안 좋음), 하락=빨강(좋음)"]. Legitimate
+because Bull/Bear are fixed identities (CaseSection's own copy: "불은 금리
+하락, 베어는 상승") regardless of the bp the trader actually types, so a
+sign-colour reading isn't a lie the way it would be for an arbitrary number —
+but it is a LOCAL, REVERSED reading, so a reader who knows this product's
+red=up convention will misread these lines unless they know this exception
+exists. Crisis is the boosted (AAA) --bw-down this file already carries for
+`prefers-contrast: more`, copied for visual weight, not accessibility. Base
+has no fixed direction and takes the neutral `--bw-ref-cd`. Three earlier
+passes in the same session (four unrelated kit hues indigo/mint/brown/purple;
+one blue family lightness-ramped; the conventional red=up/blue=down aliasing)
+were all superseded and left no trace in code. The base/today line is
+unchanged accent orange [OWNER — "현재 그래프는 오렌지인데 나머지는
+이렇다"]. They replace the 2026-08-07
+dash-pattern encoding (CurvePreview's `CASE_DASH`), which read as too faint to
+tell the four cases apart at a glance; dash is gone entirely now, not just
+de-emphasized — every scenario line is solid. Scope: chart strokes and the
+case-chip colour swatch only (graphic marks, 3:1 floor, same tier as
+`--bw-ref-cd`/`--bw-ref-policy`). This does not reopen the ban on
+orange/navy as interaction colours (`palette.test.ts` still enforces that) —
+it is a fourth palette for one screen's one dimension (which scenario), not a
+general loosening of "red=up/blue=down, everything else grey."
+
 ### Typography [revised Session 12]
 
 - Font: Pretendard Variable. `font-variant-numeric: tabular-nums` enforced

@@ -64,7 +64,10 @@ describe("useSimulationPort runCurrent — N1 guard", () => {
     expect(useSimulationDataStore.getState().status).toBe("error");
   });
 
-  it("ships the CONVERTED wire request for a valid non-3Y anchor and records the anchor", async () => {
+  it("ships FOUR case requests (converted wire for the active case) and records the anchor", async () => {
+    // 실행 하나가 네 케이스를 전부 돌린다 [OWNER, 2026-08-10]. 요청은
+    // SCENARIO_CASES 순서(base, bull, bear, crisis)로 나가므로 calls[0]이
+    // 활성(base) 케이스의 와이어다 — N1 변환 검증은 그 요청에 건다.
     mockSimulate.mockResolvedValue(RESULT);
     useSimulationDataStore.setState((s) => ({
       params: { ...s.params, anchorTenor: "10Y", baseShockBp: "30" },
@@ -73,9 +76,13 @@ describe("useSimulationPort runCurrent — N1 guard", () => {
 
     const run = await result.current.runCurrent();
     expect(run).toBe(RESULT);
-    expect(mockSimulate).toHaveBeenCalledTimes(1);
+    expect(mockSimulate).toHaveBeenCalledTimes(4);
     const wire = mockSimulate.mock.calls[0][0];
     expect(wire.baseShockBp).toBeCloseTo(30 - 12, 10); // X − spread10y
+    // 나머지 셋도 케이스 결과 슬롯에 착지한다 — 결과 창의 케이스 탭이 읽는 곳.
+    const { caseRuns, resultCase } = useSimulationDataStore.getState();
+    expect(Object.keys(caseRuns).sort()).toEqual(["base", "bear", "bull", "crisis"]);
+    expect(resultCase).toBe("base");
     await waitFor(() =>
       expect(useSimulationDataStore.getState().lastRunAnchorTenor).toBe("10Y"),
     );

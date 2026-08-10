@@ -150,6 +150,50 @@
   --bw-ref-cd: #8e8e93;   /* Grays/Grey, from the kit */
   --bw-ref-policy: #d92d3c;
 
+  /* Scenario case hues [OWNER, 2026-08-10 — 트레이더 피드백, 케이스 색 지정 요청;
+   * REVISED three times more the same session]. §5/§9's "palette is
+   * red/blue/grey plus one orange accent" no longer holds without exception:
+   * the dash-only encoding from 2026-08-07 (CurvePreview CASE_DASH) read as
+   * too faint to tell apart at a glance. Dash is GONE, not just
+   * de-emphasized — every case line is solid, colour alone carries the split,
+   * and the base/today line stays --bw-line (accent orange, unchanged —
+   * "현재 그래프는 오렌지인데 나머지는 이렇다").
+   *
+   * FINAL pass — case colour reads as good/bad, and on THIS trader's desk red
+   * is the good one [OWNER — "상승=파랑(안 좋음), 하락=빨강(좋음)"]. This is
+   * the OPPOSITE of --bw-up/--bw-down (§9: "red up / blue down"), which is why
+   * these are NOT aliased to those tokens — --bw-up/--bw-down keep meaning
+   * "the number increased" everywhere else in the product (change cells,
+   * mini-bars, waterfalls); only the scenario-case reading is flipped, and
+   * only on this screen. Bull (하락, good) = --bw-up's hex; Bear (상승, bad) =
+   * --bw-down's hex; both copied as literals, not `var()`, so a future change
+   * to the direction pair doesn't silently drag the case colours with it (the
+   * two are related, not one-source-of-truth). Crisis is a heavier bear — the
+   * AAA-boosted --bw-down this file already carries for prefers-contrast
+   * (§ below), copied here for its weight, not for accessibility. Base has no
+   * fixed direction (the trader edits it either way), so it takes the neutral
+   * reference grey (--bw-ref-cd).
+   *
+   * (History, none left a trace in code — only in git: pass 1 was four
+   * unrelated kit hues indigo/mint/brown/purple, "너무 쨍한 원색"; pass 2 was
+   * one blue family lightness-ramped; pass 3 aliased --bw-up/--bw-down
+   * directly with the CONVENTIONAL reading (red=상승=bad), superseded by this
+   * pass's opposite reading minutes later in the same conversation.)
+   *
+   * Graphic-only marks (chart strokes, the case chip's colour swatch) — 3:1
+   * floor. All four values are literal copies of tokens already proven
+   * elsewhere in this file (--bw-up/--bw-down/boosted-down/--bw-ref-cd), so
+   * no new contrast math — same numbers, swapped role. */
+  --bw-case-base: var(--bw-ref-cd);
+  --bw-case-bull: #d92d3c; /* == --bw-up's hex — 하락(good) reads red on this desk */
+  --bw-case-bear: #0064ff; /* == --bw-down's hex — 상승(bad) reads blue on this desk */
+  /* Crisis = muted purple [OWNER, 2026-08-10 — "보라색으로 다시 수정하고, 톤
+   * 다운"]. The deep-blue "heavier bear" reading lasted one session — a third
+   * hue reads faster than a second blue. Kit System Colors 10 Purple #CB30E0
+   * pulled 35% toward the kit grey (#8e8e93, the --bw-ref-cd grey) so it sits
+   * with the quiet palette. 4.22 tile / 3.98 page — clears the 3:1 mark floor. */
+  --bw-case-crisis: #b651c5;
+
   /* Motion — three durations and ONE curve (§14, motion pass B 2026-08-06).
    *
    * These are theme-invariant, so they live in :root only. Before this block
@@ -262,6 +306,16 @@
    * there). Same rule as the direction pair: grey lightened, red = dark up-red. */
   --bw-ref-cd: #98989d;   /* Grays/Grey dark, from the kit */
   --bw-ref-policy: #f16e77;
+
+  /* Scenario case hues (dark) — same reasoning as the light block: bull=red
+   * (하락, good), bear=blue (상승, bad), the FLIPPED reading vs --bw-up/
+   * --bw-down's own meaning elsewhere. Literal copies, not var() aliases.
+   * Crisis = the kit's dark purple #DB34F2 pulled 30% toward the dark grey
+   * (#98989d) — 4.06 tile / 4.47 page / 3.69 popover, popover binding. */
+  --bw-case-base: var(--bw-ref-cd);
+  --bw-case-bull: #f16e77; /* == --bw-up (dark) hex */
+  --bw-case-bear: #4c93ff; /* == --bw-down (dark) hex */
+  --bw-case-crisis: #c752d8;
 
   /* Dark-mode band substitutes (sub-palette, unreferenced). */
   --bw-hue-curve: #8dc8e8;

@@ -64,6 +64,12 @@ export function resolveDirection(up: boolean): string {
   return resolveVar(up ? "--bw-up" : "--bw-down");
 }
 
+/** 시나리오 케이스 색 [OWNER, 2026-08-10]. tokens.css의 --bw-case-* 네
+ * 토큰과 1:1 — 이름을 바꾸면 여기도 같이 바꿀 것. */
+export function resolveCaseColor(id: "base" | "bull" | "bear" | "crisis"): string {
+  return resolveVar(`--bw-case-${id}`);
+}
+
 /** 해석된 `rgb(...)` 색에 알파를 입힌다. 캔버스에는 stroke-opacity가 없으므로,
  * 램프 농도는 이 함수를 거쳐 색 자체에 녹아든다. 이미 알파를 든 문자열은
  * 이중으로 흐려지지 않게 그대로 통과시킨다. */

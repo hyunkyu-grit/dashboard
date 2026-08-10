@@ -10,13 +10,16 @@
  * 테너는 **균등 간격**으로 놓는다. 실제 연수로 놓으면 3M~2Y 구간이 왼쪽 끝에
  * 뭉치는데, 커브를 읽을 때 실제로 보는 곳이 거기다.
  *
- * 색 규율 [OWNER, 2026-08-06]: **기준선은 파랑, 예상선은 회색**이다.
- * 금리 수준은 부호가 없는 양이라 방향색(빨강/파랑 = 부호)을 쓸 수 없지만,
- * 여기서 파랑은 부호가 아니라 사우론의 차트 선 색(--bw-line)이고 "지금 시장이
- * 이렇다"를 말한다. 예상은 아직 일어나지 않은 일이라 회색으로 물러난다.
+ * 색 규율 [OWNER, 2026-08-06, 시나리오 케이스 색 2026-08-10 추가]: 기준선은
+ * 사우론의 차트 선 색(--bw-line)이고 "지금 시장이 이렇다"를 말한다. 예상선은
+ * 시나리오 케이스마다 고유색(tokens.css --bw-case-*)이고, 편집 중인 케이스만
+ * 진하게 그 외는 옅게 물러난다. 굵기도 갈라 준다 — 기준 2px, 예상 1.5px
+ * (TermSeries.basePct/shockedPct가 각각 그린다).
  *
- * 자산군(IRS·국고)은 그 위에 **농도**로 얹고, 실선/파선이 기준/예상을 한 번 더
- * 말한다 — 색을 못 보는 조건에서도 두 축이 남는다.
+ * 파선의 주인이 바뀌었다 [OWNER, 2026-08-10 — "현재 금리 상황은 파선으로"]:
+ * 2026-08-07엔 시나리오 케이스가 파선이었고, 같은 날 폐기해 전부 실선이
+ * 됐다가, 이제 **기준(현재) 선이 파선**이다. 시나리오(실선·케이스색)가
+ * 주인공이고 현재는 참조라는 위계가 선 스타일에도 실린다.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -29,11 +32,9 @@ export interface TermSeries {
   label: string;
   /** 기준선 색. */
   baseColor?: string;
-  /** 예상선 색 (회색 계열). */
+  /** 예상선 색. 시나리오 케이스가 여럿일 때 케이스마다 고유색이다
+   * [OWNER, 2026-08-10] — 전에는 파선 패턴이 이 역할을 했지만 폐기했다. */
   shockedColor?: string;
-  /** 예상선 파선 패턴. 시나리오 케이스가 여럿일 때 **색이 아니라 이것이**
-   * 어느 케이스인지 말한다 — 흑백으로도 남아야 한다(§5). */
-  shockedDash?: string;
   /** 각 pillar에 정렬. undefined = 이 계열이 그 테너를 안 가짐(선이 건너뜀),
    * null = 가지지만 그 날 값이 없음(구멍).
    *
@@ -166,16 +167,17 @@ export function TermStructureChart({ pillars, series, onHover }: TermStructureCh
         {series.map((s) => (
           <g key={s.key}>
             {s.shockedPct && (
-              <path
-                d={path(s.shockedPct)}
-                fill="none"
-                stroke={s.shockedColor}
-                strokeWidth={1.5}
-                strokeDasharray={s.shockedDash ?? "4 3"}
-              />
+              <path d={path(s.shockedPct)} fill="none" stroke={s.shockedColor} strokeWidth={1.5} />
             )}
+            {/* 기준(현재)이 파선 [OWNER, 2026-08-10] — 도입부 주석 참조. */}
             {s.basePct && (
-              <path d={path(s.basePct)} fill="none" stroke={s.baseColor} strokeWidth={2} />
+              <path
+                d={path(s.basePct)}
+                fill="none"
+                stroke={s.baseColor}
+                strokeWidth={2}
+                strokeDasharray="6 4"
+              />
             )}
           </g>
         ))}

@@ -43,7 +43,15 @@ export function useSwapInputQuotes(baseDate: string, enabled = true) {
     retry: false,
     queryFn: async (): Promise<BaseQuote[]> => {
       const snap = await marketDataApi.snapshot(baseDate);
-      const quotes: BaseQuote[] = [{ t: 0.25, label: "3M", rate: snap.cd_rate ?? null }];
+      // 1D = 콜금리 [OWNER, 2026-08-10 — "1D도 추가", "1D는 Call Rate임"].
+      // `MarketDataResponse.on_rate`는 이미 배선돼 있었다 — 백엔드
+      // MarketSnapshot.on_rate → 라우터 → 이 응답까지 전부. 빠진 건 이
+      // 훅이 그 필드를 안 읽던 것뿐이다. 워크북에 그 날 콜금리가 없으면
+      // `on_rate`가 null이고, 그대로 넘긴다(블랭크 정책 — 지어내지 않는다).
+      const quotes: BaseQuote[] = [
+        { t: 1 / 365, label: "1D", rate: snap.on_rate ?? null },
+        { t: 0.25, label: "3M", rate: snap.cd_rate ?? null },
+      ];
       for (const q of snap.swap_quotes) {
         // Sub-1Y quotes arrive as tenor_years:1 + tenor_months (6M/9M) — the
         // months field is the real tenor; ignoring it would stack them on 1Y.

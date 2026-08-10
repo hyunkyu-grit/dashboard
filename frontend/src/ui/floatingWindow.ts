@@ -17,6 +17,13 @@ export interface WinPos {
 /** The window's fixed width; content (the 880px P&L chart) plus padding. */
 export const WINDOW_W = 928;
 
+/** 시뮬레이션 결과 창은 더 넓다 [OWNER, 2026-08-10 — "결과창 좀 키워서 최대한
+ * 한눈에"]. 케이스 비교·성분 커브·일별 KRD(테너 15개까지) 가 한 창에 살게
+ * 되면서 928 은 대사 표를 가로 스크롤로 밀어냈다. 뷰포트가 이보다 좁으면
+ * CSS min() 이 줄인다(SimulationWindow 의 style) — 위치 클램프는 이 값
+ * 기준이라 좁은 화면에서 left 가 0 으로 앵커된다. */
+export const SIM_WINDOW_W = 1320;
+
 /** The drag handle's height — the strip that must NEVER leave the viewport,
  * or the window can be pushed somewhere it cannot be dragged back from. */
 export const WINDOW_HEADER_H = 48;
@@ -37,10 +44,14 @@ export function clampWindowPos(
 
 /** First-open default: horizontally centred, near the top — over the pane
  * rather than the table, so the list stays workable beside it. */
-export function defaultWindowPos(viewport: { w: number; h: number }): WinPos {
+export function defaultWindowPos(
+  viewport: { w: number; h: number },
+  winW: number = WINDOW_W,
+): WinPos {
   return clampWindowPos(
-    { left: Math.round((viewport.w - WINDOW_W) / 2), top: 56 },
+    { left: Math.round((viewport.w - winW) / 2), top: 56 },
     viewport,
+    winW,
   );
 }
 
@@ -61,9 +72,10 @@ const remembered = new Map<WindowKey, WinPos>();
 export function initialWindowPos(
   viewport: { w: number; h: number },
   key: WindowKey,
+  winW: number = WINDOW_W,
 ): WinPos {
   const seen = remembered.get(key);
-  return seen ? clampWindowPos(seen, viewport) : defaultWindowPos(viewport);
+  return seen ? clampWindowPos(seen, viewport, winW) : defaultWindowPos(viewport, winW);
 }
 
 /** Record where the reader put it (already clamped by the caller). */
