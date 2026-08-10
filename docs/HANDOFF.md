@@ -354,8 +354,36 @@ rule:
   픽스처(linear/shaped.json)의 recon `pnl/totalEstPnl/residual` 은 이제
   구식 값이다 — FE 테스트는 그 필드를 단언하지 않아 초록이지만, 다음에
   픽스처를 다시 뜰 때 같이 갱신된다.
+- **스파게티 수술 세 건 (같은 세션, 동작 바이트 불변)** [OWNER — "다
+  해봅시다"]: ① `chart.py` 806→581줄 — 일별 대사가 `recon.py`(build_
+  irs_daily_recon + build_pos_trades), BOK 이벤트 당일 진단 ~120줄이
+  `bok_breakdown.py` 로. 반환은 `ChartRun`(NamedTuple, 9필드) — 앞 7필드는
+  종전 튜플과 위치 호환이고, decomposition dict 에 밀수하던 "daily"/
+  "swapContributions" 가 자기 필드로 나왔다(orchestrator 의 pop 우회 제거,
+  distribution 은 이름 접근으로 전환). ⚠ 이음새 규칙: profiling.py 가
+  `chart.calculate_daily_mtm` **모듈 속성**을 감싸므로, bok_breakdown 은
+  그 함수를 **인자(daily_mtm_fn)** 로 받는다 — 직접 임포트하면 프로파일러/
+  몽키패치가 조용히 끊긴다. 부수 이득: skip_recon(분포 밴드) 런이
+  IRS_Trade 사전 빌드까지 통째로 건너뛴다(종전엔 낭비 계산). ② t_mat/
+  t_next 유도 세 벌 복사(enrichment·chart FM 사전계산·recon pos_trades)를
+  `swap_schedule.resolve_swap_horizon` 하나로 — BOK 진단의 91일 롤링 변형은
+  의미가 달라(시점이 이벤트 당일) 합치지 않고 그 모듈 주석에 명시. 골든
+  딥-패리티가 전부 바이트 동일 증명(simulate 35/35). ③ `BacktestWindow.tsx`
+  1,778→1,375줄 — 돈 포매터 가족(manUnits/fmtKrwFromMan/fmtKrw/splitKrw)이
+  `ui/krw.ts` 로(창 컴포넌트에서 돈 표기를 임포트하던 BacktestDailyPnl·
+  RegretLab 의 결합 해소), PnlChart+LinkedPnlChart+CARD_W 가
+  `ui/BacktestPnlCharts.tsx` 로. 소스 스캔 가드 네 곳을 **의도 보존**하며
+  갱신: readout-parity(toFixed=픽셀 규칙이 새 두 파일도 스캔), reorder
+  (no-SPRING 목록에 추가), backtest-context(CHART_PAD 정렬 핀을 새 파일로),
+  krw-additivity·regret-list(임포트 경로). BookContextChart(~180줄)는 이번
+  패스에서 창에 남았다 — backtest-context 가드가 PreviewChart/useCdReference
+  를 창 소스에 앵커하고 있어, 옮기려면 그 가드 재앵커가 같이 가야 한다.
+  검증: FE 808 passed(이전 805+skip4 → 808+skip1 — 굳어 있던 skip 3건이
+  풀려 실행·통과), lint 0 에러, next build 통과.
 - **미해결**: 백테스트 KRD는 여전히 없다(백엔드가 계산 안 함 — KRD 탭의
-  unavailable 문구 그대로). 큰 SVG 누적 손익 차트 둘(`BacktestWindow`의
+  unavailable 문구 그대로). BacktestWindow 의 남은 덩어리(BookContextChart·
+  Result·PositionRow)와 quant_engine 의 mega 함수는 다음 패스 후보 —
+  후자는 동결 이식 코드라 오너 승인 필요. 큰 SVG 누적 손익 차트 둘(`BacktestWindow`의
   `LinkedPnlChart`/`PnlChart`)은 여전히 누적 — 막대형(일별)로 바꿀지는
   별도 결정. 네 케이스 병렬 POST의 백엔드 동시성은 스레드풀이 받는다 —
   문제가 보이면 순차 발사로 낮추는 게 첫 번째 조치.

@@ -25,7 +25,7 @@ import {
   fmtKrwFromMan,
   manUnits,
   splitKrw,
-} from "../src/ui/BacktestWindow";
+} from "../src/ui/krw";
 
 /* The ENGINE-LEVEL identity — |손익 − (평가 + 캐리)| ≤ 1원 — lives where the
  * engine does: backend test_carry_and_valuation_sum_to_the_pnl and the V1

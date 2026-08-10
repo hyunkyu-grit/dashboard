@@ -151,6 +151,7 @@ describe("the reorder is the ONE surface allowed to overshoot", () => {
       "ui/AnimatedNumber.tsx",
       "ui/BottomStrip.tsx",
       "ui/BacktestWindow.tsx",
+      "ui/BacktestPnlCharts.tsx",
     ]) {
       expect(code(f), f).not.toMatch(/\bSPRING\b/);
     }

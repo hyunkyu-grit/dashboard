@@ -167,10 +167,14 @@ describe("현재 and the 52-week stats are one grammar (pass L)", () => {
     // a second grammar — the deleted fmtMove used one on its bp difference.
     // The only toFixed allowed is the SVG path-coordinate form `x(…)/y(…)
     // .toFixed(1)`, which rounds PIXELS, exactly as PreviewChart does.
-    const src = code("ui/BacktestWindow.tsx");
-    const all = (src.match(/\.toFixed\(/g) ?? []).length;
-    const pixels = (src.match(/[xy]\([^()]*\)\.toFixed\(1\)/g) ?? []).length;
-    expect(all, "a toFixed that is not a pixel coordinate").toBe(pixels);
+    // 2026-08-10: PnlChart/LinkedPnlChart 가 BacktestPnlCharts.tsx 로,
+    // 포매터가 krw.ts 로 나갔다 — 같은 규칙이 그 파일들도 스캔한다.
+    for (const f of ["ui/BacktestWindow.tsx", "ui/BacktestPnlCharts.tsx", "ui/krw.ts"]) {
+      const src = code(f);
+      const all = (src.match(/\.toFixed\(/g) ?? []).length;
+      const pixels = (src.match(/[xy]\([^()]*\)\.toFixed\(1\)/g) ?? []).length;
+      expect(all, `${f}: a toFixed that is not a pixel coordinate`).toBe(pixels);
+    }
   });
 
   it("neither surface reimplements the rounding", () => {

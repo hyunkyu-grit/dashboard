@@ -20,7 +20,8 @@
 
 import type { RegretEntry } from "@/lib/api";
 import { dirClass, fmtBp } from "@/lib/format";
-import { directionLabel, fmtKrw } from "./BacktestWindow";
+import { directionLabel } from "./BacktestWindow";
+import { fmtKrw } from "./krw";
 
 /** "M.D" from an ISO date — the list is recent memory (20 business days by
  * construction), so the year is noise. */

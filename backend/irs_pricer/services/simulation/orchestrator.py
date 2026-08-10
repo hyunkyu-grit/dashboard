@@ -158,7 +158,7 @@ def _run_simulation_profiled(
     funding_events = funding_events or (shock_curves.fundingEvents if shock_curves else [])
 
     with _phase(_prof, "base-run (bond+swap pricing+recon)"):
-        chart_data, summary, irs_settlement_events, irs_daily_recon, funding_curve, decomposition, base_rate_path = build_chart_data(
+        run = build_chart_data(
             positions=positions,
             shock_curves=shock_curves,
             funding_rate=funding_rate,
@@ -175,11 +175,18 @@ def _run_simulation_profiled(
             funding_stepping=funding_stepping,
         )
 
-    # HARDEN-1: 일별 분해 경로는 chart가 decomposition dict에 실어 보낸다
-    # (build_chart_data 튜플 모양 보존) — 응답의 최상위 additive 필드로 분리.
-    decomposition_daily = decomposition.pop("daily", [])
-    # 2026-08-06 (추가 전용): 포지션별 기여. chart가 같은 dict에 실어 보낸다.
-    swap_contributions = decomposition.pop("swapContributions", [])
+    chart_data            = run.chart_data
+    summary               = run.summary
+    irs_settlement_events = run.settlement_events
+    irs_daily_recon       = run.daily_recon
+    funding_curve         = run.funding_curve
+    decomposition         = run.decomposition
+    base_rate_path        = run.rate_path
+    # (2026-08-10) 종전에는 chart 가 decomposition dict 에 "daily"/
+    # "swapContributions" 를 밀수하고 여기서 pop 했다 — ChartRun 의 자기
+    # 필드가 되면서 그 우회가 사라졌다. 응답 필드 배치는 그대로다.
+    decomposition_daily   = run.decomposition_daily
+    swap_contributions    = run.swap_contributions
 
     # 스왑이 제외된 경우(당일 호가 없음): 스왑 성분은 0이 아니라 "미정의"다 —
     # FE는 이 null을 —(공란)으로 렌더링한다(blank-MtM 정책). 스왑이 아예 없는

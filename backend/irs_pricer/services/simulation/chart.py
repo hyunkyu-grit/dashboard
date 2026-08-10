@@ -1,11 +1,19 @@
 """build_chart_data — the per-scenario engine run (R3a, moved verbatim from
-simulation_service.py).
+simulation_service.py; 2026-08-10 에 세 조각을 모듈로 꺼냈다 — 아래).
 
 One call = one full scenario: IRS FM precompute (simulate_irs_path_fm per
 swap — the ~82s full-book hotspot, measurement-only, do not optimize here),
-the per-business-day valuation loop, the daily IRS reconciliation table, and
-the decomposition accumulators whose float identity (bondMtm + bondCarry +
-fundingCost + swapMtm + swapCarry == totalPnL) the FE waterfall consumes.
+the per-business-day valuation loop, and the decomposition accumulators whose
+float identity (bondMtm + bondCarry + fundingCost + swapMtm + swapCarry ==
+totalPnL) the FE waterfall consumes.
+
+2026-08-10 분해 (동작 바이트 동일 — 골든 픽스처가 못박는다):
+  - 일별 대사표          → recon.build_irs_daily_recon
+  - BOK 이벤트 당일 진단  → bok_breakdown.build_bok_breakdown
+  - t_mat/t_next 유도     → swap_schedule.resolve_swap_horizon (세 벌 → 하나)
+  - 반환은 ChartRun(NamedTuple) — 종전 7-튜플 언패킹과 호환되면서,
+    decomposition dict 에 밀수하던 daily/swapContributions 가 자기 필드로
+    나왔다(9필드; 위치 언패킹하던 두 호출처는 이름 접근으로 전환).
 
 curve_cache contract: every bootstrap goes through `qe.bootstrap_zero_curve`
 module-attribute lookup so the installed memo wrapper is picked up — never
@@ -13,18 +21,21 @@ import the function name directly.
 
 The s18 T5 profiler (profiling.py) wraps THIS module's calculate_daily_mtm /
 calculate_daily_carry attributes: build_chart_data resolves them from these
-globals at call time.
+globals at call time. 추출 모듈(bok_breakdown)에는 그렇게 해석한 함수를
+**인자로 넘긴다** — 직접 임포트하면 이 이음새가 조용히 끊긴다.
 """
 
 from __future__ import annotations
 
 import logging
 from datetime import date, timedelta
+from typing import NamedTuple
 
 import numpy as np
 
 from ...engine import quant_engine as qe
 from .. import funding_basis
+from .bok_breakdown import build_bok_breakdown
 from .daily_valuation import (
     _is_matured,
     calc_dynamic_funding_rate,
@@ -32,13 +43,34 @@ from .daily_valuation import (
     calculate_daily_funding_cost,
     calculate_daily_mtm,
     get_position_shock_bp,
-    get_sector_curve_key,
     interpolate_curve_shift,
 )
-from .kr_calendar import build_bizday_schedule, next_kr_business_day
+from .kr_calendar import build_bizday_schedule
 from .models import FrontendPosition, FrontendShockCurves
+from .recon import build_irs_daily_recon
+from .swap_schedule import resolve_swap_horizon
 
 logger = logging.getLogger(__name__)
+
+
+class ChartRun(NamedTuple):
+    """한 시나리오 런의 산출물 전부.
+
+    앞 7필드는 종전 7-튜플과 순서·내용이 같다 — 위치 언패킹 호환. 뒤 2필드는
+    종전에 decomposition dict 안에 "daily"/"swapContributions" 로 밀수되던
+    것을 꺼낸 것이다(orchestrator 가 pop 하던 그 값 그대로; decomposition
+    에는 이제 다섯 성분 + total 만 산다).
+    """
+
+    chart_data: list[dict]
+    summary: dict
+    settlement_events: list[dict]
+    daily_recon: list[dict]
+    funding_curve: list[dict]
+    decomposition: dict
+    rate_path: list[dict]
+    decomposition_daily: list[dict]
+    swap_contributions: list[dict]
 
 
 def _build_irs_shock_curve(
@@ -80,9 +112,8 @@ def build_chart_data(
     skip_recon: bool = False,
     funding_rate_fixed: bool = False,
     funding_stepping: bool = False,
-) -> tuple[list[dict], dict, list[dict], list[dict], list[dict], dict, list[dict]]:
-    """7-튜플 (chart_data, summary, settlement_events, daily_recon, funding_curve,
-    decomposition, rate_path).
+) -> ChartRun:
+    """ChartRun (필드 목록·의미는 클래스 doc).
 
     rate_path (s18 T3): 이 런이 소비한 국채 3Y 누적 충격 경로 [{day, bp}] —
     chart_data와 같은 day 축. 분포 밴드의 금리 팬(이중축 분리) 원천.
@@ -91,8 +122,8 @@ def build_chart_data(
     chartData와 같은 영업일 스케줄(+day 0 앵커)로 정렬된다.
 
     skip_recon (s11 T3): 분포 밴드용 퍼센타일 런은 IRS 일별 대사표가 필요 없어
-    그 루프(영업일당 커브 부트스트랩+12 범프)를 건너뛴다. 기본 False — 원본
-    경로의 산출물은 변하지 않는다.
+    그 계산(영업일당 커브 부트스트랩+범프, IRS_Trade 사전 빌드까지 통째로)을
+    건너뛴다. 기본 False — 원본 경로의 산출물은 변하지 않는다.
 
     funding_rate_fixed (s15 T1): True면 조달금리 쪽 계산(_funding_row·캐리의
     active_rate)이 funding_events 계단 스테핑을 받지 않고 funding_rate 상수를
@@ -179,7 +210,7 @@ def build_chart_data(
         if irs_shock_curve_prebuilt is not None
         else _build_irs_shock_curve(shock_mode, base_shock_bp, shock_curves)
     )
-    # BOK 이벤트 당일 KRD 재계산용 — 쇼크커브 numpy 배열로 미리 변환
+    # 대사/진단의 KRD 재계산용 — 쇼크커브 numpy 배열로 미리 변환
     _irs_sc_t  = np.array([_st for _st, _ in irs_shock_curve], dtype=float) if irs_shock_curve else np.array([0.0, 30.0])
     _irs_sc_bp = np.array([_sb for _, _sb in irs_shock_curve], dtype=float) if irs_shock_curve else np.array([0.0,  0.0])
     irs_settlement_events: list[dict] = []
@@ -193,17 +224,7 @@ def build_chart_data(
         pass
 
     for i, p in enumerate(irs_positions):
-        t_mat = max(float(p.remainingDays or 0) / 365.0, 1 / 365)
-        if p.nextFixingDate:
-            try:
-                nfd   = date.fromisoformat(str(p.nextFixingDate)[:10])
-                ref   = date.fromisoformat(base_date_str[:10])
-                t_next = max((nfd - ref).days, 1) / 365.0
-            except Exception:
-                t_next = 0.25
-        else:
-            t_next = t_mat * 0.1 if t_mat < 0.25 else 0.25
-        t_next = max(min(t_next, t_mat), 1.0 / 365.0)
+        t_mat, t_next = resolve_swap_horizon(p.remainingDays, p.nextFixingDate, base_date_str)
 
         try:
             mtm_arr, _, carry_arr, metrics, *_ = qe.simulate_irs_path_fm(
@@ -285,188 +306,37 @@ def build_chart_data(
             logger.exception("=== [CRITICAL] 엔진 크래시 상세 추적 (%s) ===", getattr(p, "id", ""))
             raise ValueError(f"FM Engine Crash ({getattr(p, 'id', '')}): {e}") from e
 
-    # ── IRS 일별 손익 대사 — 정확한 일별 KRD 재계산 ────────────────────────────
-    # 전략: 선형 에이징(_rage) 완전 폐기 → IRS_Trade 기반 실시간 KRD
-    # 최적화: 일당 12개 범프 커브 1회 빌드 + 배치 DF LUT → 종목별 순수 NPV 차분만 수행
-    _recon_names  = qe.KRD_NAMES
-    _recon_tenors = qe.KRD_TENORS
-
-    # ── BOK 이벤트 목록 (계단식 충격 모델에 사용) ───────────────────────────────
-    # 1D/3M: BOK 이벤트 누적 bp (계단식)
-    # 3M~6M: BOK ↔ IRS ramp 선형 보간
-    # 6M+:   IRS shock_curve × 누적 factor (기존 ramp/step)
-    try:
-        _bok_evts_r = sorted(
-            [{"day": (date.fromisoformat(ev["date"]) - base_date).days,
-              "bp":  float(ev.get("shiftBp", 0))}
-             for ev in (funding_events or [])
-             if ev.get("date") and 0 <= (date.fromisoformat(ev["date"]) - base_date).days <= sim_days],
-            key=lambda x: x["day"],
-        )
-    except Exception:
-        _bok_evts_r = []
-
-    def _cum_bok_r(day: int) -> float:
-        """BOK 이벤트 누적 bp (day 이하 이벤트 합산, 계단식)."""
-        return sum(e["bp"] for e in _bok_evts_r if e["day"] <= day)
-
-    # 램프 충격을 영업일 기준으로 정규화(주말 skip) — simulate_irs_path_fm(irs_fm_mtm)과
-    # 동일한 기준을 써야 "추정"(_cum_shock_r)과 "실제"(irs_fm_mtm)가 일관된다. 캘린더
-    # 일수로 나누면 월요일에 토+일+월 3일치가 한꺼번에 반영되어 실제 P&L이 부풀어 보인다.
-    _biz_ranks_r  = qe.biz_day_ranks(base_date, sim_days)
-    _biz_total_r  = int(_biz_ranks_r[-1]) if _biz_ranks_r[-1] > 0 else max(sim_days, 1)
-
-    def _ramp_factor_r(day: int) -> float:
-        return float(_biz_ranks_r[min(max(day, 0), len(_biz_ranks_r) - 1)]) / _biz_total_r
-
-    def _cum_shock_r(tau: float, day: int) -> float:
-        """테너별 누적 충격 bp (계단식 1D/3M → 선형 소멸 at 1Y → ramp 1Y+).
-
-        SIM2-4: 경로 정합이 활성화된 요청은 1Y+ ramp 성분이 biz-ranked ramp
-        대신 설계 경로 팩터를 따른다 — FM 엔진(irs_fm_mtm)과 같은 기준을 써야
-        "추정"과 "실제"가 일관된다는 기존 원칙 그대로다.
-        """
-        if _path_factor_arr is not None:
-            _fac = float(_path_factor_arr[min(max(day, 0), sim_days)])
-        else:
-            _fac = _ramp_factor_r(day) if shock_type == "ramp" else (1.0 if day > 0 else 0.0)
-        _ramp_bp = float(np.interp(tau, _irs_sc_t, _irs_sc_bp)) * _fac
-        if not _bok_evts_r:
-            return _ramp_bp
-        _bok_bp = _cum_bok_r(day)
-        if tau <= 0.25:          # 1D, 3M: BOK 계단식 100% 직결
-            return _bok_bp
-        elif tau < 1.0:          # 3M~1Y: BOK 선형 소멸 (6M≈67%, 9M≈33%)
-            w = (tau - 0.25) / 0.75
-            return _bok_bp * (1.0 - w) + _ramp_bp * w
-        else:                    # 1Y+: IRS shock_curve ramp만 적용
-            return _ramp_bp
-
-    # ── 포지션별 IRS_Trade 사전 빌드 (불변 스케줄, 루프 밖) ─────────────────
-    _pos_trades: list[tuple] = []   # (IRS_Trade | None, float_rate_pct)
-    for _rp in irs_positions:
-        _rt0 = max(float(_rp.remainingDays or 0) / 365.0, 1.0 / 365.0)
-        _flt_r = float(_rp.currentFloatRate or 0.0)
-        _fr_r  = float(_rp.couponRate or 0.0)
-        _dir_r = int(_rp.direction or 1)
-        _N_r   = float(_rp.notional or 0.0)
-        _sec_r = _rp.sector or "IRS"
-
-        if _rp.nextFixingDate:
-            try:
-                _nfd_r  = date.fromisoformat(str(_rp.nextFixingDate)[:10])
-                _ref_r  = date.fromisoformat(base_date_str[:10])
-                _t_nxt_r = max((_nfd_r - _ref_r).days, 1) / 365.0
-            except Exception:
-                _t_nxt_r = 0.25
-        else:
-            _t_nxt_r = _rt0 * 0.1 if _rt0 < 0.25 else 0.25
-        _t_nxt_r = max(min(_t_nxt_r, _rt0), 1.0 / 365.0)
-
-        _mat_dt_r = qe._modfol_bd(base_date + timedelta(days=round(_rt0 * 365)))
-        _freq_m_r = 3   # quarterly (float_freq=0.25)
-        _start_dt_r = None
-        _sdate_str  = str(_rp.startDate)[:10] if _rp.startDate else ""
-        if _sdate_str:
-            try:
-                _start_dt_r = date.fromisoformat(_sdate_str)
-            except Exception:
-                pass
-        if _start_dt_r is None:
-            _nxt_raw_r  = base_date + timedelta(days=max(round(_t_nxt_r * 365), 1))
-            _nxt_adj_r  = qe._next_business_day(_nxt_raw_r)
-            _start_dt_r = qe._modfol_bd(qe._subtract_months(_nxt_adj_r, _freq_m_r))
-
-        if _mat_dt_r > _start_dt_r:
-            _trade_r = qe.IRS_Trade(_start_dt_r, _mat_dt_r, _fr_r, _dir_r, _N_r, sector=_sec_r)
-        else:
-            _trade_r = None
-        _pos_trades.append((_trade_r, _flt_r))
-
-    # ── 일별 루프: 기준 커브 + 12 범프 커브 빌드 후 포트폴리오 KRD 합산 ────
-    _flts_r    = [flt for (_, flt) in _pos_trades if flt > 0]
-    _avg_flt0  = float(np.mean(_flts_r)) / 100.0 if _flts_r else 0.03   # Day 0 기준 float (소수)
-
     # 영업일 스케줄 (한국 공휴일+주말 제외) — recon/메인 시뮬 루프 공용
     _bizday_schedule = build_bizday_schedule(base_date, sim_days)
 
-    irs_daily_recon: list[dict] = []
-    _prev_cal_r = 0
-    # ── 배포 계약 보정 — 원본과 다른 유일한 런타임 동작 ─────────────────────
-    # 실제 프론트 브리지(position-bridge.ts, S6)는 irsParRates를 아직 싣지 않아
-    # irsCurves가 빈 배열로 온다. 원본(rates-simulator-main)은 이 경우 아래
-    # 대사 루프의 bootstrap_zero_curve/build_bumped_curves가 빈 par 커브로
-    # ValueError를 던져 요청 전체가 500이었다(2026-07-15 실측). par 커브가
-    # 없으면 IRS 일별 대사표 자체가 정의되지 않으므로, 대사표만 비우고
-    # 나머지(채권 chartData/summary/pvbp/book)는 정상 산출한다. IRS 포지션이
-    # 있는데 커브가 없는 경우는 원본과 동일하게 FM 경로에서 실패한다.
-    if par_rates and not skip_recon:
-        # ── 일자 t 의 쇼크 커브 + 포트폴리오 KRD (루프 본문과 시드가 공유) ─────
-        # 마켓 컨벤션: "N일자 KRD/PVBP"는 N의 결제일(다음 영업일) 기준으로 재평가한
-        # 값을 보고한다 — irs_fm_mtm(simulate_irs_path_fm 내부에서 이미 동일 규칙
-        # 적용됨)과 일관되도록 여기서도 val_date를 결제일로 한 번 밀어서 넘긴다.
-        def _krd_at(_vd: date, _cd: int) -> dict[str, float]:
-            # par 커브 구성: 6M+ ramp + 1D/3M BOK 계단 앙커. 6M+ par 노드는
-            # ramp 충격 그대로, 1D/3M 앙커는 기본 float rate + BOK 누적 bp.
-            _par_day: list[tuple[float, float]] = [
-                (t_p, r_p + float(np.interp(t_p, _irs_sc_t, _irs_sc_bp))
-                 * (_ramp_factor_r(_cd) if shock_type == "ramp" else (1.0 if _cd > 0 else 0.0))
-                 * 1e-4)
-                for t_p, r_p in par_rates
-            ]
-            _par_anch = qe._inject_short_anchors(_par_day, _avg_flt0 + _cum_bok_r(_cd) * 1e-4)
-            # 기준 + KRD_TENORS 범프 커브 (일당 1회 빌드) → 포트폴리오 KRD 합산
-            _zc_b = qe.bootstrap_zero_curve(_par_anch)
-            return qe.portfolio_krd_day(_pos_trades, next_kr_business_day(_vd), _zc_b, qe.build_bumped_curves(_par_anch))
-
-        # ── 전일(start-of-day) KRD 시드 [OWNER, 2026-08-10 — 교과서 관행 정합] ──
-        # 선형 추정은 **전일 KRD × 당일 Δbp** 다. 종전에는 당일(end-of-day) KRD 를
-        # 썼는데, P&L explain 의 민감도 방식 표준은 "어제의 민감도 × 오늘의 변동"
-        # 이다(외부 검증 2026-08-10) — 이벤트·리픽싱으로 KRD 가 점프하는 날에는
-        # 이동 후 민감도로 이동분을 설명하는 순서 역전이 된다. 행의 `pvbp` 필드는
-        # 계속 **그날의** KRD 다(일별 KRD 표가 보여주는 수준값); 추정만 전일 것을
-        # 쓴다. 시드는 day 0(기준일, 쇼크 전) 의 KRD 다.
-        _pvbp_prev_r = _krd_at(base_date, 0)
-
-        for _val_date_r, _cal_day, _dt_cal in _bizday_schedule:
-            # ── 테너별 누적 충격 bp 계산 (계단식 1D/3M + ramp 6M+) ─────────────
-            _cum_r    = {_n: _cum_shock_r(_tau, _cal_day)    for _n, _tau in zip(_recon_names, _recon_tenors)}
-            _cum_prev = {_n: _cum_shock_r(_tau, _prev_cal_r) for _n, _tau in zip(_recon_names, _recon_tenors)}
-            _daily_dbp_r = {_n: _cum_r[_n] - _cum_prev[_n] for _n in _recon_names}
-
-            _pvbp_r = _krd_at(_val_date_r, _cal_day)
-
-            _pnl_r       = {_n: -_pvbp_prev_r[_n] * _daily_dbp_r[_n] for _n in _recon_names}
-            _total_est   = round(sum(_pnl_r.values()))
-            _settle      = round(float(np.sum(irs_daily_scf[_prev_cal_r + 1:_cal_day + 1])))
-            _total_act   = round(float(irs_fm_mtm[_cal_day] - irs_fm_mtm[_prev_cal_r]))
-            _npv_change  = _total_act - _settle
-            _residual    = _total_act - _total_est     # 잔차: 실제P&L − 추정P&L (양수=모델 과소추정)
-            # 세타손익: 커브를 base_date 시점에 고정한 궤적(irs_fm_mtm_theta)의 같은 구간 변화.
-            # 평가손익(=마켓무브): 실제P&L에서 세타손익을 뺀 나머지 — "그날 실제로 커브가
-            # 움직여서 생긴" 손익만 분리한 값.
-            _theta_pnl   = round(float(irs_fm_mtm_theta[_cal_day] - irs_fm_mtm_theta[_prev_cal_r]))
-            _valuation_pnl = _total_act - _theta_pnl
-            irs_daily_recon.append({
-                "date":         _val_date_r.isoformat(),
-                "day":          _cal_day,
-                "pvbp":         {_n: round(_pvbp_r[_n]) for _n in _recon_names},
-                "cumulativeBp": {_n: round(_cum_r[_n], 3) for _n in _recon_names},
-                "dailyDbp":     {_n: round(_daily_dbp_r[_n], 4) for _n in _recon_names},
-                "pnl":          {_n: round(_pnl_r[_n]) for _n in _recon_names},
-                "totalEstPnl":  _total_est,
-                "totalActual":  _total_act,
-                "settleCf":     _settle,
-                "npvChange":    _npv_change,
-                "residual":     _residual,
-                "thetaPnl":     _theta_pnl,
-                "valuationPnl": _valuation_pnl,
-            })
-            _prev_cal_r  = _cal_day
-            _pvbp_prev_r = _pvbp_r
-
-    # (SIM2-4: 커스텀 경로 전처리(_sorted_cp/_factor)는 IRS FM 사전 계산보다
-    #  먼저 필요해져 함수 상단으로 이동했다 — 동작 불변, 위치만 이동.)
+    # ── IRS 일별 손익 대사표 (recon.py) ─────────────────────────────────────
+    # 배포 계약 보정 — 원본과 다른 유일한 런타임 동작: 실제 프론트 브리지
+    # (position-bridge.ts, S6)는 irsParRates를 아직 싣지 않아 irsCurves가 빈
+    # 배열로 온다. 원본(rates-simulator-main)은 이 경우 대사 루프의 부트스트랩이
+    # 빈 par 커브로 ValueError를 던져 요청 전체가 500이었다(2026-07-15 실측).
+    # par 커브가 없으면 IRS 일별 대사표 자체가 정의되지 않으므로, 대사표만
+    # 비우고 나머지(채권 chartData/summary/pvbp/book)는 정상 산출한다. IRS
+    # 포지션이 있는데 커브가 없는 경우는 원본과 동일하게 FM 경로에서 실패한다.
+    irs_daily_recon: list[dict] = (
+        build_irs_daily_recon(
+            irs_positions=irs_positions,
+            par_rates=par_rates,
+            base_date=base_date,
+            base_date_str=base_date_str,
+            sim_days=sim_days,
+            shock_type=shock_type,
+            irs_sc_t=_irs_sc_t,
+            irs_sc_bp=_irs_sc_bp,
+            path_factor_arr=_path_factor_arr,
+            funding_events=funding_events,
+            bizday_schedule=_bizday_schedule,
+            irs_fm_mtm=irs_fm_mtm,
+            irs_fm_mtm_theta=irs_fm_mtm_theta,
+            irs_daily_scf=irs_daily_scf,
+        )
+        if par_rates and not skip_recon
+        else []
+    )
 
     # 단기 이벤트 계단 함수: funding_events 날짜 → D+N 변환
     try:
@@ -492,13 +362,6 @@ def build_chart_data(
             return _factor(t)
         cum_t = sum(e["bp"] for e in _short_evts if e["day"] <= t)
         return cum_t / _cum_short
-
-    def _get_bond_zone(p: FrontendPosition, day: int) -> str:
-        cr = max(float(p.remainingDays or 1) - day, 0.0)
-        r = cr / 365.0
-        if r < 0.25: return "short"
-        if r < 1.0:  return "blend"
-        return "long"
 
     # ── s11 T4: 시간축 조달금리/캐리 스트립 ─────────────────────────────────
     def _weighted_position_rate(t: int, multiplier: float, cur_date: date) -> float | None:
@@ -578,130 +441,35 @@ def build_chart_data(
         bond_mtm  = calculate_daily_mtm(bond_positions, shock_mode, shock_type, base_shock_bp, shock_curves, multiplier, t, current_date, short_mult)
         irs_mtm_t = float(irs_fm_mtm[t])
 
-        # BOK 이벤트 당일/영업일: 구간별(3M미만/3M~1Y/1Y이상) MTM 변화 분해 (검증용)
+        # BOK 이벤트 당일/영업일: 구간별 MTM 변화 분해 (검증용, bok_breakdown.py)
         bok_breakdown = None
         if _short_evts and short_mult != prev_short_mult:
-            prev_mult_bd = _factor(prev_cal)
-            prev_sf_bd   = _short_factor(prev_cal)
-            prev_date_bd = base_date + timedelta(days=prev_cal)
-            bd: dict[str, object] = {}
-            for zone_name in ("short", "blend", "long"):
-                z_cur  = [p for p in bond_positions if p.bondType != "swap" and _get_bond_zone(p, t)       == zone_name]
-                z_prev = [p for p in bond_positions if p.bondType != "swap" and _get_bond_zone(p, prev_cal) == zone_name]
-                cur_m  = calculate_daily_mtm(z_cur,  shock_mode, shock_type, base_shock_bp, shock_curves, multiplier,    t,       current_date, short_mult)  if z_cur  else 0.0
-                prev_m = calculate_daily_mtm(z_prev, shock_mode, shock_type, base_shock_bp, shock_curves, prev_mult_bd, prev_cal, prev_date_bd, prev_sf_bd)  if z_prev else 0.0
-                # 구간 현재 PVBP 합산 (에이징 반영) — 암묵적 bp 역산용
-                zone_pvbp = sum(
-                    (p.pvbp or 0.0) * max(float(p.remainingDays or 1) - t, 0.0) / max(float(p.remainingDays or 1), 1.0)
-                    for p in z_cur
-                )
-                bd[f"{zone_name}Delta"] = round(cur_m - prev_m)
-                bd[f"{zone_name}Pvbp"]  = round(zone_pvbp)
-
-            # IRS KRD 구간별 분해: BOK 이벤트 당일 에이징된 par커브로 KRD 재계산
-            # 단기(1D/3M): BOK 정책금리 직결 → _bok_event_bp 그대로 사용
-            # 장기(1Y+):  [SIM2-4] 비자명 설계 경로가 활성화된 요청은 IRS FM이
-            #              그 경로를 타므로 이 진단도 같은 경로 팩터를 쓴다;
-            #              그 외에는 종전 linear ramp(factor=day/sim_days).
-            _bok_event_bp  = sum(e["bp"] for e in _short_evts if prev_cal < e["day"] <= t)
-            if _path_factor_arr is not None:
-                _irs_ramp_step = float(
-                    _path_factor_arr[min(t, sim_days)] - _path_factor_arr[min(max(prev_cal, 0), sim_days)]
-                )
-            else:
-                _irs_ramp_step = dt_cal / max(sim_days, 1)  # 영업일 기간 ramp 증분 (월요일=3/sim_days)
-            _KRD_PAIRS = [
-                ("1D", 1/365), ("3M", 0.25), ("6M", 0.5),  ("9M", 0.75),
-                ("1Y", 1.0),   ("1.5Y", 1.5), ("2Y", 2.0), ("3Y", 3.0),
-                ("4Y", 4.0),   ("5Y", 5.0),  ("7Y", 7.0),  ("10Y", 10.0),
-            ]
-            _irs_1p = _irs_3p = _irs_bp = _irs_lp = 0.0  # PVBP 합산
-            _irs_1d = _irs_3d = _irs_bd = _irs_ld = 0.0  # P&L 합산
-            # BOK 이벤트 당일 shocked par 커브 — [SIM2-4] 경로 활성 시 설계 팩터.
-            _fac_irs = (
-                float(_path_factor_arr[min(t, sim_days)])
-                if _path_factor_arr is not None
-                else t / max(sim_days, 1)
+            bok_breakdown = build_bok_breakdown(
+                bond_positions=bond_positions,
+                irs_positions=irs_positions,
+                shock_mode=shock_mode,
+                shock_type=shock_type,
+                base_shock_bp=base_shock_bp,
+                shock_curves=shock_curves,
+                multiplier=multiplier,
+                short_mult=short_mult,
+                t=t,
+                prev_cal=prev_cal,
+                current_date=current_date,
+                prev_date_bd=base_date + timedelta(days=prev_cal),
+                prev_mult_bd=_factor(prev_cal),
+                prev_sf_bd=_short_factor(prev_cal),
+                dt_cal=dt_cal,
+                sim_days=sim_days,
+                short_evts=_short_evts,
+                path_factor_arr=_path_factor_arr,
+                irs_sc_t=_irs_sc_t,
+                irs_sc_bp=_irs_sc_bp,
+                par_rates=par_rates,
+                # 프로파일러/몽키패치 이음새 — 모듈 doc 참조: 호출 시점에 이
+                # 모듈 전역에서 해석한 (감싸졌을 수도 있는) 함수를 넘긴다.
+                daily_mtm_fn=calculate_daily_mtm,
             )
-            _par_t   = [(tau, r + float(np.interp(tau, _irs_sc_t, _irs_sc_bp)) * _fac_irs * 1e-4)
-                        for tau, r in par_rates]
-            _FLOAT_Q = 0.25  # 분기 픽싱 표준
-            for _p in irs_positions:
-                _t_mat_0 = max(float(_p.remainingDays or 0) / 365.0, 1.0/365.0)
-                _t_mat_t = max(_t_mat_0 - t / 365.0, 1.0/365.0)
-                if _t_mat_t < 2.0/365.0:   # 사실상 만기 → 스킵
-                    continue
-                # 에이징된 다음 변동일:
-                # nextFixingDate 기준으로 이벤트 당일(current_date)까지 에이징
-                # → enrich_irs_pvbp 의 t_next 계산과 동일 방식 → pvbpSensitivity 일치
-                # 지난 픽싱일이면 91일(분기 근사) 단위로 롤링하여 미래 픽싱일 산출
-                if _p.nextFixingDate:
-                    try:
-                        _nfd = date.fromisoformat(str(_p.nextFixingDate)[:10])
-                        _days_to_nfd = (_nfd - current_date).days
-                        while _days_to_nfd <= 0:
-                            _days_to_nfd += 91  # 분기 근사 롤링
-                        _t_nxt_t = max(min(_days_to_nfd / 365.0, _t_mat_t), 1.0/365.0)
-                    except Exception:
-                        _k_fl    = int(_t_mat_t / _FLOAT_Q)
-                        _t_nxt_t = _t_mat_t - _k_fl * _FLOAT_Q
-                        if _t_nxt_t < 1.0/365.0: _t_nxt_t = _FLOAT_Q
-                        _t_nxt_t = max(min(_t_nxt_t, _t_mat_t), 1.0/365.0)
-                else:
-                    # nextFixingDate 없으면 backward-from-maturity fallback
-                    _k_fl    = int(_t_mat_t / _FLOAT_Q)
-                    _t_nxt_t = _t_mat_t - _k_fl * _FLOAT_Q
-                    if _t_nxt_t < 1.0/365.0: _t_nxt_t = _FLOAT_Q
-                    _t_nxt_t = max(min(_t_nxt_t, _t_mat_t), 1.0/365.0)
-                try:
-                    _krd = qe.compute_irs_krd_map(
-                        par_rates              = _par_t,
-                        notional               = _p.notional or 0.0,
-                        fixed_rate_pct         = _p.couponRate or 0.0,
-                        direction              = int(_p.direction or 1),
-                        t_maturity             = _t_mat_t,
-                        t_next_payment         = _t_nxt_t,
-                        current_float_rate_pct = _p.currentFloatRate or 0.0,
-                        sector                 = _p.sector or "IRS",
-                        sim_date               = current_date,
-                    )
-                except Exception as _krd_err:
-                    logger.warning(
-                        "[BOK KRD] t=%s pos=%s t_mat=%.3f t_nxt=%.3f err=%s",
-                        t, _p.sector, _t_mat_t, _t_nxt_t, _krd_err,
-                    )
-                    # 재계산 실패 시 만기 비율로 t=0 KRD를 1차 근사 스케일링
-                    _age_scale = _t_mat_t / max(_t_mat_0, 1.0/365.0)
-                    _krd = {k: v * _age_scale for k, v in (_p.krdMap or {}).items()}
-                for _tn, _ty in _KRD_PAIRS:
-                    _kv = _krd.get(_tn, 0.0) or 0.0
-                    if abs(_kv) < 1:
-                        continue
-                    # 해당 테너의 IRS ramp 증분: 쇼크 커브에서 τ별 크기 보간 × (dt_cal/sim_days)
-                    _irs_d_bp = float(np.interp(_ty, _irs_sc_t, _irs_sc_bp)) * _irs_ramp_step
-                    if _ty < 0.1:         # 1D — BOK 정책금리 직결
-                        _irs_1p += _kv;  _irs_1d -= _kv * _bok_event_bp
-                    elif _ty <= 0.25:     # 3M — BOK 직결
-                        _irs_3p += _kv;  _irs_3d -= _kv * _bok_event_bp
-                    elif _ty <= 1.0:      # 3M~1Y — BOK ↔ IRS ramp 선형 블렌드
-                        _w   = (_ty - 0.25) / 0.75
-                        _dbp = _bok_event_bp * (1 - _w) + _irs_d_bp * _w
-                        _irs_bp += _kv;  _irs_bd -= _kv * _dbp
-                    else:                 # 1Y이상 — IRS linear ramp 기준 (채권 커스텀 경로와 무관)
-                        _irs_lp += _kv;  _irs_ld -= _kv * _irs_d_bp
-            # 블렌드/장기 대표 변동폭: IRS 쇼크 커브의 5Y 기준 × ramp 증분
-            _irs_long_d_bp = float(np.interp(5.0, _irs_sc_t, _irs_sc_bp)) * _irs_ramp_step
-            _blend_mid_bp  = round((_bok_event_bp * 0.5 + _irs_long_d_bp * 0.5) * 10) / 10
-            bd.update({
-                "irs1dPvbp":    round(_irs_1p), "irs1dDelta":    round(_irs_1d),
-                "irs3mPvbp":    round(_irs_3p), "irs3mDelta":    round(_irs_3d),
-                "irsBlendPvbp": round(_irs_bp), "irsBlendDelta": round(_irs_bd),
-                "irsLongPvbp":  round(_irs_lp), "irsLongDelta":  round(_irs_ld),
-                "bokShortBp":   round(_bok_event_bp    * 10) / 10,  # BOK 이벤트 실제 bp
-                "bokBlendBp":   _blend_mid_bp,                        # IRS 블렌드 중간점
-                "bokLongBp":    round(_irs_long_d_bp   * 10) / 10,  # IRS 5Y 기준 장기 변동폭
-            })
-            bok_breakdown = bd
         # 일별 캐리: 채권만 calculate_daily_carry, IRS는 FM 엔진 리턴 값 사용 (리픽싱 비선형 반영)
         bond_carry  = calculate_daily_carry(bond_positions, shock_mode, shock_type, base_shock_bp, shock_curves, active_rate, multiplier, t, current_date, dt_cal=dt_cal)
         # s15 T2: 같은 인자의 조달 비용 성분만 병렬 누적 (분해 전용 — 기존 수치 불변)
@@ -788,6 +556,9 @@ def build_chart_data(
     # 평가손익(전체 − 세타). 두 값은 위 루프가 이미 chartData(swapThetaPnL/
     # swapValuationPnL)용으로 계산한 동일 float들이며, 합은 종전 스왑 전액과
     # 동일하므로 total·bond 성분·funding은 바이트 동일하게 유지된다.
+    #
+    # (2026-08-10) "daily"/"swapContributions" 는 더 이상 이 dict 에 밀수하지
+    # 않는다 — ChartRun 의 자기 필드로 나간다.
     decomposition = {
         "bondMtm":     bond_mtm,
         "bondCarry":   cumulative_bond_carry + cumulative_funding,
@@ -795,12 +566,16 @@ def build_chart_data(
         "swapMtm":     swap_valuation_pnl,
         "swapCarry":   swap_theta_pnl,
         "total":       bond_mtm + cumulative_bond_carry + irs_mtm_t + cumulative_irs_carry,
-        # HARDEN-1: 일별 누적 경로 (orchestrator가 응답의 decompositionDaily로
-        # 분리한다 — 튜플 모양을 바꾸지 않기 위해 dict에 실어 보낸다).
-        "daily":       decomposition_daily,
-        # 2026-08-06: 포지션별 기여 — 같은 이유로 dict에 실어 보낸다
-        # (orchestrator가 응답의 swapContributions로 분리).
-        "swapContributions": swap_contributions,
     }
 
-    return chart_data, summary, irs_settlement_events, irs_daily_recon, funding_curve, decomposition, rate_path
+    return ChartRun(
+        chart_data=chart_data,
+        summary=summary,
+        settlement_events=irs_settlement_events,
+        daily_recon=irs_daily_recon,
+        funding_curve=funding_curve,
+        decomposition=decomposition,
+        rate_path=rate_path,
+        decomposition_daily=decomposition_daily,
+        swap_contributions=swap_contributions,
+    )

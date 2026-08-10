@@ -31,9 +31,9 @@ import { code } from "./_source";
 
 import type { BacktestResult, HistoryPoint, PolicyStep } from "../src/lib/api";
 import { mintBacktestKey } from "../src/ui/backtestMemory";
+import { LinkedPnlChart } from "../src/ui/BacktestPnlCharts";
 import {
   BacktestWindow,
-  LinkedPnlChart,
   pointOnOrAfter,
   policyRateOn,
 } from "../src/ui/BacktestWindow";
@@ -478,9 +478,13 @@ describe("the context chart reuses the one renderer", () => {
 
   it("alignment is constructed, not tuned", () => {
     // the panel borrows the instrument chart's own horizontal pad — a copied
-    // constant is the drift this pin exists to catch
-    expect(win).toMatch(/right: CHART_PAD\.right/);
-    expect(win).toMatch(/left: CHART_PAD\.left/);
+    // constant is the drift this pin exists to catch. (2026-08-10:
+    // LinkedPnlChart 가 BacktestPnlCharts.tsx 로 추출되면서 PAD 는 그 파일에
+    // 산다 — 핀의 대상은 "정렬이 CHART_PAD 에서 구성된다"는 사실이지 파일
+    // 이름이 아니다.)
+    const charts = code("ui/BacktestPnlCharts.tsx");
+    expect(charts).toMatch(/right: CHART_PAD\.right/);
+    expect(charts).toMatch(/left: CHART_PAD\.left/);
     // the top chart is windowed to the run and holds still while linked —
     // a zoom the sibling cannot follow would silently break the alignment
     expect(win).toMatch(/points\.findIndex\(\(p\) => p\.t >= result\.from\)/);

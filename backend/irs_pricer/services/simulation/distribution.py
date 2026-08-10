@@ -118,7 +118,7 @@ def build_distribution_bands(
             # 그 불연속을 피하기 위해 무시할 수 있는 크기만큼 비켜 간다.
             off += 1e-6
             shifted_base = base_shock_bp + off
-        chart_p, _sum_p, _ev_p, _rec_p, _fc_p, _dec_p, rate_path_p = build_chart_data(
+        run_p = build_chart_data(
             positions=positions,
             shock_curves=_offset_shock_curves(shock_curves, off),
             funding_rate=funding_rate,
@@ -135,8 +135,8 @@ def build_distribution_bands(
             funding_rate_fixed=funding_rate_fixed,
             funding_stepping=funding_stepping,
         )
-        runs[pct] = {int(r.get("day", 0)): float(r.get("totalPnL", 0)) for r in chart_p}
-        rate_runs[pct] = {int(r.get("day", 0)): float(r.get("bp", 0.0)) for r in rate_path_p}
+        runs[pct] = {int(r.get("day", 0)): float(r.get("totalPnL", 0)) for r in run_p.chart_data}
+        rate_runs[pct] = {int(r.get("day", 0)): float(r.get("bp", 0.0)) for r in run_p.rate_path}
 
     bands: list[dict] = []
     for d in days:

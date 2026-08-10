@@ -8,6 +8,7 @@ from datetime import date, timedelta
 from ...engine import quant_engine as qe
 from .kr_calendar import next_kr_business_day
 from .models import FrontendPosition
+from .swap_schedule import resolve_swap_horizon
 
 
 def enrich_irs_pvbp(
@@ -33,19 +34,10 @@ def enrich_irs_pvbp(
             enriched.append(p)
             continue
 
-        t_mat = max(float(p.remainingDays or 0) / 365.0, 1 / 365)
         # 다음 변동 지급일: nextFixingDate 필드 우선 사용, 없으면 3개월 근사
-        if p.nextFixingDate:
-            try:
-                nfd = date.fromisoformat(str(p.nextFixingDate)[:10])
-                ref = date.fromisoformat(str(base_date_str)[:10])
-                days_to_next = max((nfd - ref).days, 1)
-                t_next = days_to_next / 365.0
-            except Exception:
-                t_next = 0.25
-        else:
-            t_next = t_mat * 0.1 if t_mat < 0.25 else 0.25
-        t_next = max(min(t_next, t_mat), 1.0 / 365.0)
+        # (유도식은 swap_schedule.resolve_swap_horizon — 세 벌이던 복사본의
+        # 단일화, 2026-08-10).
+        t_mat, t_next = resolve_swap_horizon(p.remainingDays, p.nextFixingDate, base_date_str)
 
         # startDate가 있으면 실제 ISDA 스케줄(Forward Generation + EOM + Modified
         # Following + 만기 스냅)을 그대로 재현해 compute_irs_krd_map에 전달한다.

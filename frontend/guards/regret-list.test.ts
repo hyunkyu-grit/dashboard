@@ -23,7 +23,8 @@ import { describe, expect, it } from "vitest";
 import { code, identifiers } from "./_source";
 
 import type { RegretEntry } from "../src/lib/api";
-import { directionLabel, fmtKrw } from "../src/ui/BacktestWindow";
+import { directionLabel } from "../src/ui/BacktestWindow";
+import { fmtKrw } from "../src/ui/krw";
 import { RegretLine } from "../src/ui/RegretLab";
 import { SECTIONS } from "../src/ui/tabs";
 

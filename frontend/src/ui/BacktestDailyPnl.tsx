@@ -15,7 +15,7 @@
  * 최신이 위다. 대사는 보통 어제·오늘을 보는 일이라 맨 아래로 스크롤해야
  * 시작할 수 있으면 매번 그 스크롤을 해야 한다. */
 
-import { fmtKrw } from "./BacktestWindow";
+import { fmtKrw } from "./krw";
 
 export interface BacktestPoint {
   t: string;
