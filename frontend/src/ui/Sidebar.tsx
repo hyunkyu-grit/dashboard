@@ -31,21 +31,20 @@ import type { Group } from "./rows";
 import { GROUP_TABS, SECTIONS, type SectionId } from "./tabs";
 import { Z_SIDEBAR } from "./layers";
 
-/** 항목 하나. 최상위와 중첩이 같은 칸(32)을 쓰고 들여쓰기로만 갈린다 — 킷의
- * Level 0 / L1+ 가 그렇게 되어 있다. */
+/** 항목 하나. 최상위와 중첩이 같은 칸(32)·같은 활자를 쓰고 들여쓰기로만
+ * 갈린다 — 킷의 Level 0 / L1+ 가 그렇게 되어 있다. 크기는 headline(15) —
+ * 본문 상속(14)이 작다는 지적에 사다리 한 칸 위 [OWNER, 2026-08-11]. */
 function Item({
   label,
   glyph,
   on,
   onPick,
-  sub,
   disclosure,
 }: {
   label: string;
   glyph: string;
   on: boolean;
   onPick: () => void;
-  sub?: boolean;
   /** Backtest 에만 붙는 접기 삼각형. 항목 자체와 **다른 버튼**이다 — 누르면
    * 섹션이 바뀌는 것과 접히는 것은 다른 일이고, 하나에 둘을 걸면 접으려다
    * 화면이 바뀐다. */
@@ -75,9 +74,7 @@ function Item({
              이고 7.61:1 이다.
              호버는 잉크 5%. 목업은 3%(킷 Fills/4)인데 이 제품에서 3% 상태
              표시는 화면에서 안 보인다는 것이 이미 측정돼 있다. */
-          className={`flex h-sb-item min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-left transition-colors ${
-            sub ? "text-[14px]" : ""
-          } ${
+          className={`flex h-sb-item min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-left text-headline transition-colors ${
             on ? "bg-accent font-semibold text-on-accent" : "text-ink hover:bg-ink-5"
           }`}
         >
@@ -85,7 +82,7 @@ function Item({
               color." 문자는 목업이 고른 것 그대로. */}
           <span
             aria-hidden
-            className={`w-3.5 shrink-0 text-center text-[11px] ${
+            className={`w-3.5 shrink-0 text-center text-[12px] ${
               on ? "text-on-accent" : "text-accent-fg"
             }`}
           >
@@ -151,7 +148,6 @@ export function Sidebar({
                         glyph={t.glyph}
                         on={group === t.id}
                         onPick={() => onGroup(t.id)}
-                        sub
                       />
                     ))}
                   </ul>
