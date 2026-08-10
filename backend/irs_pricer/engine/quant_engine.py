@@ -699,13 +699,23 @@ def compute_irs_krd_map(
     # 라벨 사이에 벌어질 수 있는 최대 간극(최대 몇 영업일 수준)보다 넉넉하고,
     # KRD_TENORS 최소 간격(0.25Y)보다는 작은 허용오차로 교체.
     BUCKET_TOL = 0.05  # 약 18일 — 실제 날짜/라벨 괴리를 흡수하되 인접 버킷과는 안 겹침
-    for t_key, name in zip(KRD_TENORS, KRD_NAMES):
+    # 노드→버킷 파티션 (_krd_bucket_nodes): 커브에 없는 라벨(예: 12노드
+    # 와이어 커브의 6Y/8Y/9Y)이 인접 노드 범프를 복제해 이중 계상하던 결함
+    # 방지 [OWNER, 2026-08-11 — build_bumped_curves 와 동일 규칙, 헬퍼 주석 참조].
+    # effective_upper 가 만기 안쪽에서 잘라주는 단기 스왑에서는 종전과 동일하고,
+    # 만기가 충돌 라벨을 넘는 스왑(예: 12노드 커브의 6Y+ 스왑)에서만 유령
+    # 버킷이 0으로 돌아온다.
+    owned_nodes = _krd_bucket_nodes(avail_t)
+    for (t_key, name), nodes in zip(zip(KRD_TENORS, KRD_NAMES), owned_nodes):
         if t_key > effective_upper + BUCKET_TOL:
             continue  # effective_upper 초과: 만기 내 zero curve에 무관
-        # 가장 가까운 par rate 노드 선택
+        if not nodes:
+            continue  # 이 버킷이 소유한 노드 없음 — 인접 버킷과 이중 계상 금지
         # (1D/3M 앙커 포함으로 단기 KRD가 정확하게 해당 버킷에 포안됨)
-        closest = min(avail_t, key=lambda x: abs(x - t_key))
-        shifted = [(t, r + 0.0001 if abs(t - closest) < 1e-9 else r) for t, r in par_arr]
+        shifted = [
+            (t, r + 0.0001 if any(abs(t - n) < 1e-9 for n in nodes) else r)
+            for t, r in par_arr
+        ]
         zc_s    = bootstrap_zero_curve(shifted)
         npv_s   = compute_irs_npv(
             notional, fixed_rate_pct, direction, t_maturity,
@@ -722,6 +732,26 @@ def compute_irs_krd_map(
 # 4b. 일별 KRD 최적화 — 배치 DF LUT + 포트폴리오 합산
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _krd_bucket_nodes(avail_t: list[float]) -> list[list[float]]:
+    """par 노드를 KRD 버킷에 배속 — 각 노드는 라벨 거리가 가장 가까운 버킷
+    **하나에만** 속한다(파티션).
+
+    [OWNER, 2026-08-11] 종전에는 버킷마다 "가장 가까운 노드"를 골라 범프했는데,
+    표준 12노드 와이어 커브(6y/8y/9y 노드 없음)에서 6Y 버킷이 5y 노드,
+    8Y가 7y, 9Y가 10y 노드로 충돌 매핑되어 **같은 범프 커브가 두 버킷으로
+    합산**됐다(6Y==5Y 등 이중 계상). 일별 대사표 totalEstPnl 이 매일 유령
+    손익을 실었고(대표 북 +1.88M/일, 미설명분 310%), 일별 KRD 표에는 북에
+    없는 6Y 리스크가 보였다 — 교과서 대사 검증(2026-08-11)에서 발견.
+    파티션이면 Σ버킷 = 평행 DV01 이 성립하고(각 노드는 정확히 한 번 범프),
+    라벨과 노드가 1:1로 맞는 구간의 값은 종전과 동일하다.
+    """
+    owned: list[list[float]] = [[] for _ in KRD_TENORS]
+    for t_node in avail_t:
+        k = min(range(len(KRD_TENORS)), key=lambda i: abs(KRD_TENORS[i] - t_node))
+        owned[k].append(t_node)
+    return owned
+
+
 def build_bumped_curves(
     par_anchored: list[tuple[float, float]],
 ) -> list[np.ndarray]:
@@ -729,14 +759,27 @@ def build_bumped_curves(
     KRD_TENORS(len(KRD_TENORS)개)에 대응하는 +1bp 범프 제로 커브를 사전 빌드.
     일당 1회 호출 → 종목 루프 내 재부트스트래핑 완전 제거.
     Returns list[np.ndarray] len=len(KRD_TENORS), 각 원소 shape (N,2).
+
+    버킷별로 자기가 **소유한** 노드만 범프한다(_krd_bucket_nodes 파티션 —
+    이중 계상 금지). 소유 노드가 없는 버킷은 무범프(base) 커브를 받아
+    portfolio_krd_day 의 차분이 정확히 0이 된다.
     """
     par_arr = sorted(par_anchored, key=lambda x: x[0])
     avail_t = [p[0] for p in par_arr]
+    owned = _krd_bucket_nodes(avail_t)
+    zc_plain: np.ndarray | None = None
     result: list[np.ndarray] = []
-    for t_key in KRD_TENORS:
-        closest = min(avail_t, key=lambda x: abs(x - t_key))
-        shifted = [(t, r + 0.0001 if abs(t - closest) < 1e-9 else r) for t, r in par_arr]
-        result.append(bootstrap_zero_curve(shifted))
+    for nodes in owned:
+        if nodes:
+            shifted = [
+                (t, r + 0.0001 if any(abs(t - n) < 1e-9 for n in nodes) else r)
+                for t, r in par_arr
+            ]
+            result.append(bootstrap_zero_curve(shifted))
+        else:
+            if zc_plain is None:
+                zc_plain = bootstrap_zero_curve(par_arr)
+            result.append(zc_plain)
     return result
 
 
