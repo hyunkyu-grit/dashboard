@@ -56,6 +56,12 @@ REPRESENTATIVE_REQUEST = json.loads(
 # moves it only by the schedule/yield-base refinement; real stale blotters
 # correct by ×0.678 aggregate, see DV01_FIX_REPORT.md); finalCarry/finalSwap
 # byte-identical (swaps and carry never touch this data).
+# [RE-PINNED 2026-08-10] 일별 recon 추정이 전일(start-of-day) KRD × 당일
+# Δbp 로 바뀌며(chart.py `_pvbp_prev_r` 시드 주석 — P&L explain 민감도
+# 방식의 교과서 관행) irsDailyReconciliation 의 `pnl`/`totalEstPnl`/
+# `residual` 만 달라졌다. `pvbp`(그날의 KRD 수준값)·totalActual·theta/
+# valuation 및 그 밖의 모든 키는 이전 골든과 동일하다. 이번 캡처부터
+# swapContributions 가 골든 안에 포함된다(아래 extras 단언 주석).
 GOLDEN_RESPONSE = json.loads(
     (DATA / "simulate_golden_dv01_response.json").read_text(encoding="utf-8")
 )
@@ -226,14 +232,15 @@ def test_matches_source_backend_golden(representative_response: dict) -> None:
     # recorded at the GOLDEN_RESPONSE loader comment; an unlisted NEW key must
     # still fail here.
     #
-    # [2026-08-06] 이 배포가 **의도적으로** 추가한 키는 아래 목록에만 있다.
-    # 골든 파일을 다시 뜨지 않는 이유는 FE 페이로드 핀과 같다: 골든은 원본
-    # 백엔드가 실제로 내보내던 응답의 역사적 기록이고, 새로 뜨면 핀이 "내가
-    # 마지막으로 만든 것과 같다"는 동어반복이 된다. 목록에 없는 키가 하나라도
-    # 생기면 여전히 깨진다 — 그게 이 핀의 일이다.
-    KNOWN_ADDITIONS = {"swapContributions"}
+    # [2026-08-10] 골든을 다시 떴다 — 일별 recon 추정이 전일(start-of-day)
+    # KRD 기준으로 바뀌면서(교과서 P&L-explain 관행, chart.py 시드 주석)
+    # `pnl`/`totalEstPnl`/`residual` 이 의도적으로 달라졌다. DV01-B 와 같은
+    # 재핀이고, 같은 대가를 치른다: 이 캡처에는 swapContributions 까지 다
+    # 들어 있어 더 이상 "골든에 없는 확장 키"가 없다 — 목록에 없는 새 키는
+    # 이제 응답 키 셋 비교(test_response_matches_frontend_contract_shape)와
+    # 아래 extras 빈 셋 단언이 잡는다.
     extras = set(representative_response) - set(GOLDEN_RESPONSE)
-    assert extras == KNOWN_ADDITIONS, f"예상 밖 응답 키: {extras - KNOWN_ADDITIONS}"
+    assert extras == set(), f"예상 밖 응답 키: {extras}"
     _assert_deep_close(
         {k: representative_response[k] for k in GOLDEN_RESPONSE}, GOLDEN_RESPONSE
     )

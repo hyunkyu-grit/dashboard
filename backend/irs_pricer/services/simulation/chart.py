@@ -401,36 +401,42 @@ def build_chart_data(
     # 나머지(채권 chartData/summary/pvbp/book)는 정상 산출한다. IRS 포지션이
     # 있는데 커브가 없는 경우는 원본과 동일하게 FM 경로에서 실패한다.
     if par_rates and not skip_recon:
+        # ── 일자 t 의 쇼크 커브 + 포트폴리오 KRD (루프 본문과 시드가 공유) ─────
+        # 마켓 컨벤션: "N일자 KRD/PVBP"는 N의 결제일(다음 영업일) 기준으로 재평가한
+        # 값을 보고한다 — irs_fm_mtm(simulate_irs_path_fm 내부에서 이미 동일 규칙
+        # 적용됨)과 일관되도록 여기서도 val_date를 결제일로 한 번 밀어서 넘긴다.
+        def _krd_at(_vd: date, _cd: int) -> dict[str, float]:
+            # par 커브 구성: 6M+ ramp + 1D/3M BOK 계단 앙커. 6M+ par 노드는
+            # ramp 충격 그대로, 1D/3M 앙커는 기본 float rate + BOK 누적 bp.
+            _par_day: list[tuple[float, float]] = [
+                (t_p, r_p + float(np.interp(t_p, _irs_sc_t, _irs_sc_bp))
+                 * (_ramp_factor_r(_cd) if shock_type == "ramp" else (1.0 if _cd > 0 else 0.0))
+                 * 1e-4)
+                for t_p, r_p in par_rates
+            ]
+            _par_anch = qe._inject_short_anchors(_par_day, _avg_flt0 + _cum_bok_r(_cd) * 1e-4)
+            # 기준 + KRD_TENORS 범프 커브 (일당 1회 빌드) → 포트폴리오 KRD 합산
+            _zc_b = qe.bootstrap_zero_curve(_par_anch)
+            return qe.portfolio_krd_day(_pos_trades, next_kr_business_day(_vd), _zc_b, qe.build_bumped_curves(_par_anch))
+
+        # ── 전일(start-of-day) KRD 시드 [OWNER, 2026-08-10 — 교과서 관행 정합] ──
+        # 선형 추정은 **전일 KRD × 당일 Δbp** 다. 종전에는 당일(end-of-day) KRD 를
+        # 썼는데, P&L explain 의 민감도 방식 표준은 "어제의 민감도 × 오늘의 변동"
+        # 이다(외부 검증 2026-08-10) — 이벤트·리픽싱으로 KRD 가 점프하는 날에는
+        # 이동 후 민감도로 이동분을 설명하는 순서 역전이 된다. 행의 `pvbp` 필드는
+        # 계속 **그날의** KRD 다(일별 KRD 표가 보여주는 수준값); 추정만 전일 것을
+        # 쓴다. 시드는 day 0(기준일, 쇼크 전) 의 KRD 다.
+        _pvbp_prev_r = _krd_at(base_date, 0)
+
         for _val_date_r, _cal_day, _dt_cal in _bizday_schedule:
             # ── 테너별 누적 충격 bp 계산 (계단식 1D/3M + ramp 6M+) ─────────────
             _cum_r    = {_n: _cum_shock_r(_tau, _cal_day)    for _n, _tau in zip(_recon_names, _recon_tenors)}
             _cum_prev = {_n: _cum_shock_r(_tau, _prev_cal_r) for _n, _tau in zip(_recon_names, _recon_tenors)}
             _daily_dbp_r = {_n: _cum_r[_n] - _cum_prev[_n] for _n in _recon_names}
 
-            # ── par 커브 구성: 6M+ ramp + 1D/3M BOK 계단 앙커 ──────────────────
-            # 6M+ par 노드는 ramp 충격 그대로 적용
-            _cum_bok_rt = _cum_bok_r(_cal_day)
-            _par_day_r: list[tuple[float, float]] = [
-                (t_p, r_p + float(np.interp(t_p, _irs_sc_t, _irs_sc_bp))
-                 * (_ramp_factor_r(_cal_day) if shock_type == "ramp" else (1.0 if _cal_day > 0 else 0.0))
-                 * 1e-4)
-                for t_p, r_p in par_rates
-            ]
-            # 1D/3M 앙커: 기본 float rate + BOK 누적 bp 반영 (계단식)
-            _avg_flt_r_shocked = _avg_flt0 + _cum_bok_rt * 1e-4
-            _par_anch_r = qe._inject_short_anchors(_par_day_r, _avg_flt_r_shocked)
+            _pvbp_r = _krd_at(_val_date_r, _cal_day)
 
-            # 기준 + KRD_TENORS 범프 커브 (일당 1회 빌드)
-            _zc_base_r   = qe.bootstrap_zero_curve(_par_anch_r)
-            _zc_bumped_r = qe.build_bumped_curves(_par_anch_r)
-
-            # 포트폴리오 KRD (배치 DF LUT 최적화)
-            # 마켓 컨벤션: "N일자 KRD/PVBP"는 N의 결제일(다음 영업일) 기준으로 재평가한
-            # 값을 보고한다 — irs_fm_mtm(simulate_irs_path_fm 내부에서 이미 동일 규칙
-            # 적용됨)과 일관되도록 여기서도 val_date를 결제일로 한 번 밀어서 넘긴다.
-            _pvbp_r = qe.portfolio_krd_day(_pos_trades, next_kr_business_day(_val_date_r), _zc_base_r, _zc_bumped_r)
-
-            _pnl_r       = {_n: -_pvbp_r[_n] * _daily_dbp_r[_n] for _n in _recon_names}
+            _pnl_r       = {_n: -_pvbp_prev_r[_n] * _daily_dbp_r[_n] for _n in _recon_names}
             _total_est   = round(sum(_pnl_r.values()))
             _settle      = round(float(np.sum(irs_daily_scf[_prev_cal_r + 1:_cal_day + 1])))
             _total_act   = round(float(irs_fm_mtm[_cal_day] - irs_fm_mtm[_prev_cal_r]))
@@ -456,7 +462,8 @@ def build_chart_data(
                 "thetaPnl":     _theta_pnl,
                 "valuationPnl": _valuation_pnl,
             })
-            _prev_cal_r = _cal_day
+            _prev_cal_r  = _cal_day
+            _pvbp_prev_r = _pvbp_r
 
     # (SIM2-4: 커스텀 경로 전처리(_sorted_cp/_factor)는 IRS FM 사전 계산보다
     #  먼저 필요해져 함수 상단으로 이동했다 — 동작 불변, 위치만 이동.)
