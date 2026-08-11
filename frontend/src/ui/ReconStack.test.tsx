@@ -7,7 +7,7 @@
  * 롤다운/그날 손익)은 하루에 **한 번**(rowSpan=3), 전 기간 KRD 0 인 테너
  * 열은 숨김, Δbp 는 둘째 자리 소수(정수 반올림이 하루 0.17bp 를 지운다). */
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 
 import { ReconStack, type ReconStackDay } from "./ReconStack";
 
@@ -61,5 +61,31 @@ describe("하루 = 가로줄 셋", () => {
     const { container } = render(<ReconStack days={[day(0)]} tenors={TENORS} />);
     expect(container.textContent).toContain("0.25");
     expect(container.textContent).toContain("-0.50");
+  });
+});
+
+describe("날짜 정렬 토글 [OWNER, 2026-08-11 — '오름차순 내림차순 선택']", () => {
+  const three = [day(0), day(1), day(2)]; // 03-01 → 03-03, 오름차순 입력
+
+  const firstDate = (container: HTMLElement) =>
+    container.querySelector("tbody td[rowspan='3']")?.textContent;
+
+  it("기본 asc 는 오래된 날짜가 위, desc 는 최신이 위", () => {
+    const a = render(<ReconStack days={three} tenors={TENORS} />);
+    expect(firstDate(a.container)).toContain("03-01");
+    cleanup();
+    const b = render(<ReconStack days={three} tenors={TENORS} defaultOrder="desc" />);
+    expect(firstDate(b.container)).toContain("03-03");
+  });
+
+  it("날짜 헤더를 누르면 방향이 뒤집히고 화살표가 따라온다", () => {
+    const { container, getByRole } = render(<ReconStack days={three} tenors={TENORS} />);
+    const btn = getByRole("button", { name: /날짜/ });
+    expect(btn.textContent).toContain("↑");
+    fireEvent.click(btn);
+    expect(firstDate(container)).toContain("03-03");
+    expect(btn.textContent).toContain("↓");
+    fireEvent.click(btn);
+    expect(firstDate(container)).toContain("03-01");
   });
 });

@@ -376,7 +376,9 @@ export function KrdDailyTable({ run }: { run: SimulateResponse }) {
         당일 Δbp 추정). 추정 합계와 평가의 차가 선형화 잔차이고, 평가·캐리·
         롤다운을 더하면 그날 손익이에요.
       </p>
-      <ReconStack days={days} tenors={tenors} />
+      {/* asc 기본 = 2026-08-10 룰링(D+0 이 위 — 미래 경로엔 "최신"이 없다);
+          날짜 헤더 토글로 뒤집을 수 있다 [OWNER, 2026-08-11]. */}
+      <ReconStack days={days} tenors={tenors} defaultOrder="asc" />
     </div>
   );
 }

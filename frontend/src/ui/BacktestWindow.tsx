@@ -102,11 +102,12 @@ import { useCdReference } from "./useCdReference";
 /** 억 in, raw won out. The input is in 억 because nobody types eleven zeros. */
 const EOK = 100_000_000;
 
-/** 서버 recon → 대사 스택 [OWNER, 2026-08-11]. 최신이 위다 — 대사는 보통
- * 어제·오늘을 보는 일이라(일별 PnL 표의 규칙 그대로), 시간순인 시뮬레이션
- * 쪽과 달리 여기서는 뒤집는다: 그쪽은 미래 경로라 "최신"이랄 게 없다. */
+/** 서버 recon → 대사 스택 [OWNER, 2026-08-11]. 행은 서버 순서(오름차순)
+ * 그대로 넘기고 **첫 방향만** 최신-위(desc)로 준다 — 대사는 보통 어제·오늘을
+ * 보는 일이라(일별 PnL 표의 규칙 그대로). 뒤집기 자체는 ReconStack 의 날짜
+ * 헤더 토글이 한다 [OWNER, 같은 날 — "오름차순 내림차순 선택할 수 있게"]. */
 function BacktestReconStack({ recon }: { recon: BacktestRecon }) {
-  const days: ReconStackDay[] = [...recon.rows].reverse().map((r) => ({
+  const days: ReconStackDay[] = recon.rows.map((r) => ({
     date: r.t,
     title: r.t,
     krd: r.krd,
@@ -122,6 +123,7 @@ function BacktestReconStack({ recon }: { recon: BacktestRecon }) {
     <ReconStack
       days={days}
       tenors={recon.tenors}
+      defaultOrder="desc"
       // "손익 구성"이라는 문구를 여기 쓰면 안 된다 — krw-additivity 가드가
       // 그 문자열의 첫 등장을 구성 표의 앵커로 삼는다(문자열은 주석과 달리
       // 스캔에서 살아남는다).

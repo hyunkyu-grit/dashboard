@@ -32,6 +32,8 @@
  *     방향색 텍스트 — tint.ts 의 "한 셀 한 채널" 규칙.
  *   - Δbp 는 소수 둘째 자리(하루 0.17bp 가 정수 반올림에 지워진다). */
 
+import { useState } from "react";
+
 import { directionVar, tintFor } from "@/theme/sign-tint";
 
 export interface ReconStackDay {
@@ -94,12 +96,22 @@ export function ReconStack({
   days,
   tenors: allTenors,
   note,
+  defaultOrder = "asc",
 }: {
+  /** ASCENDING chronological order, always — the display order is this
+   * component's own state (아래 정렬 토글), not the caller's arrangement. */
   days: ReconStackDay[];
   tenors: string[];
   /** 표 아래 한 줄 — 잘린 창(백테스트 truncated) 같은 데이터 사실. */
   note?: string;
+  /** 첫 표시 방향 [OWNER, 2026-08-11 — "날짜는 오름차순 내림차순 선택할 수
+   * 있게"]. 기본값이 표면마다 다른 이유는 데이터의 성격이다: 백테스트는
+   * 실제 이력이라 최신이 위(desc — 대사는 보통 어제·오늘부터), 시뮬레이션은
+   * 미래 경로라 시간순(asc — D+0 이 위, 2026-08-10 룰링). 토글은 그 기본을
+   * 읽는 사람이 뒤집을 수 있게 할 뿐이다. */
+  defaultOrder?: "asc" | "desc";
 }) {
+  const [order, setOrder] = useState<"asc" | "desc">(defaultOrder);
   if (days.length === 0) {
     return (
       <p className="py-6 text-center text-[14px] text-ink-2">
@@ -107,6 +119,7 @@ export function ReconStack({
       </p>
     );
   }
+  const shown = order === "asc" ? days : [...days].reverse();
 
   // KRD 가 전 기간 0인 테너는 숨긴다 — 판정은 KRD 하나로, 세 줄 공통.
   const tenors = allTenors.filter((t) =>
@@ -159,7 +172,19 @@ export function ReconStack({
         </colgroup>
         <thead>
           <tr>
-            <Th>날짜</Th>
+            {/* 날짜 헤더가 곧 정렬 토글이다 — InstrumentTable 의 정렬 헤더와
+                같은 문법(버튼 + " ↑"/" ↓" 접미). 정렬 대상이 날짜 하나뿐이라
+                화살표는 항상 보인다: 지금 방향이 상태이고, 누르면 뒤집힌다. */}
+            <Th>
+              <button
+                type="button"
+                onClick={() => setOrder(order === "asc" ? "desc" : "asc")}
+                className="hover:text-ink"
+                title={order === "asc" ? "오래된 날짜부터 — 누르면 최신부터" : "최신 날짜부터 — 누르면 오래된 것부터"}
+              >
+                날짜{order === "asc" ? " ↑" : " ↓"}
+              </button>
+            </Th>
             <Th>구분</Th>
             {tenors.map((t) => (
               <Th key={t} center>
@@ -174,7 +199,7 @@ export function ReconStack({
           </tr>
         </thead>
         <tbody>
-          {days.map((d) =>
+          {shown.map((d) =>
             (["krd", "dbp", "est"] as const).map((m, mi) => {
               const total = rowTotal(d, m);
               return (
