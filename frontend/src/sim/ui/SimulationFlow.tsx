@@ -29,8 +29,6 @@
  * 일이다. 지금은 치르지 않는다. [미해결]
  */
 
-import { AnimatePresence } from "motion/react";
-
 import { useSimulationPort } from "@/sim/hooks/use-simulation";
 import { useSimulationDataStore } from "@/sim/store/simulation-data-store";
 import { ErrorBoundary } from "@/ui/ErrorBoundary";
@@ -58,18 +56,23 @@ export function SimulationFlow() {
       <ConfigureStage />
 
       {/* 조건 위에 뜬다. 존재 조건은 예전과 같다 — 결과 단계이고 실행 결과가
-          있을 때. 창을 닫는 것이 곧 조건 단계로 돌아가는 것이다. */}
-      <AnimatePresence>
-        {stage === "results" && lastRun && (
-          <ErrorBoundary
-            key="sim-window"
-            region="popup"
-            fallback="시뮬레이션 결과를 그리지 못했어요"
-          >
-            <SimulationWindow onClose={() => setStage("configure")} />
-          </ErrorBoundary>
-        )}
-      </AnimatePresence>
+          있을 때. 창을 닫는 것이 곧 조건 단계로 돌아가는 것이다.
+
+          NO AnimatePresence — 백테스트 창과 같은 판결이다 [안 닫히는 창 2제,
+          ba2c1e0 & 2026-08-11 "팝업창 아직도 잘 안닫히는데"]: 프레즌스 자식은
+          exit 완료 보고(rAF)를 기다려야 내려가는데, 닫는 순간의 무거운 리렌더
+          (이 창은 일별 대사까지 실어 크다)나 스로틀된 탭이 그 보고를 굶기면
+          창이 영원히 남는다. 닫기는 아무것도 기다리지 않는 평범한 조건부
+          언마운트다. 입장 애니메이션은 프레즌스가 필요 없어 그대로 산다. */}
+      {stage === "results" && lastRun && (
+        <ErrorBoundary
+          key="sim-window"
+          region="popup"
+          fallback="시뮬레이션 결과를 그리지 못했어요"
+        >
+          <SimulationWindow onClose={() => setStage("configure")} />
+        </ErrorBoundary>
+      )}
     </div>
   );
 }

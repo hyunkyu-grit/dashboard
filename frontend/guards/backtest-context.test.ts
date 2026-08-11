@@ -473,6 +473,15 @@ describe("the context chart reuses the one renderer", () => {
     // and the backtest window mount as plain conditionals.
     const app = code("ui/App.tsx");
     expect((app.match(/<AnimatePresence/g) ?? []).length).toBe(1);
+    // The simulation window is the same class and escaped ba2c1e0 — the owner
+    // hit it the same day ("팝업창 아직도 잘 안닫히는데"). Same invariant:
+    // mounts under no presence, carries no exit. Its close render is HEAVIER
+    // than the backtest window's (일별 대사 rows ride in ResultsStage), so the
+    // starvation that makes presences hang is easier to hit here, not harder.
+    const simFlow = code("sim/ui/SimulationFlow.tsx");
+    expect(simFlow).not.toMatch(/<AnimatePresence/);
+    const simWin = code("sim/ui/SimulationWindow.tsx");
+    expect(simWin).not.toMatch(/exit=\{/);
   });
 
   it("every authored transition collapses under reduced motion (instant)", () => {

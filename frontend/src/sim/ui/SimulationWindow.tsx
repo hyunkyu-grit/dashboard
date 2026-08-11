@@ -30,7 +30,7 @@ import { useEffect, useRef } from "react";
 import { ErrorBoundary } from "@/ui/ErrorBoundary";
 import { SIM_WINDOW_W } from "@/ui/floatingWindow";
 import { Z_WINDOW } from "@/ui/layers";
-import { ENTER, EXIT, instant } from "@/ui/motion";
+import { ENTER, instant } from "@/ui/motion";
 import { useFloatingWindow } from "@/ui/useFloatingWindow";
 import { WindowControls } from "@/ui/WindowControls";
 
@@ -66,9 +66,10 @@ export function SimulationWindow({ onClose }: { onClose: () => void }) {
          min() 은 뷰포트가 좁을 때를 위한 것 — 위치 클램프(useFloatingWindow)는
          SIM_WINDOW_W 기준이라 그 경우 left 가 0 에 앵커되고 폭만 줄어든다. */
       style={{ left: pos.left, top: pos.top, width: `min(${SIM_WINDOW_W}px, calc(100vw - 16px))` }}
+      /* exit 는 없다 — 프레즌스 밖에서 마운트되므로(SimulationFlow) 죽은
+         코드이고, 살아 있으면 다시 프레즌스에 넣고 싶어진다. 닫기는 즉시다. */
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, transition: instant(EXIT, reduced) }}
       transition={instant(ENTER, reduced)}
     >
       {/* 끌 수 있는 유일한 면. 신호등이 맨 앞인 이유는 백테스트 창과 같다 —
