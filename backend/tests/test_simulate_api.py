@@ -128,9 +128,14 @@ def test_response_matches_frontend_contract_shape(representative_response: dict)
     )
     # 그리고 행들의 합은 응답의 스왑 성분 합과 같아야 한다 — 이 표가 전체를
     # 설명한다는 주장이 성립하는지 확인한다. (엔진 세타/평가 재분해와 반올림
-    # 차이가 있을 수 있어 ±₩1로 본다.)
+    # 차이가 있을 수 있어 ±₩1로 본다.) [2026-08-11 3분해] 스왑 성분은 셋이다
+    # — swapRolldown 을 빼먹으면 캐리/롤다운 분리분만큼 어긋난다.
     decomp = body["totalReturnDecomposition"]
-    swap_total = (decomp["swapMtm"] or 0.0) + (decomp["swapCarry"] or 0.0)
+    swap_total = (
+        (decomp["swapMtm"] or 0.0)
+        + (decomp["swapCarry"] or 0.0)
+        + (decomp["swapRolldown"] or 0.0)
+    )
     assert math.isclose(sum(r["total"] for r in contribs), swap_total, rel_tol=0, abs_tol=1.0)
 
     # chartData: day 0 anchor + one row per Korean business day in the horizon.

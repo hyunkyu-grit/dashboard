@@ -974,6 +974,87 @@
  ],
  "irsDailyReconciliation": [
   {
+   "date": "2026-01-15",
+   "day": 0,
+   "pvbp": {
+    "1D": -54273,
+    "3M": -112127,
+    "6M": 78,
+    "9M": 140,
+    "1Y": 147,
+    "1.5Y": -11532,
+    "2Y": 3904860,
+    "3Y": 12341,
+    "4Y": -1434885,
+    "5Y": -2955907,
+    "6Y": 0,
+    "7Y": 0,
+    "8Y": 0,
+    "9Y": 0,
+    "10Y": 0
+   },
+   "cumulativeBp": {
+    "1D": 0.0,
+    "3M": 0.0,
+    "6M": 0.0,
+    "9M": 0.0,
+    "1Y": 0.0,
+    "1.5Y": 0.0,
+    "2Y": 0.0,
+    "3Y": 0.0,
+    "4Y": 0.0,
+    "5Y": 0.0,
+    "6Y": 0.0,
+    "7Y": 0.0,
+    "8Y": 0.0,
+    "9Y": 0.0,
+    "10Y": 0.0
+   },
+   "dailyDbp": {
+    "1D": 0.0,
+    "3M": 0.0,
+    "6M": 0.0,
+    "9M": 0.0,
+    "1Y": 0.0,
+    "1.5Y": 0.0,
+    "2Y": 0.0,
+    "3Y": 0.0,
+    "4Y": 0.0,
+    "5Y": 0.0,
+    "6Y": 0.0,
+    "7Y": 0.0,
+    "8Y": 0.0,
+    "9Y": 0.0,
+    "10Y": 0.0
+   },
+   "pnl": {
+    "1D": 0,
+    "3M": 0,
+    "6M": 0,
+    "9M": 0,
+    "1Y": 0,
+    "1.5Y": 0,
+    "2Y": 0,
+    "3Y": 0,
+    "4Y": 0,
+    "5Y": 0,
+    "6Y": 0,
+    "7Y": 0,
+    "8Y": 0,
+    "9Y": 0,
+    "10Y": 0
+   },
+   "totalEstPnl": 0,
+   "totalActual": 36098,
+   "settleCf": 0,
+   "npvChange": 0,
+   "residual": 0,
+   "thetaPnl": 36098,
+   "valuationPnl": 0,
+   "carryPnl": 73973,
+   "rolldownPnl": -37875
+  },
+  {
    "date": "2026-01-16",
    "day": 1,
    "pvbp": {
@@ -1045,14 +1126,14 @@
     "10Y": 0
    },
    "totalEstPnl": 314621,
-   "totalActual": 353972,
+   "totalActual": 330280,
    "settleCf": 0,
    "npvChange": 353972,
-   "residual": 39351,
-   "thetaPnl": 36098,
+   "residual": 3253,
+   "thetaPnl": 12406,
    "valuationPnl": 317874,
-   "carryPnl": 73973,
-   "rolldownPnl": -37875
+   "carryPnl": 24658,
+   "rolldownPnl": -12252
   },
   {
    "date": "2026-01-19",
@@ -1126,14 +1207,14 @@
     "10Y": 0
    },
    "totalEstPnl": 316735,
-   "totalActual": 331535,
+   "totalActual": 331722,
    "settleCf": 0,
    "npvChange": 331535,
-   "residual": 14800,
-   "thetaPnl": 12406,
+   "residual": 2394,
+   "thetaPnl": 12593,
    "valuationPnl": 319129,
    "carryPnl": 24658,
-   "rolldownPnl": -12252
+   "rolldownPnl": -12065
   },
   {
    "date": "2026-01-20",
@@ -1207,14 +1288,14 @@
     "10Y": 0
    },
    "totalEstPnl": 317155,
-   "totalActual": 332983,
+   "totalActual": 333170,
    "settleCf": 0,
    "npvChange": 332983,
-   "residual": 15828,
-   "thetaPnl": 12593,
+   "residual": 3235,
+   "thetaPnl": 12780,
    "valuationPnl": 320390,
    "carryPnl": 24658,
-   "rolldownPnl": -12065
+   "rolldownPnl": -11878
   },
   {
    "date": "2026-01-21",
@@ -1288,14 +1369,14 @@
     "10Y": 0
    },
    "totalEstPnl": 317576,
-   "totalActual": 334437,
+   "totalActual": 334624,
    "settleCf": 0,
    "npvChange": 334437,
-   "residual": 16861,
-   "thetaPnl": 12780,
+   "residual": 4081,
+   "thetaPnl": 12967,
    "valuationPnl": 321657,
    "carryPnl": 24658,
-   "rolldownPnl": -11878
+   "rolldownPnl": -11691
   },
   {
    "date": "2026-01-22",
@@ -1369,14 +1450,14 @@
     "10Y": 0
    },
    "totalEstPnl": 318000,
-   "totalActual": 335896,
+   "totalActual": 362952,
    "settleCf": 0,
    "npvChange": 335896,
-   "residual": 17896,
-   "thetaPnl": 12967,
+   "residual": 4929,
+   "thetaPnl": 40023,
    "valuationPnl": 322929,
-   "carryPnl": 24658,
-   "rolldownPnl": -11691
+   "carryPnl": 73973,
+   "rolldownPnl": -33950
   },
   {
    "date": "2026-01-23",
@@ -1450,14 +1531,14 @@
     "10Y": 0
    },
    "totalEstPnl": 318426,
-   "totalActual": 374467,
+   "totalActual": 348159,
    "settleCf": 0,
    "npvChange": 374467,
-   "residual": 56041,
-   "thetaPnl": 40023,
+   "residual": 16018,
+   "thetaPnl": 13715,
    "valuationPnl": 334444,
-   "carryPnl": 73973,
-   "rolldownPnl": -33950
+   "carryPnl": 24658,
+   "rolldownPnl": -10943
   },
   {
    "date": "2026-01-26",
@@ -1531,14 +1612,14 @@
     "10Y": 0
    },
    "totalEstPnl": 320577,
-   "totalActual": 340933,
+   "totalActual": 341120,
    "settleCf": 0,
    "npvChange": 340933,
-   "residual": 20356,
-   "thetaPnl": 13715,
+   "residual": 6641,
+   "thetaPnl": 13902,
    "valuationPnl": 327218,
    "carryPnl": 24658,
-   "rolldownPnl": -10943
+   "rolldownPnl": -10756
   },
   {
    "date": "2026-01-27",
@@ -1612,14 +1693,14 @@
     "10Y": 0
    },
    "totalEstPnl": 321011,
-   "totalActual": 342414,
+   "totalActual": 342601,
    "settleCf": 0,
    "npvChange": 342414,
-   "residual": 21403,
-   "thetaPnl": 13902,
+   "residual": 7501,
+   "thetaPnl": 14089,
    "valuationPnl": 328512,
    "carryPnl": 24658,
-   "rolldownPnl": -10756
+   "rolldownPnl": -10569
   },
   {
    "date": "2026-01-28",
@@ -1693,14 +1774,14 @@
     "10Y": 0
    },
    "totalEstPnl": 321446,
-   "totalActual": 343901,
+   "totalActual": 344088,
    "settleCf": 0,
    "npvChange": 343901,
-   "residual": 22455,
-   "thetaPnl": 14089,
+   "residual": 8366,
+   "thetaPnl": 14276,
    "valuationPnl": 329812,
    "carryPnl": 24658,
-   "rolldownPnl": -10569
+   "rolldownPnl": -10382
   },
   {
    "date": "2026-01-29",
@@ -1774,14 +1855,14 @@
     "10Y": 0
    },
    "totalEstPnl": 321884,
-   "totalActual": 345393,
+   "totalActual": 375069,
    "settleCf": 0,
    "npvChange": 345393,
-   "residual": 23509,
-   "thetaPnl": 14276,
+   "residual": 9233,
+   "thetaPnl": 43952,
    "valuationPnl": 331117,
-   "carryPnl": 24658,
-   "rolldownPnl": -10382
+   "carryPnl": 73973,
+   "rolldownPnl": -30021
   },
   {
    "date": "2026-01-30",
@@ -1855,14 +1936,14 @@
     "10Y": 0
    },
    "totalEstPnl": 322323,
-   "totalActual": 395398,
+   "totalActual": 366471,
    "settleCf": 0,
    "npvChange": 395398,
-   "residual": 73075,
-   "thetaPnl": 43952,
+   "residual": 29123,
+   "thetaPnl": 15025,
    "valuationPnl": 351446,
-   "carryPnl": 73973,
-   "rolldownPnl": -30021
+   "carryPnl": 24658,
+   "rolldownPnl": -9633
   },
   {
    "date": "2026-02-02",
@@ -1936,14 +2017,14 @@
     "10Y": 0
    },
    "totalEstPnl": 324512,
-   "totalActual": 350537,
+   "totalActual": 350725,
    "settleCf": 0,
    "npvChange": 350537,
-   "residual": 26025,
-   "thetaPnl": 15025,
+   "residual": 11000,
+   "thetaPnl": 15213,
    "valuationPnl": 335512,
    "carryPnl": 24658,
-   "rolldownPnl": -9633
+   "rolldownPnl": -9445
   },
   {
    "date": "2026-02-03",
@@ -2017,14 +2098,14 @@
     "10Y": 0
    },
    "totalEstPnl": 324959,
-   "totalActual": 352052,
+   "totalActual": 352239,
    "settleCf": 0,
    "npvChange": 352052,
-   "residual": 27093,
-   "thetaPnl": 15213,
+   "residual": 11880,
+   "thetaPnl": 15400,
    "valuationPnl": 336839,
    "carryPnl": 24658,
-   "rolldownPnl": -9445
+   "rolldownPnl": -9258
   },
   {
    "date": "2026-02-04",
@@ -2098,14 +2179,14 @@
     "10Y": 0
    },
    "totalEstPnl": 325408,
-   "totalActual": 353572,
+   "totalActual": 353760,
    "settleCf": 0,
    "npvChange": 353572,
-   "residual": 28164,
-   "thetaPnl": 15400,
+   "residual": 12764,
+   "thetaPnl": 15588,
    "valuationPnl": 338172,
    "carryPnl": 24658,
-   "rolldownPnl": -9258
+   "rolldownPnl": -9070
   },
   {
    "date": "2026-02-05",
@@ -2179,14 +2260,14 @@
     "10Y": 0
    },
    "totalEstPnl": 325859,
-   "totalActual": 355098,
+   "totalActual": 387398,
    "settleCf": 0,
    "npvChange": 355098,
-   "residual": 29239,
-   "thetaPnl": 15588,
+   "residual": 13651,
+   "thetaPnl": 47888,
    "valuationPnl": 339510,
-   "carryPnl": 24658,
-   "rolldownPnl": -9070
+   "carryPnl": 73973,
+   "rolldownPnl": -26085
   },
   {
    "date": "2026-02-06",
@@ -2260,14 +2341,14 @@
     "10Y": 0
    },
    "totalEstPnl": 326312,
-   "totalActual": 416764,
+   "totalActual": 385214,
    "settleCf": 0,
    "npvChange": 416764,
-   "residual": 90452,
-   "thetaPnl": 47888,
+   "residual": 42564,
+   "thetaPnl": 16338,
    "valuationPnl": 368876,
-   "carryPnl": 73973,
-   "rolldownPnl": -26085
+   "carryPnl": 24658,
+   "rolldownPnl": -8320
   },
   {
    "date": "2026-02-09",
@@ -2341,14 +2422,14 @@
     "10Y": 0
    },
    "totalEstPnl": 328538,
-   "totalActual": 360347,
+   "totalActual": 360534,
    "settleCf": 0,
    "npvChange": 360347,
-   "residual": 31809,
-   "thetaPnl": 16338,
+   "residual": 15471,
+   "thetaPnl": 16525,
    "valuationPnl": 344009,
    "carryPnl": 24658,
-   "rolldownPnl": -8320
+   "rolldownPnl": -8133
   },
   {
    "date": "2026-02-10",
@@ -2422,14 +2503,14 @@
     "10Y": 0
    },
    "totalEstPnl": 328999,
-   "totalActual": 361896,
+   "totalActual": 362084,
    "settleCf": 0,
    "npvChange": 361896,
-   "residual": 32897,
-   "thetaPnl": 16525,
+   "residual": 16372,
+   "thetaPnl": 16713,
    "valuationPnl": 345371,
    "carryPnl": 24658,
-   "rolldownPnl": -8133
+   "rolldownPnl": -7945
   },
   {
    "date": "2026-02-11",
@@ -2503,14 +2584,14 @@
     "10Y": 0
    },
    "totalEstPnl": 329461,
-   "totalActual": 363450,
+   "totalActual": 363638,
    "settleCf": 0,
    "npvChange": 363450,
-   "residual": 33989,
-   "thetaPnl": 16713,
+   "residual": 17276,
+   "thetaPnl": 16901,
    "valuationPnl": 346737,
    "carryPnl": 24658,
-   "rolldownPnl": -7945
+   "rolldownPnl": -7757
   },
   {
    "date": "2026-02-12",
@@ -2584,14 +2665,14 @@
     "10Y": 0
    },
    "totalEstPnl": 329926,
-   "totalActual": 365009,
+   "totalActual": 453456,
    "settleCf": 0,
    "npvChange": 365009,
-   "residual": 35083,
-   "thetaPnl": 16901,
+   "residual": 18182,
+   "thetaPnl": 105348,
    "valuationPnl": 348108,
-   "carryPnl": 24658,
-   "rolldownPnl": -7757
+   "carryPnl": 147945,
+   "rolldownPnl": -42597
   },
   {
    "date": "2026-02-13",
@@ -2665,14 +2746,14 @@
     "10Y": 0
    },
    "totalEstPnl": 330393,
-   "totalActual": 548209,
+   "totalActual": 461077,
    "settleCf": 0,
    "npvChange": 548209,
-   "residual": 217816,
-   "thetaPnl": 105348,
+   "residual": 112468,
+   "thetaPnl": 18216,
    "valuationPnl": 442861,
-   "carryPnl": 147945,
-   "rolldownPnl": -42597
+   "carryPnl": 24658,
+   "rolldownPnl": -6442
   },
   {
    "date": "2026-02-19",
@@ -2746,14 +2827,14 @@
     "10Y": 0
    },
    "totalEstPnl": 335358,
-   "totalActual": 373709,
+   "totalActual": 411268,
    "settleCf": 0,
    "npvChange": 373709,
-   "residual": 38351,
-   "thetaPnl": 18216,
+   "residual": 20135,
+   "thetaPnl": 55775,
    "valuationPnl": 355493,
-   "carryPnl": 24658,
-   "rolldownPnl": -6442
+   "carryPnl": 73973,
+   "rolldownPnl": -18198
   },
   {
    "date": "2026-02-20",
@@ -2827,14 +2908,14 @@
     "10Y": 0
    },
    "totalEstPnl": 335837,
-   "totalActual": 453980,
+   "totalActual": 417173,
    "settleCf": 0,
    "npvChange": 453980,
-   "residual": 118143,
-   "thetaPnl": 55775,
+   "residual": 62368,
+   "thetaPnl": 18968,
    "valuationPnl": 398205,
-   "carryPnl": 73973,
-   "rolldownPnl": -18198
+   "carryPnl": 24658,
+   "rolldownPnl": -5690
   },
   {
    "date": "2026-02-23",
@@ -2908,14 +2989,14 @@
     "10Y": 0
    },
    "totalEstPnl": 338135,
-   "totalActual": 379149,
+   "totalActual": 379337,
    "settleCf": 0,
    "npvChange": 379149,
-   "residual": 41014,
-   "thetaPnl": 18968,
+   "residual": 22046,
+   "thetaPnl": 19156,
    "valuationPnl": 360181,
    "carryPnl": 24658,
-   "rolldownPnl": -5690
+   "rolldownPnl": -5502
   },
   {
    "date": "2026-02-24",
@@ -2989,14 +3070,14 @@
     "10Y": 0
    },
    "totalEstPnl": 338622,
-   "totalActual": 380758,
+   "totalActual": 380946,
    "settleCf": 0,
    "npvChange": 380758,
-   "residual": 42136,
-   "thetaPnl": 19156,
+   "residual": 22980,
+   "thetaPnl": 19344,
    "valuationPnl": 361602,
    "carryPnl": 24658,
-   "rolldownPnl": -5502
+   "rolldownPnl": -5314
   },
   {
    "date": "2026-02-25",
@@ -3070,14 +3151,14 @@
     "10Y": 0
    },
    "totalEstPnl": 339111,
-   "totalActual": 382373,
+   "totalActual": 382562,
    "settleCf": 0,
    "npvChange": 382373,
-   "residual": 43262,
-   "thetaPnl": 19344,
+   "residual": 23918,
+   "thetaPnl": 19533,
    "valuationPnl": 363029,
    "carryPnl": 24658,
-   "rolldownPnl": -5314
+   "rolldownPnl": -5125
   },
   {
    "date": "2026-02-26",
@@ -3151,14 +3232,14 @@
     "10Y": 0
    },
    "totalEstPnl": -1037322,
-   "totalActual": -925110,
+   "totalActual": -864630,
    "settleCf": 0,
    "npvChange": -925110,
-   "residual": 112212,
-   "thetaPnl": 19533,
+   "residual": 92679,
+   "thetaPnl": 80013,
    "valuationPnl": -944643,
-   "carryPnl": 24658,
-   "rolldownPnl": -5125
+   "carryPnl": 98630,
+   "rolldownPnl": -18617
   },
   {
    "date": "2026-02-27",
@@ -3232,14 +3313,14 @@
     "10Y": 0
    },
    "totalEstPnl": 340096,
-   "totalActual": 795162,
+   "totalActual": 735623,
    "settleCf": 0,
    "npvChange": 795162,
-   "residual": 455066,
-   "thetaPnl": 80013,
+   "residual": 375053,
+   "thetaPnl": 20474,
    "valuationPnl": 715149,
-   "carryPnl": 98630,
-   "rolldownPnl": -18617
+   "carryPnl": 24658,
+   "rolldownPnl": -4184
   },
   {
    "date": "2026-03-03",
@@ -3313,14 +3394,14 @@
     "10Y": 0
    },
    "totalEstPnl": 343352,
-   "totalActual": 458668,
+   "totalActual": 458857,
    "settleCf": 0,
    "npvChange": 458668,
-   "residual": 115316,
-   "thetaPnl": 20474,
+   "residual": 94842,
+   "thetaPnl": 20663,
    "valuationPnl": 438194,
    "carryPnl": 24658,
-   "rolldownPnl": -4184
+   "rolldownPnl": -3995
   },
   {
    "date": "2026-03-04",
@@ -3394,14 +3475,14 @@
     "10Y": 0
    },
    "totalEstPnl": 343854,
-   "totalActual": 460323,
+   "totalActual": 460511,
    "settleCf": 0,
    "npvChange": 460323,
-   "residual": 116469,
-   "thetaPnl": 20663,
+   "residual": 95806,
+   "thetaPnl": 20851,
    "valuationPnl": 439660,
    "carryPnl": 24658,
-   "rolldownPnl": -3995
+   "rolldownPnl": -3807
   },
   {
    "date": "2026-03-05",
@@ -3475,14 +3556,14 @@
     "10Y": 0
    },
    "totalEstPnl": 344359,
-   "totalActual": 461984,
+   "totalActual": 504818,
    "settleCf": 0,
    "npvChange": 461984,
-   "residual": 117625,
-   "thetaPnl": 20851,
+   "residual": 96774,
+   "thetaPnl": 63685,
    "valuationPnl": 441133,
-   "carryPnl": 24658,
-   "rolldownPnl": -3807
+   "carryPnl": 73973,
+   "rolldownPnl": -10288
   },
   {
    "date": "2026-03-06",
@@ -3556,14 +3637,14 @@
     "10Y": 0
    },
    "totalEstPnl": 344866,
-   "totalActual": 701905,
+   "totalActual": 659826,
    "settleCf": 0,
    "npvChange": 701905,
-   "residual": 357039,
-   "thetaPnl": 63685,
+   "residual": 293354,
+   "thetaPnl": 21606,
    "valuationPnl": 638220,
-   "carryPnl": 73973,
-   "rolldownPnl": -10288
+   "carryPnl": 24658,
+   "rolldownPnl": -3052
   },
   {
    "date": "2026-03-09",
@@ -3637,14 +3718,14 @@
     "10Y": 0
    },
    "totalEstPnl": 347236,
-   "totalActual": 467667,
+   "totalActual": 467855,
    "settleCf": 0,
    "npvChange": 467667,
-   "residual": 120431,
-   "thetaPnl": 21606,
+   "residual": 98825,
+   "thetaPnl": 21794,
    "valuationPnl": 446061,
    "carryPnl": 24658,
-   "rolldownPnl": -3052
+   "rolldownPnl": -2864
   },
   {
    "date": "2026-03-10",
@@ -3718,14 +3799,14 @@
     "10Y": 0
    },
    "totalEstPnl": 347750,
-   "totalActual": 469350,
+   "totalActual": 469539,
    "settleCf": 0,
    "npvChange": 469350,
-   "residual": 121600,
-   "thetaPnl": 21794,
+   "residual": 99806,
+   "thetaPnl": 21983,
    "valuationPnl": 447556,
    "carryPnl": 24658,
-   "rolldownPnl": -2864
+   "rolldownPnl": -2675
   },
   {
    "date": "2026-03-11",
@@ -3799,14 +3880,14 @@
     "10Y": 0
    },
    "totalEstPnl": 348267,
-   "totalActual": 471039,
+   "totalActual": 471228,
    "settleCf": 0,
    "npvChange": 471039,
-   "residual": 122772,
-   "thetaPnl": 21983,
+   "residual": 100789,
+   "thetaPnl": 22172,
    "valuationPnl": 449056,
    "carryPnl": 24658,
-   "rolldownPnl": -2675
+   "rolldownPnl": -2486
   },
   {
    "date": "2026-03-12",
@@ -3880,14 +3961,14 @@
     "10Y": 0
    },
    "totalEstPnl": 348785,
-   "totalActual": 472733,
+   "totalActual": 518215,
    "settleCf": 0,
    "npvChange": 472733,
-   "residual": 123948,
-   "thetaPnl": 22172,
+   "residual": 101776,
+   "thetaPnl": 67654,
    "valuationPnl": 450561,
-   "carryPnl": 24658,
-   "rolldownPnl": -2486
+   "carryPnl": 73973,
+   "rolldownPnl": -6319
   },
   {
    "date": "2026-03-13",
@@ -3961,14 +4042,14 @@
     "10Y": 0
    },
    "totalEstPnl": 349305,
-   "totalActual": 725512,
+   "totalActual": 701281,
    "settleCf": -6164384,
    "npvChange": 6889896,
-   "residual": 376207,
-   "thetaPnl": 67654,
+   "residual": 308553,
+   "thetaPnl": 43423,
    "valuationPnl": 657858,
-   "carryPnl": 73973,
-   "rolldownPnl": -6319
+   "carryPnl": 16668,
+   "rolldownPnl": 26755
   },
   {
    "date": "2026-03-16",
@@ -4042,14 +4123,14 @@
     "10Y": 0
    },
    "totalEstPnl": 351774,
-   "totalActual": 519269,
+   "totalActual": 478720,
    "settleCf": 8383562,
    "npvChange": -7864293,
-   "residual": 167495,
-   "thetaPnl": 43423,
+   "residual": 124072,
+   "thetaPnl": 2874,
    "valuationPnl": 475846,
-   "carryPnl": 16668,
-   "rolldownPnl": 26755
+   "carryPnl": 16209,
+   "rolldownPnl": -13335
   },
   {
    "date": "2026-03-17",
@@ -4123,14 +4204,14 @@
     "10Y": 0
    },
    "totalEstPnl": 352119,
-   "totalActual": 439432,
+   "totalActual": 442996,
    "settleCf": 0,
    "npvChange": 439432,
-   "residual": 87313,
-   "thetaPnl": 2874,
+   "residual": 84439,
+   "thetaPnl": 6438,
    "valuationPnl": 436558,
    "carryPnl": 16209,
-   "rolldownPnl": -13335
+   "rolldownPnl": -9771
   },
   {
    "date": "2026-03-18",
@@ -4204,14 +4285,14 @@
     "10Y": 0
    },
    "totalEstPnl": 352715,
-   "totalActual": 425619,
+   "totalActual": 418733,
    "settleCf": 0,
    "npvChange": 425619,
-   "residual": 72904,
-   "thetaPnl": 6438,
+   "residual": 66466,
+   "thetaPnl": -448,
    "valuationPnl": 419181,
    "carryPnl": 16209,
-   "rolldownPnl": -9771
+   "rolldownPnl": -16657
   },
   {
    "date": "2026-03-19",
@@ -4285,14 +4366,14 @@
     "10Y": 0
    },
    "totalEstPnl": 353354,
-   "totalActual": 460677,
+   "totalActual": 461059,
    "settleCf": 0,
    "npvChange": 460677,
-   "residual": 107323,
-   "thetaPnl": -448,
+   "residual": 107771,
+   "thetaPnl": -66,
    "valuationPnl": 461125,
-   "carryPnl": 16209,
-   "rolldownPnl": -16657
+   "carryPnl": 48626,
+   "rolldownPnl": -48692
   },
   {
    "date": "2026-03-20",
@@ -4366,14 +4447,14 @@
     "10Y": 0
    },
    "totalEstPnl": 353919,
-   "totalActual": 678568,
+   "totalActual": 678981,
    "settleCf": 0,
    "npvChange": 678568,
-   "residual": 324649,
-   "thetaPnl": -66,
+   "residual": 324715,
+   "thetaPnl": 347,
    "valuationPnl": 678634,
-   "carryPnl": 48626,
-   "rolldownPnl": -48692
+   "carryPnl": 16209,
+   "rolldownPnl": -15862
   },
   {
    "date": "2026-03-23",
@@ -4447,14 +4528,14 @@
     "10Y": 0
    },
    "totalEstPnl": 356407,
-   "totalActual": 466032,
+   "totalActual": 466217,
    "settleCf": 0,
    "npvChange": 466032,
-   "residual": 109625,
-   "thetaPnl": 347,
+   "residual": 109278,
+   "thetaPnl": 532,
    "valuationPnl": 465685,
    "carryPnl": 16209,
-   "rolldownPnl": -15862
+   "rolldownPnl": -15677
   },
   {
    "date": "2026-03-24",
@@ -4528,14 +4609,14 @@
     "10Y": 0
    },
    "totalEstPnl": 356962,
-   "totalActual": 467807,
+   "totalActual": 467992,
    "settleCf": 0,
    "npvChange": 467807,
-   "residual": 110845,
-   "thetaPnl": 532,
+   "residual": 110313,
+   "thetaPnl": 717,
    "valuationPnl": 467275,
    "carryPnl": 16209,
-   "rolldownPnl": -15677
+   "rolldownPnl": -15492
   },
   {
    "date": "2026-03-25",
@@ -4609,14 +4690,14 @@
     "10Y": 0
    },
    "totalEstPnl": 357520,
-   "totalActual": 469588,
+   "totalActual": 469773,
    "settleCf": 0,
    "npvChange": 469588,
-   "residual": 112068,
-   "thetaPnl": 717,
+   "residual": 111351,
+   "thetaPnl": 902,
    "valuationPnl": 468871,
    "carryPnl": 16209,
-   "rolldownPnl": -15492
+   "rolldownPnl": -15307
   },
   {
    "date": "2026-03-26",
@@ -4690,14 +4771,14 @@
     "10Y": 0
    },
    "totalEstPnl": 358080,
-   "totalActual": 471374,
+   "totalActual": 474287,
    "settleCf": 0,
    "npvChange": 471374,
-   "residual": 113294,
-   "thetaPnl": 902,
+   "residual": 112392,
+   "thetaPnl": 3815,
    "valuationPnl": 470472,
-   "carryPnl": 16209,
-   "rolldownPnl": -15307
+   "carryPnl": 48626,
+   "rolldownPnl": -44811
   },
   {
    "date": "2026-03-27",
@@ -4771,14 +4852,14 @@
     "10Y": 0
    },
    "totalEstPnl": 358642,
-   "totalActual": 703274,
+   "totalActual": 701100,
    "settleCf": 0,
    "npvChange": 703274,
-   "residual": 344632,
-   "thetaPnl": 3815,
+   "residual": 340817,
+   "thetaPnl": 1641,
    "valuationPnl": 699459,
-   "carryPnl": 48626,
-   "rolldownPnl": -44811
+   "carryPnl": 16209,
+   "rolldownPnl": -14568
   },
   {
    "date": "2026-03-30",
@@ -4852,14 +4933,14 @@
     "10Y": 0
    },
    "totalEstPnl": 361167,
-   "totalActual": 477447,
+   "totalActual": 477632,
    "settleCf": 0,
    "npvChange": 477447,
-   "residual": 116280,
-   "thetaPnl": 1641,
+   "residual": 114639,
+   "thetaPnl": 1826,
    "valuationPnl": 475806,
    "carryPnl": 16209,
-   "rolldownPnl": -14568
+   "rolldownPnl": -14383
   },
   {
    "date": "2026-03-31",
@@ -4933,14 +5014,14 @@
     "10Y": 0
    },
    "totalEstPnl": 361736,
-   "totalActual": 479256,
+   "totalActual": 479442,
    "settleCf": 0,
    "npvChange": 479256,
-   "residual": 117520,
-   "thetaPnl": 1826,
+   "residual": 115694,
+   "thetaPnl": 2012,
    "valuationPnl": 477430,
    "carryPnl": 16209,
-   "rolldownPnl": -14383
+   "rolldownPnl": -14197
   },
   {
    "date": "2026-04-01",
@@ -5014,14 +5095,14 @@
     "10Y": 0
    },
    "totalEstPnl": 362308,
-   "totalActual": 481070,
+   "totalActual": 481255,
    "settleCf": 0,
    "npvChange": 481070,
-   "residual": 118762,
-   "thetaPnl": 2012,
+   "residual": 116750,
+   "thetaPnl": 2197,
    "valuationPnl": 479058,
    "carryPnl": 16209,
-   "rolldownPnl": -14197
+   "rolldownPnl": -14012
   },
   {
    "date": "2026-04-02",
@@ -5095,14 +5176,14 @@
     "10Y": 0
    },
    "totalEstPnl": 362881,
-   "totalActual": 482889,
+   "totalActual": 488393,
    "settleCf": 0,
    "npvChange": 482889,
-   "residual": 120008,
-   "thetaPnl": 2197,
+   "residual": 117811,
+   "thetaPnl": 7701,
    "valuationPnl": 480692,
-   "carryPnl": 16209,
-   "rolldownPnl": -14012
+   "carryPnl": 48626,
+   "rolldownPnl": -40925
   },
   {
    "date": "2026-04-03",
@@ -5176,14 +5257,14 @@
     "10Y": 0
    },
    "totalEstPnl": 363456,
-   "totalActual": 728419,
+   "totalActual": 723656,
    "settleCf": 0,
    "npvChange": 728419,
-   "residual": 364963,
-   "thetaPnl": 7701,
+   "residual": 357262,
+   "thetaPnl": 2938,
    "valuationPnl": 720718,
-   "carryPnl": 48626,
-   "rolldownPnl": -40925
+   "carryPnl": 16209,
+   "rolldownPnl": -13271
   },
   {
    "date": "2026-04-06",
@@ -5257,14 +5338,14 @@
     "10Y": 0
    },
    "totalEstPnl": 366018,
-   "totalActual": 489070,
+   "totalActual": 489255,
    "settleCf": 0,
    "npvChange": 489070,
-   "residual": 123052,
-   "thetaPnl": 2938,
+   "residual": 120114,
+   "thetaPnl": 3123,
    "valuationPnl": 486132,
    "carryPnl": 16209,
-   "rolldownPnl": -13271
+   "rolldownPnl": -13086
   },
   {
    "date": "2026-04-07",
@@ -5338,14 +5419,14 @@
     "10Y": 0
    },
    "totalEstPnl": 366601,
-   "totalActual": 490912,
+   "totalActual": 491097,
    "settleCf": 0,
    "npvChange": 490912,
-   "residual": 124311,
-   "thetaPnl": 3123,
+   "residual": 121188,
+   "thetaPnl": 3308,
    "valuationPnl": 487789,
    "carryPnl": 16209,
-   "rolldownPnl": -13086
+   "rolldownPnl": -12901
   },
   {
    "date": "2026-04-08",
@@ -5419,14 +5500,14 @@
     "10Y": 0
    },
    "totalEstPnl": 367186,
-   "totalActual": 492760,
+   "totalActual": 492946,
    "settleCf": 0,
    "npvChange": 492760,
-   "residual": 125574,
-   "thetaPnl": 3308,
+   "residual": 122266,
+   "thetaPnl": 3494,
    "valuationPnl": 489452,
    "carryPnl": 16209,
-   "rolldownPnl": -12901
+   "rolldownPnl": -12715
   },
   {
    "date": "2026-04-09",
@@ -5500,14 +5581,14 @@
     "10Y": 0
    },
    "totalEstPnl": 367773,
-   "totalActual": 494613,
+   "totalActual": 502712,
    "settleCf": 0,
    "npvChange": 494613,
-   "residual": 126840,
-   "thetaPnl": 3494,
+   "residual": 123346,
+   "thetaPnl": 11593,
    "valuationPnl": 491119,
-   "carryPnl": 16209,
-   "rolldownPnl": -12715
+   "carryPnl": 48626,
+   "rolldownPnl": -37033
   },
   {
    "date": "2026-04-10",
@@ -5581,14 +5662,14 @@
     "10Y": 0
    },
    "totalEstPnl": 368362,
-   "totalActual": 754006,
+   "totalActual": 746648,
    "settleCf": 0,
    "npvChange": 754006,
-   "residual": 385644,
-   "thetaPnl": 11593,
+   "residual": 374051,
+   "thetaPnl": 4235,
    "valuationPnl": 742413,
-   "carryPnl": 48626,
-   "rolldownPnl": -37033
+   "carryPnl": 16209,
+   "rolldownPnl": -11974
   },
   {
    "date": "2026-04-13",
@@ -5662,14 +5743,14 @@
     "10Y": 0
    },
    "totalEstPnl": 370961,
-   "totalActual": 500901,
+   "totalActual": 501087,
    "settleCf": 0,
    "npvChange": 500901,
-   "residual": 129940,
-   "thetaPnl": 4235,
+   "residual": 125705,
+   "thetaPnl": 4421,
    "valuationPnl": 496666,
    "carryPnl": 16209,
-   "rolldownPnl": -11974
+   "rolldownPnl": -11788
   },
   {
    "date": "2026-04-14",
@@ -5743,14 +5824,14 @@
     "10Y": 0
    },
    "totalEstPnl": 371557,
-   "totalActual": 502777,
+   "totalActual": 502963,
    "settleCf": 0,
    "npvChange": 502777,
-   "residual": 131220,
-   "thetaPnl": 4421,
+   "residual": 126799,
+   "thetaPnl": 4607,
    "valuationPnl": 498356,
    "carryPnl": 16209,
-   "rolldownPnl": -11788
+   "rolldownPnl": -11602
   },
   {
    "date": "2026-04-15",
@@ -5824,14 +5905,14 @@
     "10Y": 0
    },
    "totalEstPnl": 372156,
-   "totalActual": 504659,
+   "totalActual": 500052,
    "settleCf": 0,
    "npvChange": 504659,
-   "residual": 132503,
-   "thetaPnl": 4607,
+   "residual": 127896,
+   "thetaPnl": 0,
    "valuationPnl": 500052,
-   "carryPnl": 16209,
-   "rolldownPnl": -11602
+   "carryPnl": 0,
+   "rolldownPnl": 0
   }
  ],
  "fundingCurve": [

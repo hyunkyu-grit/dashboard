@@ -594,9 +594,8 @@ def trace(dataset: Dataset, pos: Position) -> list[dict]:
 #
 # KRD convention matches the simulation engine's DV01 sign: positive =
 # receive-fixed gains when rates FALL, so the estimate is −KRD × Δbp. The
-# backtest values ON the row's date (its own convention everywhere); the sim
-# engine reports next-business-day settle — 시뮬 recon 의 세타 귀속은 아직
-# 백워드(월요일 스파이크)다. 맞추려면 별도 패스(골든 재핀 동반)가 필요하다.
+# recon KRD/세타 관행은 시뮬 recon(irs_pricer recon.py)도 동일하게 따른다
+# [OWNER, 같은 날 "같이 맞춰"] — 세 표면(백테스트·시뮬·인포맥스)이 한 기준.
 
 RECON_MAX_DAYS = 250          # business days of recon rows served (~1 year)
 # Rough cap on extra valuations for KRD bumps. Measured ~0.5ms per valuation,

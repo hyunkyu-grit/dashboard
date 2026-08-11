@@ -180,9 +180,61 @@ def build_irs_daily_recon(
     # 쓴다. 시드는 day 0(기준일, 쇼크 전) 의 KRD 다.
     _pvbp_prev_r = _krd_at(base_date, 0)
 
+    # ── 세타 귀속: 평가일 기준 **포워드** [OWNER, 2026-08-11 — "금요일날
+    # 토일월의 캐리롤다운이 반영되어야 … 금요일에 튀어야" · "같이 맞춰"] ──
+    # 행 t 의 캐리/롤다운/세타 = (t → 다음 영업일) 구간의 궤적 증분 — 금요일
+    # 행이 주말 사흘치를 싣는다. 평가(마켓무브)는 여전히 전일 대비(백워드,
+    # 실제 증분 − 백워드 세타). 그날 손익(totalActual)은 평가 + 포워드 세타
+    # — 백테스트 recon(app/backtest.py _book_recon)과 같은 데스크 관행이고,
+    # 마지막 행은 호라이즌이 끝나 이월할 밤이 없으므로 세타 0 이다. D+0 행이
+    # 새로 선다(백테스트의 진입일 행과 같은 것): 평가·추정 0, 첫날 밤 세타,
+    # KRD 는 시드(쇼크 전 커브)의 수준값. settleCf/npvChange 는 그날 실제로
+    # 정산된 현금의 장부 사실이라 백워드 그대로 둔다.
+    _cals = [c for (_d, c, _dt) in bizday_schedule]
+
+    def _fwd_theta(j: int) -> tuple[int, int, int]:
+        """행 j 의 (theta, carry, rolldown) — (cal_j → cal_{j+1}) 증분, 라운딩
+        잔차로 가산성 보존. 마지막 행은 (0, 0, 0)."""
+        if j + 1 >= len(_cals):
+            return 0, 0, 0
+        a, b = _cals[j], _cals[j + 1]
+        theta = round(float(irs_fm_mtm_theta[b] - irs_fm_mtm_theta[a]))
+        carry = (
+            round(float(irs_fm_carry_cash[b] - irs_fm_carry_cash[a]))
+            if irs_fm_carry_cash is not None
+            else 0
+        )
+        return theta, carry, theta - carry
+
     irs_daily_recon: list[dict] = []
+    # D+0 앵커 행 — 위 주석 참조. (0 → 첫 영업일의 세타)
+    if _cals:
+        _t0 = round(float(irs_fm_mtm_theta[_cals[0]] - irs_fm_mtm_theta[0]))
+        _c0 = (
+            round(float(irs_fm_carry_cash[_cals[0]] - irs_fm_carry_cash[0]))
+            if irs_fm_carry_cash is not None
+            else 0
+        )
+        irs_daily_recon.append({
+            "date":         base_date.isoformat(),
+            "day":          0,
+            "pvbp":         {_n: round(_pvbp_prev_r[_n]) for _n in _recon_names},
+            "cumulativeBp": {_n: 0.0 for _n in _recon_names},
+            "dailyDbp":     {_n: 0.0 for _n in _recon_names},
+            "pnl":          {_n: 0 for _n in _recon_names},
+            "totalEstPnl":  0,
+            "totalActual":  _t0,
+            "settleCf":     0,
+            "npvChange":    0,
+            "residual":     0,
+            "thetaPnl":     _t0,
+            "valuationPnl": 0,
+            "carryPnl":     _c0,
+            "rolldownPnl":  _t0 - _c0,
+        })
+
     _prev_cal_r = 0
-    for _val_date_r, _cal_day, _dt_cal in bizday_schedule:
+    for _row_j, (_val_date_r, _cal_day, _dt_cal) in enumerate(bizday_schedule):
         # ── 테너별 누적 충격 bp 계산 (계단식 1D/3M + ramp 6M+) ─────────────
         _cum_r    = {_n: _cum_shock_r(_tau, _cal_day)    for _n, _tau in zip(_recon_names, _recon_tenors)}
         _cum_prev = {_n: _cum_shock_r(_tau, _prev_cal_r) for _n, _tau in zip(_recon_names, _recon_tenors)}
@@ -195,22 +247,15 @@ def build_irs_daily_recon(
         _settle      = round(float(np.sum(irs_daily_scf[_prev_cal_r + 1:_cal_day + 1])))
         _total_act   = round(float(irs_fm_mtm[_cal_day] - irs_fm_mtm[_prev_cal_r]))
         _npv_change  = _total_act - _settle
-        _residual    = _total_act - _total_est     # 잔차: 실제P&L − 추정P&L (양수=모델 과소추정)
-        # 세타손익: 커브를 base_date 시점에 고정한 궤적(irs_fm_mtm_theta)의 같은 구간 변화.
-        # 평가손익(=마켓무브): 실제P&L에서 세타손익을 뺀 나머지 — "그날 실제로 커브가
-        # 움직여서 생긴" 손익만 분리한 값.
-        _theta_pnl   = round(float(irs_fm_mtm_theta[_cal_day] - irs_fm_mtm_theta[_prev_cal_r]))
-        _valuation_pnl = _total_act - _theta_pnl
-        # [OWNER, 2026-08-11 — 교과서 3분해] 세타의 같은 구간 변화를 캐리
-        # (동결 커브 순액크루얼+정산, carry_split.py)와 롤다운(잔여)으로 가른다.
-        # 라운딩 후 잔차로 롤다운을 잡아 행 단위 가산성(캐리+롤다운 == 세타)을
-        # 표시 정밀도에서 보존한다.
-        _carry_pnl = (
-            round(float(irs_fm_carry_cash[_cal_day] - irs_fm_carry_cash[_prev_cal_r]))
-            if irs_fm_carry_cash is not None
-            else 0
-        )
-        _rolldown_pnl = _theta_pnl - _carry_pnl
+        # 평가손익(=마켓무브, 백워드): 실제 증분에서 **백워드** 세타(전일 →
+        # 오늘, 커브 고정 궤적의 같은 구간 변화)를 뺀 나머지 — 이 정의는
+        # 종전과 동일하다. 표시되는 세타 3필드만 포워드다(위 주석).
+        _theta_back  = round(float(irs_fm_mtm_theta[_cal_day] - irs_fm_mtm_theta[_prev_cal_r]))
+        _valuation_pnl = _total_act - _theta_back
+        # [OWNER, 2026-08-11] 포워드 세타 (오늘 → 다음 영업일) + 3분해:
+        # 캐리(동결 커브 순액크루얼+정산, carry_split.py) / 롤다운(잔차 —
+        # 표시 정밀도 가산성 보존).
+        _theta_pnl, _carry_pnl, _rolldown_pnl = _fwd_theta(_row_j)
         irs_daily_recon.append({
             "date":         _val_date_r.isoformat(),
             "day":          _cal_day,
@@ -219,10 +264,14 @@ def build_irs_daily_recon(
             "dailyDbp":     {_n: round(_daily_dbp_r[_n], 4) for _n in _recon_names},
             "pnl":          {_n: round(_pnl_r[_n]) for _n in _recon_names},
             "totalEstPnl":  _total_est,
-            "totalActual":  _total_act,
+            # 그날 손익 = 평가(백워드) + 세타(포워드) — 데스크 관행 데일리.
+            # 누적 궤적의 증분(구 정의)과는 세타 타이밍이 하루 어긋난다.
+            "totalActual":  _valuation_pnl + _theta_pnl,
             "settleCf":     _settle,
             "npvChange":    _npv_change,
-            "residual":     _residual,
+            # 선형화 잔차: 추정이 설명하는 대상은 평가(커브무브)뿐이다 —
+            # 백테스트 recon 과 같은 정의로 정렬(세타를 섞어 빼지 않는다).
+            "residual":     _valuation_pnl - _total_est,
             "thetaPnl":     _theta_pnl,
             "valuationPnl": _valuation_pnl,
             "carryPnl":     _carry_pnl,
