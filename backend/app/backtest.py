@@ -414,6 +414,7 @@ def _run_one(
     # Roll-down chain seed: the entry date itself, whose clean is clean0.
     prev_i = entry_i
     prev_clean = clean0
+    prev_fx = _cd_fixings(dataset, entry_i)
     roll_cum = 0.0
     for i in live:
         fx = _cd_fixings(dataset, i)
@@ -442,15 +443,22 @@ def _run_one(
         val_total = clean - clean0
         carry = accrued - accrued0 + cash
         if i > prev_i:
+            # 동결 재평가는 **전일 시점의 픽싱**으로 [OWNER, 2026-08-11 —
+            # 평가일 기준 세타]: 스텝 사이에 새로 찍힌 CD 프린트(리셋 t+1,
+            # F(R)=t 인 기간)는 "어제 알던 것"이 아니므로 동결 세계에 넣지
+            # 않는다 — 그 서프라이즈는 잔여(평가)로 떨어진다. 이래야 일별
+            # 대사의 포워드 세타(전일에 booking)와 레코드 스칼라의 버킷이
+            # 정확히 일치한다(안 맞추면 픽싱일마다 롤다운으로 새서 Σ가
+            # 어긋난다 — 실측 5개월 25만원).
             clean_frozen, _acc_f = _value_on(
-                legs, dataset, i, entry_date, fx, cache, curve_idx=prev_i
+                legs, dataset, i, entry_date, prev_fx, cache, curve_idx=prev_i
             )
             roll_cum += clean_frozen - prev_clean
         own[i] = last = val_total + carry
         last_val = val_total - roll_cum
         last_roll = roll_cum
         last_carry, last_cash = carry, cash
-        prev_i, prev_clean = i, clean
+        prev_i, prev_clean, prev_fx = i, clean, fx
 
     def at(i: int) -> float:
         if i < entry_i:
@@ -526,10 +534,13 @@ def trace(dataset: Dataset, pos: Position) -> list[dict]:
     )
 
     out = []
-    # the same chained roll-down as `_run_one` (see the comment there) — the
-    # trace grid is the thinned full span, so each chain step is one grid step
+    # the same chained roll-down as `_run_one` (see the comments there — the
+    # frozen step prices with the PREVIOUS point's fixings, so a fresh CD
+    # print falls into 평가, not 롤다운) — the trace grid is the thinned full
+    # span, so each chain step is one grid step
     prev_i = entry_i
     prev_clean = clean0
+    prev_fx = _cd_fixings(dataset, entry_i)
     roll_cum = 0.0
     for i in _thin(list(range(entry_i, exit_i + 1)), MAX_POINTS):
         fx = _cd_fixings(dataset, i)
@@ -539,10 +550,10 @@ def trace(dataset: Dataset, pos: Position) -> list[dict]:
         carry = accrued - accrued0 + cash
         if i > prev_i:
             clean_frozen, _acc_f = _value_on(
-                legs, dataset, i, entry_date, fx, curve_idx=prev_i
+                legs, dataset, i, entry_date, prev_fx, curve_idx=prev_i
             )
             roll_cum += clean_frozen - prev_clean
-        prev_i, prev_clean = i, clean
+        prev_i, prev_clean, prev_fx = i, clean, fx
         out.append(
             {
                 "t": dates[i].isoformat(),
@@ -564,14 +575,28 @@ def trace(dataset: Dataset, pos: Position) -> list[dict]:
 # curve, the ACTUAL per-tenor par move (this is history — the Δbp are real
 # quotes, not a scenario), the P&L-explain linear estimate (yesterday's KRD ×
 # today's Δbp, the same start-of-day convention the simulation recon adopted
-# 2026-08-10), and the day's actual P&L split 평가/캐리/롤다운 exactly as the
-# position records split it.
+# 2026-08-10), and the day's actual P&L split 평가/캐리/롤다운.
+#
+# 세타의 귀속은 **평가일 기준 포워드**다 [OWNER, 2026-08-11 — "결제일 기준이
+# 아니라 평가일 기준으로 계산하기 때문에, 금요일날 토일월의 캐리롤다운이
+# 반영되어야 … 월요일에 값이 튀는 게 아니라 금요일에 튀어야"]. 즉 행 t 의
+# 캐리·롤다운은 (t → 다음 영업일) 구간 몫이다 — 금요일 행이 토·일·월 사흘치
+# 세타를 싣고, 월요일 행은 하루치만 싣는다. 평가(커브무브)는 여전히 전일
+# 대비(백워드)다: 데스크 관행 그대로 "마켓무브는 어제 종가 대비, 세타는
+# 오늘부터 내일까지". 수학적으로 백워드 세타(t−1→t, 전일 커브 동결)와 포워드
+# 세타(t−1 행에서 계산한 t−1→t)는 같은 양이라, 이 전환은 세타 열을 한 칸
+# 앞으로 옮기고 마지막 행에 오늘 커브의 다음-영업일 세타를 더한 것과 같다.
+# 따라서 행 합("그날 손익") = 평가(백워드) + 캐리·롤다운(포워드)이고, 청산된
+# 포지션의 행 합계는 포지션 스칼라와 정확히 일치하며, 아직 열린 포지션만
+# 마지막 행의 "오늘 밤" 세타 하루만큼 스칼라보다 앞서간다(내일로 이월되는
+# 몫 — 데스크의 YTD 도 같은 크기만큼 앞서간다). 진입일도 행을 갖는다:
+# 평가 0, 첫날 밤 세타부터 booking — 시스템의 리스크-온 표기와 같다.
 #
 # KRD convention matches the simulation engine's DV01 sign: positive =
 # receive-fixed gains when rates FALL, so the estimate is −KRD × Δbp. The
 # backtest values ON the row's date (its own convention everywhere); the sim
-# engine reports next-business-day settle. When reconciling against a system
-# that uses settle-basis KRD, expect a one-day shift — recorded in HANDOFF.
+# engine reports next-business-day settle — 시뮬 recon 의 세타 귀속은 아직
+# 백워드(월요일 스파이크)다. 맞추려면 별도 패스(골든 재핀 동반)가 필요하다.
 
 RECON_MAX_DAYS = 250          # business days of recon rows served (~1 year)
 # Rough cap on extra valuations for KRD bumps. Measured ~0.5ms per valuation,
@@ -603,13 +628,19 @@ def _book_recon(
     """The daily reconciliation block for the whole book.
 
     One extra pass over the window. Costs: per day, one base valuation per
-    live position, one frozen-curve valuation (roll-down step), and one
-    bumped-curve valuation per (tenor the position can feel × live position).
-    The bump set per position is cut at its own longest remaining maturity —
-    bumping 10Y for a 1Y book moves nothing and would triple the pass for a
-    row of zeros. The window is the LAST `RECON_MAX_DAYS` business days of
-    the book (a 10-year backtest reconciles its recent year, not 2,600 rows
-    nobody scrolls), shrunk further only if the bump budget demands it.
+    live position, one NEXT-BUSINESS-DAY valuation on the same curve (the
+    forward theta — 평가일 기준 귀속, 모듈 주석), and one bumped-curve
+    valuation per (tenor the position can feel × live position). The bump set
+    per position is cut at its own longest remaining maturity — bumping 10Y
+    for a 1Y book moves nothing and would triple the pass for a row of
+    zeros. The window is the LAST `RECON_MAX_DAYS` business days of the book
+    (a 10-year backtest reconciles its recent year, not 2,600 rows nobody
+    scrolls), shrunk further only if the bump budget demands it.
+
+    평가(백워드 마켓무브)는 전일 커브 재평가를 따로 하지 않는다: 전일 행이
+    계산해 둔 포워드 세타가 곧 오늘의 백워드 세타이므로, 평가 = (오늘 실측
+    변화) − (전일 행의 포워드 세타)로 나온다. 잘린 창의 첫 행만 전일 커브
+    동결 재평가 한 번으로 시드한다.
     """
     dates = dataset.dates
     labels = list(TENOR_T)  # insertion order == ascending tenor
@@ -636,10 +667,13 @@ def _book_recon(
         pos_info.append({
             "entry_i": entry_i, "exit_i": exit_i, "entry_date": entry_date,
             "legs": legs, "swaps": [_leg_swap(leg, entry_date) for leg in legs],
-            "bump": bump, "prev": None,  # (clean, accrued, cash)
+            "bump": bump,
+            "prev": None,       # (clean + accrued + cash) — 어제의 실측 마크
+            "prev_fwd": None,   # (carry_fwd, roll_fwd) — 어제 행이 booking 한 오늘치 세타
         })
 
-    start = max(first + 1, last - RECON_MAX_DAYS + 1)
+    # 진입일부터 행이 선다 (평가 0 + 첫날 밤 포워드 세타 — 모듈 주석)
+    start = max(first, last - RECON_MAX_DAYS + 1)
     # budget guard: shrink the window rather than serve a 30-second response
     cost_per_day = sum(len(p["bump"]) + 3 for p in pos_info) or 1
     max_days = max(30, RECON_VALUATION_BUDGET // cost_per_day)
@@ -663,37 +697,68 @@ def _book_recon(
         par = par_rates_at_index(dataset, i)
         zc_base = _curve_at(dataset, i, cache)
         bumped: dict[str, np.ndarray] = {}  # lazy, shared across positions
+        # 이 행이 세타를 booking 하는 구간의 끝 = 다음 마크. 창 안쪽에서는
+        # 데이터의 다음 행(공휴일 건너뜀 포함 — 실제 다음 평가일), 마지막
+        # 행에서는 달력상 다음 영업일이다.
+        nxt = dates[i + 1] if i < last else next_kr_business_day(dates[last])
 
         krd = {lb: 0.0 for lb in labels}
-        day_actual = day_carry = day_roll = day_val = 0.0
+        day_carry = day_roll = day_val = 0.0
         for info in pos_info:
             if i < info["entry_i"] or i > info["exit_i"]:
                 continue  # not yet on / closed & frozen: no risk, no day P&L
             clean, accrued = dirty_on(info, on, zc_base, fx)
             cash = _settled_to(info["legs"], info["entry_date"], on, fx)
-            if info["prev"] is not None:
-                p_clean, p_accrued, p_cash = info["prev"]
-                clean_frozen, _af = _value_on(
-                    info["legs"], dataset, i, info["entry_date"], fx, cache,
-                    curve_idx=i - 1,
-                )
-                day_carry += (accrued - p_accrued) + (cash - p_cash)
-                day_roll += clean_frozen - p_clean
-                day_val += clean - clean_frozen
-                day_actual += (clean + accrued + cash) - (p_clean + p_accrued + p_cash)
-            info["prev"] = (clean, accrued, cash)
+            mark = clean + accrued + cash
 
-            base_dirty = clean + accrued
-            for lb in info["bump"]:
-                t_l = TENOR_T[lb]
-                if lb not in bumped:
-                    if not any(abs(t - t_l) < 1e-9 for t, _r in par):
-                        continue  # no node that day — KRD 0, like the sim's partition
-                    bumped[lb] = bootstrap_zero_curve(
-                        [(t, r + (1e-4 if abs(t - t_l) < 1e-9 else 0.0)) for t, r in par]
+            # 평가(백워드) = 실측 변화 − 어제 행이 booking 한 오늘치 세타.
+            # 진입일은 0(그날 종가 par 로 struck), 잘린 창의 첫 행은 전일
+            # 커브 동결 재평가로 시드(어제 행이 없어서).
+            if i > info["entry_i"]:
+                if info["prev_fwd"] is not None:
+                    p_carry_f, p_roll_f = info["prev_fwd"]
+                    day_val += (mark - info["prev"]) - (p_carry_f + p_roll_f)
+                else:
+                    # 전일 시점 픽싱으로(레코드 체인과 같은 규칙 — _run_one)
+                    clean_frozen, _af = _value_on(
+                        info["legs"], dataset, i, info["entry_date"],
+                        _cd_fixings(dataset, i - 1), cache, curve_idx=i - 1,
                     )
-                b_clean, b_accrued = dirty_on(info, on, bumped[lb], fx)
-                krd[lb] += -((b_clean + b_accrued) - base_dirty)
+                    day_val += clean - clean_frozen
+
+            # 포워드 세타 (i → nxt), 오늘 커브 동결·오늘 알려진 픽싱으로.
+            # 청산/만기 행에서는 없다 — 그 마크에서 얼어붙는 포지션이다.
+            alive_fwd = i < info["exit_i"] or (i == last and info["exit_i"] == last)
+            if alive_fwd:
+                f_clean, f_accrued = dirty_on(info, nxt, zc_base, fx)
+                f_cash = _settled_to(info["legs"], info["entry_date"], nxt, fx)
+                carry_f = (f_accrued - accrued) + (f_cash - cash)
+                roll_f = f_clean - clean
+                day_carry += carry_f
+                day_roll += roll_f
+                info["prev_fwd"] = (carry_f, roll_f)
+            else:
+                info["prev_fwd"] = (0.0, 0.0)
+            info["prev"] = mark
+
+            # KRD 는 **T+1(다음 영업일) 평가 기준**이다 [OWNER, 2026-08-11 —
+            # 인포맥스 실측 대사: 3/9 1Y Rec 을 3/9 커브·3/10 평가로 재면
+            # 12M 버킷이 49원(0.005%)까지 붙는다. 당일 평가로 재면 2,847원
+            # 어긋나고 1.5Y 로 스필도 샌다]. 시뮬 엔진의 결제일 관행과도
+            # 같아져 세 표면(백테스트·시뮬·인포맥스)이 한 기준이 됐다.
+            # 청산 마크의 포지션은 내일 리스크가 없다 — KRD 0.
+            if alive_fwd:
+                base_dirty = f_clean + f_accrued
+                for lb in info["bump"]:
+                    t_l = TENOR_T[lb]
+                    if lb not in bumped:
+                        if not any(abs(t - t_l) < 1e-9 for t, _r in par):
+                            continue  # no node that day — KRD 0, like the sim's partition
+                        bumped[lb] = bootstrap_zero_curve(
+                            [(t, r + (1e-4 if abs(t - t_l) < 1e-9 else 0.0)) for t, r in par]
+                        )
+                    b_clean, b_accrued = dirty_on(info, nxt, bumped[lb], fx)
+                    krd[lb] += -((b_clean + b_accrued) - base_dirty)
 
         if i >= start:
             dbp: dict[str, float | None] = {}
@@ -712,18 +777,24 @@ def _book_recon(
                 "dbp": dbp,
                 "est": {lb: round(est[lb]) for lb in labels},
                 "estTotal": total_est,
-                "actual": round(day_actual),
+                # 그날 손익 = 평가(백워드) + 캐리·롤다운(포워드) — 평가일
+                # 기준 데일리. 차트의 `d`(종가 대 종가)와는 세타 귀속이 하루
+                # 어긋난다: 금요일 행이 주말치를 실으므로 여기가 튀고, 차트의
+                # d 는 월요일에 튄다. 그게 이 관행의 정의다(모듈 주석).
+                "actual": round(day_val + day_carry + day_roll),
                 "valuation": round(day_val),
                 "rolldown": round(day_roll),
                 "carry": round(day_carry),
-                "residual": round(day_actual) - total_est,
+                # 선형화 잔차: 추정(전일 KRD × Δbp)이 설명하는 대상은
+                # 평가(커브무브)뿐이다 — 세타를 섞어 빼던 종전 정의를 정리.
+                "residual": round(day_val) - total_est,
             })
         prev_krd = krd
 
     return {
         "tenors": labels,
         "rows": rows,
-        "truncated": start > first + 1,
+        "truncated": start > first,
     }
 
 

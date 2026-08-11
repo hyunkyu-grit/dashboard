@@ -497,16 +497,36 @@ and each row is another full daily revaluation pass.
   (스왑평가/스왑캐리/스왑롤다운 — backend carry_split.py, engine-cross-checked
   against scf_b), so the two tabs speak one language.
 - **일별 대사 (`recon`) rides every backtest response** [OWNER, 2026-08-11 —
-  "직접 트레이딩 시스템과 대사"]: per business day, the book's per-tenor KRD
-  on that day's own curve (bump-reval, the position's own horizon capping the
-  bump set), the ACTUAL market Δbp per tenor, the P&L-explain estimate
-  (전일 KRD × 당일 Δbp), and the day's actual P&L split 평가/캐리/롤다운.
-  The window is capped (last ~250 business days; `truncated` says so). One
-  day = THREE stacked rows in the drawer (KRD·Δbp·손익 — 80 days = 240 rows,
-  the owner's own spec), drawn by the shared `ui/ReconStack.tsx` that the
-  simulation's 일별 대사 uses too. The backtest values ON the row's date;
-  the sim engine reports next-business-day settle — a one-day shift against
-  a settle-basis system is the convention, not a bug.
+  "직접 트레이딩 시스템과 대사"]: per business day, the book's per-tenor KRD,
+  the ACTUAL market Δbp per tenor, the P&L-explain estimate (전일 KRD × 당일
+  Δbp), and the day's P&L split 평가/캐리/롤다운. The window is capped (last
+  ~250 business days; `truncated` says so). One day = THREE stacked rows in
+  the drawer (KRD·Δbp·손익 — 80 days = 240 rows, the owner's own spec),
+  drawn by the shared `ui/ReconStack.tsx` that the simulation's 일별 대사
+  uses too.
+  - **KRD is T+1-settle basis** [OWNER, 2026-08-11 — 인포맥스 실측 대사]:
+    row N's KRD = the book on N's curve VALUED AT the next business day,
+    bump-revalued per par node. Measured against the Infomax calculator on
+    the 3/9 1Y Rec: 12M bucket agrees to ₩49 (0.005%), short-bucket SUM to
+    ₩2 — the only residual difference is attribution (Infomax puts all
+    float-leg risk on 3M; our bootstrap interpolation lets a sliver sit on
+    6M). Same-day valuation missed by ₩2,847 and spilled into 1.5Y, which
+    is how the convention was confirmed empirically. This also matches the
+    sim engine's next-business-day settle — one convention across 백테스트·
+    시뮬·인포맥스.
+  - **Theta books FORWARD, on the valuation date** [OWNER, 2026-08-11 —
+    "금요일날 토일월의 캐리롤다운이 반영되어야 … 금요일에 튀어야"]: row t's
+    캐리/롤다운 = the (t → next business day) slice, so Friday carries the
+    weekend's three days and Monday carries one. 평가 stays close-over-close
+    (backward). Row total = 평가 + forward theta — the desk-convention daily;
+    it deliberately differs from the chart's close-to-close `d` by the theta
+    timing. The frozen step prices with the PREVIOUS day's fixings, so a
+    fresh CD print is a market event (평가), not roll-down — this keeps the
+    recon rows and the position scalars bucket-identical. An ENTRY date has
+    a row (평가 0, first-night theta; carry starts the NEXT night because
+    the T+1 effective date means no accrual has begun). A still-open book's
+    row sum leads the position scalars by exactly the last row's "tonight"
+    theta; a closed position's rows sum exactly.
 - **The P&L chart has a hovered readout**: date, cumulative, and the ONE-DAY
   change. The change is SERVED, not differenced in the browser (§16) —
   differencing a rounded series client-side gives a number that disagrees with
