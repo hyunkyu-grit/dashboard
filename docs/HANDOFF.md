@@ -249,10 +249,12 @@ launcher powershell 만 죽이고 cmd 래퍼 밑 uvicorn 이 살아남아 :8100 
   main 의 코드 커밋에 대한 규칙으로 산다.
 - 오늘 데이터는 `977d81f8`(asof=2026-08-11, sql, 2,620행)로 구워졌고
   deploy 브랜치(3f8c1536 = origin/main 4019dc0e + 체리픽)가 GitHub 에
-  올라갔다. **미완: Vercel 대시보드에서 프로덕션 브랜치를 deploy 로 전환**
-  (Settings → Environments → Production → Branch Tracking). API 는
-  비공식 `PATCH /v9/projects/{id}/branch` 뿐이라 세션 권한으로 못 밀었다.
-  프로젝트 id `prj_vpVCV4AM1tMoK6Di1N8O8cHbHNe1`.
+  올라갔다. **전환 완료(8/12 08:33)**: 프로덕션 브랜치 main→deploy 는
+  비공식 `PATCH /v9/projects/{id}/branch` 를 오너가 CLI 로 직접 실행
+  (Git Bash 에선 `MSYS_NO_PATHCONV=1` 필요 — MSYS 가 `/v9/...` 를 경로
+  변환함). 빈 커밋(f75a0966) push 로 첫 프로덕션 빌드 트리거, 라이브
+  manifest asof=2026-08-11 확인. 프로젝트 id
+  `prj_vpVCV4AM1tMoK6Di1N8O8cHbHNe1`.
 
 ### 일별 대사: 전일 KRD 표시 + 이월 앵커 (2026-08-11 저녁)
 
