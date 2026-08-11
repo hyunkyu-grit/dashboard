@@ -192,7 +192,32 @@ rule:
 
 ---
 
-## 6. Current state (as of the 2026-08-11 session)
+## 6. Current state (as of the 2026-08-12 session)
+
+### 아침 굽기 첫 실전 + 배포 두 갈래 분리 (2026-08-12 아침)
+
+첫 실전(8/12 07:50)에서 굽기가 1단계에서 중단됐다: 부팅(07:46) 로그온
+트리거로 뜬 SauronBackend 를 `Stop-ScheduledTask` 로 세웠는데 스케줄러가
+launcher powershell 만 죽이고 cmd 래퍼 밑 uvicorn 이 살아남아 :8100 이 안
+비었다(태스크 결과 267014 = TERMINATED 인데 포트는 LISTEN — 스케줄러가
+다시는 못 잡는 고아). 두 커밋으로 마감:
+
+- `58fb72c` — 굽기 1단계 폴백: 태스크 정지 후에도 :8100 이 살아 있으면
+  리스너 pid 를 직접 `Stop-Process`. python 을 죽이면 redirect 를 쥔 cmd
+  래퍼는 따라 내려간다.
+- `0ad318d2` — 배포 두 갈래 [OWNER, 2026-08-12 "데이터만 자동으로 하고
+  코드는 내가"]: 기존 push 가드는 비자동화 커밋이 있으면 데이터까지 통째로
+  보류해 사이트가 영업일 지연됐다(8/12 실제). 이제 **Vercel 프로덕션
+  브랜치 = `deploy`** — origin/main 위에 Data refresh 커밋만 체리픽한 기계
+  소유 브랜치(임시 워크트리 `.sauron\deploy-wt`, 본 작업트리 불변, force
+  push). main 은 비자동화 커밋이 없을 때만 자동 push. "푸시는 오너"는
+  main 의 코드 커밋에 대한 규칙으로 산다.
+- 오늘 데이터는 `977d81f8`(asof=2026-08-11, sql, 2,620행)로 구워졌고
+  deploy 브랜치(3f8c1536 = origin/main 4019dc0e + 체리픽)가 GitHub 에
+  올라갔다. **미완: Vercel 대시보드에서 프로덕션 브랜치를 deploy 로 전환**
+  (Settings → Environments → Production → Branch Tracking). API 는
+  비공식 `PATCH /v9/projects/{id}/branch` 뿐이라 세션 권한으로 못 밀었다.
+  프로젝트 id `prj_vpVCV4AM1tMoK6Di1N8O8cHbHNe1`.
 
 ### 일별 대사: 전일 KRD 표시 + 이월 앵커 (2026-08-11 저녁)
 
