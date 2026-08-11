@@ -29,6 +29,10 @@ What is pinned here:
      `actual` is carry + roll-down alone with 평가 == 0: time, and nothing
      else. 진입일 행이 있고(평가 0, 첫날 밤 세타), 리시버의 캐리 부호가
      경제와 맞는다.
+  7. START-OF-DAY KRD + 이월 앵커 [OWNER, 2026-08-11] — 행의 krd 는 est 가
+     곱한 전일 KRD 그 자체라 블록 안에서 krd × dbp ≈ est 가 표시 라운딩
+     안에서 닫히고, 진입일 krd 는 0(그날 아침엔 포지션이 없었다), 마지막
+     행은 carryover 앵커(종가 KRD 만, 손익은 전부 None)다.
 """
 
 from __future__ import annotations
@@ -49,6 +53,12 @@ DATA = Path(__file__).resolve().parents[2] / "data" / "irsdata.xlsx"
 N = 1e10  # 100억
 
 
+def pnl_rows(rc: dict) -> list[dict]:
+    """손익이 실리는 행만 — 끝의 carryover 앵커(종가 KRD 만, 손익 None)를
+    뺀다. 합산·항등식 단언은 전부 이 창 위에서 성립한다."""
+    return [r for r in rc["rows"] if not r.get("carryover")]
+
+
 @pytest.fixture(scope="module")
 def ds():
     return load_dataset(DATA)
@@ -63,8 +73,8 @@ def one_y(ds):
 
 def test_every_row_is_an_identity(one_y):
     _book, rc = one_y
-    assert rc["rows"], "recon produced no rows"
-    for r in rc["rows"]:
+    assert pnl_rows(rc), "recon produced no rows"
+    for r in pnl_rows(rc):
         assert abs(r["actual"] - (r["valuation"] + r["rolldown"] + r["carry"])) <= 2, r["t"]
         assert r["residual"] == r["valuation"] - r["estTotal"]
 
@@ -73,20 +83,23 @@ def test_daily_rows_sum_to_the_record_scalars(one_y):
     book, rc = one_y
     assert rc["truncated"] is False  # a five-month book fits the window whole
     rec = book["positions"][0]
-    tol = len(rc["rows"])  # ±1원 per row of rounding
-    last = rc["rows"][-1]  # 아직 열린 포지션: 마지막 행은 "오늘 밤" 포워드 세타
-    assert abs(sum(r["valuation"] for r in rc["rows"]) - rec["valuation"]) <= tol
+    rows = pnl_rows(rc)
+    tol = len(rows)  # ±1원 per row of rounding
+    last = rows[-1]  # 아직 열린 포지션: 마지막 행은 "오늘 밤" 포워드 세타
+    assert abs(sum(r["valuation"] for r in rows) - rec["valuation"]) <= tol
     assert abs(
-        sum(r["rolldown"] for r in rc["rows"]) - last["rolldown"] - rec["rolldown"]
+        sum(r["rolldown"] for r in rows) - last["rolldown"] - rec["rolldown"]
     ) <= tol
     assert abs(
-        sum(r["carry"] for r in rc["rows"]) - last["carry"] - rec["carry"]
+        sum(r["carry"] for r in rows) - last["carry"] - rec["carry"]
     ) <= tol
-    # 진입일 행이 있다: 평가 0(그날 par 로 struck), 세타는 booking 된다
-    first = rc["rows"][0]
+    # 진입일 행이 있다: 평가 0(그날 par 로 struck), 세타는 booking 된다.
+    # krd 도 0 이다 — 그날 아침엔 포지션이 없었다(기초 리스크의 참값).
+    first = rows[0]
     assert first["t"] == rec["entry"]
     assert first["valuation"] == 0
     assert first["carry"] != 0 or first["rolldown"] != 0
+    assert all(v == 0 for v in first["krd"].values())
 
 
 def test_weekend_theta_books_on_friday(one_y):
@@ -97,7 +110,7 @@ def test_weekend_theta_books_on_friday(one_y):
     import statistics as _st
 
     _book, rc = one_y
-    rows = rc["rows"]
+    rows = pnl_rows(rc)
     span = []
     for a, b in zip(rows, rows[1:]):
         gap = (_dt.date.fromisoformat(b["t"]) - _dt.date.fromisoformat(a["t"])).days
@@ -113,10 +126,43 @@ def test_weekend_theta_books_on_friday(one_y):
 
 def test_estimate_explains_the_curve_move_bucket(one_y):
     _book, rc = one_y
-    sum_est = sum(r["estTotal"] for r in rc["rows"])
-    sum_val = sum(r["valuation"] for r in rc["rows"])
+    sum_est = sum(r["estTotal"] for r in pnl_rows(rc))
+    sum_val = sum(r["valuation"] for r in pnl_rows(rc))
     # the aggregate linearization gap is small relative to the move itself
     assert abs(sum_est - sum_val) <= 0.15 * max(abs(sum_val), 1.0), (sum_est, sum_val)
+
+
+def test_block_closes_in_row(one_y):
+    """행의 krd 는 est 가 곱한 전일 KRD 그 자체다 [OWNER, 2026-08-11] — 한
+    블록 안에서 −krd × dbp ≈ est 가 **표시 라운딩** 안에서 닫힌다(krd 는
+    1원, dbp 는 0.01bp 로 반올림된 표시값이므로 그만큼의 슬랙만 허용)."""
+    _book, rc = one_y
+    checked = 0
+    for r in pnl_rows(rc):
+        for lb, e in r["est"].items():
+            d = r["dbp"][lb]
+            if d is None:
+                continue
+            slack = 0.5 * abs(d) + 0.005 * abs(r["krd"][lb]) + 1.0
+            assert abs(e - (-r["krd"][lb] * d)) <= slack, (r["t"], lb)
+            if e != 0:
+                checked += 1
+    assert checked > 0, "fixture had no nonzero estimates to check"
+
+
+def test_carryover_anchor_carries_tomorrows_risk(one_y):
+    """rows 의 마지막은 이월 앵커다: 마지막 날의 종가 KRD(다음 영업일 기준
+    재평가 — 내일 아침 들고 갈 리스크)만 싣고, 손익 필드는 전부 None."""
+    _book, rc = one_y
+    anchor = rc["rows"][-1]
+    assert anchor.get("carryover") is True
+    assert sum(1 for r in rc["rows"] if r.get("carryover")) == 1
+    last = pnl_rows(rc)[-1]
+    assert anchor["t"] > last["t"]  # 다음 영업일 — P&L 창 밖
+    assert any(v != 0 for v in anchor["krd"].values())  # 아직 열린 1Y 북
+    for key in ("estTotal", "actual", "valuation", "rolldown", "carry", "residual"):
+        assert anchor[key] is None, key
+    assert anchor["dbp"] == {} and anchor["est"] == {}
 
 
 def test_tenors_beyond_the_books_horizon_carry_no_krd(one_y):
@@ -136,8 +182,8 @@ def test_frozen_market_recon_is_time_and_nothing_else():
     ds = frozen_dataset(zc, start, 90)
     pos = [Position("10Y", +1, N, start)]
     rc = book_recon(ds, pos)
-    assert rc["rows"]
-    for r in rc["rows"]:
+    assert pnl_rows(rc)
+    for r in pnl_rows(rc):
         for lb, v in r["dbp"].items():
             assert v is None or v == 0.0, (r["t"], lb, v)
         assert r["estTotal"] == 0

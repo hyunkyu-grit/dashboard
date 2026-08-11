@@ -69,6 +69,13 @@ REPRESENTATIVE_REQUEST = json.loads(
 # irsDailyReconciliation 행 +carryPnl/+rolldownPnl — 그 밖의 모든 키·값
 # (swapMtm·total·bond·funding·pvbp·totalActual 포함)은 바이트 동일, 그리고
 # 새 swapCarry+swapRolldown == 구 swapCarry(세타)가 float 그대로 성립.
+# [RE-PINNED 2026-08-11 #2] recon 행의 `pvbp` 가 추정에 쓴 전일(start-of-day)
+# KRD 그 자체가 됐고(한 블록 안에서 pvbp × dailyDbp = pnl 이 닫힌다 —
+# recon.py 모듈 주석) rows 끝에 이월 앵커(carryover=True, 종가 KRD 만,
+# 손익 필드 전부 null)가 붙었다. blast-radius 로 단언한 범위: 61개 행의
+# pvbp 가 정확히 한 칸 시프트(행 0 시드는 동일)·전 행 +carryover=False·
+# 앵커 1행 추가 — pvbp/carryover 밖의 모든 키·값과 recon 밖 전체는 바이트
+# 동일.
 GOLDEN_RESPONSE = json.loads(
     (DATA / "simulate_golden_dv01_response.json").read_text(encoding="utf-8")
 )

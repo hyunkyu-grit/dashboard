@@ -62,6 +62,32 @@ describe("하루 = 가로줄 셋", () => {
     expect(container.textContent).toContain("0.25");
     expect(container.textContent).toContain("-0.50");
   });
+
+  it("이월 앵커 블록(종가 KRD만, 손익 null)도 세 줄이고 나머지는 —", () => {
+    // 2026-08-11 recon 앵커: 마지막 날의 종가 KRD 만 싣고 Δbp·손익·하루
+    // 요약은 전부 null — 아직 오지 않은 날의 손익을 0 이라고 말하지 않는다.
+    const anchor: ReconStackDay = {
+      date: "2026-03-04",
+      title: "2026-03-04 · 다음 영업일로 들고 가는 이월 리스크",
+      krd: { "3M": -28400, "6M": 387162, "1Y": 185827, "10Y": 0 },
+      dbp: {},
+      est: {},
+      estTotal: null,
+      valuation: null,
+      carry: null,
+      rolldown: null,
+      actual: null,
+    };
+    const { container } = render(
+      <ReconStack days={[day(0), anchor]} tenors={TENORS} />,
+    );
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(6);
+    // 앵커 블록의 KRD 는 보이고(이월 리스크), 하루 요약 넷은 — 로 선다.
+    expect(container.textContent).toContain("387,162");
+    const dashes = [...container.querySelectorAll("tbody td[rowspan='3']")]
+      .filter((el) => el.textContent === "—");
+    expect(dashes.length).toBe(4); // 앵커의 평가·캐리·롤다운·그날 손익
+  });
 });
 
 describe("날짜 정렬 토글 [OWNER, 2026-08-11 — '오름차순 내림차순 선택']", () => {

@@ -133,22 +133,28 @@ class IrsSettlementEvent(BaseModel):
 class IrsDailyReconRow(BaseModel):
     date: str
     day: int
+    # [OWNER, 2026-08-11 — 대사 편의] pvbp 는 그 행의 추정에 쓴 **전일
+    # (start-of-day) KRD** 다 — 한 블록 안에서 pvbp × dailyDbp = pnl 이
+    # 닫힌다(recon.py 모듈 주석). 마지막 날의 종가 KRD 는 끝의 이월 앵커
+    # 행(carryover=True)이 싣고, 그 행의 손익 필드는 전부 None 이다 —
+    # 아직 오지 않은 날의 손익을 0 이라고 말하지 않는다(공란 정책).
     pvbp: dict[str, int]
     cumulativeBp: dict[str, float]
     dailyDbp: dict[str, float]
     pnl: dict[str, int]
-    totalEstPnl: int
-    totalActual: int
-    settleCf: int
-    npvChange: int
-    residual: int
-    thetaPnl: int
-    valuationPnl: int
+    totalEstPnl: int | None
+    totalActual: int | None
+    settleCf: int | None
+    npvChange: int | None
+    residual: int | None
+    thetaPnl: int | None
+    valuationPnl: int | None
     # [OWNER, 2026-08-11 — 교과서 3분해] 세타의 캐리/롤다운 분리(그날 증분).
     # carryPnl + rolldownPnl == thetaPnl (표시 정밀도에서 정확 — recon.py가
     # 라운딩 잔차로 롤다운을 잡는다). 구 캐시/구 응답 호환을 위해 기본 0.
-    carryPnl: int = 0
-    rolldownPnl: int = 0
+    carryPnl: int | None = 0
+    rolldownPnl: int | None = 0
+    carryover: bool = False
 
 
 class FundingCurvePoint(BaseModel):

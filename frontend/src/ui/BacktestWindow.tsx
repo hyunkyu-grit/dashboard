@@ -109,7 +109,8 @@ const EOK = 100_000_000;
 function BacktestReconStack({ recon }: { recon: BacktestRecon }) {
   const days: ReconStackDay[] = recon.rows.map((r) => ({
     date: r.t,
-    title: r.t,
+    // 이월 앵커(마지막 행): 종가 KRD = 다음 영업일로 들고 가는 리스크.
+    title: r.carryover ? `${r.t} · 다음 영업일로 들고 가는 이월 리스크` : r.t,
     krd: r.krd,
     dbp: r.dbp,
     est: r.est,

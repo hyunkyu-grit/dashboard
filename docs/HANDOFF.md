@@ -194,6 +194,37 @@ rule:
 
 ## 6. Current state (as of the 2026-08-11 session)
 
+### 일별 대사: 전일 KRD 표시 + 이월 앵커 (2026-08-11 저녁)
+
+[OWNER — "KRD를 전일걸 가져와서 붙이는게 조금 더 대사하기 편하지 않을까 …
+같이 넣어주고 백테스트와 시뮬레이션에 모두 적용하기"]. 종전에는 KRD 줄이
+그날 종가 KRD(수준값)였고 추정만 전일 KRD 를 써서, 한 블록의 KRD × Δbp 가
+손익 줄과 안 맞았다(눈이 전일 블록으로 오가야 대사가 됐다).
+
+- **행의 KRD = 추정이 곱한 전일(start-of-day) KRD 그 자체** — 두 백엔드
+  모두(`recon.py` `pvbp`, `backtest.py` `_book_recon` `krd`). 한 블록 안에서
+  KRD × Δbp = 손익이 표시 라운딩 안에서 닫힌다(test_block_closes_in_row 가
+  핀). 백테스트 진입일 행의 krd 는 0 — 그날 아침엔 포지션이 없었다.
+- **이월 앵커 행** — 표시가 전일 KRD 가 되며 사라질 뻔한 마지막 날의 종가
+  KRD(다음 영업일로 들고 가는 리스크)를 rows 끝의 `carryover: true` 행이
+  싣는다(D+0 앵커와 대칭). 손익 필드는 전부 **null** — 아직 오지 않은 날의
+  손익을 0 이라고 말하지 않는다(공란 정책). dailyDbp/pnl(시뮬)·dbp/est
+  (백테스트)는 빈 dict. 시뮬 앵커의 cumulativeBp 는 마지막 행 값의 이월
+  (호라이즌 종점 커브가 그대로 서 있다).
+- **계약**: `IrsDailyReconRow` 손익 스칼라들이 `int | None` + `carryover:
+  bool = False`(전 행에 직렬화됨), FE `IrsDailyReconRow`/`BacktestReconRow`
+  도 같은 방향으로 넓힘. ReconStack 은 null 을 — 로 그린다(기존 Won/cellText
+  경로 그대로). 이월 행 툴팁: "다음 영업일로 들고 가는 이월 리스크".
+- **골든 재핀 #4** (blast-radius 스크립트로 단언 후 재캡처): 61개 recon 행의
+  `pvbp` 가 정확히 한 칸 시프트(행 0 시드 동일)·전 행 +carryover=False·앵커
+  1행 추가 — pvbp/carryover 밖의 모든 키·값과 recon 밖 전체는 바이트 동일.
+  FE 픽스처(linear/shaped.json)는 재캡처 안 함 — FE 테스트가 그 필드를 단언
+  하지 않는 기존 정책 그대로, path-matrix F4a 는 carryover 행을 미리 걸러
+  둠(앵커 날짜는 경로 행렬 정의역 밖).
+- 검증: 백엔드 recon 8/8 + simulate 계열 37/37, FE vitest 815/816(1 skip
+  기존), lint 0 에러. tsc 의 guards/*.test.ts 에러 8건은 HEAD 와 동일한
+  기존 드리프트(stash 왕복으로 확인).
+
 ### 아침 자동 굽기 파이프라인 (2026-08-11 오후, 병행 세션)
 
 [OWNER — "정적 JSON으로 하지말고, 매일 아침에 구워지게" · "SQL 데이터가 없다면

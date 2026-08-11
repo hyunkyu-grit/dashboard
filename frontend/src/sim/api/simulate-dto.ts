@@ -199,23 +199,31 @@ export interface IrsSettlementEvent {
 export interface IrsDailyReconRow {
   date: string;
   day: number;
+  /** [OWNER, 2026-08-11 — 대사 편의] 그 행의 추정에 쓴 **전일(start-of-day)
+   * KRD** — 블록 안에서 pvbp × dailyDbp = pnl 이 닫힌다. 마지막 날의 종가
+   * KRD 는 끝의 이월 앵커 행(carryover)이 싣는다. */
   pvbp: Record<string, number>;
   cumulativeBp: Record<string, number>;
   dailyDbp: Record<string, number>;
   pnl: Record<string, number>;
-  totalEstPnl: number;
-  totalActual: number;
-  settleCf: number;
-  npvChange: number;
-  residual: number;
-  thetaPnl: number;
-  valuationPnl: number;
+  /** 손익 스칼라들은 이월 앵커 행에서 null — 아직 오지 않은 날의 손익을
+   * 0 이라고 말하지 않는다(공란 정책). 구 캐시 응답은 non-null 그대로. */
+  totalEstPnl: number | null;
+  totalActual: number | null;
+  settleCf: number | null;
+  npvChange: number | null;
+  residual: number | null;
+  thetaPnl: number | null;
+  valuationPnl: number | null;
   /** [OWNER, 2026-08-11 — 교과서 3분해] 세타의 캐리/롤다운 분리(그날 증분):
    * carryPnl = 동결 커브 경로의 순액크루얼+정산(backend carry_split.py),
    * rolldownPnl = thetaPnl − carryPnl. 표시 정밀도에서 정확히 가산적이다.
-   * 구 캐시 응답에는 없다 — 옵셔널. */
-  carryPnl?: number;
-  rolldownPnl?: number;
+   * 구 캐시 응답에는 없다 — 옵셔널. 이월 앵커 행에서는 null. */
+  carryPnl?: number | null;
+  rolldownPnl?: number | null;
+  /** true = 끝의 이월 앵커 행: 마지막 날의 종가 KRD(다음 영업일로 들고
+   * 가는 리스크)만 싣는다. 구 캐시 응답에는 없다 — 옵셔널. */
+  carryover?: boolean;
 }
 
 /** 스왑 한 건의 만기 시점 기여 (2026-08-06, 추가 전용).

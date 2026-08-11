@@ -162,7 +162,10 @@ describe("samplePathDays / buildPathMatrix", () => {
   it("FB3 F4a — byte-agreement with the ENGINE's applied path: matrix(swap) == irsDailyReconciliation.cumulativeBp per pillar, incl. the genuinely-zero 1D/3M", () => {
     const { request, response } = loadFixture("linear");
     const ev = createPathEvaluator(request);
-    const reconRows = response.irsDailyReconciliation ?? [];
+    // 이월 앵커 행(carryover)은 호라이즌 밖의 날짜라 경로 행렬의 정의역
+    // 밖이다 — 대조는 손익이 실리는 행 위에서만 한다(2026-08-11 recon 앵커;
+    // 현 픽스처엔 앵커가 없지만 재캡처 후에도 이 테스트가 서 있게).
+    const reconRows = (response.irsDailyReconciliation ?? []).filter((r) => !r.carryover);
     expect(reconRows.length).toBeGreaterThan(0);
     // Every engine recon row, every pillar the engine carries: the FE matrix
     // reproduces the engine's applied cumulative Δbp to the engine's own 3dp

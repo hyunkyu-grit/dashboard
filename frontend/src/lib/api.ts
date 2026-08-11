@@ -372,22 +372,27 @@ export interface BacktestPosition {
   cash: number;
 }
 
-/** 일별 대사 [OWNER, 2026-08-11] — one business day of the book: per-tenor
- * KRD on that day's own curve, the ACTUAL market Δbp (this is history, not a
- * scenario), the P&L-explain estimate (전일 KRD × 당일 Δbp), and the day's
- * actual P&L split 평가/롤다운/캐리. `dbp` is null where the tenor had no
- * quote on one of the two days — unknown, not zero. */
+/** 일별 대사 [OWNER, 2026-08-11] — one business day of the book: the
+ * start-of-day per-tenor KRD (the very sensitivities the estimate
+ * multiplied — krd × dbp = est closes inside the row [OWNER, 같은 날]), the
+ * ACTUAL market Δbp (this is history, not a scenario), the P&L-explain
+ * estimate, and the day's actual P&L split 평가/롤다운/캐리. `dbp` is null
+ * where the tenor had no quote on one of the two days — unknown, not zero.
+ * The last row is the carry-over anchor (`carryover: true`): the final
+ * day's CLOSE KRD — tomorrow's risk — with every P&L field null (a day
+ * that hasn't happened has no P&L; 공란 정책) and empty `dbp`/`est`. */
 export interface BacktestReconRow {
   t: string;
   krd: Record<string, number>;
   dbp: Record<string, number | null>;
   est: Record<string, number>;
-  estTotal: number;
-  actual: number;
-  valuation: number;
-  rolldown: number;
-  carry: number;
-  residual: number;
+  estTotal: number | null;
+  actual: number | null;
+  valuation: number | null;
+  rolldown: number | null;
+  carry: number | null;
+  residual: number | null;
+  carryover?: boolean;
 }
 
 export interface BacktestRecon {

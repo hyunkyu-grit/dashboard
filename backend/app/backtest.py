@@ -640,6 +640,14 @@ def _book_recon(
     계산해 둔 포워드 세타가 곧 오늘의 백워드 세타이므로, 평가 = (오늘 실측
     변화) − (전일 행의 포워드 세타)로 나온다. 잘린 창의 첫 행만 전일 커브
     동결 재평가 한 번으로 시드한다.
+
+    행의 `krd` 는 그 행의 추정에 쓴 **전일(start-of-day) KRD** 다 [OWNER,
+    2026-08-11 — "전일걸 가져와서 붙이는게 대사하기 편하지 않을까"]: 한
+    블록 안에서 krd × dbp = est 가 닫힌다. 진입일 행의 krd 는 0 이다(그날
+    아침엔 포지션이 없었다 — 참인 기초 리스크). 마지막 날의 종가 KRD(다음
+    영업일로 들고 가는 이월 리스크)는 rows 끝의 이월 앵커 행
+    (`carryover: True`)이 싣고, 그 행의 손익 필드는 전부 None 이다 — 아직
+    오지 않은 날의 손익을 0 이라고 말하지 않는다(공란 정책).
     """
     dates = dataset.dates
     labels = list(TENOR_T)  # insertion order == ascending tenor
@@ -772,7 +780,8 @@ def _book_recon(
             total_est = round(sum(est.values()))
             rows.append({
                 "t": on.isoformat(),
-                "krd": {lb: round(krd[lb]) for lb in labels},
+                # 전일(start-of-day) KRD — est 가 곱한 바로 그 값 (모듈 주석)
+                "krd": {lb: round(prev_krd[lb]) for lb in labels},
                 "dbp": dbp,
                 "est": {lb: round(est[lb]) for lb in labels},
                 "estTotal": total_est,
@@ -789,6 +798,24 @@ def _book_recon(
                 "residual": round(day_val) - total_est,
             })
         prev_krd = krd
+
+    # 이월 앵커 행 [OWNER, 2026-08-11]: 마지막 날의 종가 KRD(다음 영업일
+    # 기준 재평가 — 곧 내일 아침 들고 갈 리스크). 날짜는 마지막 행이 세타를
+    # booking 한 구간의 끝(`nxt`)이고, 손익 필드는 전부 None — 공란 정책.
+    if rows:
+        rows.append({
+            "t": nxt.isoformat(),
+            "krd": {lb: round(krd[lb]) for lb in labels},
+            "dbp": {},
+            "est": {},
+            "estTotal": None,
+            "actual": None,
+            "valuation": None,
+            "rolldown": None,
+            "carry": None,
+            "residual": None,
+            "carryover": True,
+        })
 
     return {
         "tenors": labels,

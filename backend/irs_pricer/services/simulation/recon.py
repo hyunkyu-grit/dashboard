@@ -2,8 +2,13 @@
 
 영업일마다: 그날의 쇼크 par 커브를 부트스트랩하고 KRD_TENORS 를 범프해
 포트폴리오 KRD 를 재계산, 전일(start-of-day) KRD × 당일 Δbp 선형 추정을
-FM 엔진의 실제 증분과 나란히 적는다. 응답의 `irsDailyReconciliation` 이
-이 함수의 반환값 그대로다.
+FM 엔진의 실제 증분과 나란히 적는다. 행의 `pvbp` 도 **그 추정에 쓴 전일
+KRD 그대로**다 [OWNER, 2026-08-11 — "전일걸 가져와서 붙이는게 대사하기
+편하지 않을까"]: 한 블록 안에서 KRD × Δbp = 손익이 닫히고, 눈이 전일
+블록으로 오갈 일이 없다. 마지막 날의 종가 KRD(다음 영업일로 들고 가는
+리스크)는 표 끝의 이월 앵커 행(`carryover: True`, 손익 필드는 전부
+None — 아직 없는 날의 손익을 0 이라고 말하지 않는다)이 싣는다. 응답의
+`irsDailyReconciliation` 이 이 함수의 반환값 그대로다.
 
 **바이트 동일 이식**: 로직·라운딩·필드 전부 chart.py 에 있던 그대로다.
 골든 픽스처(test_simulate_api)가 결과 불변을 못박는다. 추출로 달라진 것
@@ -175,9 +180,11 @@ def build_irs_daily_recon(
     # 선형 추정은 **전일 KRD × 당일 Δbp** 다. 종전에는 당일(end-of-day) KRD 를
     # 썼는데, P&L explain 의 민감도 방식 표준은 "어제의 민감도 × 오늘의 변동"
     # 이다(외부 검증 2026-08-10) — 이벤트·리픽싱으로 KRD 가 점프하는 날에는
-    # 이동 후 민감도로 이동분을 설명하는 순서 역전이 된다. 행의 `pvbp` 필드는
-    # 계속 **그날의** KRD 다(일별 KRD 표가 보여주는 수준값); 추정만 전일 것을
-    # 쓴다. 시드는 day 0(기준일, 쇼크 전) 의 KRD 다.
+    # 이동 후 민감도로 이동분을 설명하는 순서 역전이 된다. 행의 `pvbp` 도
+    # **같은 전일 KRD** 다 [OWNER, 2026-08-11 — 표시가 그날 KRD 이던 동안은
+    # 한 블록의 KRD × Δbp 가 손익 줄과 안 맞아 눈이 전일 블록으로 오가야
+    # 했다]. 그날 종가 KRD 는 다음 행이(마지막 날 것은 이월 앵커 행이)
+    # 보여준다. 시드는 day 0(기준일, 쇼크 전) 의 KRD 다.
     _pvbp_prev_r = _krd_at(base_date, 0)
 
     # ── 세타 귀속: 평가일 기준 **포워드** [OWNER, 2026-08-11 — "금요일날
@@ -240,7 +247,7 @@ def build_irs_daily_recon(
         _cum_prev = {_n: _cum_shock_r(_tau, _prev_cal_r) for _n, _tau in zip(_recon_names, _recon_tenors)}
         _daily_dbp_r = {_n: _cum_r[_n] - _cum_prev[_n] for _n in _recon_names}
 
-        _pvbp_r = _krd_at(_val_date_r, _cal_day)
+        _pvbp_r = _krd_at(_val_date_r, _cal_day)   # 오늘 종가 KRD — 다음 행의 전일 KRD
 
         _pnl_r       = {_n: -_pvbp_prev_r[_n] * _daily_dbp_r[_n] for _n in _recon_names}
         _total_est   = round(sum(_pnl_r.values()))
@@ -259,7 +266,7 @@ def build_irs_daily_recon(
         irs_daily_recon.append({
             "date":         _val_date_r.isoformat(),
             "day":          _cal_day,
-            "pvbp":         {_n: round(_pvbp_r[_n]) for _n in _recon_names},
+            "pvbp":         {_n: round(_pvbp_prev_r[_n]) for _n in _recon_names},
             "cumulativeBp": {_n: round(_cum_r[_n], 3) for _n in _recon_names},
             "dailyDbp":     {_n: round(_daily_dbp_r[_n], 4) for _n in _recon_names},
             "pnl":          {_n: round(_pnl_r[_n]) for _n in _recon_names},
@@ -279,5 +286,32 @@ def build_irs_daily_recon(
         })
         _prev_cal_r  = _cal_day
         _pvbp_prev_r = _pvbp_r
+
+    # ── 이월 앵커 행 [OWNER, 2026-08-11 — 이월 리스크 앵커] ────────────────
+    # 행의 pvbp 가 전일 KRD 가 되면서 마지막 날의 종가 KRD(다음 영업일로
+    # 들고 가는 리스크)가 표에서 사라진다 — 그 값을 D+0 앵커와 대칭인 끝
+    # 앵커가 싣는다. 커브는 호라이즌 종점의 것이 그대로 서 있으므로
+    # cumulativeBp 는 마지막 행 값의 이월이고, 손익 필드는 전부 None 이다
+    # (아직 오지 않은 날의 손익을 0 이라고 말하지 않는다 — 공란 정책).
+    if bizday_schedule:
+        _co_date = next_kr_business_day(_val_date_r)
+        irs_daily_recon.append({
+            "date":         _co_date.isoformat(),
+            "day":          (_co_date - base_date).days,
+            "pvbp":         {_n: round(_pvbp_prev_r[_n]) for _n in _recon_names},
+            "cumulativeBp": {_n: round(_cum_r[_n], 3) for _n in _recon_names},
+            "dailyDbp":     {},
+            "pnl":          {},
+            "totalEstPnl":  None,
+            "totalActual":  None,
+            "settleCf":     None,
+            "npvChange":    None,
+            "residual":     None,
+            "thetaPnl":     None,
+            "valuationPnl": None,
+            "carryPnl":     None,
+            "rolldownPnl":  None,
+            "carryover":    True,
+        })
 
     return irs_daily_recon
