@@ -82,7 +82,6 @@ import {
   ARRIVE,
   ARRIVE_STAGGER,
   ENTER,
-  EXIT,
   instant,
   STAGGER_STEP,
 } from "./motion";
@@ -1155,26 +1154,20 @@ export function BacktestWindow({
         maxWidth: "96vw",
       }}
       /* a window MATERIALIZES — the slight scale gives it a surface arriving
-         rather than a div blinking on; exit is the faster twin (§14: exits
-         run shorter than entrances). `transitionEnd: display none` is the
-         close-button fix's second belt [2026-08-05]: the failure was the
-         window fading to opacity 0 and then STAYING MOUNTED (a nested
-         presence blocked AnimatePresence's removal), which left an
-         invisible surface eating every click over its area. The root cause
-         is fixed in AnimatedNumber (no popLayout); this line makes the
-         failure CLASS harmless — a node that somehow survives its exit
-         stops painting AND stops hit-testing. */
+         rather than a div blinking on. There is NO exit and no presence
+         wrapper anymore [2026-08-11]: closing is an instant unmount at the
+         mount site (App.tsx), because an AnimatePresence removal only
+         happens when every exit animation REPORTS completing, and that
+         report rides motion's rAF frameloop — starve it (the router
+         re-render at close, a throttled tab) and the window stays mounted
+         forever. That was the second 안 닫히는 창; the first (2026-08-05,
+         popLayout) was the same class. The old `transitionEnd: display
+         none` belt left with the exit — with no presence there is nothing
+         for a surviving node to survive. */
       initial={{ opacity: 0, scale: 0.985 }}
       animate={{ opacity: 1, scale: 1 }}
-      exit={{
-        opacity: 0,
-        transitionEnd: { display: "none" },
-        transition: instant(EXIT, reduced === true),
-      }}
       /* Was an ad-hoc 0.15s pair. It is the shared entrance now — the window
-         was the last site still carrying its own duration, and "exits run
-         shorter than entrances" is the token pair's job rather than a number
-         written here. */
+         was the last site still carrying its own duration. */
       transition={instant(ENTER, reduced === true)}
     >
       {/* the drag handle — the ONLY draggable surface, and the strip the

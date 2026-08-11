@@ -718,59 +718,73 @@ export function App() {
       </AnimatePresence>
 
       {/* the enlarged view (?tile) — a modal over everything, including the
-          floating window; closing it leaves the window exactly as it was */}
-      <AnimatePresence>
-        {enlargedRow && summary && (
-          <ErrorBoundary
-            key="enlarged"
-            region="popup"
-            fallback="큰 화면을 그리지 못했어요"
-          >
-            <EnlargedView
-              row={enlargedRow}
-              summary={summary}
-              chartType={chartType}
-              onChartType={onChartType}
-              onClose={closeEnlarged}
-            />
-          </ErrorBoundary>
-        )}
-      </AnimatePresence>
+          floating window; closing it leaves the window exactly as it was.
+          NO AnimatePresence — see the backtest window's note below: both
+          surfaces are unmounted BY A ROUTER WRITE, and that unmount must not
+          wait on an exit animation's completion. EnlargedView's own exit
+          props are inert without a presence wrapper and simply never run. */}
+      {enlargedRow && summary && (
+        <ErrorBoundary
+          key="enlarged"
+          region="popup"
+          fallback="큰 화면을 그리지 못했어요"
+        >
+          <EnlargedView
+            row={enlargedRow}
+            summary={summary}
+            chartType={chartType}
+            onChartType={onChartType}
+            onClose={closeEnlarged}
+          />
+        </ErrorBoundary>
+      )}
 
       {/* the floating backtest window (?bt) — parallel to everything above:
           tabs, pins and the enlarged view all keep working underneath it.
           Keyed by the instance nonce so REPLACING (a new chart click while
           one is open) remounts and re-seeds; the window boundaries its own
-          body, this covers the shell. */}
-      <AnimatePresence>
-        {btKey && btRow && summary && (
-          <ErrorBoundary
-            key={btKey}
-            region="popup"
-            fallback="백테스트 화면을 그리지 못했어요"
-          >
-            <BacktestWindow
-              row={btRow}
-              rows={rows}
-              asOf={summary.asof}
-              entryFrom={params.get("btf") ?? undefined}
-              memoryKey={btKey}
-              /* only BOOKABLE pins are captured [V-PASS V5]: a pinned
-                 forward or 변동성 row slipped past the dropdown's filter
-                 into the book and 422'd two clicks later at 실행. Filtered
-                 at the source — the window's capture effect cannot grow a
-                 branch around its setState (compiler lint). */
-              captured={
-                pinned && BOOKABLE_GROUPS.includes(pinned.group)
-                  ? pinned
-                  : null
-              }
-              policy={summary.policy}
-              onClose={closeBacktest}
-            />
-          </ErrorBoundary>
-        )}
-      </AnimatePresence>
+          body, this covers the shell.
+
+          NO AnimatePresence — THE CLOSE MUST NOT WAIT ON AN ANIMATION
+          [2026-08-11, the second 안 닫히는 창]. A presence-wrapped window
+          only leaves the DOM when every exit animation reports completion,
+          and that report is delivered by motion's rAF frameloop. The render
+          that removes this window is a ROUTER write, which triggers a heavy
+          re-render right when the 160ms exit needs its ~10 frames — starve
+          them (jank at close, a throttled or hidden tab, an energy-saver
+          profile) and the completion never arrives: the window stays
+          mounted forever, invisible-eating-clicks or fully visible. The
+          2026-08-05 ghost (popLayout) was one member of this class; this
+          removes the class. Closing is an instant unmount — which is also
+          exactly what reduced motion already did by design (§14 instant()).
+          The entrance still animates; entrances need no presence. */}
+      {btKey && btRow && summary && (
+        <ErrorBoundary
+          key={btKey}
+          region="popup"
+          fallback="백테스트 화면을 그리지 못했어요"
+        >
+          <BacktestWindow
+            row={btRow}
+            rows={rows}
+            asOf={summary.asof}
+            entryFrom={params.get("btf") ?? undefined}
+            memoryKey={btKey}
+            /* only BOOKABLE pins are captured [V-PASS V5]: a pinned
+               forward or 변동성 row slipped past the dropdown's filter
+               into the book and 422'd two clicks later at 실행. Filtered
+               at the source — the window's capture effect cannot grow a
+               branch around its setState (compiler lint). */
+            captured={
+              pinned && BOOKABLE_GROUPS.includes(pinned.group)
+                ? pinned
+                : null
+            }
+            policy={summary.policy}
+            onClose={closeBacktest}
+          />
+        </ErrorBoundary>
+      )}
 
       {/* 시뮬레이션 결과 창은 **여기 없다** — 시뮬레이션 서브트리 안에서 뜬다
           (sim/ui/SimulationFlow.tsx). App 이 띄우려면 그 스토어를 정적으로

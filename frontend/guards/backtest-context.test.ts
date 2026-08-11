@@ -455,16 +455,24 @@ describe("the context chart reuses the one renderer", () => {
     expect(win).toMatch(/\{!chartLinked && \(/);
   });
 
-  it("the window's exit cannot leave a click-eating ghost [close-button fix, 2026-08-05]", () => {
-    // The failure: a nested AnimatePresence (AnimatedNumber) with
-    // mode="popLayout" whose exit was in flight when the WINDOW's exit
-    // started blocked AnimatePresence from removing the window — it faded
-    // to opacity 0 and stayed mounted, an invisible surface eating every
-    // click over its area. Two pins, root cause and belt:
+  it("closing the window cannot wait on an animation [안 닫히는 창 2제, 2026-08-05 & 2026-08-11]", () => {
+    // The class: an AnimatePresence child leaves the DOM only when every
+    // exit animation REPORTS completing, and that report rides motion's rAF
+    // frameloop. 2026-08-05: a nested popLayout presence (AnimatedNumber)
+    // swallowed the report. 2026-08-11: the router re-render at close (or a
+    // throttled/hidden tab) starved the frames that deliver it. Both ended
+    // the same way — the window mounted forever, eating clicks or fully
+    // visible. So the invariant is structural now: the window carries NO
+    // exit and mounts under NO presence wrapper; closing is a plain
+    // conditional unmount that waits on nothing.
     const num = code("ui/AnimatedNumber.tsx");
-    expect(num).not.toMatch(/popLayout/);
-    // a node that somehow survives its exit stops painting AND hit-testing
-    expect(win).toMatch(/transitionEnd: \{ display: "none" \}/);
+    expect(num).not.toMatch(/popLayout/); // still a hazard for live presences
+    expect(win).not.toMatch(/exit=\{/);
+    // App: the ONE remaining AnimatePresence is the preview sheet's (its
+    // removal render is local state, not a router write). The enlarged view
+    // and the backtest window mount as plain conditionals.
+    const app = code("ui/App.tsx");
+    expect((app.match(/<AnimatePresence/g) ?? []).length).toBe(1);
   });
 
   it("every authored transition collapses under reduced motion (instant)", () => {
