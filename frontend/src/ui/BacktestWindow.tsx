@@ -56,6 +56,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   type BacktestLeg,
+  type BacktestRecon,
   type BacktestResult,
   BacktestUnavailable,
   CD_SERIES_ID,
@@ -74,7 +75,13 @@ import { loadBacktestMemory, saveBacktestMemory } from "./backtestMemory";
 import { LinkedPnlChart, PnlChart } from "./BacktestPnlCharts";
 import { fmtKrw, fmtKrwFromMan, splitKrw } from "./krw";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { WINDOW_W } from "./floatingWindow";
+import { SIM_WINDOW_W } from "./floatingWindow";
+
+/* 창 폭 = 시뮬레이션 결과 창과 동일 [OWNER, 2026-08-11 — "백테스트도
+ * 시뮬레이션만큼 가로 사이즈 키우자"]. 차트 폭은 창 폭에서 본문 패딩
+ * (p-6 = 24px 양쪽)을 뺀 값 — 928/880 시절과 같은 관계식이라, 링크드
+ * 스택 세 패널이 공유하는 x-수식(CHART_PAD)에는 아무 일도 없다. */
+const BT_CHART_W = SIM_WINDOW_W - 48;
 import { useFloatingWindow } from "./useFloatingWindow";
 import { Z_WINDOW } from "./layers";
 import { LinkedLegsChart } from "./LinkedLegsChart";
@@ -86,14 +93,46 @@ import {
   STAGGER_STEP,
 } from "./motion";
 import { type ChartMark, PreviewChart } from "./PreviewChart";
+import { ReconStack, type ReconStackDay } from "./ReconStack";
 import { GROUP_LABEL, type Group, type Row } from "./rows";
-import { BacktestDailyPnl } from "./BacktestDailyPnl";
 import { WindowControls } from "./WindowControls";
 import { WindowDrawer } from "./WindowDrawer";
 import { useCdReference } from "./useCdReference";
 
 /** 억 in, raw won out. The input is in 억 because nobody types eleven zeros. */
 const EOK = 100_000_000;
+
+/** 서버 recon → 대사 스택 [OWNER, 2026-08-11]. 최신이 위다 — 대사는 보통
+ * 어제·오늘을 보는 일이라(일별 PnL 표의 규칙 그대로), 시간순인 시뮬레이션
+ * 쪽과 달리 여기서는 뒤집는다: 그쪽은 미래 경로라 "최신"이랄 게 없다. */
+function BacktestReconStack({ recon }: { recon: BacktestRecon }) {
+  const days: ReconStackDay[] = [...recon.rows].reverse().map((r) => ({
+    date: r.t,
+    title: r.t,
+    krd: r.krd,
+    dbp: r.dbp,
+    est: r.est,
+    estTotal: r.estTotal,
+    valuation: r.valuation,
+    carry: r.carry,
+    rolldown: r.rolldown,
+    actual: r.actual,
+  }));
+  return (
+    <ReconStack
+      days={days}
+      tenors={recon.tenors}
+      // "손익 구성"이라는 문구를 여기 쓰면 안 된다 — krw-additivity 가드가
+      // 그 문자열의 첫 등장을 구성 표의 앵커로 삼는다(문자열은 주석과 달리
+      // 스캔에서 살아남는다).
+      note={
+        recon.truncated
+          ? "긴 백테스트라 최근 영업일만 실었어요 — 기간 전체 분해는 위 표에 있어요."
+          : undefined
+      }
+    />
+  );
+}
 
 /** Mirrors `backtest.MAX_POSITIONS`. Past this the sheet is unreadable and
  * each extra row is another full daily revaluation pass on the server. */
@@ -421,7 +460,7 @@ function BookContextChart({
         points={pts}
         stats={series.stats}
         unit={unit}
-        width={880}
+        width={BT_CHART_W}
         height={200}
         policy={policy}
         cd={cd}
@@ -450,7 +489,7 @@ function BookContextChart({
               cd={cd}
               policy={policy}
               markDates={marks.map((m) => m.date)}
-              width={880}
+              width={BT_CHART_W}
               height={150}
               hoverIso={hoverIso}
               onHover={setHoverIso}
@@ -470,7 +509,7 @@ function BookContextChart({
           <LinkedPnlChart
             pts={pts}
             result={result}
-            width={880}
+            width={BT_CHART_W}
             height={140}
             hoverIso={hoverIso}
             onHover={setHoverIso}
@@ -532,7 +571,7 @@ function Result({
 
       {!chartLinked && (
         <div className="mt-4">
-          <PnlChart result={result} width={880} height={200} />
+          <PnlChart result={result} width={BT_CHART_W} height={200} />
         </div>
       )}
 
@@ -613,32 +652,35 @@ function Result({
         </tbody>
       </table>
 
-      {/* 손익 구성 [OWNER]: the headline split into the two things that made
-          it. Above the fold, because "was this a rate call or was I just
-          collecting coupon" is a question about the RESULT, not about how the
-          trade was built. */}
+      {/* 손익 구성 [OWNER]: the headline split into the three things that
+          made it [2026-08-11 — 교과서 3분해: 평가·캐리·롤다운]. Above the
+          fold, because "was this a rate call or was I just collecting coupon"
+          is a question about the RESULT, not about how the trade was built. */}
       <table className="mt-5 w-full text-[14px] tabular-nums">
         <thead className="text-left text-ink-2">
           <tr>
             <th className="pb-1 font-normal">손익 구성</th>
             <th className="pb-1 text-right font-normal">평가손익</th>
             <th className="pb-1 text-right font-normal">캐리손익</th>
+            <th className="pb-1 text-right font-normal">롤다운손익</th>
             <th className="pb-1 text-right font-normal">합계</th>
           </tr>
         </thead>
         {/* The grid is ADDITIVE AT DISPLAYED PRECISION, by construction
-            (2026-08-03 verification): each row's 캐리 is 합계 − 평가 in
-            만-units (splitKrw), and the 합계 row is the COLUMN SUM of the
+            (2026-08-03 verification): each row's 캐리 is 합계 − 평가 − 롤다운
+            in 만-units (splitKrw), and the 합계 row is the COLUMN SUM of the
             displayed rows — so every row sums across, every column sums
             down, and no reader's mental arithmetic can catch the table
             lying by a 만원. The server relationship is exact to the won
             (verified: 1,499 points, worst gap 1원); this is purely about
-            what rounding does to three figures printed separately. A
-            sub-만원 figure prints as ±0만원 here — the attribution table
-            keeps one unit so it keeps its arithmetic. */}
+            what rounding does to figures printed separately. A sub-만원
+            figure prints as ±0만원 here — the attribution table keeps one
+            unit so it keeps its arithmetic. A result restored from an older
+            session lacks `rolldown`; splitKrw's default 0 degrades it to
+            exactly the two-way display it was saved with. */}
         <tbody>
           {result.positions.map((p, i) => {
-            const u = splitKrw(p.pnl, p.valuation);
+            const u = splitKrw(p.pnl, p.valuation, p.rolldown);
             return (
               <tr key={`${p.id}-${i}`} className="border-t border-edge">
                 <td className="py-1.5">{naming.get(p.id)?.label ?? p.id}</td>
@@ -656,6 +698,13 @@ function Result({
                 >
                   {fmtKrwFromMan(u.uCarry)}
                 </td>
+                <td
+                  className={`py-1.5 text-right ${
+                    u.uRoll >= 0 ? "text-up" : "text-down"
+                  }`}
+                >
+                  {fmtKrwFromMan(u.uRoll)}
+                </td>
                 <td className="py-1.5 text-right font-semibold">
                   {fmtKrwFromMan(u.uPnl)}
                 </td>
@@ -664,7 +713,9 @@ function Result({
           })}
           {result.positions.length > 1 &&
             (() => {
-              const rows = result.positions.map((p) => splitKrw(p.pnl, p.valuation));
+              const rows = result.positions.map((p) =>
+                splitKrw(p.pnl, p.valuation, p.rolldown),
+              );
               const sum = (f: (u: ReturnType<typeof splitKrw>) => number) =>
                 rows.reduce((a, u) => a + f(u), 0);
               return (
@@ -672,6 +723,7 @@ function Result({
                   <td className="py-1.5">합계</td>
                   <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uVal))}</td>
                   <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uCarry))}</td>
+                  <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uRoll))}</td>
                   <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uPnl))}</td>
                 </tr>
               );
@@ -679,8 +731,8 @@ function Result({
         </tbody>
       </table>
       <p className="mt-1.5 text-[13px] opacity-50">
-        평가손익 = 금리·잔존만기 변화, 캐리손익 = 실제 주고받은 이자. 둘의
-        합이 손익이에요.
+        평가손익 = 금리가 움직인 몫, 캐리손익 = 실제 주고받은 이자, 롤다운손익 =
+        커브가 멈춰도 잔존만기가 줄며 생기는 몫. 셋의 합이 손익이에요.
       </p>
 
       <details className="mt-5">
@@ -1061,7 +1113,7 @@ export function BacktestWindow({
   // 기계는 `useFloatingWindow` 로 나갔다 [2026-08-07] — 시뮬레이션 결과 창이
   // 같은 것을 쓴다. 두 벌이면 한쪽만 클램프를 고치는 날이 오고, 그 창은 끌어서
   // 되돌릴 수 없는 곳으로 나간다.
-  const { pos, dragHandlers } = useFloatingWindow("backtest");
+  const { pos, dragHandlers } = useFloatingWindow("backtest", SIM_WINDOW_W);
 
   /* Dialog keyboard convention: Escape closes the window (the × was the only
    * way out). One press peels ONE layer: this handler yields while the
@@ -1150,8 +1202,7 @@ export function BacktestWindow({
         top: 0,
         x: pos.left,
         y: pos.top,
-        width: WINDOW_W,
-        maxWidth: "96vw",
+        width: `min(${SIM_WINDOW_W}px, calc(100vw - 16px))`,
       }}
       /* a window MATERIALIZES — the slight scale gives it a surface arriving
          rather than a div blinking on. There is NO exit and no presence
@@ -1343,24 +1394,26 @@ export function BacktestWindow({
       {/* 대사용 숫자 — 시뮬레이션 결과 창과 **같은 서랍**이다
           [트레이더 피드백 5, 2026-08-07]. 껍데기가 하나여야 "둘 다에 존재한다"
           가 유지된다.
-          KRD 는 아직 없다: 백테스트 응답은 `points`(일별 손익)와 포지션별
-          기록만 들고, 테너별 민감도는 계산하지 않는다. 탭을 **숨기지 않고
-          비워 두는** 이유가 그것이다 — 없다는 사실이 화면에서 보여야 다음
-          사람이 "왜 한쪽에만 있지" 를 묻지 않는다. */}
+          [OWNER, 2026-08-11 — "탭 1개에 KRD·Bp변화·PnL변화를 몰아야"]: 일별
+          PnL 탭과 빈 KRD 탭이 **일별 대사 하나**로 합쳐졌다. 백엔드가 이제
+          영업일마다 테너별 KRD(범프 재평가)·실제 Δbp·추정·3분해를 계산해
+          `recon` 으로 싣는다 — "백테스트 KRD 없음" 시대의 빈 탭은 임무 종료.
+          하루 = 가로줄 셋(KRD·Δbp·손익)의 스택은 ReconStack 이 그리고, 같은
+          컴포넌트를 시뮬레이션 일별 대사도 쓴다. 옛 세션에서 복원된 결과에는
+          `recon` 이 없다 — 탭을 숨기지 않고 비워 둔다(없다는 사실이 화면에
+          보여야 한다). BacktestDailyPnl 은 감춘 표 목록에 합류(파일은 남아
+          있다 — 복원 규칙). */}
       {shownResult && (
         <WindowDrawer
           tabs={[
             {
-              id: "pnl",
-              label: "일별 PnL",
-              content: <BacktestDailyPnl points={shownResult.points} />,
-            },
-            {
-              id: "krd",
-              label: "KRD",
-              content: null,
+              id: "recon",
+              label: "일별 대사",
+              content: shownResult.recon ? (
+                <BacktestReconStack recon={shownResult.recon} />
+              ) : null,
               unavailable:
-                "백테스트는 아직 테너별 민감도를 계산하지 않아요 — 응답에 일별 손익만 있어요",
+                "이 결과는 예전 세션에서 복원돼 일별 대사가 없어요 — 다시 실행하면 나와요",
             },
           ]}
         />

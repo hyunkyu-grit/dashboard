@@ -14,14 +14,19 @@ export interface WinPos {
   top: number;
 }
 
-/** The window's fixed width; content (the 880px P&L chart) plus padding. */
+/** The historical fixed width (content: an 880px P&L chart plus padding).
+ * Still the helpers' default so the pure-function guards keep their anchor,
+ * but NO window renders at it anymore — the backtest moved to SIM_WINDOW_W
+ * [OWNER, 2026-08-11 — "백테스트도 시뮬레이션만큼 가로 사이즈 키우자"]. */
 export const WINDOW_W = 928;
 
 /** 시뮬레이션 결과 창은 더 넓다 [OWNER, 2026-08-10 — "결과창 좀 키워서 최대한
  * 한눈에"]. 케이스 비교·성분 커브·일별 KRD(테너 15개까지) 가 한 창에 살게
  * 되면서 928 은 대사 표를 가로 스크롤로 밀어냈다. 뷰포트가 이보다 좁으면
  * CSS min() 이 줄인다(SimulationWindow 의 style) — 위치 클램프는 이 값
- * 기준이라 좁은 화면에서 left 가 0 으로 앵커된다. */
+ * 기준이라 좁은 화면에서 left 가 0 으로 앵커된다.
+ * 2026-08-11 부터는 백테스트 창도 이 폭이다 — 일별 대사 스택(테너 격자 +
+ * 하루 요약 다섯 열)이 백테스트 서랍에도 살게 되면서 같은 논리가 성립한다. */
 export const SIM_WINDOW_W = 1320;
 
 /** The drag handle's height — the strip that must NEVER leave the viewport,

@@ -126,7 +126,7 @@ def test_shaped_path_swaps_follow_the_designed_path(client) -> None:
 
     # Per-day decomposition (HARDEN-1 series) stays internally consistent.
     for row in body["decompositionDaily"]:
-        s = row["fundingCost"] + row["bondMtm"] + row["bondCarry"] + (row["swapMtm"] or 0) + (row["swapCarry"] or 0)
+        s = row["fundingCost"] + row["bondMtm"] + row["bondCarry"] + (row["swapMtm"] or 0) + (row["swapCarry"] or 0) + (row["swapRolldown"] or 0)
         assert s == pytest.approx(row["total"], abs=1.0)
         if 0 < row["day"] <= 30:
             assert row["swapMtm"] == pytest.approx(0.0, abs=1.0), "per-day swap valuation flat in the window"
@@ -207,7 +207,7 @@ def test_funding_stepping_moves_only_funding_side_fields(client) -> None:
 
     # The identity still closes on the stepped side, per day and at horizon.
     for row in b["decompositionDaily"]:
-        s = row["fundingCost"] + row["bondMtm"] + row["bondCarry"] + (row["swapMtm"] or 0) + (row["swapCarry"] or 0)
+        s = row["fundingCost"] + row["bondMtm"] + row["bondCarry"] + (row["swapMtm"] or 0) + (row["swapCarry"] or 0) + (row["swapRolldown"] or 0)
         assert s == pytest.approx(row["total"], abs=1.0)
 
 

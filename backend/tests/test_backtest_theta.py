@@ -95,16 +95,27 @@ def _grid_par_and_annuity(zc, t_years: float) -> tuple[float, float]:
 
 
 def test_frozen_market_valuation_is_rolldown_and_nothing_else(frozen):
+    """[OWNER, 2026-08-11 — 교과서 3분해] the module docstring's WHERE
+    ROLL-DOWN LIVES is now answered by a FIELD: the clean change from aging
+    lives in `rolldown`, and `valuation` is the curve-move remainder — which
+    on a frozen market must be EXACTLY zero (the chained revaluation reuses
+    the identical curve, so the subtraction cancels to float noise). The
+    smoothness/magnitude assertions that used to constrain `valuation`
+    constrain `rolldown` unchanged."""
     ds, zc = frozen
     pos = Position("10Y", +1, N, START)
     path = trace(ds, pos)
 
+    # the curve never moves, so the curve-move bucket is empty — everywhere
+    for pt in path:
+        assert abs(pt["valuation"]) <= KRW_TOL, (pt["t"], pt["valuation"])
+
     # identity at every point, and no step beyond the budget PER CALENDAR DAY
     # it spans — a weekend ages the swap three days and may step three days
     for a, b in zip(path, path[1:]):
-        assert abs((b["valuation"] + b["carry"]) - b["pnl"]) <= KRW_TOL
+        assert abs((b["valuation"] + b["rolldown"] + b["carry"]) - b["pnl"]) <= KRW_TOL
         cal = (dt.date.fromisoformat(b["t"]) - dt.date.fromisoformat(a["t"])).days
-        step_bp = abs(b["valuation"] - a["valuation"]) / N * 1e4
+        step_bp = abs(b["rolldown"] - a["rolldown"]) / N * 1e4
         assert step_bp <= STEP_BUDGET_BP * cal, (a["t"], b["t"], step_bp, cal)
 
     # magnitude at the stub-free horizon: elapsed 0.5y from the SCHEDULE's
@@ -120,19 +131,20 @@ def test_frozen_market_valuation_is_rolldown_and_nothing_else(frozen):
 
     strike = ds.series["10Y"][0] / 100.0
     par95, ann95 = _grid_par_and_annuity(zc, 9.5)
-    # 평가 is clean_t − clean₀, so the prediction subtracts the SAME entry
-    # baseline (the engine's own, ~0.30bp of N on this fixture — the accepted
+    # 롤다운 is clean_t − clean₀ here (the whole clean change on a frozen
+    # market), so the prediction subtracts the SAME entry baseline (the
+    # engine's own, ~0.30bp of N on this fixture — the accepted
     # bootstrap/schedule residual; a prediction from zero mis-books it)
     entry_i, _e, _m = _span_of(ds, pos)
     legs = _build_legs(ds, "10Y", N, entry_i)
     clean0, _acc0 = _value_on(legs, ds, entry_i, ds.dates[entry_i], _cd_fixings(ds, entry_i))
     predicted = (par95 - strike) * ann95 * N - clean0
-    gap_bp = abs(pt["valuation"] - predicted) / N * 1e4
-    assert gap_bp <= ROLL_BUDGET_BP, (pt["t"], pt["valuation"], predicted, gap_bp)
+    gap_bp = abs(pt["rolldown"] - predicted) / N * 1e4
+    assert gap_bp <= ROLL_BUDGET_BP, (pt["t"], pt["rolldown"], predicted, gap_bp)
 
     # and roll-down is REAL here — the isolated term must be visibly nonzero,
     # or the bounds above certified an empty statement
-    assert abs(path[-1]["valuation"]) / N * 1e4 > 0.5
+    assert abs(path[-1]["rolldown"]) / N * 1e4 > 0.5
 
 
 def test_frozen_market_carry_is_the_frozen_spread_times_time(frozen):

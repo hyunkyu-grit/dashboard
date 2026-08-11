@@ -190,7 +190,7 @@ def test_payer_and_receiver_mirror_to_the_won(ds):
         Position("10Y", -1, N, dt.date(2025, 8, 4)),
     ])
     p, r = res["positions"]
-    for k in ("pnl", "valuation", "carry", "cash"):
+    for k in ("pnl", "valuation", "rolldown", "carry", "cash"):
         assert abs(p[k] + r[k]) <= KRW_TOL, k
     assert abs(res["pnl"]) <= 2 * KRW_TOL  # two independently rounded figures
 
@@ -201,7 +201,7 @@ def test_notional_scales_linearly_to_the_won(ds):
         Position("10Y", +1, 2 * N, dt.date(2025, 8, 4)),
     ])
     p, p2 = res["positions"]
-    for k in ("pnl", "valuation", "carry", "cash"):
+    for k in ("pnl", "valuation", "rolldown", "carry", "cash"):
         # 2× the rounded single is within 2 KRW of the rounded double
         assert abs(p2[k] - 2 * p[k]) <= 2 * KRW_TOL, k
 
@@ -224,9 +224,12 @@ def test_entry_npv_is_within_the_bootstrap_budget_across_tenors(ds):
 
 
 def test_held_to_maturity_the_pnl_is_the_carry(ds):
-    """At maturity every flow has settled, so clean NPV is 0 and 평가 collapses
-    to −clean₀ — the entry residual and nothing else. The bound is therefore
-    the SAME bootstrap budget as the entry test, at the entry curve."""
+    """At maturity every flow has settled, so clean NPV is 0 and the CLEAN
+    change (평가 + 롤다운, since the 2026-08-11 3분해) collapses to −clean₀ —
+    the entry residual and nothing else. The bound is therefore the SAME
+    bootstrap budget as the entry test, at the entry curve. The two halves
+    are individually market history (the curve really moved over the hold),
+    so only their SUM is bounded here."""
     for pos in (Position("1Y", +1, N, dt.date(2024, 1, 2)),
                 Position("1Y", +1, N, dt.date(2021, 6, 1))):
         entry_i, _e, matured = _span_of(ds, pos)
@@ -234,7 +237,8 @@ def test_held_to_maturity_the_pnl_is_the_carry(ds):
         zc = bootstrap_zero_curve(par_rates_at_index(ds, entry_i))
         budget = RESID_BP * pv01(zc, TENOR_T[pos.series_id]) * N * 1e-4
         last = trace(ds, pos)[-1]
-        assert abs(last["valuation"]) <= budget, (pos.entry, last["valuation"], budget)
+        assert abs(last["valuation"] + last["rolldown"]) <= budget, (
+            pos.entry, last["valuation"], last["rolldown"], budget)
         assert abs(last["pnl"] - last["carry"]) <= budget + KRW_TOL
 
 

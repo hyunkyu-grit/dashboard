@@ -4,8 +4,8 @@
  * 성분 누적 경로. 응답의 decompositionDaily가 원천이고, 각 선의 마지막 값이
  * 곧 아래 워터폴의 막대다 (같은 엔진 누적기라 다시 계산하지 않는다).
  *
- * 무엇을 그리는지는 lib/components.ts가 정한다 — 지금은 스왑평가·스왑캐리
- * 둘뿐이다 [OWNER, 2026-08-06].
+ * 무엇을 그리는지는 lib/components.ts가 정한다 — 스왑평가·스왑캐리·스왑롤다운
+ * 셋이다 [OWNER, 2026-08-06 스왑만 · 2026-08-11 교과서 3분해].
  *
  * ─ 선을 어떻게 가르나 ────────────────────────────────────────────────────
  * **최종(마지막 날) 부호로 방향색**을 칠한다 [OWNER, 2026-08-10 — "성분
@@ -94,7 +94,9 @@ export function ComponentCurves() {
       label,
       color: finalOf(key) >= 0 ? t.up : t.down,
       final: finalOf(key),
-      excluded: swapExcluded && (key === "swapMtm" || key === "swapCarry"),
+      excluded:
+        swapExcluded &&
+        (key === "swapMtm" || key === "swapCarry" || key === "swapRolldown"),
     }));
 
     return { series: built, legend: rows };

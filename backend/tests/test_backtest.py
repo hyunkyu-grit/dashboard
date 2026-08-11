@@ -399,11 +399,13 @@ def test_carry_and_valuation_sum_to_the_pnl(ds):
 
         pnl = (dirty_t − dirty_0) + cash
             = (clean_t − clean_0) + (accrued_t − accrued_0 + cash)
-            =      평가손익       +           캐리손익
+            = (평가손익 + 롤다운손익) +        캐리손익
 
-    so the two halves must reconstruct the published figure to the rounding.
-    A split that only approximately added up would be a model nobody agreed
-    to, presented as arithmetic.
+    [OWNER, 2026-08-11 — 교과서 3분해] the clean change is further split by a
+    chained unchanged-curve revaluation (롤다운) whose telescoping keeps the
+    sum exact, so the THREE parts must reconstruct the published figure to
+    the rounding. A split that only approximately added up would be a model
+    nobody agreed to, presented as arithmetic.
     """
     book = run_backtest(
         ds,
@@ -414,7 +416,7 @@ def test_carry_and_valuation_sum_to_the_pnl(ds):
         ],
     )
     for p in book["positions"]:
-        assert abs((p["valuation"] + p["carry"]) - p["pnl"]) <= 1, p["id"]
+        assert abs((p["valuation"] + p["rolldown"] + p["carry"]) - p["pnl"]) <= 1, p["id"]
 
 
 def test_carry_follows_the_fixed_rate_against_the_average_cd(ds):
@@ -454,7 +456,7 @@ def test_valuation_carries_the_rate_move(ds):
 def test_the_trace_splits_the_same_way(ds):
     path = trace(ds, Position("10Y", +1, N, dt.date(2025, 7, 30)))
     for pt in path:
-        assert abs((pt["valuation"] + pt["carry"]) - pt["pnl"]) <= 1
+        assert abs((pt["valuation"] + pt["rolldown"] + pt["carry"]) - pt["pnl"]) <= 1
 
 
 def test_each_point_carries_a_real_one_day_change(ds):

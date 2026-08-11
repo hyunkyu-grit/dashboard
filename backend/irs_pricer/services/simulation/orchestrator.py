@@ -195,12 +195,14 @@ def _run_simulation_profiled(
     if swaps_excluded:
         decomposition["swapMtm"] = None
         decomposition["swapCarry"] = None
+        decomposition["swapRolldown"] = None
         decomposition["total"] = (
             decomposition["bondMtm"] + decomposition["bondCarry"] + decomposition["fundingCost"]
         )
         for row in decomposition_daily:
             row["swapMtm"] = None
             row["swapCarry"] = None
+            row["swapRolldown"] = None
             row["total"] = row["fundingCost"] + row["bondMtm"] + row["bondCarry"]
     with _phase(_prof, "assembly (pvbp+bookPnL)"):
         pvbp_sensitivity = build_frontend_pvbp_sensitivity(positions)

@@ -65,9 +65,17 @@ def test_forward_realization_is_the_zero_pnl_path(realized):
     # a position that never matured would certify a different claim
     assert p["matured"] is True
 
-    for k in ("pnl", "valuation", "carry"):
+    for k in ("pnl", "carry"):
         bp = abs(p[k]) / N * 1e4
         assert bp <= NEUTRALITY_BUDGET_BP, (k, p[k], bp)
+
+    # [OWNER, 2026-08-11 — 3분해] the textbook statement this fixture was
+    # built to isolate, now visible as FIELDS: roll-down is the unchanged-
+    # curve assumption, so when the forwards DO realize, the market move
+    # (평가) claws back exactly what the roll chain booked. Each half is
+    # REAL (visibly nonzero) and their SUM collapses to the entry residual.
+    assert abs(p["valuation"] + p["rolldown"]) / N * 1e4 <= NEUTRALITY_BUDGET_BP
+    assert abs(p["rolldown"]) / N * 1e4 > NEUTRALITY_BUDGET_BP
 
     # 평가 and 캐리 offset into the same budget along the way too: no point
     # of the path may drift beyond the budget + the swap's own mid-life mark
@@ -84,5 +92,8 @@ def test_the_receiver_is_neutral_too(realized):
     res = run_backtest(ds := realized, [Position("1Y", -1, N, START)])
     p = res["positions"][0]
     assert p["matured"] is True
-    for k in ("pnl", "valuation", "carry"):
+    for k in ("pnl", "carry"):
         assert abs(p[k]) / N * 1e4 <= NEUTRALITY_BUDGET_BP, (k, p[k])
+    # mirror of the payer's 평가↔롤다운 offset (see that test's comment)
+    assert abs(p["valuation"] + p["rolldown"]) / N * 1e4 <= NEUTRALITY_BUDGET_BP
+    assert abs(p["rolldown"]) / N * 1e4 > NEUTRALITY_BUDGET_BP

@@ -85,6 +85,7 @@ def build_irs_daily_recon(
     irs_fm_mtm: np.ndarray,
     irs_fm_mtm_theta: np.ndarray,
     irs_daily_scf: np.ndarray,
+    irs_fm_carry_cash: np.ndarray | None = None,
 ) -> list[dict]:
     """IRS 일별 손익 대사 — 정확한 일별 KRD 재계산.
 
@@ -200,6 +201,16 @@ def build_irs_daily_recon(
         # 움직여서 생긴" 손익만 분리한 값.
         _theta_pnl   = round(float(irs_fm_mtm_theta[_cal_day] - irs_fm_mtm_theta[_prev_cal_r]))
         _valuation_pnl = _total_act - _theta_pnl
+        # [OWNER, 2026-08-11 — 교과서 3분해] 세타의 같은 구간 변화를 캐리
+        # (동결 커브 순액크루얼+정산, carry_split.py)와 롤다운(잔여)으로 가른다.
+        # 라운딩 후 잔차로 롤다운을 잡아 행 단위 가산성(캐리+롤다운 == 세타)을
+        # 표시 정밀도에서 보존한다.
+        _carry_pnl = (
+            round(float(irs_fm_carry_cash[_cal_day] - irs_fm_carry_cash[_prev_cal_r]))
+            if irs_fm_carry_cash is not None
+            else 0
+        )
+        _rolldown_pnl = _theta_pnl - _carry_pnl
         irs_daily_recon.append({
             "date":         _val_date_r.isoformat(),
             "day":          _cal_day,
@@ -214,6 +225,8 @@ def build_irs_daily_recon(
             "residual":     _residual,
             "thetaPnl":     _theta_pnl,
             "valuationPnl": _valuation_pnl,
+            "carryPnl":     _carry_pnl,
+            "rolldownPnl":  _rolldown_pnl,
         })
         _prev_cal_r  = _cal_day
         _pvbp_prev_r = _pvbp_r

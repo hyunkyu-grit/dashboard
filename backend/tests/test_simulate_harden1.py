@@ -35,7 +35,10 @@ from irs_pricer.services import simulation_service
 
 DATA = Path(__file__).parent / "data"
 
-DECOMP_KEYS = ("fundingCost", "bondMtm", "bondCarry", "swapMtm", "swapCarry")
+# [OWNER, 2026-08-11 — 교과서 3분해] 세타(구 swapCarry)가 swapCarry(순캐리) +
+# swapRolldown(만기 압축)으로 갈렸다. 두 값의 합은 종전 세타와 float 그대로
+# 일치한다(아래 핀들이 그 등식을 그대로 들고 있다).
+DECOMP_KEYS = ("fundingCost", "bondMtm", "bondCarry", "swapMtm", "swapCarry", "swapRolldown")
 
 
 @pytest.fixture(scope="module")
@@ -71,9 +74,12 @@ def test_swap_carry_nonzero_and_pinned_on_fan_fixture(client) -> None:
     d = body["totalReturnDecomposition"]
 
     assert d["swapCarry"] != 0.0
-    assert d["swapCarry"] == pytest.approx(-42_393_854.82569349, abs=1.0)
+    # 3분해: 캐리+롤다운 == 종전 세타 −42,393,854.82569349 (float 그대로)
+    assert d["swapCarry"] == pytest.approx(-11_109_974.910064168, abs=1.0)
+    assert d["swapRolldown"] == pytest.approx(-31_283_879.91562932, abs=1.0)
+    assert d["swapCarry"] + d["swapRolldown"] == pytest.approx(-42_393_854.82569349, abs=1.0)
     assert d["swapMtm"] == pytest.approx(125_508_190.65524912, abs=1.0)
-    assert d["swapMtm"] + d["swapCarry"] == pytest.approx(83_114_335.82955563, abs=1.0)
+    assert d["swapMtm"] + d["swapCarry"] + d["swapRolldown"] == pytest.approx(83_114_335.82955563, abs=1.0)
     # Unchanged components (pre-fix captures, exact to the float).
     # [CHANGED, DV01-B] bondMtm −75,833,596.48720416 → −50,977,444.638177246
     # (and total by exactly that delta, +24,856,151.849): the fixture's wire
@@ -90,9 +96,11 @@ def test_swap_carry_nonzero_and_pinned_on_fan_fixture(client) -> None:
 def test_swap_carry_pinned_on_representative_fixture(client) -> None:
     body = _post(client, "simulate_request_representative.json")
     d = body["totalReturnDecomposition"]
-    assert d["swapCarry"] == pytest.approx(1_131_256.9212863185, abs=1.0)
+    assert d["swapCarry"] == pytest.approx(1_957_723.3548396071, abs=1.0)
+    assert d["swapRolldown"] == pytest.approx(-826_466.4335532887, abs=1.0)
+    assert d["swapCarry"] + d["swapRolldown"] == pytest.approx(1_131_256.9212863185, abs=1.0)
     assert d["swapMtm"] == pytest.approx(25_036_628.398704525, abs=1.0)
-    assert d["swapMtm"] + d["swapCarry"] == pytest.approx(26_167_885.319990844, abs=1.0)
+    assert d["swapMtm"] + d["swapCarry"] + d["swapRolldown"] == pytest.approx(26_167_885.319990844, abs=1.0)
 
 
 def test_five_components_sum_to_total_with_nonzero_swap_carry(client) -> None:
@@ -110,8 +118,11 @@ def test_swap_split_matches_chart_theta_valuation_series(client) -> None:
     body = _post(client, "fan_non_monotone_request.json")
     d = body["totalReturnDecomposition"]
     last = body["chartData"][-1]
-    assert d["swapCarry"] == pytest.approx(last["swapThetaPnL"], abs=1.0)
+    assert d["swapCarry"] + d["swapRolldown"] == pytest.approx(last["swapThetaPnL"], abs=1.0)
     assert d["swapMtm"] == pytest.approx(last["swapValuationPnL"], abs=1.0)
+    # 3분해의 자기 궤적도 같은 원본이다 (swapCashCarryPnL/swapRolldownPnL)
+    assert d["swapCarry"] == pytest.approx(last["swapCashCarryPnL"], abs=1.0)
+    assert d["swapRolldown"] == pytest.approx(last["swapRolldownPnL"], abs=1.0)
 
 
 # ── 2. Per-day decomposition series ─────────────────────────────────────────
@@ -153,6 +164,7 @@ def test_decomposition_daily_blank_policy_on_swap_exclusion(client, monkeypatch)
 
     for row in body["decompositionDaily"]:
         assert row["swapMtm"] is None and row["swapCarry"] is None
+        assert row["swapRolldown"] is None
         assert math.isclose(
             row["fundingCost"] + row["bondMtm"] + row["bondCarry"], row["total"], abs_tol=1e-6
         )

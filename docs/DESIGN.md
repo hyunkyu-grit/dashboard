@@ -473,15 +473,40 @@ and each row is another full daily revaluation pass.
   take the CD91 print of F(R) = reset − 1 Seoul business day through the ported
   `select_fixing`, and the fixing store handed to each valuation is truncated
   at that date so the port's guard is not the only thing in the way.
-- **손익 = 평가손익 + 캐리손익**, and that is an IDENTITY, not an attribution
-  model [OWNER]. `pnl = (clean_t − clean_0) + (accrued_t − accrued_0 + cash)`:
-  the first half is mark-to-market on the clean price (the rate move and
-  roll-down), the second is interest actually earned or paid, settled plus
-  still accruing. They reconstruct the headline to the rounding, which is
-  asserted — a split that only roughly added up would be a model nobody agreed
-  to, presented as arithmetic. Carry's sign follows the struck fixed rate
-  against the CD that ACTUALLY printed over the holding period, not against CD
-  on any one day.
+- **손익 = 평가손익 + 캐리손익 + 롤다운손익**, and that is an IDENTITY, not an
+  attribution model [OWNER; 3분해 2026-08-11 — "진짜 외부 리서치를 통한
+  Textbook의 기준"]. `pnl = (clean_t − clean_0) + (accrued_t − accrued_0 +
+  cash)`: the second bracket is 캐리 — interest actually earned or paid,
+  settled plus still accruing (the textbook cash carry: what doing nothing
+  pays; Clarus). The clean change is further split by a CHAINED
+  unchanged-curve revaluation: 롤다운 = value today's (shorter) swap on the
+  PREVIOUS valued date's curve, unchanged in tenor space (Tuckman's
+  unchanged-term-structure assumption, the same "yesterday's" convention the
+  recon estimate uses), accumulated step by step; 평가 = the remainder — what
+  the curve MOVING did. The chain telescopes, so all three reconstruct the
+  headline to the rounding, which is asserted — a split that only roughly
+  added up would be a model nobody agreed to, presented as arithmetic. Two
+  fixtures pin the split's MEANING, not just its arithmetic: a frozen market
+  puts exactly 0 in 평가 and the whole clean change in 롤다운
+  (test_backtest_theta), and a forward-realizing market claws the roll back
+  through 평가 so the two cancel (test_backtest_neutrality — the textbook
+  statement "roll-down assumes the forwards will NOT realize", visible as
+  fields). Carry's sign follows the struck fixed rate against the CD that
+  ACTUALLY printed over the holding period, not against CD on any one day.
+  The simulation's swap decomposition uses the SAME three-way definitions
+  (스왑평가/스왑캐리/스왑롤다운 — backend carry_split.py, engine-cross-checked
+  against scf_b), so the two tabs speak one language.
+- **일별 대사 (`recon`) rides every backtest response** [OWNER, 2026-08-11 —
+  "직접 트레이딩 시스템과 대사"]: per business day, the book's per-tenor KRD
+  on that day's own curve (bump-reval, the position's own horizon capping the
+  bump set), the ACTUAL market Δbp per tenor, the P&L-explain estimate
+  (전일 KRD × 당일 Δbp), and the day's actual P&L split 평가/캐리/롤다운.
+  The window is capped (last ~250 business days; `truncated` says so). One
+  day = THREE stacked rows in the drawer (KRD·Δbp·손익 — 80 days = 240 rows,
+  the owner's own spec), drawn by the shared `ui/ReconStack.tsx` that the
+  simulation's 일별 대사 uses too. The backtest values ON the row's date;
+  the sim engine reports next-business-day settle — a one-day shift against
+  a settle-basis system is the convention, not a bug.
 - **The P&L chart has a hovered readout**: date, cumulative, and the ONE-DAY
   change. The change is SERVED, not differenced in the browser (§16) —
   differencing a rounded series client-side gives a number that disagrees with

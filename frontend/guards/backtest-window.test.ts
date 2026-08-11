@@ -177,7 +177,10 @@ describe("mechanics, pinned in source", () => {
      * 주장은 그대로다. 창 쪽에서는 **끌 수 있는 면이 헤더 하나뿐**임을 보고,
      * 훅 쪽에서 스냅샷과 클램프를 본다. */
     expect((win.match(/\{\.\.\.dragHandlers\}/g) ?? []).length).toBe(1);
-    expect(win).toMatch(/useFloatingWindow\("backtest"\)/);
+    // 폭 인자는 시뮬레이션 창과 같은 SIM_WINDOW_W 다 [OWNER, 2026-08-11 —
+    // "백테스트도 시뮬레이션만큼 가로 사이즈 키우자"]; 핀의 본론은 여전히
+    // 키("backtest") 하나로 훅을 지난다는 것이다.
+    expect(win).toMatch(/useFloatingWindow\("backtest", SIM_WINDOW_W\)/);
 
     const hook = code("ui/useFloatingWindow.ts");
     expect(hook).toMatch(/setPointerCapture/);

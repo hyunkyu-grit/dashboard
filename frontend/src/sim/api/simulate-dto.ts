@@ -156,7 +156,10 @@ export interface DecompositionDailyPoint {
   bondMtm: number;
   bondCarry: number;
   swapMtm: number | null;
+  /** [2026-08-11 3분해] 순캐리 — 종전에는 세타 전액이었다. 구 응답(캐시)에는
+   * swapRolldown 이 없고 swapCarry 가 세타 전액이다 — 옵셔널의 이유. */
   swapCarry: number | null;
+  swapRolldown?: number | null;
   total: number;
 }
 
@@ -166,6 +169,7 @@ export interface TotalReturnDecomposition {
   fundingCost: number;
   swapMtm: number | null;
   swapCarry: number | null;
+  swapRolldown?: number | null;
   total: number;
 }
 
@@ -206,6 +210,12 @@ export interface IrsDailyReconRow {
   residual: number;
   thetaPnl: number;
   valuationPnl: number;
+  /** [OWNER, 2026-08-11 — 교과서 3분해] 세타의 캐리/롤다운 분리(그날 증분):
+   * carryPnl = 동결 커브 경로의 순액크루얼+정산(backend carry_split.py),
+   * rolldownPnl = thetaPnl − carryPnl. 표시 정밀도에서 정확히 가산적이다.
+   * 구 캐시 응답에는 없다 — 옵셔널. */
+  carryPnl?: number;
+  rolldownPnl?: number;
 }
 
 /** 스왑 한 건의 만기 시점 기여 (2026-08-06, 추가 전용).

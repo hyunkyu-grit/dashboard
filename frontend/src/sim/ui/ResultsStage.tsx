@@ -254,7 +254,8 @@ export function ResultsStage({ onEdit }: { onEdit: () => void }) {
         <Section title="성분 누적 경로">
           <p className="pb-1 text-body text-ink-2">
             설계한 금리 경로대로 갔을 때 손익이 어떻게 쌓이는지예요. 평가는 커브가
-            움직여서 생기는 몫이고, 캐리는 시간이 지나서 생기는 몫이에요.
+            움직여서 생기는 몫, 캐리는 실제 주고받는 이자의 몫, 롤다운은 커브가
+            멈춰도 잔존만기가 줄며 생기는 몫이에요.
           </p>
           <ComponentCurves />
         </Section>

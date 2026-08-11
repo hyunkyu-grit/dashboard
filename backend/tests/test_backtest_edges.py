@@ -98,7 +98,8 @@ def test_request_dates_roll_conservatively_and_visibly(ds):
 def test_exit_on_the_swap_start_date_has_zero_carry(ds):
     """The schedule accrues from the swap's START (entry + 1 business day).
     Exiting ON that start date means zero days accrued and nothing settled:
-    carry must be EXACTLY 0 KRW and the PnL entirely 평가."""
+    carry must be EXACTLY 0 KRW and the PnL entirely clean-price (평가+롤다운
+    — the one chained aging step of the 3분해 [OWNER, 2026-08-11])."""
     entry = dt.date(2026, 7, 29)
     start = dt.date(2026, 7, 30)  # next business day
     res = run_backtest(ds, [Position("10Y", +1, N, entry, start)])
@@ -106,7 +107,7 @@ def test_exit_on_the_swap_start_date_has_zero_carry(ds):
     assert p["exit"] == start.isoformat()
     assert p["carry"] == 0.0
     assert p["cash"] == 0.0
-    assert p["pnl"] == p["valuation"]
+    assert p["pnl"] == p["valuation"] + p["rolldown"]
 
 
 # ── V5-5: carry sign, exercised in BOTH directions with the fixing average ──

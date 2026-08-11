@@ -8,7 +8,9 @@
    "swapPnL": 0,
    "totalPnL": 0,
    "swapThetaPnL": 0,
-   "swapValuationPnL": 0
+   "swapValuationPnL": 0,
+   "swapCashCarryPnL": 0,
+   "swapRolldownPnL": 0
   },
   {
    "day": 1,
@@ -17,7 +19,9 @@
    "swapPnL": 353972,
    "totalPnL": -3007693,
    "swapThetaPnL": 36098,
-   "swapValuationPnL": 317873
+   "swapValuationPnL": 317873,
+   "swapCashCarryPnL": 73973,
+   "swapRolldownPnL": -37874
   },
   {
    "day": 4,
@@ -26,7 +30,9 @@
    "swapPnL": 685507,
    "totalPnL": -12628217,
    "swapThetaPnL": 48505,
-   "swapValuationPnL": 637002
+   "swapValuationPnL": 637002,
+   "swapCashCarryPnL": 98630,
+   "swapRolldownPnL": -50125
   },
   {
    "day": 5,
@@ -35,7 +41,9 @@
    "swapPnL": 1018490,
    "totalPnL": -15578318,
    "swapThetaPnL": 61098,
-   "swapValuationPnL": 957392
+   "swapValuationPnL": 957392,
+   "swapCashCarryPnL": 123288,
+   "swapRolldownPnL": -62190
   },
   {
    "day": 6,
@@ -44,7 +52,9 @@
    "swapPnL": 1352927,
    "totalPnL": -18507735,
    "swapThetaPnL": 73878,
-   "swapValuationPnL": 1279049
+   "swapValuationPnL": 1279049,
+   "swapCashCarryPnL": 147945,
+   "swapRolldownPnL": -74067
   },
   {
    "day": 7,
@@ -53,7 +63,9 @@
    "swapPnL": 1688823,
    "totalPnL": -21416626,
    "swapThetaPnL": 86845,
-   "swapValuationPnL": 1601978
+   "swapValuationPnL": 1601978,
+   "swapCashCarryPnL": 172603,
+   "swapRolldownPnL": -85758
   },
   {
    "day": 8,
@@ -62,7 +74,9 @@
    "swapPnL": 2063290,
    "totalPnL": -24268041,
    "swapThetaPnL": 126868,
-   "swapValuationPnL": 1936423
+   "swapValuationPnL": 1936423,
+   "swapCashCarryPnL": 246575,
+   "swapRolldownPnL": -119708
   },
   {
    "day": 11,
@@ -71,7 +85,9 @@
    "swapPnL": 2404223,
    "totalPnL": -33479239,
    "swapThetaPnL": 140583,
-   "swapValuationPnL": 2263640
+   "swapValuationPnL": 2263640,
+   "swapCashCarryPnL": 271233,
+   "swapRolldownPnL": -130650
   },
   {
    "day": 12,
@@ -80,7 +96,9 @@
    "swapPnL": 2746637,
    "totalPnL": -36288689,
    "swapThetaPnL": 154485,
-   "swapValuationPnL": 2592153
+   "swapValuationPnL": 2592153,
+   "swapCashCarryPnL": 295890,
+   "swapRolldownPnL": -141406
   },
   {
    "day": 13,
@@ -89,7 +107,9 @@
    "swapPnL": 3090538,
    "totalPnL": -39078542,
    "swapThetaPnL": 168574,
-   "swapValuationPnL": 2921964
+   "swapValuationPnL": 2921964,
+   "swapCashCarryPnL": 320548,
+   "swapRolldownPnL": -151974
   },
   {
    "day": 14,
@@ -98,7 +118,9 @@
    "swapPnL": 3435931,
    "totalPnL": -41848948,
    "swapThetaPnL": 182850,
-   "swapValuationPnL": 3253081
+   "swapValuationPnL": 3253081,
+   "swapCashCarryPnL": 345205,
+   "swapRolldownPnL": -162355
   },
   {
    "day": 15,
@@ -107,7 +129,9 @@
    "swapPnL": 3831330,
    "totalPnL": -44551549,
    "swapThetaPnL": 226802,
-   "swapValuationPnL": 3604527
+   "swapValuationPnL": 3604527,
+   "swapCashCarryPnL": 419178,
+   "swapRolldownPnL": -192376
   },
   {
    "day": 18,
@@ -116,7 +140,9 @@
    "swapPnL": 4181866,
    "totalPnL": -53376571,
    "swapThetaPnL": 241828,
-   "swapValuationPnL": 3940038
+   "swapValuationPnL": 3940038,
+   "swapCashCarryPnL": 443836,
+   "swapRolldownPnL": -202008
   },
   {
    "day": 19,
@@ -125,7 +151,9 @@
    "swapPnL": 4533918,
    "totalPnL": -56052836,
    "swapThetaPnL": 257040,
-   "swapValuationPnL": 4276877
+   "swapValuationPnL": 4276877,
+   "swapCashCarryPnL": 468493,
+   "swapRolldownPnL": -211453
   },
   {
    "day": 20,
@@ -134,7 +162,9 @@
    "swapPnL": 4887490,
    "totalPnL": -58710535,
    "swapThetaPnL": 272441,
-   "swapValuationPnL": 4615049
+   "swapValuationPnL": 4615049,
+   "swapCashCarryPnL": 493151,
+   "swapRolldownPnL": -220710
   },
   {
    "day": 21,
@@ -143,7 +173,9 @@
    "swapPnL": 5242587,
    "totalPnL": -61349809,
    "swapThetaPnL": 288028,
-   "swapValuationPnL": 4954559
+   "swapValuationPnL": 4954559,
+   "swapCashCarryPnL": 517808,
+   "swapRolldownPnL": -229780
   },
   {
    "day": 22,
@@ -152,7 +184,9 @@
    "swapPnL": 5659352,
    "totalPnL": -63910663,
    "swapThetaPnL": 335916,
-   "swapValuationPnL": 5323436
+   "swapValuationPnL": 5323436,
+   "swapCashCarryPnL": 591781,
+   "swapRolldownPnL": -255865
   },
   {
    "day": 25,
@@ -161,7 +195,9 @@
    "swapPnL": 6019699,
    "totalPnL": -72371472,
    "swapThetaPnL": 352254,
-   "swapValuationPnL": 5667445
+   "swapValuationPnL": 5667445,
+   "swapCashCarryPnL": 616438,
+   "swapRolldownPnL": -264185
   },
   {
    "day": 26,
@@ -170,7 +206,9 @@
    "swapPnL": 6381595,
    "totalPnL": -74921623,
    "swapThetaPnL": 368779,
-   "swapValuationPnL": 6012816
+   "swapValuationPnL": 6012816,
+   "swapCashCarryPnL": 641096,
+   "swapRolldownPnL": -272317
   },
   {
    "day": 27,
@@ -179,7 +217,9 @@
    "swapPnL": 6745044,
    "totalPnL": -77454181,
    "swapThetaPnL": 385492,
-   "swapValuationPnL": 6359552
+   "swapValuationPnL": 6359552,
+   "swapCashCarryPnL": 665753,
+   "swapRolldownPnL": -280262
   },
   {
    "day": 28,
@@ -188,7 +228,9 @@
    "swapPnL": 7110053,
    "totalPnL": -79969280,
    "swapThetaPnL": 402393,
-   "swapValuationPnL": 6707660
+   "swapValuationPnL": 6707660,
+   "swapCashCarryPnL": 690411,
+   "swapRolldownPnL": -288018
   },
   {
    "day": 29,
@@ -197,7 +239,9 @@
    "swapPnL": 7658262,
    "totalPnL": -82285416,
    "swapThetaPnL": 507741,
-   "swapValuationPnL": 7150522
+   "swapValuationPnL": 7150522,
+   "swapCashCarryPnL": 838356,
+   "swapRolldownPnL": -330615
   },
   {
    "day": 35,
@@ -206,7 +250,9 @@
    "swapPnL": 8031971,
    "totalPnL": -98714673,
    "swapThetaPnL": 525956,
-   "swapValuationPnL": 7506015
+   "swapValuationPnL": 7506015,
+   "swapCashCarryPnL": 863014,
+   "swapRolldownPnL": -337057
   },
   {
    "day": 36,
@@ -215,7 +261,9 @@
    "swapPnL": 8485951,
    "totalPnL": -101018478,
    "swapThetaPnL": 581732,
-   "swapValuationPnL": 7904220
+   "swapValuationPnL": 7904220,
+   "swapCashCarryPnL": 936986,
+   "swapRolldownPnL": -355255
   },
   {
    "day": 39,
@@ -224,7 +272,9 @@
    "swapPnL": 8865101,
    "totalPnL": -108813447,
    "swapThetaPnL": 600700,
-   "swapValuationPnL": 8264401
+   "swapValuationPnL": 8264401,
+   "swapCashCarryPnL": 961644,
+   "swapRolldownPnL": -360944
   },
   {
    "day": 40,
@@ -233,7 +283,9 @@
    "swapPnL": 9245859,
    "totalPnL": -111132443,
    "swapThetaPnL": 619856,
-   "swapValuationPnL": 8626003
+   "swapValuationPnL": 8626003,
+   "swapCashCarryPnL": 986301,
+   "swapRolldownPnL": -366446
   },
   {
    "day": 41,
@@ -242,7 +294,9 @@
    "swapPnL": 9628232,
    "totalPnL": -113435631,
    "swapThetaPnL": 639200,
-   "swapValuationPnL": 8989032
+   "swapValuationPnL": 8989032,
+   "swapCashCarryPnL": 1010959,
+   "swapRolldownPnL": -371759
   },
   {
    "day": 42,
@@ -252,6 +306,8 @@
    "totalPnL": -118457818,
    "swapThetaPnL": 658733,
    "swapValuationPnL": 8044390,
+   "swapCashCarryPnL": 1035616,
+   "swapRolldownPnL": -376884,
    "bokBreakdown": {
     "shortDelta": 1244647,
     "shortPvbp": 49089,
@@ -279,7 +335,9 @@
    "swapPnL": 9498284,
    "totalPnL": -119850542,
    "swapThetaPnL": 738746,
-   "swapValuationPnL": 8759539
+   "swapValuationPnL": 8759539,
+   "swapCashCarryPnL": 1134247,
+   "swapRolldownPnL": -395501
   },
   {
    "day": 47,
@@ -288,7 +346,9 @@
    "swapPnL": 9956953,
    "totalPnL": -127975070,
    "swapThetaPnL": 759220,
-   "swapValuationPnL": 9197733
+   "swapValuationPnL": 9197733,
+   "swapCashCarryPnL": 1158904,
+   "swapRolldownPnL": -399684
   },
   {
    "day": 48,
@@ -297,7 +357,9 @@
    "swapPnL": 10417276,
    "totalPnL": -129630152,
    "swapThetaPnL": 779883,
-   "swapValuationPnL": 9637393
+   "swapValuationPnL": 9637393,
+   "swapCashCarryPnL": 1183562,
+   "swapRolldownPnL": -403679
   },
   {
    "day": 49,
@@ -306,7 +368,9 @@
    "swapPnL": 10879260,
    "totalPnL": -131269505,
    "swapThetaPnL": 800734,
-   "swapValuationPnL": 10078526
+   "swapValuationPnL": 10078526,
+   "swapCashCarryPnL": 1208219,
+   "swapRolldownPnL": -407485
   },
   {
    "day": 50,
@@ -315,7 +379,9 @@
    "swapPnL": 11581165,
    "totalPnL": -132655009,
    "swapThetaPnL": 864419,
-   "swapValuationPnL": 10716746
+   "swapValuationPnL": 10716746,
+   "swapCashCarryPnL": 1282192,
+   "swapRolldownPnL": -417772
   },
   {
    "day": 53,
@@ -324,7 +390,9 @@
    "swapPnL": 12048832,
    "totalPnL": -138356885,
    "swapThetaPnL": 886025,
-   "swapValuationPnL": 11162807
+   "swapValuationPnL": 11162807,
+   "swapCashCarryPnL": 1306849,
+   "swapRolldownPnL": -420824
   },
   {
    "day": 54,
@@ -333,7 +401,9 @@
    "swapPnL": 12518182,
    "totalPnL": -139920605,
    "swapThetaPnL": 907819,
-   "swapValuationPnL": 11610362
+   "swapValuationPnL": 11610362,
+   "swapCashCarryPnL": 1331507,
+   "swapRolldownPnL": -423688
   },
   {
    "day": 55,
@@ -342,7 +412,9 @@
    "swapPnL": 12989220,
    "totalPnL": -141469389,
    "swapThetaPnL": 929802,
-   "swapValuationPnL": 12059418
+   "swapValuationPnL": 12059418,
+   "swapCashCarryPnL": 1356164,
+   "swapRolldownPnL": -426362
   },
   {
    "day": 56,
@@ -351,7 +423,9 @@
    "swapPnL": 13461953,
    "totalPnL": -143003365,
    "swapThetaPnL": 951974,
-   "swapValuationPnL": 12509979
+   "swapValuationPnL": 12509979,
+   "swapCashCarryPnL": 1380822,
+   "swapRolldownPnL": -428848
   },
   {
    "day": 57,
@@ -360,7 +434,9 @@
    "swapPnL": 14187465,
    "totalPnL": -144271580,
    "swapThetaPnL": 1019628,
-   "swapValuationPnL": 13167837
+   "swapValuationPnL": 13167837,
+   "swapCashCarryPnL": 1454795,
+   "swapRolldownPnL": -435166
   },
   {
    "day": 60,
@@ -369,7 +445,9 @@
    "swapPnL": 14706734,
    "totalPnL": -149696249,
    "swapThetaPnL": 1063052,
-   "swapValuationPnL": 13643683
+   "swapValuationPnL": 13643683,
+   "swapCashCarryPnL": 1471463,
+   "swapRolldownPnL": -408411
   },
   {
    "day": 61,
@@ -378,7 +456,9 @@
    "swapPnL": 15146166,
    "totalPnL": -151194377,
    "swapThetaPnL": 1065926,
-   "swapValuationPnL": 14080241
+   "swapValuationPnL": 14080241,
+   "swapCashCarryPnL": 1487671,
+   "swapRolldownPnL": -421746
   },
   {
    "day": 62,
@@ -387,7 +467,9 @@
    "swapPnL": 15571785,
    "totalPnL": -152695494,
    "swapThetaPnL": 1072363,
-   "swapValuationPnL": 14499422
+   "swapValuationPnL": 14499422,
+   "swapCashCarryPnL": 1503880,
+   "swapRolldownPnL": -431517
   },
   {
    "day": 63,
@@ -396,7 +478,9 @@
    "swapPnL": 16032463,
    "totalPnL": -154150852,
    "swapThetaPnL": 1071915,
-   "swapValuationPnL": 14960548
+   "swapValuationPnL": 14960548,
+   "swapCashCarryPnL": 1520089,
+   "swapRolldownPnL": -448174
   },
   {
    "day": 64,
@@ -405,7 +489,9 @@
    "swapPnL": 16711030,
    "totalPnL": -155377743,
    "swapThetaPnL": 1071849,
-   "swapValuationPnL": 15639182
+   "swapValuationPnL": 15639182,
+   "swapCashCarryPnL": 1568715,
+   "swapRolldownPnL": -496866
   },
   {
    "day": 67,
@@ -414,7 +500,9 @@
    "swapPnL": 17177062,
    "totalPnL": -160556424,
    "swapThetaPnL": 1072196,
-   "swapValuationPnL": 16104867
+   "swapValuationPnL": 16104867,
+   "swapCashCarryPnL": 1584923,
+   "swapRolldownPnL": -512727
   },
   {
    "day": 68,
@@ -423,7 +511,9 @@
    "swapPnL": 17644870,
    "totalPnL": -161952983,
    "swapThetaPnL": 1072728,
-   "swapValuationPnL": 16572142
+   "swapValuationPnL": 16572142,
+   "swapCashCarryPnL": 1601132,
+   "swapRolldownPnL": -528404
   },
   {
    "day": 69,
@@ -432,7 +522,9 @@
    "swapPnL": 18114458,
    "totalPnL": -163337787,
    "swapThetaPnL": 1073445,
-   "swapValuationPnL": 17041013
+   "swapValuationPnL": 17041013,
+   "swapCashCarryPnL": 1617341,
+   "swapRolldownPnL": -543896
   },
   {
    "day": 70,
@@ -441,7 +533,9 @@
    "swapPnL": 18585831,
    "totalPnL": -164710946,
    "swapThetaPnL": 1074347,
-   "swapValuationPnL": 17511485
+   "swapValuationPnL": 17511485,
+   "swapCashCarryPnL": 1633549,
+   "swapRolldownPnL": -559203
   },
   {
    "day": 71,
@@ -450,7 +544,9 @@
    "swapPnL": 19289105,
    "totalPnL": -165842463,
    "swapThetaPnL": 1078161,
-   "swapValuationPnL": 18210944
+   "swapValuationPnL": 18210944,
+   "swapCashCarryPnL": 1682176,
+   "swapRolldownPnL": -604014
   },
   {
    "day": 74,
@@ -459,7 +555,9 @@
    "swapPnL": 19766552,
    "totalPnL": -170803179,
    "swapThetaPnL": 1079803,
-   "swapValuationPnL": 18686749
+   "swapValuationPnL": 18686749,
+   "swapCashCarryPnL": 1698384,
+   "swapRolldownPnL": -618582
   },
   {
    "day": 75,
@@ -468,7 +566,9 @@
    "swapPnL": 20245807,
    "totalPnL": -172120876,
    "swapThetaPnL": 1081629,
-   "swapValuationPnL": 19164178
+   "swapValuationPnL": 19164178,
+   "swapCashCarryPnL": 1714593,
+   "swapRolldownPnL": -632964
   },
   {
    "day": 76,
@@ -477,7 +577,9 @@
    "swapPnL": 20726877,
    "totalPnL": -173427577,
    "swapThetaPnL": 1083641,
-   "swapValuationPnL": 19643237
+   "swapValuationPnL": 19643237,
+   "swapCashCarryPnL": 1730802,
+   "swapRolldownPnL": -647161
   },
   {
    "day": 77,
@@ -486,7 +588,9 @@
    "swapPnL": 21209767,
    "totalPnL": -174723386,
    "swapThetaPnL": 1085837,
-   "swapValuationPnL": 20123929
+   "swapValuationPnL": 20123929,
+   "swapCashCarryPnL": 1747010,
+   "swapRolldownPnL": -661173
   },
   {
    "day": 78,
@@ -495,7 +599,9 @@
    "swapPnL": 21938186,
    "totalPnL": -175764698,
    "swapThetaPnL": 1093538,
-   "swapValuationPnL": 20844648
+   "swapValuationPnL": 20844648,
+   "swapCashCarryPnL": 1795636,
+   "swapRolldownPnL": -702098
   },
   {
    "day": 81,
@@ -504,7 +610,9 @@
    "swapPnL": 22427256,
    "totalPnL": -180523735,
    "swapThetaPnL": 1096476,
-   "swapValuationPnL": 21330780
+   "swapValuationPnL": 21330780,
+   "swapCashCarryPnL": 1811845,
+   "swapRolldownPnL": -715369
   },
   {
    "day": 82,
@@ -513,7 +621,9 @@
    "swapPnL": 22918168,
    "totalPnL": -181767746,
    "swapThetaPnL": 1099599,
-   "swapValuationPnL": 21818569
+   "swapValuationPnL": 21818569,
+   "swapCashCarryPnL": 1828054,
+   "swapRolldownPnL": -728455
   },
   {
    "day": 83,
@@ -522,7 +632,9 @@
    "swapPnL": 23410928,
    "totalPnL": -183001464,
    "swapThetaPnL": 1102907,
-   "swapValuationPnL": 22308021
+   "swapValuationPnL": 22308021,
+   "swapCashCarryPnL": 1844262,
+   "swapRolldownPnL": -741356
   },
   {
    "day": 84,
@@ -531,7 +643,9 @@
    "swapPnL": 23905542,
    "totalPnL": -184224984,
    "swapThetaPnL": 1106400,
-   "swapValuationPnL": 22799141
+   "swapValuationPnL": 22799141,
+   "swapCashCarryPnL": 1860471,
+   "swapRolldownPnL": -754071
   },
   {
    "day": 85,
@@ -540,7 +654,9 @@
    "swapPnL": 24659548,
    "totalPnL": -185180868,
    "swapThetaPnL": 1117994,
-   "swapValuationPnL": 23541554
+   "swapValuationPnL": 23541554,
+   "swapCashCarryPnL": 1909097,
+   "swapRolldownPnL": -791104
   },
   {
    "day": 88,
@@ -549,7 +665,9 @@
    "swapPnL": 25160449,
    "totalPnL": -189753321,
    "swapThetaPnL": 1122229,
-   "swapValuationPnL": 24038220
+   "swapValuationPnL": 24038220,
+   "swapCashCarryPnL": 1925306,
+   "swapRolldownPnL": -803077
   },
   {
    "day": 89,
@@ -558,7 +676,9 @@
    "swapPnL": 25663226,
    "totalPnL": -190928426,
    "swapThetaPnL": 1126650,
-   "swapValuationPnL": 24536576
+   "swapValuationPnL": 24536576,
+   "swapCashCarryPnL": 1941515,
+   "swapRolldownPnL": -814864
   },
   {
    "day": 90,
@@ -567,7 +687,9 @@
    "swapPnL": 26167885,
    "totalPnL": -192093885,
    "swapThetaPnL": 1131257,
-   "swapValuationPnL": 25036628
+   "swapValuationPnL": 25036628,
+   "swapCashCarryPnL": 1957723,
+   "swapRolldownPnL": -826466
   }
  ],
  "summary": {
@@ -928,7 +1050,9 @@
    "npvChange": 353972,
    "residual": 39351,
    "thetaPnl": 36098,
-   "valuationPnl": 317874
+   "valuationPnl": 317874,
+   "carryPnl": 73973,
+   "rolldownPnl": -37875
   },
   {
    "date": "2026-01-19",
@@ -1007,7 +1131,9 @@
    "npvChange": 331535,
    "residual": 14800,
    "thetaPnl": 12406,
-   "valuationPnl": 319129
+   "valuationPnl": 319129,
+   "carryPnl": 24658,
+   "rolldownPnl": -12252
   },
   {
    "date": "2026-01-20",
@@ -1086,7 +1212,9 @@
    "npvChange": 332983,
    "residual": 15828,
    "thetaPnl": 12593,
-   "valuationPnl": 320390
+   "valuationPnl": 320390,
+   "carryPnl": 24658,
+   "rolldownPnl": -12065
   },
   {
    "date": "2026-01-21",
@@ -1165,7 +1293,9 @@
    "npvChange": 334437,
    "residual": 16861,
    "thetaPnl": 12780,
-   "valuationPnl": 321657
+   "valuationPnl": 321657,
+   "carryPnl": 24658,
+   "rolldownPnl": -11878
   },
   {
    "date": "2026-01-22",
@@ -1244,7 +1374,9 @@
    "npvChange": 335896,
    "residual": 17896,
    "thetaPnl": 12967,
-   "valuationPnl": 322929
+   "valuationPnl": 322929,
+   "carryPnl": 24658,
+   "rolldownPnl": -11691
   },
   {
    "date": "2026-01-23",
@@ -1323,7 +1455,9 @@
    "npvChange": 374467,
    "residual": 56041,
    "thetaPnl": 40023,
-   "valuationPnl": 334444
+   "valuationPnl": 334444,
+   "carryPnl": 73973,
+   "rolldownPnl": -33950
   },
   {
    "date": "2026-01-26",
@@ -1402,7 +1536,9 @@
    "npvChange": 340933,
    "residual": 20356,
    "thetaPnl": 13715,
-   "valuationPnl": 327218
+   "valuationPnl": 327218,
+   "carryPnl": 24658,
+   "rolldownPnl": -10943
   },
   {
    "date": "2026-01-27",
@@ -1481,7 +1617,9 @@
    "npvChange": 342414,
    "residual": 21403,
    "thetaPnl": 13902,
-   "valuationPnl": 328512
+   "valuationPnl": 328512,
+   "carryPnl": 24658,
+   "rolldownPnl": -10756
   },
   {
    "date": "2026-01-28",
@@ -1560,7 +1698,9 @@
    "npvChange": 343901,
    "residual": 22455,
    "thetaPnl": 14089,
-   "valuationPnl": 329812
+   "valuationPnl": 329812,
+   "carryPnl": 24658,
+   "rolldownPnl": -10569
   },
   {
    "date": "2026-01-29",
@@ -1639,7 +1779,9 @@
    "npvChange": 345393,
    "residual": 23509,
    "thetaPnl": 14276,
-   "valuationPnl": 331117
+   "valuationPnl": 331117,
+   "carryPnl": 24658,
+   "rolldownPnl": -10382
   },
   {
    "date": "2026-01-30",
@@ -1718,7 +1860,9 @@
    "npvChange": 395398,
    "residual": 73075,
    "thetaPnl": 43952,
-   "valuationPnl": 351446
+   "valuationPnl": 351446,
+   "carryPnl": 73973,
+   "rolldownPnl": -30021
   },
   {
    "date": "2026-02-02",
@@ -1797,7 +1941,9 @@
    "npvChange": 350537,
    "residual": 26025,
    "thetaPnl": 15025,
-   "valuationPnl": 335512
+   "valuationPnl": 335512,
+   "carryPnl": 24658,
+   "rolldownPnl": -9633
   },
   {
    "date": "2026-02-03",
@@ -1876,7 +2022,9 @@
    "npvChange": 352052,
    "residual": 27093,
    "thetaPnl": 15213,
-   "valuationPnl": 336839
+   "valuationPnl": 336839,
+   "carryPnl": 24658,
+   "rolldownPnl": -9445
   },
   {
    "date": "2026-02-04",
@@ -1955,7 +2103,9 @@
    "npvChange": 353572,
    "residual": 28164,
    "thetaPnl": 15400,
-   "valuationPnl": 338172
+   "valuationPnl": 338172,
+   "carryPnl": 24658,
+   "rolldownPnl": -9258
   },
   {
    "date": "2026-02-05",
@@ -2034,7 +2184,9 @@
    "npvChange": 355098,
    "residual": 29239,
    "thetaPnl": 15588,
-   "valuationPnl": 339510
+   "valuationPnl": 339510,
+   "carryPnl": 24658,
+   "rolldownPnl": -9070
   },
   {
    "date": "2026-02-06",
@@ -2113,7 +2265,9 @@
    "npvChange": 416764,
    "residual": 90452,
    "thetaPnl": 47888,
-   "valuationPnl": 368876
+   "valuationPnl": 368876,
+   "carryPnl": 73973,
+   "rolldownPnl": -26085
   },
   {
    "date": "2026-02-09",
@@ -2192,7 +2346,9 @@
    "npvChange": 360347,
    "residual": 31809,
    "thetaPnl": 16338,
-   "valuationPnl": 344009
+   "valuationPnl": 344009,
+   "carryPnl": 24658,
+   "rolldownPnl": -8320
   },
   {
    "date": "2026-02-10",
@@ -2271,7 +2427,9 @@
    "npvChange": 361896,
    "residual": 32897,
    "thetaPnl": 16525,
-   "valuationPnl": 345371
+   "valuationPnl": 345371,
+   "carryPnl": 24658,
+   "rolldownPnl": -8133
   },
   {
    "date": "2026-02-11",
@@ -2350,7 +2508,9 @@
    "npvChange": 363450,
    "residual": 33989,
    "thetaPnl": 16713,
-   "valuationPnl": 346737
+   "valuationPnl": 346737,
+   "carryPnl": 24658,
+   "rolldownPnl": -7945
   },
   {
    "date": "2026-02-12",
@@ -2429,7 +2589,9 @@
    "npvChange": 365009,
    "residual": 35083,
    "thetaPnl": 16901,
-   "valuationPnl": 348108
+   "valuationPnl": 348108,
+   "carryPnl": 24658,
+   "rolldownPnl": -7757
   },
   {
    "date": "2026-02-13",
@@ -2508,7 +2670,9 @@
    "npvChange": 548209,
    "residual": 217816,
    "thetaPnl": 105348,
-   "valuationPnl": 442861
+   "valuationPnl": 442861,
+   "carryPnl": 147945,
+   "rolldownPnl": -42597
   },
   {
    "date": "2026-02-19",
@@ -2587,7 +2751,9 @@
    "npvChange": 373709,
    "residual": 38351,
    "thetaPnl": 18216,
-   "valuationPnl": 355493
+   "valuationPnl": 355493,
+   "carryPnl": 24658,
+   "rolldownPnl": -6442
   },
   {
    "date": "2026-02-20",
@@ -2666,7 +2832,9 @@
    "npvChange": 453980,
    "residual": 118143,
    "thetaPnl": 55775,
-   "valuationPnl": 398205
+   "valuationPnl": 398205,
+   "carryPnl": 73973,
+   "rolldownPnl": -18198
   },
   {
    "date": "2026-02-23",
@@ -2745,7 +2913,9 @@
    "npvChange": 379149,
    "residual": 41014,
    "thetaPnl": 18968,
-   "valuationPnl": 360181
+   "valuationPnl": 360181,
+   "carryPnl": 24658,
+   "rolldownPnl": -5690
   },
   {
    "date": "2026-02-24",
@@ -2824,7 +2994,9 @@
    "npvChange": 380758,
    "residual": 42136,
    "thetaPnl": 19156,
-   "valuationPnl": 361602
+   "valuationPnl": 361602,
+   "carryPnl": 24658,
+   "rolldownPnl": -5502
   },
   {
    "date": "2026-02-25",
@@ -2903,7 +3075,9 @@
    "npvChange": 382373,
    "residual": 43262,
    "thetaPnl": 19344,
-   "valuationPnl": 363029
+   "valuationPnl": 363029,
+   "carryPnl": 24658,
+   "rolldownPnl": -5314
   },
   {
    "date": "2026-02-26",
@@ -2982,7 +3156,9 @@
    "npvChange": -925110,
    "residual": 112212,
    "thetaPnl": 19533,
-   "valuationPnl": -944643
+   "valuationPnl": -944643,
+   "carryPnl": 24658,
+   "rolldownPnl": -5125
   },
   {
    "date": "2026-02-27",
@@ -3061,7 +3237,9 @@
    "npvChange": 795162,
    "residual": 455066,
    "thetaPnl": 80013,
-   "valuationPnl": 715149
+   "valuationPnl": 715149,
+   "carryPnl": 98630,
+   "rolldownPnl": -18617
   },
   {
    "date": "2026-03-03",
@@ -3140,7 +3318,9 @@
    "npvChange": 458668,
    "residual": 115316,
    "thetaPnl": 20474,
-   "valuationPnl": 438194
+   "valuationPnl": 438194,
+   "carryPnl": 24658,
+   "rolldownPnl": -4184
   },
   {
    "date": "2026-03-04",
@@ -3219,7 +3399,9 @@
    "npvChange": 460323,
    "residual": 116469,
    "thetaPnl": 20663,
-   "valuationPnl": 439660
+   "valuationPnl": 439660,
+   "carryPnl": 24658,
+   "rolldownPnl": -3995
   },
   {
    "date": "2026-03-05",
@@ -3298,7 +3480,9 @@
    "npvChange": 461984,
    "residual": 117625,
    "thetaPnl": 20851,
-   "valuationPnl": 441133
+   "valuationPnl": 441133,
+   "carryPnl": 24658,
+   "rolldownPnl": -3807
   },
   {
    "date": "2026-03-06",
@@ -3377,7 +3561,9 @@
    "npvChange": 701905,
    "residual": 357039,
    "thetaPnl": 63685,
-   "valuationPnl": 638220
+   "valuationPnl": 638220,
+   "carryPnl": 73973,
+   "rolldownPnl": -10288
   },
   {
    "date": "2026-03-09",
@@ -3456,7 +3642,9 @@
    "npvChange": 467667,
    "residual": 120431,
    "thetaPnl": 21606,
-   "valuationPnl": 446061
+   "valuationPnl": 446061,
+   "carryPnl": 24658,
+   "rolldownPnl": -3052
   },
   {
    "date": "2026-03-10",
@@ -3535,7 +3723,9 @@
    "npvChange": 469350,
    "residual": 121600,
    "thetaPnl": 21794,
-   "valuationPnl": 447556
+   "valuationPnl": 447556,
+   "carryPnl": 24658,
+   "rolldownPnl": -2864
   },
   {
    "date": "2026-03-11",
@@ -3614,7 +3804,9 @@
    "npvChange": 471039,
    "residual": 122772,
    "thetaPnl": 21983,
-   "valuationPnl": 449056
+   "valuationPnl": 449056,
+   "carryPnl": 24658,
+   "rolldownPnl": -2675
   },
   {
    "date": "2026-03-12",
@@ -3693,7 +3885,9 @@
    "npvChange": 472733,
    "residual": 123948,
    "thetaPnl": 22172,
-   "valuationPnl": 450561
+   "valuationPnl": 450561,
+   "carryPnl": 24658,
+   "rolldownPnl": -2486
   },
   {
    "date": "2026-03-13",
@@ -3772,7 +3966,9 @@
    "npvChange": 6889896,
    "residual": 376207,
    "thetaPnl": 67654,
-   "valuationPnl": 657858
+   "valuationPnl": 657858,
+   "carryPnl": 73973,
+   "rolldownPnl": -6319
   },
   {
    "date": "2026-03-16",
@@ -3851,7 +4047,9 @@
    "npvChange": -7864293,
    "residual": 167495,
    "thetaPnl": 43423,
-   "valuationPnl": 475846
+   "valuationPnl": 475846,
+   "carryPnl": 16668,
+   "rolldownPnl": 26755
   },
   {
    "date": "2026-03-17",
@@ -3930,7 +4128,9 @@
    "npvChange": 439432,
    "residual": 87313,
    "thetaPnl": 2874,
-   "valuationPnl": 436558
+   "valuationPnl": 436558,
+   "carryPnl": 16209,
+   "rolldownPnl": -13335
   },
   {
    "date": "2026-03-18",
@@ -4009,7 +4209,9 @@
    "npvChange": 425619,
    "residual": 72904,
    "thetaPnl": 6438,
-   "valuationPnl": 419181
+   "valuationPnl": 419181,
+   "carryPnl": 16209,
+   "rolldownPnl": -9771
   },
   {
    "date": "2026-03-19",
@@ -4088,7 +4290,9 @@
    "npvChange": 460677,
    "residual": 107323,
    "thetaPnl": -448,
-   "valuationPnl": 461125
+   "valuationPnl": 461125,
+   "carryPnl": 16209,
+   "rolldownPnl": -16657
   },
   {
    "date": "2026-03-20",
@@ -4167,7 +4371,9 @@
    "npvChange": 678568,
    "residual": 324649,
    "thetaPnl": -66,
-   "valuationPnl": 678634
+   "valuationPnl": 678634,
+   "carryPnl": 48626,
+   "rolldownPnl": -48692
   },
   {
    "date": "2026-03-23",
@@ -4246,7 +4452,9 @@
    "npvChange": 466032,
    "residual": 109625,
    "thetaPnl": 347,
-   "valuationPnl": 465685
+   "valuationPnl": 465685,
+   "carryPnl": 16209,
+   "rolldownPnl": -15862
   },
   {
    "date": "2026-03-24",
@@ -4325,7 +4533,9 @@
    "npvChange": 467807,
    "residual": 110845,
    "thetaPnl": 532,
-   "valuationPnl": 467275
+   "valuationPnl": 467275,
+   "carryPnl": 16209,
+   "rolldownPnl": -15677
   },
   {
    "date": "2026-03-25",
@@ -4404,7 +4614,9 @@
    "npvChange": 469588,
    "residual": 112068,
    "thetaPnl": 717,
-   "valuationPnl": 468871
+   "valuationPnl": 468871,
+   "carryPnl": 16209,
+   "rolldownPnl": -15492
   },
   {
    "date": "2026-03-26",
@@ -4483,7 +4695,9 @@
    "npvChange": 471374,
    "residual": 113294,
    "thetaPnl": 902,
-   "valuationPnl": 470472
+   "valuationPnl": 470472,
+   "carryPnl": 16209,
+   "rolldownPnl": -15307
   },
   {
    "date": "2026-03-27",
@@ -4562,7 +4776,9 @@
    "npvChange": 703274,
    "residual": 344632,
    "thetaPnl": 3815,
-   "valuationPnl": 699459
+   "valuationPnl": 699459,
+   "carryPnl": 48626,
+   "rolldownPnl": -44811
   },
   {
    "date": "2026-03-30",
@@ -4641,7 +4857,9 @@
    "npvChange": 477447,
    "residual": 116280,
    "thetaPnl": 1641,
-   "valuationPnl": 475806
+   "valuationPnl": 475806,
+   "carryPnl": 16209,
+   "rolldownPnl": -14568
   },
   {
    "date": "2026-03-31",
@@ -4720,7 +4938,9 @@
    "npvChange": 479256,
    "residual": 117520,
    "thetaPnl": 1826,
-   "valuationPnl": 477430
+   "valuationPnl": 477430,
+   "carryPnl": 16209,
+   "rolldownPnl": -14383
   },
   {
    "date": "2026-04-01",
@@ -4799,7 +5019,9 @@
    "npvChange": 481070,
    "residual": 118762,
    "thetaPnl": 2012,
-   "valuationPnl": 479058
+   "valuationPnl": 479058,
+   "carryPnl": 16209,
+   "rolldownPnl": -14197
   },
   {
    "date": "2026-04-02",
@@ -4878,7 +5100,9 @@
    "npvChange": 482889,
    "residual": 120008,
    "thetaPnl": 2197,
-   "valuationPnl": 480692
+   "valuationPnl": 480692,
+   "carryPnl": 16209,
+   "rolldownPnl": -14012
   },
   {
    "date": "2026-04-03",
@@ -4957,7 +5181,9 @@
    "npvChange": 728419,
    "residual": 364963,
    "thetaPnl": 7701,
-   "valuationPnl": 720718
+   "valuationPnl": 720718,
+   "carryPnl": 48626,
+   "rolldownPnl": -40925
   },
   {
    "date": "2026-04-06",
@@ -5036,7 +5262,9 @@
    "npvChange": 489070,
    "residual": 123052,
    "thetaPnl": 2938,
-   "valuationPnl": 486132
+   "valuationPnl": 486132,
+   "carryPnl": 16209,
+   "rolldownPnl": -13271
   },
   {
    "date": "2026-04-07",
@@ -5115,7 +5343,9 @@
    "npvChange": 490912,
    "residual": 124311,
    "thetaPnl": 3123,
-   "valuationPnl": 487789
+   "valuationPnl": 487789,
+   "carryPnl": 16209,
+   "rolldownPnl": -13086
   },
   {
    "date": "2026-04-08",
@@ -5194,7 +5424,9 @@
    "npvChange": 492760,
    "residual": 125574,
    "thetaPnl": 3308,
-   "valuationPnl": 489452
+   "valuationPnl": 489452,
+   "carryPnl": 16209,
+   "rolldownPnl": -12901
   },
   {
    "date": "2026-04-09",
@@ -5273,7 +5505,9 @@
    "npvChange": 494613,
    "residual": 126840,
    "thetaPnl": 3494,
-   "valuationPnl": 491119
+   "valuationPnl": 491119,
+   "carryPnl": 16209,
+   "rolldownPnl": -12715
   },
   {
    "date": "2026-04-10",
@@ -5352,7 +5586,9 @@
    "npvChange": 754006,
    "residual": 385644,
    "thetaPnl": 11593,
-   "valuationPnl": 742413
+   "valuationPnl": 742413,
+   "carryPnl": 48626,
+   "rolldownPnl": -37033
   },
   {
    "date": "2026-04-13",
@@ -5431,7 +5667,9 @@
    "npvChange": 500901,
    "residual": 129940,
    "thetaPnl": 4235,
-   "valuationPnl": 496666
+   "valuationPnl": 496666,
+   "carryPnl": 16209,
+   "rolldownPnl": -11974
   },
   {
    "date": "2026-04-14",
@@ -5510,7 +5748,9 @@
    "npvChange": 502777,
    "residual": 131220,
    "thetaPnl": 4421,
-   "valuationPnl": 498356
+   "valuationPnl": 498356,
+   "carryPnl": 16209,
+   "rolldownPnl": -11788
   },
   {
    "date": "2026-04-15",
@@ -5589,7 +5829,9 @@
    "npvChange": 504659,
    "residual": 132503,
    "thetaPnl": 4607,
-   "valuationPnl": 500052
+   "valuationPnl": 500052,
+   "carryPnl": 16209,
+   "rolldownPnl": -11602
   }
  ],
  "fundingCurve": [
@@ -7019,7 +7261,8 @@
   "bondCarry": 438686333.53850025,
   "fundingCost": -401765838.35616463,
   "swapMtm": 25036628.398704525,
-  "swapCarry": 1131256.9212863185,
+  "swapCarry": 1957723.3548396071,
+  "swapRolldown": -826466.4335532887,
   "total": -192093885.41100392
  },
  "decompositionDaily": [
@@ -7030,6 +7273,7 @@
    "bondCarry": 0.0,
    "swapMtm": 0.0,
    "swapCarry": 0.0,
+   "swapRolldown": 0.0,
    "total": 0.0
   },
   {
@@ -7038,7 +7282,8 @@
    "bondMtm": -3372025.1704571424,
    "bondCarry": 4698259.538791935,
    "swapMtm": 317873.0951397419,
-   "swapCarry": 36098.49917984009,
+   "swapCarry": 73972.60273972666,
+   "swapRolldown": -37874.10355988657,
    "total": -3007692.6674826117
   },
   {
@@ -7047,7 +7292,8 @@
    "bondMtm": -13398006.493418345,
    "bondCarry": 18835877.5058902,
    "swapMtm": 637002.0973815918,
-   "swapCarry": 48504.851313352585,
+   "swapCarry": 98630.13698630268,
+   "swapRolldown": -50125.28567295009,
    "total": -12628216.559381144
   },
   {
@@ -7056,7 +7302,8 @@
    "bondMtm": -16710440.66153133,
    "bondCarry": 23553125.912303742,
    "swapMtm": 957392.3363146782,
-   "swapCarry": 61098.0270614624,
+   "swapCarry": 123287.67123287776,
+   "swapRolldown": -62189.64417141536,
    "total": -15578317.536536375
   },
   {
@@ -7065,7 +7312,8 @@
    "bondMtm": -20008328.039068677,
    "bondCarry": 28275057.980859444,
    "swapMtm": 1279049.1415593624,
-   "swapCarry": 73878.06482744217,
+   "swapCarry": 147945.20547945332,
+   "swapRolldown": -74067.14065201115,
    "total": -18507734.632644344
   },
   {
@@ -7074,7 +7322,8 @@
    "bondMtm": -23291806.704085287,
    "bondCarry": 33001648.289652005,
    "swapMtm": 1601977.8427569866,
-   "swapCarry": 86845.0029976368,
+   "swapCarry": 172602.73972602887,
+   "swapRolldown": -85757.73672839208,
    "total": -21416625.97963756
   },
   {
@@ -7083,7 +7332,8 @@
    "bondMtm": -26561013.58166143,
    "bondCarry": 37732871.41677613,
    "swapMtm": 1936422.557904005,
-   "swapCarry": 126867.60398101807,
+   "swapCarry": 246575.34246575506,
+   "swapRolldown": -119707.738484737,
    "total": -24268041.044096168
   },
   {
@@ -7092,7 +7342,8 @@
    "bondMtm": -36284355.44593027,
    "bondCarry": 51967778.56883718,
    "swapMtm": 2263640.334891796,
-   "swapCarry": 140582.52767801285,
+   "swapCarry": 271232.87671233155,
+   "swapRolldown": -130650.3490343187,
    "total": -33479238.946030132
   },
   {
@@ -7101,7 +7352,8 @@
    "bondMtm": -39497821.36505458,
    "bondCarry": 56717278.75023457,
    "swapMtm": 2592152.5230793953,
-   "swapCarry": 154484.5436077118,
+   "swapCarry": 295890.41095890664,
+   "swapRolldown": -141405.86735119484,
    "total": -36288689.10977674
   },
   {
@@ -7110,7 +7362,8 @@
    "bondMtm": -42697682.82752029,
    "bondCarry": 61471284.64043702,
    "swapMtm": 2921964.453571081,
-   "swapCarry": 168573.69012904167,
+   "swapCarry": 320547.9452054817,
+   "swapRolldown": -151974.25507644005,
    "total": -39078542.23516397
   },
   {
@@ -7119,7 +7372,8 @@
    "bondMtm": -45884069.84055986,
    "bondCarry": 66229770.81753926,
    "swapMtm": 3253081.45749712,
-   "swapCarry": 182850.005548954,
+   "swapCarry": 345205.4794520582,
+   "swapRolldown": -162355.4739031042,
    "total": -41848948.381892346
   },
   {
@@ -7128,7 +7382,8 @@
    "bondMtm": -49057111.258431144,
    "bondCarry": 70992711.85963595,
    "swapMtm": 3604527.1819689274,
-   "swapCarry": 226802.34808516502,
+   "swapCarry": 419178.0821917844,
+   "swapRolldown": -192375.73410661938,
    "total": -44551549.32079589
   },
   {
@@ -7137,7 +7392,8 @@
    "bondMtm": -58497433.18899422,
    "bondCarry": 85321171.17658097,
    "swapMtm": 3940038.4407703876,
-   "swapCarry": 241827.72194814682,
+   "swapCarry": 443835.6164383604,
+   "swapRolldown": -202007.8944902136,
    "total": -53376571.19216047
   },
   {
@@ -7146,7 +7402,8 @@
    "bondMtm": -61618357.70927812,
    "bondCarry": 90101677.4596026,
    "swapMtm": 4276877.302026749,
-   "swapCarry": 257040.4560599327,
+   "swapCarry": 468493.15068493504,
+   "swapRolldown": -211452.69462500233,
    "total": -56052836.46419159
   },
   {
@@ -7155,7 +7412,8 @@
    "bondMtm": -64726563.611063495,
    "bondCarry": 94886511.49809219,
    "swapMtm": 4615049.098687887,
-   "swapCarry": 272440.58866739273,
+   "swapCarry": 493150.68493151106,
+   "swapRolldown": -220710.09626411833,
    "total": -58710535.02835575
   },
   {
@@ -7164,7 +7422,8 @@
    "bondMtm": -67822172.83076037,
    "bondCarry": 99675647.87014447,
    "swapMtm": 4954559.163872242,
-   "swapCarry": 288028.157984972,
+   "swapCarry": 517808.2191780871,
+   "swapRolldown": -229780.06119311508,
    "total": -61349808.871635385
   },
   {
@@ -7173,7 +7432,8 @@
    "bondMtm": -70905306.15180413,
    "bondCarry": 104469061.15385416,
    "swapMtm": 5323435.805798292,
-   "swapCarry": 335915.86820602417,
+   "swapCarry": 591780.8219178133,
+   "swapRolldown": -255864.9537117891,
    "total": -63910663.18695934
   },
   {
@@ -7182,7 +7442,8 @@
    "bondMtm": -80081041.26275179,
    "bondCarry": 118887335.61560433,
    "swapMtm": 5667445.40081358,
-   "swapCarry": 352253.56630301476,
+   "swapCarry": 616438.3561643884,
+   "swapRolldown": -264184.7898613736,
    "total": -72371472.43345551
   },
   {
@@ -7191,7 +7452,8 @@
    "bondMtm": -83115455.76404482,
    "bondCarry": 123697602.32689057,
    "swapMtm": 6012815.808797121,
-   "swapCarry": 368778.8920161724,
+   "swapCarry": 641095.8904109644,
+   "swapRolldown": -272316.99839479197,
    "total": -74921623.11990258
   },
   {
@@ -7200,7 +7462,8 @@
    "bondMtm": -86137980.98924239,
    "bondCarry": 128512018.84030773,
    "swapMtm": 6359552.365005732,
-   "swapCarry": 385491.8834660053,
+   "swapCarry": 665753.4246575399,
+   "swapRolldown": -280261.5411915346,
    "total": -77454180.91416153
   },
   {
@@ -7209,7 +7472,8 @@
    "bondMtm": -89148730.80393215,
    "bondCarry": 133330559.73395047,
    "swapMtm": 6707660.404952288,
-   "swapCarry": 402392.5788016319,
+   "swapCarry": 690410.958904115,
+   "swapRolldown": -288018.3801024831,
    "total": -79969279.73006335
   },
   {
@@ -7218,7 +7482,8 @@
    "bondMtm": -92147817.92072706,
    "bondCarry": 138153199.5859135,
    "swapMtm": 7150521.5875918865,
-   "swapCarry": 507740.66559553146,
+   "swapCarry": 838356.1643835693,
+   "swapRolldown": -330615.4987880378,
    "total": -82285416.35559869
   },
   {
@@ -7227,7 +7492,8 @@
    "bondMtm": -109903590.59722923,
    "bondCarry": 167233398.03715515,
    "swapMtm": 7506015.080262661,
-   "swapCarry": 525956.3544855118,
+   "swapCarry": 863013.6986301434,
+   "swapRolldown": -337057.34414463164,
    "total": -98714673.1801204
   },
   {
@@ -7236,7 +7502,8 @@
    "bondMtm": -112824097.93205512,
    "bondCarry": 172084018.784012,
    "swapMtm": 7904219.750004768,
-   "swapCarry": 581731.6235866547,
+   "swapCarry": 936986.3013698715,
+   "swapRolldown": -355254.6777832168,
    "total": -101018478.45938319
   },
   {
@@ -7245,7 +7512,8 @@
    "bondMtm": -121521213.10245775,
    "bondCarry": 186670712.475136,
    "swapMtm": 8264400.928980112,
-   "swapCarry": 600699.5740785599,
+   "swapCarry": 961643.8356164475,
+   "swapRolldown": -360944.2615378876,
    "total": -108813446.6996055
   },
   {
@@ -7254,7 +7522,8 @@
    "bondMtm": -124399119.82412253,
    "bondCarry": 191536763.02287275,
    "swapMtm": 8626003.232634068,
-   "swapCarry": 619855.6849148273,
+   "swapCarry": 986301.3698630217,
+   "swapRolldown": -366445.6849481943,
    "total": -111132443.08918035
   },
   {
@@ -7263,7 +7532,8 @@
    "bondMtm": -127266626.4672271,
    "bondCarry": 196406607.46606618,
    "swapMtm": 8989032.003382921,
-   "swapCarry": 639199.9940526485,
+   "swapCarry": 1010958.9041095967,
+   "swapRolldown": -371758.9100569482,
    "total": -113435630.83934179
   },
   {
@@ -7272,7 +7542,8 @@
    "bondMtm": -131960637.31948446,
    "bondCarry": 201280220.38281104,
    "swapMtm": 8044389.920394182,
-   "swapCarry": 658732.5394506454,
+   "swapCarry": 1035616.4383561728,
+   "swapRolldown": -376883.8989055273,
    "total": -118457817.76449983
   },
   {
@@ -7281,7 +7552,8 @@
    "bondMtm": -134749200.47915474,
    "bondCarry": 206157576.351202,
    "swapMtm": 8759538.636823893,
-   "swapCarry": 738745.8417036533,
+   "swapCarry": 1134246.575342475,
+   "swapRolldown": -395500.73363882164,
    "total": -119850542.3891512
   },
   {
@@ -7290,7 +7562,8 @@
    "bondMtm": -145793974.27491838,
    "bondCarry": 225725872.1748921,
    "swapMtm": 9197732.612419844,
-   "swapCarry": 759220.1368849277,
+   "swapCarry": 1158904.109589051,
+   "swapRolldown": -399683.97270412324,
    "total": -127975069.89866671
   },
   {
@@ -7299,7 +7572,8 @@
    "bondMtm": -148528390.4005607,
    "bondCarry": 230621562.07293424,
    "swapMtm": 9637393.286667585,
-   "swapCarry": 779882.895688057,
+   "swapCarry": 1183561.643835626,
+   "swapRolldown": -403678.74814756913,
    "total": -129630152.14527082
   },
   {
@@ -7308,7 +7582,8 @@
    "bondMtm": -151252328.5164447,
    "bondCarry": 235520842.49119076,
    "swapMtm": 10078526.01102519,
-   "swapCarry": 800734.1559092999,
+   "swapCarry": 1208219.178082202,
+   "swapRolldown": -407485.02217290225,
    "total": -131269505.31037426
   },
   {
@@ -7317,7 +7592,8 @@
    "bondMtm": -153965903.06464535,
    "bondCarry": 240423688.0077563,
    "swapMtm": 10716745.766795635,
-   "swapCarry": 864419.3234512806,
+   "swapCarry": 1282191.7808219292,
+   "swapRolldown": -417772.4573706486,
    "total": -132655008.87075174
   },
   {
@@ -7326,7 +7602,8 @@
    "bondMtm": -162045572.429277,
    "bondCarry": 255163852.84793895,
    "swapMtm": 11162806.670004606,
-   "swapCarry": 886024.9675922394,
+   "swapCarry": 1306849.3150685043,
+   "swapRolldown": -420824.3474762649,
    "total": -138356885.2040152
   },
   {
@@ -7335,7 +7612,8 @@
    "bondMtm": -164718814.06800088,
    "bondCarry": 260080704.5386877,
    "swapMtm": 11610362.26737094,
-   "swapCarry": 907819.3022034168,
+   "swapCarry": 1331506.8493150803,
+   "swapRolldown": -423687.5471116635,
    "total": -139920604.6720676
   },
   {
@@ -7344,7 +7622,8 @@
    "bondMtm": -167382247.0547967,
    "bondCarry": 265000994.21821898,
    "swapMtm": 12059417.913733006,
-   "swapCarry": 929802.3650312424,
+   "swapCarry": 1356164.3835616545,
+   "swapRolldown": -426362.0185304121,
    "total": -141469388.72219706
   },
   {
@@ -7353,7 +7632,8 @@
    "bondMtm": -170035978.9138915,
    "bondCarry": 269924696.4646275,
    "swapMtm": 12509978.964397907,
-   "swapCarry": 951974.1938245296,
+   "swapCarry": 1380821.9178082296,
+   "swapRolldown": -428847.7239836999,
    "total": -143003364.9074799
   },
   {
@@ -7362,7 +7642,8 @@
    "bondMtm": -172680116.0165378,
    "bondCarry": 274851785.85600805,
    "swapMtm": 13167836.765164372,
-   "swapCarry": 1019628.3971960582,
+   "swapCarry": 1454794.5205479576,
+   "swapRolldown": -435166.12335189944,
    "total": -144271580.06666252
   },
   {
@@ -7371,7 +7652,8 @@
    "bondMtm": -180556005.2036917,
    "bondCarry": 289614202.9323826,
    "swapMtm": 13643682.675494667,
-   "swapCarry": 1063051.6086108424,
+   "swapCarry": 1471462.5390159353,
+   "swapRolldown": -408410.9304050929,
    "total": -149696248.80912146
   },
   {
@@ -7380,7 +7662,8 @@
    "bondMtm": -183140835.1110167,
    "bondCarry": 294538294.0818582,
    "swapMtm": 14080240.709479209,
-   "swapCarry": 1065925.5629299618,
+   "swapCarry": 1487671.232876724,
+   "swapRolldown": -421745.66994676227,
    "total": -151194377.4964754
   },
   {
@@ -7389,7 +7672,8 @@
    "bondMtm": -185718099.91474742,
    "bondCarry": 299465645.2667793,
    "swapMtm": 14499422.147475597,
-   "swapCarry": 1072363.310737107,
+   "swapCarry": 1503879.9267375125,
+   "swapRolldown": -431516.6160004055,
    "total": -152695493.8472897
   },
   {
@@ -7398,7 +7682,8 @@
    "bondMtm": -188287899.06828853,
    "bondCarry": 304396231.06524056,
    "swapMtm": 14960547.718989369,
-   "swapCarry": 1071914.9282346703,
+   "swapCarry": 1520088.6205983022,
+   "swapRolldown": -448173.6923636319,
    "total": -154150851.93116647
   },
   {
@@ -7407,7 +7692,8 @@
    "bondMtm": -190850330.8720702,
    "bondCarry": 309330026.0553367,
    "swapMtm": 15639181.736909982,
-   "swapCarry": 1071848.6283933856,
+   "swapCarry": 1568714.7021806696,
+   "swapRolldown": -496866.0737872841,
    "total": -155377742.9445809
   },
   {
@@ -7416,7 +7702,8 @@
    "bondMtm": -198494387.89453974,
    "bondCarry": 324159836.1560435,
    "swapMtm": 16104866.520594116,
-   "swapCarry": 1072195.9257560708,
+   "swapCarry": 1584923.3960414594,
+   "swapRolldown": -512727.47028538864,
    "total": -160556423.53872147
   },
   {
@@ -7425,7 +7712,8 @@
    "bondMtm": -201028310.24409187,
    "bondCarry": 329106213.69362617,
    "swapMtm": 16572141.715439674,
-   "swapCarry": 1072727.986529801,
+   "swapCarry": 1601132.0899022473,
+   "swapRolldown": -528404.1033724463,
    "total": -161952983.0128799
   },
   {
@@ -7434,7 +7722,8 @@
    "bondMtm": -203555339.45141545,
    "bondCarry": 334055673.3133172,
    "swapMtm": 17041012.67069375,
-   "swapCarry": 1073444.8495297171,
+   "swapCarry": 1617340.783763037,
+   "swapRolldown": -543895.93423332,
    "total": -163337786.70006672
   },
   {
@@ -7443,7 +7732,8 @@
    "bondMtm": -206075566.89909288,
    "bondCarry": 339008189.59321123,
    "swapMtm": 17511484.736519452,
-   "swapCarry": 1074346.5535795428,
+   "swapCarry": 1633549.4776238268,
+   "swapRolldown": -559202.924044284,
    "total": -164710946.01578277
   },
   {
@@ -7452,7 +7742,8 @@
    "bondMtm": -208589082.81673184,
    "bondCarry": 343963737.1114031,
    "swapMtm": 18210943.792138573,
-   "swapCarry": 1078161.100079272,
+   "swapCarry": 1682175.5592061924,
+   "swapRolldown": -604014.4591269204,
    "total": -165842462.7309192
   },
   {
@@ -7461,7 +7752,8 @@
    "bondMtm": -216090246.3908749,
    "bondCarry": 358857203.2163634,
    "swapMtm": 18686749.159895178,
-   "swapCarry": 1079802.556287501,
+   "swapCarry": 1698384.2530669821,
+   "swapRolldown": -618581.6967794811,
    "total": -170803179.1295618
   },
   {
@@ -7470,7 +7762,8 @@
    "bondMtm": -218577795.4249439,
    "bondCarry": 363824621.46869344,
    "swapMtm": 19164178.303795215,
-   "swapCarry": 1081629.0474421717,
+   "swapCarry": 1714592.94692777,
+   "swapRolldown": -632963.8994855983,
    "total": -172120876.19405434
   },
   {
@@ -7479,7 +7772,8 @@
    "bondMtm": -221059066.78239334,
    "bondCarry": 368794943.84979475,
    "swapMtm": 19643236.57967126,
-   "swapCarry": 1083640.612294767,
+   "swapCarry": 1730801.6407885617,
+   "swapRolldown": -647161.0284937946,
    "total": -173427577.24748203
   },
   {
@@ -7488,7 +7782,8 @@
    "bondMtm": -223534143.77498302,
    "bondCarry": 373768144.9377621,
    "swapMtm": 20123929.344296213,
-   "swapCarry": 1085837.289557431,
+   "swapCarry": 1747010.3346493496,
+   "swapRolldown": -661173.0450919187,
    "total": -174723385.62802503
   },
   {
@@ -7497,7 +7792,8 @@
    "bondMtm": -226003108.5614983,
    "bondCarry": 378744199.3106901,
    "swapMtm": 20844647.731189843,
-   "swapCarry": 1093538.38297138,
+   "swapCarry": 1795636.416231717,
+   "swapRolldown": -702098.0332603371,
    "total": -175764698.47911295
   },
   {
@@ -7506,7 +7802,8 @@
    "bondMtm": -233374133.97783017,
    "bondCarry": 393697584.399825,
    "swapMtm": 21330779.950971123,
-   "swapCarry": 1096475.8969199397,
+   "swapCarry": 1811845.1100925049,
+   "swapRolldown": -715369.2131725652,
    "total": -180523734.8260047
   },
   {
@@ -7515,7 +7812,8 @@
    "bondMtm": -235819448.4684074,
    "bondCarry": 398684797.69354284,
    "swapMtm": 21818569.359220263,
-   "swapCarry": 1099598.7167469002,
+   "swapCarry": 1828053.8039532946,
+   "swapRolldown": -728455.0872063944,
    "total": -181767745.71259624
   },
   {
@@ -7524,7 +7822,8 @@
    "bondMtm": -238259044.25221688,
    "bondCarry": 403674737.1626949,
    "swapMtm": 22308021.31880557,
-   "swapCarry": 1102906.8810554482,
+   "swapCarry": 1844262.4978140825,
+   "swapRolldown": -741355.6167586343,
    "total": -183001463.82116807
   },
   {
@@ -7533,7 +7832,8 @@
    "bondMtm": -240692996.5701961,
    "bondCarry": 408667377.3853758,
    "swapMtm": 22799141.193549868,
-   "swapCarry": 1106400.428531859,
+   "swapCarry": 1860471.1916748723,
+   "swapRolldown": -754070.7631430132,
    "total": -184224984.41205385
   },
   {
@@ -7542,7 +7842,8 @@
    "bondMtm": -243121379.51030794,
    "bondCarry": 413662692.93968034,
    "swapMtm": 23541554.068120237,
-   "swapCarry": 1117993.7559555508,
+   "swapCarry": 1909097.2732572416,
+   "swapRolldown": -791103.5173016908,
    "total": -185180867.5136753
   },
   {
@@ -7551,7 +7852,8 @@
    "bondMtm": -250373835.64844766,
    "bondCarry": 428672259.9929111,
    "swapMtm": 24038219.737352725,
-   "swapCarry": 1122229.2220921256,
+   "swapCarry": 1925305.9671180295,
+   "swapRolldown": -803076.7450259039,
    "total": -189753321.2166399
   },
   {
@@ -7560,7 +7862,8 @@
    "bondMtm": -252780658.89722538,
    "bondCarry": 433678022.6546571,
    "swapMtm": 24536576.05744862,
-   "swapCarry": 1126650.2643518187,
+   "swapCarry": 1941514.6609788192,
+   "swapRolldown": -814864.3966270005,
    "total": -190928426.35912424
   },
   {
@@ -7569,7 +7872,8 @@
    "bondMtm": -255182265.91333038,
    "bondCarry": 438686333.53850025,
    "swapMtm": 25036628.398704525,
-   "swapCarry": 1131256.9212863185,
+   "swapCarry": 1957723.3548396071,
+   "swapRolldown": -826466.4335532887,
    "total": -192093885.41100392
   }
  ],

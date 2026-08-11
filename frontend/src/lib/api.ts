@@ -356,14 +356,46 @@ export interface BacktestPosition {
   entryValue: number | null;
   exitValue: number | null;
   pnl: number;
-  /** The two halves of `pnl`, which they sum to exactly:
-   *   평가 = mark-to-market on the clean price — the rate move and roll-down
-   *   캐리 = interest actually earned or paid, settled plus still accruing
-   * An identity, not an attribution model (see backend/app/backtest.py). */
+  /** The three parts of `pnl`, which they sum to exactly [OWNER, 2026-08-11
+   * — 교과서 3분해]:
+   *   평가   = what the curve MOVING did (clean change minus the roll chain)
+   *   롤다운 = clean change from aging alone on the unchanged curve
+   *            (Tuckman unchanged-term-structure, chained day by day)
+   *   캐리   = interest actually earned or paid, settled plus still accruing
+   * An identity, not an attribution model (see backend/app/backtest.py).
+   * `rolldown` is optional only for results restored from an older session's
+   * memory — the server always sends it now. */
   valuation: number;
+  rolldown?: number;
   carry: number;
   /** settled cash alone, the part of `carry` that has actually been paid */
   cash: number;
+}
+
+/** 일별 대사 [OWNER, 2026-08-11] — one business day of the book: per-tenor
+ * KRD on that day's own curve, the ACTUAL market Δbp (this is history, not a
+ * scenario), the P&L-explain estimate (전일 KRD × 당일 Δbp), and the day's
+ * actual P&L split 평가/롤다운/캐리. `dbp` is null where the tenor had no
+ * quote on one of the two days — unknown, not zero. */
+export interface BacktestReconRow {
+  t: string;
+  krd: Record<string, number>;
+  dbp: Record<string, number | null>;
+  est: Record<string, number>;
+  estTotal: number;
+  actual: number;
+  valuation: number;
+  rolldown: number;
+  carry: number;
+  residual: number;
+}
+
+export interface BacktestRecon {
+  /** every tenor label, ascending — columns; the table hides all-zero ones */
+  tenors: string[];
+  rows: BacktestReconRow[];
+  /** true when the window was cut to the last ~250 business days */
+  truncated: boolean;
 }
 
 export interface BacktestResult {
@@ -382,6 +414,9 @@ export interface BacktestResult {
   pnl: number;
   maxProfit: number;
   maxLoss: number;
+  /** 일별 대사 — optional only for results restored from an older session's
+   * memory; the live endpoint always sends it. */
+  recon?: BacktestRecon;
 }
 
 /** What the user typed, before the server prices it. */

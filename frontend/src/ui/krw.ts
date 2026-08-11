@@ -36,16 +36,24 @@ export function fmtKrw(v: number): string {
   return fmtKrwFromMan(manUnits(v));
 }
 
-/** 평가 + 캐리 = 합계, AT DISPLAYED PRECISION, by construction: the total and
- * the valuation round once each, and the carry IS their difference in
- * 만-units — the fmtMove precedent (difference the displayed endpoints)
- * applied to money. Rounding all three independently can miss by a 만원,
- * which is exactly the defect the old carry & roll block was deleted for. */
+/** 평가 + 캐리 + 롤다운 = 합계, AT DISPLAYED PRECISION, by construction: the
+ * total, the valuation and the rolldown round once each, and the carry IS
+ * their difference in 만-units — the fmtMove precedent (difference the
+ * displayed endpoints) applied to money. Rounding all four independently can
+ * miss by a 만원, which is exactly the defect the old carry & roll block was
+ * deleted for.
+ *
+ * [OWNER, 2026-08-11 — 교과서 3분해] `rolldown` joined the split. It defaults
+ * to 0 so a result restored from an older session's memory — whose 평가 still
+ * bundles the roll — degrades to the exact two-way display it was saved with
+ * (롤다운 0, 캐리 = the old residual). */
 export function splitKrw(
   pnl: number,
   valuation: number,
-): { uPnl: number; uVal: number; uCarry: number } {
+  rolldown: number = 0,
+): { uPnl: number; uVal: number; uRoll: number; uCarry: number } {
   const uPnl = manUnits(pnl);
   const uVal = manUnits(valuation);
-  return { uPnl, uVal, uCarry: uPnl - uVal };
+  const uRoll = manUnits(rolldown);
+  return { uPnl, uVal, uRoll, uCarry: uPnl - uVal - uRoll };
 }

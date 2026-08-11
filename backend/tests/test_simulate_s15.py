@@ -102,8 +102,10 @@ def _base_request(positions: list[dict], **overrides) -> dict:
 
 
 def _decomposition_sum(d: dict) -> float:
+    # [2026-08-11 3분해] swapRolldown 이 여섯 번째 성분으로 갈라져 나왔다
+    # (test_simulate_harden1 의 DECOMP_KEYS 주석 참조).
     return sum(
-        d[k] for k in ("bondMtm", "bondCarry", "fundingCost", "swapMtm", "swapCarry")
+        d[k] for k in ("bondMtm", "bondCarry", "fundingCost", "swapMtm", "swapCarry", "swapRolldown")
         if d[k] is not None
     )
 
@@ -364,7 +366,7 @@ def test_decomposition_sums_on_representative_book(client: TestClient) -> None:
         body["summary"]["finalCarry"], abs=1.0
     )
     assert d["bondMtm"] == pytest.approx(body["summary"]["finalMTM"], abs=1.0)
-    assert d["swapMtm"] + d["swapCarry"] == pytest.approx(
+    assert d["swapMtm"] + d["swapCarry"] + d["swapRolldown"] == pytest.approx(
         body["summary"]["finalSwap"], abs=1.0
     )
 

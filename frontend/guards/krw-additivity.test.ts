@@ -42,12 +42,15 @@ import {
 describe("the displayed split stays tied to the raw engine fields", () => {
   it("the verified live triple: 9,133 + 82 = 9,215, and 82 IS the raw carry", () => {
     // raw fields from the audited run: val + carry == pnl to the won
+    // (a 2-way triple — splitKrw's rolldown default 0 must reproduce the
+    // exact pre-3분해 display, which is also the restored-old-result path)
     const pnl = 1_092_153_029;
     const val = 1_091_329_056;
     const carry = 823_973;
     expect(Math.abs(pnl - (val + carry))).toBeLessThanOrEqual(1);
     const u = splitKrw(pnl, val);
     expect(fmtKrwFromMan(u.uVal)).toBe("+10억 9,133만원");
+    expect(u.uRoll).toBe(0);
     expect(fmtKrwFromMan(u.uCarry)).toBe("+82만원");
     expect(fmtKrwFromMan(u.uPnl)).toBe("+10억 9,215만원");
     // the tie: the residual-derived carry equals the raw carry's own units
@@ -55,22 +58,29 @@ describe("the displayed split stays tied to the raw engine fields", () => {
     expect(u.uCarry).toBe(manUnits(carry)); // exactly, on this triple
   });
 
-  it("the tie holds across a deterministic sweep of identity-true triples", () => {
-    // raw (val, carry) pairs over signs, magnitudes and half-만원 edges;
-    // pnl reconstructed WITH the server's ±1원 rounding slack, so the sweep
-    // exercises exactly the inputs the API contract permits
+  it("the tie holds across a deterministic sweep of identity-true quadruples", () => {
+    // raw (val, carry, rolldown) triples over signs, magnitudes and half-만원
+    // edges; pnl reconstructed WITH the server's ±1원 rounding slack, so the
+    // sweep exercises exactly the inputs the API contract permits.
+    // [2026-08-11 — 3분해] rolldown rounds on its own like valuation; carry
+    // stays the residual, so its tie tolerance grows to TWO units (two
+    // independent roundings now sit between it and the raw carry).
     for (let k = 0; k < 500; k++) {
       const val = (k * 104_729_331 - 999_999_999) % 2_000_000_000;
       const carry = (k * 7_919_777 - 87_654_321) % 50_000_000;
+      const roll = (k * 3_331_337 - 23_456_789) % 80_000_000;
       const eps = (k % 3) - 1; // −1, 0, +1원 — the server's rounding slack
-      const pnl = val + carry + eps;
-      const u = splitKrw(pnl, val);
+      const pnl = val + carry + roll + eps;
+      const u = splitKrw(pnl, val, roll);
       expect(u.uPnl).toBe(manUnits(pnl));
       expect(u.uVal).toBe(manUnits(val));
+      expect(u.uRoll).toBe(manUnits(roll));
+      // the row still sums across at displayed precision, by construction
+      expect(u.uVal + u.uRoll + u.uCarry).toBe(u.uPnl);
       expect(
         Math.abs(u.uCarry - manUnits(carry)),
         `raw carry ${carry} drifted from displayed at k=${k}`,
-      ).toBeLessThanOrEqual(1);
+      ).toBeLessThanOrEqual(2);
     }
   });
 });

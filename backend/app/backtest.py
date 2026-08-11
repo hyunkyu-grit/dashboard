@@ -274,6 +274,7 @@ def _value_on(
     entry_date: dt.date,
     fixings: dict[dt.date, float],
     cache: dict[int, np.ndarray] | None = None,
+    curve_idx: int | None = None,
 ) -> tuple[float, float]:
     """(clean NPV, accrued interest) of the position on the row at index `i`.
 
@@ -281,8 +282,19 @@ def _value_on(
     평가손익 + 캐리손익. Their sum is the dirty NPV, which is what the total is
     built from, so nothing about the headline number changes — only that it can
     now be read in two parts.
+
+    `curve_idx` [OWNER, 2026-08-11 — 교과서 3분해]: value the swap AS OF
+    `dates[i]` but on the curve bootstrapped from the row at `curve_idx`.
+    The zero curve is a function of time-FROM-valuation-date, so an older
+    curve at a later date is exactly the unchanged-term-structure
+    (constant-maturity) assumption — the textbook roll-down revaluation.
+    Default (None) keeps the ordinary same-day valuation.
     """
-    curve = CurveBundle(dataset.dates[i], _curve_at(dataset, i, cache), [])
+    curve = CurveBundle(
+        dataset.dates[i],
+        _curve_at(dataset, i if curve_idx is None else curve_idx, cache),
+        [],
+    )
     clean = 0.0
     accrued = 0.0
     for leg in legs:
@@ -397,19 +409,48 @@ def _run_one(
     last = 0.0
     last_carry = 0.0
     last_val = 0.0
+    last_roll = 0.0
     last_cash = 0.0
+    # Roll-down chain seed: the entry date itself, whose clean is clean0.
+    prev_i = entry_i
+    prev_clean = clean0
+    roll_cum = 0.0
     for i in live:
         fx = _cd_fixings(dataset, i)
         clean, accrued = _value_on(legs, dataset, i, entry_date, fx, cache)
         cash = _settled_to(legs, entry_date, dates[i], fx)
-        # An exact split, not an attribution model:
+        # An exact split, not an attribution model [OWNER, 2026-08-11 — 교과서
+        # 3분해: 평가 + 캐리 + 롤다운]:
         #   pnl = (dirty_t − dirty_0) + cash
         #       = (clean_t − clean_0) + (accrued_t − accrued_0 + cash)
-        # so 평가손익 and 캐리손익 sum to the published figure by construction.
-        val = clean - clean0
+        #       = (평가손익 + 롤다운손익) +        캐리손익
+        # 캐리 = settled + accrued net interest — the textbook cash carry (the
+        # coupon differential earned by doing nothing; Clarus/Tuckman).
+        # 롤다운 = the clean-price change from AGING ALONE, chained step by
+        # step: value today's (shorter) swap on the PREVIOUS valued date's
+        # curve, unchanged in tenor space — Tuckman's unchanged-term-structure
+        # assumption, the P&L-explain "yesterday's curve" convention this repo
+        # already adopted for the recon estimate (2026-08-10). 평가 = the
+        # remainder of the clean change, i.e. what the CURVE MOVING did that
+        # step. The chain telescopes, so 평가 + 롤다운 == clean_t − clean_0 to
+        # the float, and the three parts still sum to the published figure by
+        # construction. On a thinned book (>MAX_POINTS days) a chain step
+        # spans several days; the split stays exact, only the step width of
+        # the unchanged-curve assumption widens (test_backtest_theta pins the
+        # daily case: a frozen market puts the whole clean change in 롤다운
+        # and exactly 0 in 평가).
+        val_total = clean - clean0
         carry = accrued - accrued0 + cash
-        own[i] = last = val + carry
-        last_val, last_carry, last_cash = val, carry, cash
+        if i > prev_i:
+            clean_frozen, _acc_f = _value_on(
+                legs, dataset, i, entry_date, fx, cache, curve_idx=prev_i
+            )
+            roll_cum += clean_frozen - prev_clean
+        own[i] = last = val_total + carry
+        last_val = val_total - roll_cum
+        last_roll = roll_cum
+        last_carry, last_cash = carry, cash
+        prev_i, prev_clean = i, clean
 
     def at(i: int) -> float:
         if i < entry_i:
@@ -449,11 +490,13 @@ def _run_one(
         # position; shipping a full npv/cash series for each would be 12 × 400
         # × 2 numbers to draw one total line. `trace()` below reconstructs the
         # path when something needs to look at it.
-        # The two halves of `pnl`, which they sum to exactly (§backtest).
-        # 평가 = mark-to-market on the clean price: the rate move and the
-        # roll-down. 캐리 = interest actually earned or paid, settled plus
-        # still accruing.
+        # The three parts of `pnl`, which they sum to exactly (§backtest)
+        # [OWNER, 2026-08-11 — 교과서 3분해]. 평가 = what the curve MOVING
+        # did (clean change minus the roll chain). 롤다운 = clean change from
+        # aging alone on the unchanged curve. 캐리 = interest actually earned
+        # or paid, settled plus still accruing.
         "valuation": round(last_val, 0),
+        "rolldown": round(last_roll, 0),
         "carry": round(last_carry, 0),
         "cash": round(last_cash, 0),
     }
@@ -483,23 +526,205 @@ def trace(dataset: Dataset, pos: Position) -> list[dict]:
     )
 
     out = []
+    # the same chained roll-down as `_run_one` (see the comment there) — the
+    # trace grid is the thinned full span, so each chain step is one grid step
+    prev_i = entry_i
+    prev_clean = clean0
+    roll_cum = 0.0
     for i in _thin(list(range(entry_i, exit_i + 1)), MAX_POINTS):
         fx = _cd_fixings(dataset, i)
         clean, accrued = _value_on(legs, dataset, i, entry_date, fx)
         cash = _settled_to(legs, entry_date, dates[i], fx)
-        val = clean - clean0
+        val_total = clean - clean0
         carry = accrued - accrued0 + cash
+        if i > prev_i:
+            clean_frozen, _acc_f = _value_on(
+                legs, dataset, i, entry_date, fx, curve_idx=prev_i
+            )
+            roll_cum += clean_frozen - prev_clean
+        prev_i, prev_clean = i, clean
         out.append(
             {
                 "t": dates[i].isoformat(),
-                "pnl": round(val + carry, 0),
-                "valuation": round(val, 0),
+                "pnl": round(val_total + carry, 0),
+                "valuation": round(val_total - roll_cum, 0),
+                "rolldown": round(roll_cum, 0),
                 "carry": round(carry, 0),
                 "npv": round(clean + accrued, 0),
                 "cash": round(cash, 0),
             }
         )
     return out
+
+
+# ── 일별 대사: KRD · Δbp · 손익 [OWNER, 2026-08-11] ──────────────────────────
+#
+# "직접 트레이딩 시스템과 대사하기 위해서" — for every business day of the
+# book's life (capped, below): the book's per-tenor KRD on that day's own
+# curve, the ACTUAL per-tenor par move (this is history — the Δbp are real
+# quotes, not a scenario), the P&L-explain linear estimate (yesterday's KRD ×
+# today's Δbp, the same start-of-day convention the simulation recon adopted
+# 2026-08-10), and the day's actual P&L split 평가/캐리/롤다운 exactly as the
+# position records split it.
+#
+# KRD convention matches the simulation engine's DV01 sign: positive =
+# receive-fixed gains when rates FALL, so the estimate is −KRD × Δbp. The
+# backtest values ON the row's date (its own convention everywhere); the sim
+# engine reports next-business-day settle. When reconciling against a system
+# that uses settle-basis KRD, expect a one-day shift — recorded in HANDOFF.
+
+RECON_MAX_DAYS = 250          # business days of recon rows served (~1 year)
+# Rough cap on extra valuations for KRD bumps. Measured ~0.5ms per valuation,
+# so this is ~6s worst case (a six-position decade book shrinks to ~120 rows —
+# still half again the owner's "80일이면 240줄" spec); a typical 1–3 position
+# book is untouched by the cap and answers in well under a second.
+RECON_VALUATION_BUDGET = 12_000
+
+
+def _leg_swap(leg: Leg, entry_date: dt.date) -> VanillaSwap:
+    """The valuation object for one leg — same construction as `_value_on`
+    (see the FLOAT-tenor comment there; `TENOR_T[leg.tenor]` must stay the
+    unrounded float)."""
+    return VanillaSwap(
+        tenor_years=TENOR_T[leg.tenor],
+        notional=leg.notional,
+        fixed_rate=leg.entry_rate,
+        pay_fixed=leg.sign > 0,
+        trade_date=entry_date,
+    )
+
+
+def _book_recon(
+    dataset: Dataset,
+    positions: list[Position],
+    spans: list[tuple[int, int, bool]],
+    cache: dict[int, np.ndarray],
+) -> dict:
+    """The daily reconciliation block for the whole book.
+
+    One extra pass over the window. Costs: per day, one base valuation per
+    live position, one frozen-curve valuation (roll-down step), and one
+    bumped-curve valuation per (tenor the position can feel × live position).
+    The bump set per position is cut at its own longest remaining maturity —
+    bumping 10Y for a 1Y book moves nothing and would triple the pass for a
+    row of zeros. The window is the LAST `RECON_MAX_DAYS` business days of
+    the book (a 10-year backtest reconciles its recent year, not 2,600 rows
+    nobody scrolls), shrunk further only if the bump budget demands it.
+    """
+    dates = dataset.dates
+    labels = list(TENOR_T)  # insertion order == ascending tenor
+    first = min(a for a, _b, _m in spans)
+    last = max(b for _a, b, _m in spans)
+
+    # per-position statics: legs at entry, span, longest maturity, bump set
+    pos_info = []
+    for pos, (entry_i, exit_i, _m) in zip(positions, spans):
+        legs = _build_legs(dataset, pos.series_id, pos.notional, entry_i)
+        for leg in legs:
+            leg.sign *= pos.direction
+        entry_date = dates[entry_i]
+        matures = max(_maturity_of(entry_date, t) for t, _s in _legs_for(pos.series_id))
+        # tenors this position can feel: every node up to and including the
+        # first one at or beyond the longest remaining maturity AT ENTRY (the
+        # set only shrinks as it ages; one fixed set keeps columns stable)
+        tau = (matures - entry_date).days / 365.0
+        bump: list[str] = []
+        for lb in labels:
+            bump.append(lb)
+            if TENOR_T[lb] >= tau:
+                break
+        pos_info.append({
+            "entry_i": entry_i, "exit_i": exit_i, "entry_date": entry_date,
+            "legs": legs, "swaps": [_leg_swap(leg, entry_date) for leg in legs],
+            "bump": bump, "prev": None,  # (clean, accrued, cash)
+        })
+
+    start = max(first + 1, last - RECON_MAX_DAYS + 1)
+    # budget guard: shrink the window rather than serve a 30-second response
+    cost_per_day = sum(len(p["bump"]) + 3 for p in pos_info) or 1
+    max_days = max(30, RECON_VALUATION_BUDGET // cost_per_day)
+    start = max(start, last - max_days + 1)
+
+    def dirty_on(info: dict, on: dt.date, zc: np.ndarray, fx) -> tuple[float, float]:
+        """(clean, accrued) of one position on an explicit curve."""
+        curve = CurveBundle(on, zc, [])
+        clean = accrued = 0.0
+        for swap in info["swaps"]:
+            res = value_booked_trade(swap, curve, fx)
+            clean += res.clean_npv
+            accrued += res.accrued_interest
+        return clean, accrued
+
+    rows: list[dict] = []
+    prev_krd: dict[str, float] = {lb: 0.0 for lb in labels}
+    for i in range(max(start - 1, first), last + 1):
+        on = dates[i]
+        fx = _cd_fixings(dataset, i)
+        par = par_rates_at_index(dataset, i)
+        zc_base = _curve_at(dataset, i, cache)
+        bumped: dict[str, np.ndarray] = {}  # lazy, shared across positions
+
+        krd = {lb: 0.0 for lb in labels}
+        day_actual = day_carry = day_roll = day_val = 0.0
+        for info in pos_info:
+            if i < info["entry_i"] or i > info["exit_i"]:
+                continue  # not yet on / closed & frozen: no risk, no day P&L
+            clean, accrued = dirty_on(info, on, zc_base, fx)
+            cash = _settled_to(info["legs"], info["entry_date"], on, fx)
+            if info["prev"] is not None:
+                p_clean, p_accrued, p_cash = info["prev"]
+                clean_frozen, _af = _value_on(
+                    info["legs"], dataset, i, info["entry_date"], fx, cache,
+                    curve_idx=i - 1,
+                )
+                day_carry += (accrued - p_accrued) + (cash - p_cash)
+                day_roll += clean_frozen - p_clean
+                day_val += clean - clean_frozen
+                day_actual += (clean + accrued + cash) - (p_clean + p_accrued + p_cash)
+            info["prev"] = (clean, accrued, cash)
+
+            base_dirty = clean + accrued
+            for lb in info["bump"]:
+                t_l = TENOR_T[lb]
+                if lb not in bumped:
+                    if not any(abs(t - t_l) < 1e-9 for t, _r in par):
+                        continue  # no node that day — KRD 0, like the sim's partition
+                    bumped[lb] = bootstrap_zero_curve(
+                        [(t, r + (1e-4 if abs(t - t_l) < 1e-9 else 0.0)) for t, r in par]
+                    )
+                b_clean, b_accrued = dirty_on(info, on, bumped[lb], fx)
+                krd[lb] += -((b_clean + b_accrued) - base_dirty)
+
+        if i >= start:
+            dbp: dict[str, float | None] = {}
+            est: dict[str, float] = {}
+            for lb in labels:
+                vals = dataset.series.get(lb)
+                cur = vals[i] if vals else None
+                prv = vals[i - 1] if vals and i > 0 else None
+                d = None if cur is None or prv is None else (cur - prv) * 100.0
+                dbp[lb] = None if d is None else round(d, 2)
+                est[lb] = 0.0 if d is None else -prev_krd[lb] * d
+            total_est = round(sum(est.values()))
+            rows.append({
+                "t": on.isoformat(),
+                "krd": {lb: round(krd[lb]) for lb in labels},
+                "dbp": dbp,
+                "est": {lb: round(est[lb]) for lb in labels},
+                "estTotal": total_est,
+                "actual": round(day_actual),
+                "valuation": round(day_val),
+                "rolldown": round(day_roll),
+                "carry": round(day_carry),
+                "residual": round(day_actual) - total_est,
+            })
+        prev_krd = krd
+
+    return {
+        "tenors": labels,
+        "rows": rows,
+        "truncated": start > first + 1,
+    }
 
 
 def run_backtest(dataset: Dataset, positions: list[Position]) -> dict:
@@ -576,6 +801,23 @@ def run_backtest(dataset: Dataset, positions: list[Position]) -> dict:
         "maxProfit": max(pnls) if pnls else 0.0,
         "maxLoss": min(pnls) if pnls else 0.0,
     }
+
+
+def book_recon(dataset: Dataset, positions: list[Position]) -> dict:
+    """The 일별 대사 block, as its own call [OWNER, 2026-08-11].
+
+    Separate from `run_backtest` ON PURPOSE: the KRD bump pass costs several
+    times the backtest itself, and every property test that replays books
+    would pay it for rows it never reads. The ENDPOINT merges this under
+    `recon` in the same response; the engine tests call whichever they test.
+    """
+    if not positions:
+        raise BacktestError("at least one position is required")
+    if len(positions) > MAX_POSITIONS:
+        raise BacktestError(f"at most {MAX_POSITIONS} positions")
+    spans = [_span_of(dataset, p) for p in positions]
+    cache: dict[int, np.ndarray] = {}
+    return _book_recon(dataset, positions, spans, cache)
 
 
 def _quoted_value(dataset: Dataset, series_id: str, i: int) -> float | None:

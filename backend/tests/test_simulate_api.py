@@ -62,6 +62,13 @@ REPRESENTATIVE_REQUEST = json.loads(
 # `residual` 만 달라졌다. `pvbp`(그날의 KRD 수준값)·totalActual·theta/
 # valuation 및 그 밖의 모든 키는 이전 골든과 동일하다. 이번 캡처부터
 # swapContributions 가 골든 안에 포함된다(아래 extras 단언 주석).
+# [RE-PINNED 2026-08-11] 교과서 3분해 — 세타(구 swapCarry)가 캐리/롤다운으로
+# 갈렸다(carry_split.py). 재캡처 전 blast-radius 스크립트로 단언한 변경 범위:
+# chartData 행 +swapCashCarryPnL/+swapRolldownPnL, decompositionDaily·
+# totalReturnDecomposition 의 swapCarry 값 변경 +swapRolldown 추가,
+# irsDailyReconciliation 행 +carryPnl/+rolldownPnl — 그 밖의 모든 키·값
+# (swapMtm·total·bond·funding·pvbp·totalActual 포함)은 바이트 동일, 그리고
+# 새 swapCarry+swapRolldown == 구 swapCarry(세타)가 float 그대로 성립.
 GOLDEN_RESPONSE = json.loads(
     (DATA / "simulate_golden_dv01_response.json").read_text(encoding="utf-8")
 )

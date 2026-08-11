@@ -65,7 +65,7 @@ from irs_pricer.engine import curve_cache
 
 from . import instruments as instruments_mod
 from . import payloads
-from .backtest import BacktestError, Position, run_backtest
+from .backtest import BacktestError, Position, book_recon, run_backtest
 from .cache import cached
 from .curves import build_basis_curves
 from .dataset import load_dataset_merged
@@ -374,7 +374,12 @@ def backtest(positions: str = "") -> dict:
             raise HTTPException(status_code=422, detail=f"bad position {raw!r}: {exc}")
 
     try:
-        return run_backtest(_dataset, parsed)
+        # 일별 대사(`recon`)는 별도 패스다 — KRD 범프가 백테스트 본체보다
+        # 비싸서 엔진 함수를 둘로 나눴다(backtest.book_recon doc). 응답은
+        # 종전 그대로 한 덩어리에 `recon`만 얹는다.
+        result = run_backtest(_dataset, parsed)
+        result["recon"] = book_recon(_dataset, parsed)
+        return result
     except BacktestError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 

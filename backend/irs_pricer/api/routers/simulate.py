@@ -144,6 +144,11 @@ class IrsDailyReconRow(BaseModel):
     residual: int
     thetaPnl: int
     valuationPnl: int
+    # [OWNER, 2026-08-11 — 교과서 3분해] 세타의 캐리/롤다운 분리(그날 증분).
+    # carryPnl + rolldownPnl == thetaPnl (표시 정밀도에서 정확 — recon.py가
+    # 라운딩 잔차로 롤다운을 잡는다). 구 캐시/구 응답 호환을 위해 기본 0.
+    carryPnl: int = 0
+    rolldownPnl: int = 0
 
 
 class FundingCurvePoint(BaseModel):
@@ -200,16 +205,19 @@ class TotalReturnDecomposition(BaseModel):
     (±₩1, 라운딩 차이만 — test_simulate_api가 고정). 스왑이 제외된 요청에서는
     swapMtm/swapCarry가 null(미정의)이고 total은 채권 성분 합이다.
 
-    HARDEN-1: 스왑 성분은 채권과 대칭인 세타/평가 분해다 — swapCarry =
-    세타손익(커브 base_date 고정·시간경과, chartData.swapThetaPnL의 비라운딩
-    원본), swapMtm = 평가손익(전체 − 세타, chartData.swapValuationPnL의 원본).
-    엔진 daily_carry(항상 0)를 그대로 노출하던 종전 swapCarry=0 분해를 대체;
-    swapMtm+swapCarry 합·total·채권 성분·funding은 종전과 동일하다."""
+    HARDEN-1: 스왑 성분은 채권과 대칭인 세타/평가 분해였다(swapCarry = 세타
+    전액). [OWNER, 2026-08-11 — 교과서 3분해] 세타 버킷이 문헌(Clarus carry,
+    Tuckman unchanged-term-structure)대로 다시 갈렸다: swapCarry = 순캐리
+    (동결 커브 경로의 쿠폰 차 액크루얼+정산 — carry_split.py), swapRolldown =
+    세타 − 캐리(만기 압축의 클린 가격 변화), swapMtm = 평가손익(전체 − 세타,
+    종전 그대로). swapCarry+swapRolldown == 종전 swapCarry(세타)이고 합·total·
+    채권 성분·funding은 동일하다. 스왑 제외 요청에서는 셋 다 null."""
     bondMtm: float
     bondCarry: float
     fundingCost: float
     swapMtm: float | None
     swapCarry: float | None
+    swapRolldown: float | None = None
     total: float
 
 
@@ -217,15 +225,17 @@ class DecompositionDailyPoint(BaseModel):
     """HARDEN-1 — 일별 누적 Total Return 성분 분해(비라운딩 float, 원화).
     TotalReturnDecomposition과 같은 엔진 누적기에서 나온 같은 float들의 일별
     스냅샷: 매일 fundingCost + bondMtm + bondCarry + swapMtm + swapCarry ==
-    total (±₩1 핀), 마지막 날 == totalReturnDecomposition. 스왑 성분은 세타/
-    평가 대칭 분해(swapCarry = 세타손익, swapMtm = 평가손익); 스왑 제외 요청은
-    swapMtm/swapCarry가 매일 null(blank 정책 — 게으른 0 금지)."""
+    total (±₩1 핀), 마지막 날 == totalReturnDecomposition. 스왑 성분은
+    평가/캐리/롤다운 3분해 [OWNER, 2026-08-11 — TotalReturnDecomposition
+    doc 참조]; 스왑 제외 요청은 스왑 성분 셋이 매일 null(blank 정책 —
+    게으른 0 금지)."""
     day: int
     fundingCost: float
     bondMtm: float
     bondCarry: float
     swapMtm: float | None
     swapCarry: float | None
+    swapRolldown: float | None = None
     total: float
 
 

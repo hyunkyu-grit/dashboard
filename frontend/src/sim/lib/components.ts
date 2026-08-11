@@ -21,10 +21,17 @@ export interface ComponentDef {
   label: string;
 }
 
-/** 현재 범위. 순서는 의미 없다 — 화면은 마지막 값 크기로 다시 정렬한다. */
+/** 현재 범위. 순서는 의미 없다 — 화면은 마지막 값 크기로 다시 정렬한다.
+ *
+ * [OWNER, 2026-08-11 — 교과서 3분해] 스왑캐리(세타 전액)가 캐리/롤다운으로
+ * 갈렸다: 스왑캐리 = 순캐리(쿠폰 차 액크루얼+정산), 스왑롤다운 = 커브가
+ * 멈춰도 잔존만기가 줄며 생기는 클린 가격 변화. 셋의 합 = 스왑 손익 전액은
+ * 그대로다(백엔드 carry_split.py · 골든 핀). 구 캐시 응답에는 swapRolldown
+ * 이 없다 — visibleTotal 의 typeof 가드가 그대로 처리한다. */
 export const COMPONENTS: readonly ComponentDef[] = [
   { key: "swapMtm", label: "스왑평가" },
   { key: "swapCarry", label: "스왑캐리" },
+  { key: "swapRolldown", label: "스왑롤다운" },
 ];
 
 /** 범위 밖이라 화면에 없는 성분. 되살릴 때 여기서 위로 옮긴다.
