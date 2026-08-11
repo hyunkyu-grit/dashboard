@@ -504,16 +504,26 @@ and each row is another full daily revaluation pass.
   the drawer (KRD·Δbp·손익 — 80 days = 240 rows, the owner's own spec),
   drawn by the shared `ui/ReconStack.tsx` that the simulation's 일별 대사
   uses too.
-  - **Every tenor column renders, and the stack drag-pans** [OWNER,
-    2026-08-12 — "좌우로 드래그하는 부분을 만들어서 잘리는 부분도 볼 수
-    있게 … 물리적으로 잘린 테너들도 복원"]: the old width discipline (hide
-    tenor columns whose KRD is 0 for the whole window; the earlier "좌우
-    스크롤 하기 싫음") is retired. A column of zeros says the book HAS no
-    risk there — that fact is part of the reconciliation. The overflow is
-    handled by mouse drag-panning (`ui/useDragScroll`; wheel, scrollbar and
-    touch keep working, a sub-4px gesture stays a click), and 날짜·구분 are
-    sticky-left so a panned row keeps its identity (the ForwardMatrix
-    scroll-affordance precedent).
+  - **Every tenor column renders, and the stack is a frozen-pane scroller**
+    [OWNER, 2026-08-12 — "물리적으로 잘린 테너들도 복원", second pass same
+    day — "마우스로 잡아 끄는게 아니라 좌우 스크롤이 가능하게 … 좌우의
+    범례는 열과 행 고정"]: the old width discipline (hide tenor columns
+    whose KRD is 0 for the whole window; the earlier "좌우 스크롤 하기
+    싫음") is retired. A column of zeros says the book HAS no risk there —
+    that fact is part of the reconciliation. The stack scrolls BOTH axes
+    inside its own height-capped container, so the kit's always-drawn thin
+    scrollbars (globals.css) sit within reach — horizontal at the
+    container's bottom, vertical at its right — instead of at the bottom of
+    a thousands-of-px table. Legends are pinned on all four sides: the
+    tenor header row sticks top, 날짜·구분 stick left, 합계·평가·캐리·
+    롤다운·그날 손익 stick right; only the tenor × day grid flows. (A
+    drag-to-pan surface was built first and replaced the same day by the
+    second ruling.) Geometry rules that keep the pins honest: the table
+    width is the EXACT sum of its column tracks (`table-fixed`
+    redistributes any difference and the ch-written offsets then miss the
+    real track edges), and an offset-carrying cell must not change
+    font-face (`ch` is that element's own '0' advance — font-medium's zero
+    is wider; weight lives on an inner span).
   - **KRD is T+1-settle basis** [OWNER, 2026-08-11 — 인포맥스 실측 대사]:
     row N's KRD = the book on N's curve VALUED AT the next business day,
     bump-revalued per par node. Measured against the Infomax calculator on

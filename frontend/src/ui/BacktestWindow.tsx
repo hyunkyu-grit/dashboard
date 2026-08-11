@@ -125,6 +125,9 @@ function BacktestReconStack({ recon }: { recon: BacktestRecon }) {
       days={days}
       tenors={recon.tenors}
       defaultOrder="desc"
+      // 서랍 자체 캡(WindowDrawer 38vh) 안에 캡션까지 들어가는 높이 —
+      // 바깥 서랍이 스크롤하기 시작하면 스택의 고정 범례가 도로 깨진다.
+      heightClass="max-h-[30vh]"
       // "손익 구성"이라는 문구를 여기 쓰면 안 된다 — krw-additivity 가드가
       // 그 문자열의 첫 등장을 구성 표의 앵커로 삼는다(문자열은 주석과 달리
       // 스캔에서 살아남는다).

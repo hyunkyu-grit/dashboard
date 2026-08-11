@@ -59,25 +59,42 @@ describe("하루 = 가로줄 셋", () => {
     expect(queryByText(/숨겼어요/)).toBeNull();
   });
 
-  it("표면을 마우스로 끌면 가로로 팬 되고, 그 제스처의 클릭은 삼켜진다", () => {
-    // 드래그 = pointerdown → 문턱(4px) 너머 pointermove. jsdom 은 레이아웃이
-    // 없어도 scrollLeft 대입은 보존한다 — 팬 수식(시작 scrollLeft − dx)을
-    // 그대로 단언할 수 있다.
-    const { container, getByRole } = render(
-      <ReconStack days={[day(0)]} tenors={TENORS} />,
-    );
-    const pane = container.querySelector("div.overflow-x-auto") as HTMLElement;
-    fireEvent.pointerDown(pane, { pointerType: "mouse", button: 0, clientX: 200, buttons: 1 });
-    fireEvent.pointerMove(pane, { pointerType: "mouse", clientX: 120, buttons: 1 });
-    expect(pane.scrollLeft).toBe(80);
-    fireEvent.pointerUp(pane, { pointerType: "mouse" });
-    // 팬을 끝낸 손이 정렬을 뒤집으면 안 된다 — 직후 클릭 하나는 죽는다.
-    const btn = getByRole("button", { name: /날짜/ });
-    fireEvent.click(btn);
-    expect(btn.textContent).toContain("↑");
-    // 다음 클릭부터는 보통 클릭이다.
-    fireEvent.click(btn);
-    expect(btn.textContent).toContain("↓");
+  it("양축 스크롤러가 높이 캡을 갖는다 — 가로 바가 표 바닥이 아니라 눈앞에 선다", () => {
+    // [OWNER, 2026-08-12 2차 — "마우스로 잡아 끄는게 아니라 좌우 스크롤이
+    // 가능하게"]: 잡아 끄는 팬은 걷어냈다. 컨테이너가 자기 안에서 세로로
+    // 스크롤해야 헤더 행 고정이 성립하고 가로 스크롤바가 닿는 곳에 선다.
+    const { container } = render(<ReconStack days={[day(0)]} tenors={TENORS} />);
+    const pane = container.querySelector("div.overflow-auto") as HTMLElement;
+    expect(pane).not.toBeNull();
+    expect(pane.className).toContain("max-h-");
+  });
+
+  it("범례는 사방 고정 — 헤더 행은 top, 날짜·구분은 left, 요약 다섯은 right", () => {
+    // [OWNER, 2026-08-12 2차 — "좌우의 범례 … 열과 행 고정시켜서 스크롤을
+    // 움직이더라도 고정"]. 좌표는 컬럼 트랙(ch)과 같은 자로 풀려야 한다 —
+    // 13px 헤더는 14/13 환산(calc), 14px 본문 셀은 ch 그대로.
+    const { container } = render(<ReconStack days={[day(0)]} tenors={TENORS} />);
+    const ths = [...container.querySelectorAll("thead th")] as HTMLElement[];
+    expect(ths.every((th) => th.className.includes("sticky"))).toBe(true); // 행 고정
+    // jsdom 의 CSSOM 이 calc(Nch * 14 / 13) 을 calc(N·14/13 ch) 로 접어
+    // 직렬화한다 — 소스의 수식이 아니라 환산된 값으로 단언한다.
+    expect(ths[0].style.left).toBe("0px"); // 날짜
+    expect(ths[1].style.left).toMatch(/calc\(7\.53\d*ch\)/); // 구분 = 7ch·14/13
+    const tail = ths.slice(-5);
+    expect(tail.map((th) => th.style.right)).toEqual([
+      expect.stringMatching(/calc\(47\.38\d*ch\)/), // 합계 = 44ch·14/13
+      expect.stringMatching(/calc\(35\.53\d*ch\)/), // 평가 = 33ch·14/13
+      expect.stringMatching(/calc\(23\.69\d*ch\)/), // 캐리 = 22ch·14/13
+      expect.stringMatching(/calc\(11\.84\d*ch\)/), // 롤다운 = 11ch·14/13
+      "0px",
+    ]);
+    // 본문: 날짜(왼쪽)와 요약 넷(오른쪽)의 rowSpan 셀도 스티키 + 불투명 bg(§G).
+    const spanned = [...container.querySelectorAll("tbody td[rowspan='3']")] as HTMLElement[];
+    expect(spanned).toHaveLength(5);
+    for (const td of spanned) {
+      expect(td.className).toContain("sticky");
+      expect(td.className).toMatch(/bg-(tile|page|popover)/);
+    }
   });
 
   it("Δbp 줄은 둘째 자리 소수를 그대로 보인다", () => {
