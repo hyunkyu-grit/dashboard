@@ -10,13 +10,16 @@
 #      manifest.source 가 엑셀이 섞였음을 말한다.
 #   5. 11:00 까지는 계속 지켜본다 — SQL 이 뒤늦게 오면 다시 구워 올린다.
 #   6. 게이트(데이터 경로 pytest + static-agreement)를 통과한 트리만
-#      정적 트리 경로 한정으로 자동 commit+push 한다 [OWNER 승인, 2026-08-11].
+#      정적 트리 경로 한정으로 자동 commit 한다 [OWNER 승인, 2026-08-11].
 #      게이트 1이 전체 스위트가 아니라 데이터 관련 테스트인 이유: 데이터
 #      커밋이 다른 레인의 미완성 코드에 인질 잡히면 안 된다 — 코드의 게이트는
-#      gate.ps1 이고, 깨진 코드가 나가는 사고는 push 가드가 막는다(비자동화
-#      커밋이 있으면 push 자체를 보류하므로).
-#      비자동화 커밋이 push 대기 중이면 push 는 보류하고 알린다 — "푸시는
-#      오너" 규칙은 그 커밋들에 대해 그대로 산다.
+#      gate.ps1 이다.
+#   7. 배포는 두 갈래 [OWNER, 2026-08-12 "데이터만 자동으로 하고 코드는 내가"]:
+#      Vercel 프로덕션 브랜치는 deploy — origin/main 위에 Data refresh 커밋만
+#      체리픽한 기계 소유 브랜치라, 데이터는 코드 커밋이 main 에서 push 를
+#      기다리는 날에도 자동으로 나간다. main 자체는 비자동화 커밋이 없을
+#      때만 자동 push 한다 — "푸시는 오너"는 이제 main 의 코드 커밋에 대한
+#      규칙으로 산다.
 #
 # 조용한 실패 금지: 못 구운 날, 게이트가 깨진 날, push 를 보류한 날은 알림
 # (msg 팝업 + .sauron\ALERT-bake.txt + 로그)으로 말한다.
@@ -201,29 +204,68 @@ function Invoke-Bake {
   }
   Write-Log "bake: committed `"$msg`""
 
-  # 7) push 가드 — 우리 커밋보다 앞에 비자동화 커밋이 끼어 있으면 보류.
-  #    push 는 커밋 단위가 아니라 브랜치 단위라, 밀면 그 커밋들까지 같이
-  #    나간다. "푸시는 오너" 규칙이 그 커밋들의 것이므로 기다린다.
+  # 7) 배포 — 데이터는 deploy 브랜치로 자동, 코드는 오너의 main push 로만
+  #    [OWNER, 2026-08-12]. deploy = origin/main + 대기 중인 Data refresh
+  #    커밋 체리픽. Vercel 프로덕션 브랜치가 deploy 를 본다. push 는 브랜치
+  #    단위라 main 을 밀면 코드 커밋까지 같이 나가므로, main 은 비자동화
+  #    커밋이 없을 때만 민다.
   git fetch origin 2>&1 | Out-Null
   if ($LASTEXITCODE -ne 0) {
     Pop-Location
-    Send-Alert "origin fetch 가 실패해 push 를 건너뛰었어요 (네트워크?) — 커밋은 로컬에 있어요"
+    Send-Alert "origin fetch 가 실패해 배포를 건너뛰었어요 (네트워크?) — 커밋은 로컬에 있어요"
     return [string]$m.source
   }
   $subjects = @(git log --format=%s origin/main..HEAD)
   $foreign = @($subjects | Where-Object { $_ -notmatch '^Data refresh: ' })
-  if ($foreign.Count -gt 0) {
-    Pop-Location
-    Send-Alert "수동 커밋 $($foreign.Count)건이 push 대기 중이라 자동 push 를 보류했어요 — 오너 push 후 다음 굽기부터 자동으로 나가요"
-    return [string]$m.source
+  if ($foreign.Count -eq 0) {
+    # main 이 데이터 커밋뿐 — main 을 밀고 deploy 를 같은 곳에 맞춘다.
+    git push origin main 2>&1 | Out-String | ForEach-Object { Add-Content $log $_ }
+    if ($LASTEXITCODE -ne 0) {
+      Pop-Location
+      Send-Alert "origin push 가 실패했어요 — 커밋은 로컬에 있어요"
+      return [string]$m.source
+    }
+    git push origin +main:deploy 2>&1 | Out-String | ForEach-Object { Add-Content $log $_ }
+    if ($LASTEXITCODE -ne 0) {
+      Pop-Location
+      Send-Alert "deploy 브랜치 push 가 실패했어요 — 사이트는 이전 데이터로 남아요"
+      return [string]$m.source
+    }
+    Write-Log "bake: pushed main+deploy to origin — Vercel 이 재배포해요"
   }
-  git push origin main 2>&1 | Out-String | ForEach-Object { Add-Content $log $_ }
-  if ($LASTEXITCODE -ne 0) {
-    Pop-Location
-    Send-Alert "origin push 가 실패했어요 — 커밋은 로컬에 있어요"
-    return [string]$m.source
+  else {
+    # 코드 커밋이 main 에서 오너 push 를 기다린다 — 데이터 커밋만 체리픽한
+    # deploy 를 임시 워크트리에서 만든다 (본 작업트리는 건드리지 않는다).
+    $dataShas = @(git log --reverse --format="%H %s" origin/main..HEAD |
+      Where-Object { $_ -match ' Data refresh: ' } | ForEach-Object { ($_ -split ' ')[0] })
+    $wt = Join-Path $sauron "deploy-wt"
+    git worktree remove --force $wt 2>&1 | Out-Null
+    git worktree prune 2>&1 | Out-Null
+    git worktree add --detach $wt origin/main 2>&1 | Out-String | ForEach-Object { Add-Content $log $_ }
+    if ($LASTEXITCODE -ne 0) {
+      Pop-Location
+      Send-Alert "deploy 워크트리 생성이 실패했어요 — bake.log 를 봐 주세요. 사이트는 이전 데이터로 남아요"
+      return [string]$m.source
+    }
+    $ok = $true
+    if ($dataShas.Count -gt 0) {
+      # --keep-redundant-commits: origin/main 에 이미 같은 트리가 있어도
+      # (빈 체리픽) 실패 대신 빈 커밋으로 지나간다.
+      git -C $wt cherry-pick --keep-redundant-commits $dataShas 2>&1 | Out-String | ForEach-Object { Add-Content $log $_ }
+      if ($LASTEXITCODE -ne 0) { git -C $wt cherry-pick --abort 2>&1 | Out-Null; $ok = $false }
+    }
+    if ($ok) {
+      git -C $wt push origin +HEAD:deploy 2>&1 | Out-String | ForEach-Object { Add-Content $log $_ }
+      if ($LASTEXITCODE -ne 0) { $ok = $false }
+    }
+    git worktree remove --force $wt 2>&1 | Out-Null
+    if (-not $ok) {
+      Pop-Location
+      Send-Alert "deploy 브랜치를 만들지 못했어요 (체리픽/push 실패) — bake.log 를 봐 주세요. 사이트는 이전 데이터로 남아요"
+      return [string]$m.source
+    }
+    Write-Log "bake: pushed deploy (origin/main + data x$($dataShas.Count)) — 코드 커밋 $($foreign.Count)건은 main 에서 오너 push 대기"
   }
-  Write-Log "bake: pushed to origin — Vercel 이 재배포해요"
   git push mirror main 2>&1 | Out-Null
   if ($LASTEXITCODE -ne 0) { Write-Log "mirror push failed (non-fatal)" }
   Pop-Location
