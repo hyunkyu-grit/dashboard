@@ -101,6 +101,17 @@ function Invoke-Bake {
   $sw = [Diagnostics.Stopwatch]::StartNew()
   while ((Test-PortListening 8100) -and $sw.Elapsed.TotalSeconds -lt 30) { Start-Sleep -Seconds 2 }
   if (Test-PortListening 8100) {
+    # 태스크 정지는 자기 인스턴스의 트리만 노린다 — cmd 래퍼 밑 uvicorn 이
+    # 살아남거나(2026-08-12 첫 실전) 다른 세션이 띄운 백엔드는 못 잡는다.
+    # :8100 은 이 리포 백엔드 전용 포트라 리스너를 직접 끝낸다. python 을
+    # 죽이면 redirect 를 쥔 cmd 래퍼는 따라 내려간다.
+    foreach ($c in @(Get-NetTCPConnection -LocalPort 8100 -State Listen -ErrorAction SilentlyContinue)) {
+      Write-Log "bake: :8100 survived task stop — killing listener pid $($c.OwningProcess)"
+      Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue
+    }
+    Start-Sleep -Seconds 3
+  }
+  if (Test-PortListening 8100) {
     Send-Alert ":8100 이 멈추지 않아 굽기를 중단했어요 — SauronBackend 태스크를 확인해 주세요"
     return $null
   }
