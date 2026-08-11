@@ -20,6 +20,7 @@ import {
   volatilityUrl,
 } from "./staticPaths";
 import {
+  type DataSource,
   type Freshness,
   freshnessFrom,
   type FreshnessLevel,
@@ -27,7 +28,7 @@ import {
 } from "./freshness";
 
 export { API_BASE } from "./staticPaths";
-export type { Freshness, FreshnessLevel, Manifest };
+export type { DataSource, Freshness, FreshnessLevel, Manifest };
 
 /* THE change bases. Three [OWNER, 2026-07-31]: WTD and QTD were dropped —
  * between 어제 and MTD a week is rarely the interval anyone reasons in, and
@@ -179,6 +180,9 @@ export interface Health {
   asof: string;
   rows: number;
   missingNodes: string[];
+  /** 데이터 출처 — "sql" 이 아니면 엑셀이 섞였고, DataFreshness 가 칩으로
+   * 말한다 [OWNER, 2026-08-11]. 옵셔널: 이 필드 이전의 백엔드/트리도 읽힌다. */
+  source?: DataSource;
   freshness: Freshness;
 }
 
@@ -196,6 +200,7 @@ export async function fetchHealth(): Promise<Health> {
       asof: m.asof,
       rows: m.rows,
       missingNodes: m.missingNodes,
+      source: m.source,
       freshness: freshnessFrom(m),
     };
   }

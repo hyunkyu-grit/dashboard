@@ -28,7 +28,7 @@
 |---|---|
 | Frontend (Next.js, App Router, TS, Tailwind v4) | `:3100` |
 | Backend (FastAPI + ported curve engine) | `:8100` |
-| Data | **MySQL** `miraebond2.kro.kr:4004/sim_portfolio`, table `mkt_irs_close` (2026-08-07). `data/irsdata.xlsx` is no longer read by the server — it survives only as a test fixture |
+| Data | **MySQL** `miraebond2.kro.kr:4004/sim_portfolio`, table `mkt_irs_close` (2026-08-07). `data/irsdata.xlsx` 는 2026-08-11 부터 **보충 출처**로 복귀 — 병합 로더(`load_dataset_merged`)가 SQL 에 기대 전영업일이 없을 때만 읽는다. 아침 자동화가 매일 갱신 |
 | Git remote | `origin` = `wwoo1116-cell/swap_monitor` (**push is owner-only**), `mirror` = `D:\Backups\braveworld.git` |
 | Backup | mirror to `D:\Backups\braveworld.git` |
 
@@ -193,6 +193,53 @@ rule:
 ---
 
 ## 6. Current state (as of the 2026-08-11 session)
+
+### 아침 자동 굽기 파이프라인 (2026-08-11 오후, 병행 세션)
+
+[OWNER — "정적 JSON으로 하지말고, 매일 아침에 구워지게" · "SQL 데이터가 없다면
+엑셀 데이터를 참조" · "1D가 없다면 1D는 엑셀에서" · "엑셀데이터에 연결되어
+있다고 말은 해줘야" · 휴일 no-op · 정적 트리 경로 한정 자동 commit+push 승인].
+발단: Vercel 트리는 push 가 유일한 갱신 트리거인데 8/6 에 멈춰 있었다.
+
+- **병합 로더** `dataset.load_dataset_merged` — 서버(main.py)와
+  build_static.py 가 **같은 진입점**을 지난다(한쪽만 병합을 알면 폴백한 날
+  static-agreement 가 갈라진다). 판정은 `merge_expected_close` 순수 함수
+  (test_dataset_merge, 12건): SQL 이 기대 전영업일을 온전히 들면 그대로 /
+  1D 만 비면 그 칸을 엑셀에서 / 하루가 통째로 없으면 그 하루를 엑셀에서 /
+  SQL 자체를 못 읽으면 전체 폴백. **과거사는 절대 엑셀로 갈아타지 않는다**
+  (1D 는 다른 계열 — 유령 점프 방지). `Dataset.source` 4값("sql",
+  "sql+xlsx-1d", "sql+xlsx-day", "xlsx")이 health·manifest 의 `source` 로
+  나가고 `DataFreshness` 가 sql 아닐 때만 칩("엑셀 연결 — …")을 단다.
+  캐시 키는 `Dataset.data_key` — 순수 SQL 이면 종전 워터마크 그대로, 엑셀이
+  섞이면 병합분 지문이 붙는다.
+- **ops/morning_bake.ps1** — `SauronMorningBake` 태스크(평일 07:20, 로그온
+  세션 전용, StartWhenAvailable). 흐름: check_close.py(JSON) → 휴일 no-op →
+  SQL full 이면 즉시 굽기, 아니면 08:30 까지 대기(그동안 refresh_irsdata 로
+  엑셀 폴백을 데움) → 있는 것으로 굽기 → 게이트 1(데이터 경로 pytest:
+  build_static/dataset_merge/dataset_validation/cache — 전체 스위트가 아닌
+  이유: 데이터 커밋이 다른 레인 WIP 에 인질 잡히면 안 됨; 코드 게이트는
+  gate.ps1) → 백엔드 재시작 → 게이트 2(static-agreement) → **정적 트리 경로만
+  commit** → push 가드: 비자동화 커밋이 ahead 면 push 보류+알림("푸시는
+  오너" 규칙 보존) → 11:00 까지 late-SQL 재굽기(출처 랭크가 오를 때만).
+  실패·보류는 전부 msg 팝업 + `.sauron\ALERT-bake.txt` + bake.log.
+- **ops/refresh_irsdata.ps1** — 핵심 발견: **COM 으로 띄운 엑셀에는 인포맥스
+  애드인이 실리지 않는다**(레지스트리 OPEN 키 미처리; xlam 직접 열기·
+  RegisterXLL(False) 모두 실패, IMDH=#NAME?). 정답은 **정상 excel.exe 기동 +
+  GetActiveObject 부착**. 사본에서 재계산 → 이중 검증(기대일 셀 존재+오류 셀
+  없음, 그리고 load_dataset 전체 검증) 통과 시에만 원본 교체. 원본을 직접
+  열지 않는 이유: 애드인 없이 저장하면 수식이 #NAME? 로 덮여 폴백 소스가
+  파괴된다. 성공 판정은 **날짜 셀 == 기대 전영업일** — "값이 있음" 은 어제
+  값 잔존(조용한 실패)을 통과시킨다.
+- 함정 셋: ① .ps1 은 **UTF-8 BOM 필수** — PS 5.1 이 BOM 없는 UTF-8 을 CP949
+  로 읽어 한글 주석이 파서를 깨뜨린다(재현됨). ② PS 함수 반환값에 파이프
+  출력이 샌다 — git add 는 `| Out-Null`, 반환은 `Select-Object -Last 1`.
+  ③ 0x800AC472 = 엑셀 바쁨 — 실패가 아니라 재시도 신호(Invoke-ComRetry).
+- xlsx 는 `source != "sql"` 인 날만 데이터 커밋에 동승 — 순수 SQL 날은
+  워킹트리에 dirty 로 남는 것이 **정상**이다(들어간 값의 출처만 리포에 남긴다).
+- 오늘 수동 검증 완료: 굽기 asof 08-10(source=sql) · 게이트 1 묶음 108 pass ·
+  프론트 가드 67 pass · 엑셀 갱신 exit 0(08-10 반영). **미확인 = 태스크의 첫
+  실전 실행(내일 아침)** — 첫 push 는 오너가 밀린 수동 커밋을 push 한 뒤에야
+  나간다(가드가 보류한다).
 
 ### Latest — KRD 팬텀 버킷 이중 계상 수정 (2026-08-11, 교과서 대사 검증에서 발견)
 

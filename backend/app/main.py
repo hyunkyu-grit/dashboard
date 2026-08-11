@@ -66,9 +66,9 @@ from irs_pricer.engine import curve_cache
 from . import instruments as instruments_mod
 from . import payloads
 from .backtest import BacktestError, Position, run_backtest
-from .cache import cached, sql_data_hash
+from .cache import cached
 from .curves import build_basis_curves
-from .dataset import load_dataset_sql
+from .dataset import load_dataset_merged
 from .derive import basis_dates, derived_ids
 from .dv01 import build_dv01_table
 from .events import detect_event_clusters
@@ -226,7 +226,13 @@ async def runtime_error_handler(request: Request, exc: RuntimeError) -> JSONResp
 # 소수점 끝까지 일치했고, 1D(콜금리)만 80.8% 어긋났다(다른 계열). 오너가 SQL 을
 # 정답으로 정했으므로 1D 도 그대로 받는다 — 과거 짧은 끝 커브가 달라지고 그건
 # 의도된 변경이다.
-_dataset = load_dataset_sql()
+#
+# 2026-08-11 부터는 **병합 로더**다 [OWNER — 아침 자동 굽기]: SQL 이 기대
+# 전영업일을 온전히 들고 있으면 위와 동작이 같고, 1D 만 비면 그 칸을, 하루가
+# 통째로 없으면 그 하루를 엑셀(irsdata.xlsx)에서 보충한다. 정적 빌드
+# (scripts/build_static.py)도 같은 로더를 지난다 — 한쪽만 병합을 알면 폴백한
+# 날마다 static-agreement 가 갈라진다.
+_dataset = load_dataset_merged()
 _bases = basis_dates(_dataset)
 # The policy step, resolved ONCE against this dataset's as-of date — the carry
 # bound depends on both files, so it cannot be decided by policy.py alone (see
@@ -243,8 +249,9 @@ _dv01_table = build_dv01_table(_curves["now"], derived_ids)
 # changes once a day. Persist them keyed by the data-file hash; recompute only
 # when the data changes (loudly logged).
 # 바이트가 없으므로 **테이블 워터마크**가 캐시 키다 (cache.sql_data_hash) —
-# CLAUDE.md 가 이 이동에서 잊지 말라고 못 박은 자리다.
-_data_hash = sql_data_hash(_dataset.asof)
+# CLAUDE.md 가 이 이동에서 잊지 말라고 못 박은 자리다. 키는 병합 로더가 만든다:
+# 순수 SQL 이면 워터마크 그대로, 엑셀이 섞이면 병합분 지문이 붙는다.
+_data_hash = _dataset.data_key
 _forwards = cached("forwards", _data_hash, lambda: forwards_payload(_dataset, _curves))
 # 라고 할 때 살걸: a 20-day event replay plus ~2 valuations per line — a
 # couple of seconds over a file that changes once a day, so it caches the
@@ -279,6 +286,9 @@ def health() -> dict:
         "asof": _dataset.asof.isoformat(),
         "rows": len(_dataset.dates),
         "missingNodes": _dataset.missing_nodes,
+        # 어디서 온 데이터인가 — "sql" 이 아니면 프론트가 엑셀 연결 칩을 단다
+        # [OWNER, 2026-08-11 "엑셀데이터에 연결되어있다고 말은 해줘야 해"].
+        "source": _dataset.source,
         "freshness": dataset_freshness(_dataset.asof),
         "simulation": {
             "dataDir": str(DATA_DIR),

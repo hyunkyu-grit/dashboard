@@ -45,9 +45,9 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "backend"))
 
 from app import payloads  # noqa: E402
-from app.cache import SCHEMA_VERSION, cached, sql_data_hash  # noqa: E402
+from app.cache import SCHEMA_VERSION, cached  # noqa: E402
 from app.curves import build_basis_curves, par_rates_at_index  # noqa: E402
-from app.dataset import load_dataset_sql  # noqa: E402
+from app.dataset import load_dataset_merged  # noqa: E402
 from app.mysqldb import IRS_CLOSE_TABLE  # noqa: E402
 from app.derive import (  # noqa: E402
     basis_dates,
@@ -305,7 +305,10 @@ def build(out_root: Path, quiet: bool = False) -> dict:
     t0 = time.perf_counter()
     say = (lambda *_a: None) if quiet else (lambda *a: print(*a, flush=True))
 
-    dataset = load_dataset_sql()
+    # 병합 로더 [OWNER, 2026-08-11]: SQL 우선, 기대 전영업일이 비면 엑셀 보충.
+    # 서버(main.py)와 같은 진입점이라 폴백한 날에도 static-agreement 가 선다.
+    dataset = load_dataset_merged()
+    say(f"  source: {dataset.source}  asof: {dataset.asof}")
     bases = basis_dates(dataset)
     curves = build_basis_curves(dataset)
     events = detect_event_clusters(dataset)
@@ -321,7 +324,7 @@ def build(out_root: Path, quiet: bool = False) -> dict:
         for p in (par_rates_at_index(dataset, i) for i in range(len(dataset.dates)))
     ]
 
-    hash_ = sql_data_hash(dataset.asof)
+    hash_ = dataset.data_key  # 병합 로더가 만든 키 — 엑셀이 섞이면 지문이 붙는다
     fwd = cached("forwards", hash_, lambda: forwards_payload(dataset, curves))
     regret = cached("regret", hash_, lambda: regret_payload(dataset))
 
@@ -375,6 +378,9 @@ def build(out_root: Path, quiet: bool = False) -> dict:
         "schemaVersion": SCHEMA_VERSION,
         "rows": len(dataset.dates),
         "missingNodes": dataset.missing_nodes,
+        # 어디서 온 데이터인가 — "sql" 이 아니면 배포된 화면이 엑셀 연결 칩을
+        # 단다 [OWNER, 2026-08-11]. health 의 같은 필드와 짝이다.
+        "source": dataset.source,
         "seriesCount": len(ids),
         "businessDaysAfter": ladder,
         "freshnessThresholds": {"behind": BEHIND_AT, "stale": STALE_AT},

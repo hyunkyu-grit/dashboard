@@ -12,7 +12,38 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { fetchHealth } from "@/lib/api";
+import { type DataSource, fetchHealth } from "@/lib/api";
+
+/* 출처 칩 [OWNER, 2026-08-11 "엑셀데이터에 연결되어있다고 말은 해줘야 해"].
+ * "sql" 이 정상 경로라 그때는 아무것도 안 그린다 — 조용함이 기본값이고,
+ * 엑셀이 섞인 날만 말이 생긴다. title 이 어느 조각이 엑셀인지 적는다. */
+const SOURCE_NOTE: Partial<Record<DataSource, { chip: string; title: string }>> = {
+  "sql+xlsx-1d": {
+    chip: "엑셀 연결 — 1D",
+    title: "SQL에 1D(콜금리)가 없어 1D만 엑셀 값으로 채웠어요",
+  },
+  "sql+xlsx-day": {
+    chip: "엑셀 연결 — 전일",
+    title: "SQL에 전일 종가가 없어 전일 하루를 엑셀에서 가져왔어요",
+  },
+  xlsx: {
+    chip: "엑셀 연결 — 전체",
+    title: "SQL을 읽지 못해 엑셀 데이터로 보여드리고 있어요",
+  },
+};
+
+function SourceChip({ source }: { source?: DataSource }) {
+  const note = source ? SOURCE_NOTE[source] : undefined;
+  if (!note) return null;
+  return (
+    <span
+      title={note.title}
+      className="rounded-control border border-edge px-2 py-0.5 text-[13px] text-ink"
+    >
+      {note.chip}
+    </span>
+  );
+}
 
 export function DataFreshness() {
   const { data } = useQuery({
@@ -26,30 +57,40 @@ export function DataFreshness() {
 
   const asOf = `${f.asOf} 기준`;
   const title = `데이터 최신일 ${f.asOf} · 오늘 ${f.today} · ${f.ageBusinessDays}영업일 경과`;
+  const chip = <SourceChip source={data?.source} />;
 
   if (f.level === "stale") {
     return (
-      <span
-        title={title}
-        className="rounded-control border border-up px-2 py-0.5 text-[13px] font-semibold text-up"
-      >
-        데이터 {f.ageBusinessDays}영업일 지연 — 최신 커브가 아닐 수 있어요 · {f.asOf}
+      <span className="inline-flex items-center gap-1.5">
+        {chip}
+        <span
+          title={title}
+          className="rounded-control border border-up px-2 py-0.5 text-[13px] font-semibold text-up"
+        >
+          데이터 {f.ageBusinessDays}영업일 지연 — 최신 커브가 아닐 수 있어요 · {f.asOf}
+        </span>
       </span>
     );
   }
   if (f.level === "behind") {
     return (
-      <span
-        title={title}
-        className="rounded-control border border-edge px-2 py-0.5 text-[13px] text-ink"
-      >
-        {asOf} · {f.ageBusinessDays}영업일 지연
+      <span className="inline-flex items-center gap-1.5">
+        {chip}
+        <span
+          title={title}
+          className="rounded-control border border-edge px-2 py-0.5 text-[13px] text-ink"
+        >
+          {asOf} · {f.ageBusinessDays}영업일 지연
+        </span>
       </span>
     );
   }
   return (
-    <span title={title} className="text-[13px] text-ink-2">
-      {asOf}
+    <span className="inline-flex items-center gap-1.5">
+      {chip}
+      <span title={title} className="text-[13px] text-ink-2">
+        {asOf}
+      </span>
     </span>
   );
 }

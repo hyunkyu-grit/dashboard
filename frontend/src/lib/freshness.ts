@@ -25,8 +25,15 @@ export interface Manifest {
   /** ISO dates, ascending, strictly after `asof`. */
   businessDaysAfter: string[];
   freshnessThresholds: { behind: number; stale: number };
+  /** 데이터 출처 [OWNER, 2026-08-11]. "sql" 이 정상 경로; "sql+xlsx-1d" /
+   * "sql+xlsx-day" / "xlsx" 는 엑셀이 섞였다는 뜻이고 화면이 칩으로 말한다.
+   * 옵셔널인 이유: 이 필드가 생기기 전에 구운 트리도 읽혀야 한다. */
+  source?: DataSource;
   builtAt: string;
 }
+
+/** `Dataset.source` (backend/app/dataset.py) 의 네 값. */
+export type DataSource = "sql" | "sql+xlsx-1d" | "sql+xlsx-day" | "xlsx";
 
 export type FreshnessLevel = "current" | "behind" | "stale";
 

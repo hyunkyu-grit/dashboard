@@ -144,6 +144,19 @@ class Dataset:
     # logged at startup and the server runs. Anything that would make a
     # displayed number wrong raises DataFileError instead.
     warnings: list[str] = field(default_factory=list)
+    # 이 데이터셋이 어디서 왔는가 [OWNER, 2026-08-11 — "엑셀데이터에 연결되어
+    # 있다고 말은 해줘야 해"]. 값은 넷뿐이다:
+    #   "sql"          mkt_irs_close 그대로
+    #   "sql+xlsx-1d"  SQL 이되, asof 의 1D 만 엑셀에서 채움
+    #   "sql+xlsx-day" SQL 이되, asof 하루 전체를 엑셀에서 덧붙임
+    #   "xlsx"         SQL 을 못 읽어 엑셀 전체로 폴백
+    # 화면(freshness 칩)과 manifest 가 이 값을 그대로 내보낸다. 라벨이지 판정이
+    # 아니다 — 어떤 값이든 서버는 뜬다.
+    source: str = "sql"
+    # 파생 페이로드 디스크 캐시의 키. 병합 로더만 채운다 — 워터마크(sql)나
+    # 파일 바이트(xlsx)에 병합분 지문이 붙는다. 빈 문자열이면 호출자가
+    # sql_data_hash 로 직접 만든다 (단일 출처 경로).
+    data_key: str = ""
 
     @property
     def asof(self) -> dt.date:
@@ -273,7 +286,8 @@ def load_dataset(xlsx_path: Path, today: dt.date | None = None) -> Dataset:
                 f"order, with no repeats"
             )
 
-    return _finalize(dates, series, tenor_order, order_rows, today)
+    return _finalize(dates, series, tenor_order, order_rows, today,
+                     source="xlsx")
 
 
 def _finalize(
@@ -282,6 +296,7 @@ def _finalize(
     tenor_order: list[str],
     order_rows: list[int],
     today: dt.date,
+    source: str = "sql",
 ) -> Dataset:
     """파싱이 끝난 뒤의 **공통 규칙** — 전일종가 컷, 빈칸·공백 검사, 경고.
 
@@ -356,7 +371,7 @@ def _finalize(
     ordered = sorted(tenor_order, key=lambda t: (t != "1D", tenor_order.index(t)))
     missing = [t for t in SPEC_NODE_ORDER if t not in series]
     return Dataset(dates=dates, series=series, tenor_order=ordered,
-                   missing_nodes=missing, warnings=warnings)
+                   missing_nodes=missing, warnings=warnings, source=source)
 
 
 # ── MySQL ─────────────────────────────────────────────────────────────────────
@@ -429,4 +444,180 @@ def load_dataset_sql(today: dt.date | None = None) -> Dataset:
 
     tenor_order = list(SQL_COLUMN_TENOR.values())
     order_rows = list(range(1, len(dates) + 1))
-    return _finalize(dates, series, tenor_order, order_rows, today)
+    return _finalize(dates, series, tenor_order, order_rows, today,
+                     source="sql")
+
+
+# ── 병합: SQL 우선, 엑셀 보충 [OWNER, 2026-08-11] ────────────────────────────
+#
+# 아침 자동 굽기의 데이터 규칙. 오너 지시 그대로다:
+#   "혹시 SQL 데이터가 없다면 엑셀 데이터를 참조하는 방식으로 할 거고" —
+#   "만약 1D가 없다면, 1D는 엑셀에서 가져와서 채우는 걸로 하고" —
+#   "만약 엑셀데이터를 받아온다면 이건 엑셀데이터에 연결되어있다고 말은
+#    해줘야 해"
+#
+# 그래서 판정은 **기대 전영업일 하루**에 대해서만 내린다. SQL 이 그 날을 온전히
+# 들고 있으면 SQL 그대로, 1D 만 비면 그 칸만 엑셀, 그 날이 통째로 없으면 그
+# 하루를 엑셀에서 덧붙인다. 과거사(history)는 절대 엑셀로 갈아타지 않는다 —
+# 1D 는 두 출처가 **다른 계열**(80.8% 불일치)이라, 폴백이 역사를 바꾸면 SQL 이
+# 뒤늦게 적재된 날 1D 차트에 유령 점프가 생긴다. 전체 폴백("xlsx")은 SQL 을
+# 아예 못 읽는 비상시 뿐이고, 그때는 칩이 말한다.
+
+#: 병합 로더의 기본 엑셀 경로. 서버가 읽는 정본은 MySQL 이고(2026-08-07),
+#: 이 파일은 아침 자동화가 갱신해 두는 **보충 출처**다.
+DEFAULT_XLSX = Path(__file__).resolve().parents[2] / "data" / "irsdata.xlsx"
+
+
+def prev_kr_business_day(today: dt.date) -> dt.date:
+    """`today`(서울 날짜) 직전의 한국 영업일 — "기대하는 전일 종가"의 날짜.
+
+    달력은 엔진 것 하나뿐이다 (`engine_port._is_kr_business_day`). 지연
+    import 인 이유는 mysqldb 와 같다 — 엑셀만 만지는 경로가 QuantLib 을
+    끌어들일 이유가 없다.
+    """
+    from .engine_port import _is_kr_business_day  # 지연 import
+
+    d = today - dt.timedelta(days=1)
+    while not _is_kr_business_day(d):
+        d -= dt.timedelta(days=1)
+    return d
+
+
+def _xlsx_value_at(xlsx_ds: Dataset, tenor: str, date: dt.date) -> float | None:
+    """엑셀 데이터셋에서 특정 날짜의 값 하나. 없으면 None — 예외가 아니다."""
+    if tenor not in xlsx_ds.series:
+        return None
+    i = bisect_left(xlsx_ds.dates, date)
+    if i >= len(xlsx_ds.dates) or xlsx_ds.dates[i] != date:
+        return None
+    return xlsx_ds.series[tenor][i]
+
+
+def merge_expected_close(
+    sql_ds: Dataset | None,
+    xlsx_ds: Dataset | None,
+    expected: dt.date,
+) -> Dataset:
+    """기대 전영업일 하루에 대한 SQL·엑셀 병합. 순수 함수 — DB 도 파일도 안
+    만진다. 테스트가 이 함수를 직접 친다.
+
+    반환되는 데이터셋의 `source` 가 곧 판정이다 (Dataset.source 주석 참조).
+    `data_key` 는 여기서 만들지 않는다 — 워터마크/파일 바이트는 I/O 라서
+    `load_dataset_merged` 의 몫이다.
+    """
+    if sql_ds is None:
+        if xlsx_ds is None:
+            raise DataFileError(
+                "IRS 종가를 어느 출처에서도 읽지 못했다 — MySQL 도, 엑셀도"
+            )
+        xlsx_ds.warnings.append(
+            "SQL 을 읽지 못해 엑셀 전체로 폴백 — 1D 는 다른 계열이므로 짧은 끝"
+            " 커브가 SQL 기준과 다르다"
+        )
+        return xlsx_ds  # source 는 이미 "xlsx"
+
+    if sql_ds.asof >= expected:
+        # SQL 이 기대일을 들고 있다(초과는 이론상 없지만 SQL 을 믿는다).
+        if sql_ds.latest("1D") is not None:
+            return sql_ds  # 정상 경로: 손대지 않는다
+        patch = _xlsx_value_at(xlsx_ds, "1D", sql_ds.asof) if xlsx_ds else None
+        if patch is not None:
+            sql_ds.series["1D"][-1] = patch
+            sql_ds.source = "sql+xlsx-1d"
+            sql_ds.warnings.append(
+                f"{sql_ds.asof} 의 1D 가 SQL 에 없어 엑셀 값 {patch} 로 채움"
+                " [OWNER, 2026-08-11]"
+            )
+        else:
+            sql_ds.warnings.append(
+                f"{sql_ds.asof} 의 1D 가 SQL 에도 엑셀에도 없다 — 빈칸으로 서빙"
+            )
+        return sql_ds
+
+    # SQL 에 기대일이 통째로 없다 → 그 하루를 엑셀에서 덧붙인다.
+    if xlsx_ds is None or all(
+        _xlsx_value_at(xlsx_ds, t, expected) is None for t in sql_ds.series
+    ):
+        sql_ds.warnings.append(
+            f"기대 전영업일 {expected} 이 SQL 에도 엑셀에도 없다 — "
+            f"{sql_ds.asof} 까지로 서빙 (지연 칩이 말한다)"
+        )
+        return sql_ds
+
+    appended: dict[str, float | None] = {}
+    absent: list[str] = []
+    for tenor in sql_ds.series:
+        v = _xlsx_value_at(xlsx_ds, tenor, expected)
+        sql_ds.series[tenor].append(v)
+        appended[tenor] = v
+        if v is None:
+            absent.append(tenor)
+    sql_ds.dates.append(expected)
+    sql_ds.source = "sql+xlsx-day"
+    sql_ds.warnings.append(
+        f"{expected} 종가가 SQL 에 없어 하루 전체를 엑셀에서 덧붙임"
+        + (f" (엑셀에도 없는 노드: {', '.join(absent)})" if absent else "")
+    )
+    return sql_ds
+
+
+def load_dataset_merged(
+    xlsx_path: Path = DEFAULT_XLSX, today: dt.date | None = None
+) -> Dataset:
+    """서버와 정적 빌드가 함께 쓰는 **유일한 진입점** [OWNER, 2026-08-11].
+
+    둘이 같은 로더를 지나야 static-agreement 게이트가 성립한다 — 한쪽만 병합을
+    알면 폴백한 날마다 정적 트리와 라이브 API 가 갈라진다.
+
+    `data_key` 는 여기서 채운다: 순수 SQL 이면 기존 워터마크 키 그대로(캐시
+    연속성), 엑셀이 섞이면 병합분의 지문이 붙어 키가 갈라진다 — 내용이 다른데
+    키가 같은 캐시가 이 프로젝트의 고질병이라서다.
+    """
+    import hashlib as _hashlib
+    import json as _json
+
+    today = today or market_today()
+    expected = prev_kr_business_day(today)
+
+    sql_ds: Dataset | None = None
+    sql_err: Exception | None = None
+    try:
+        sql_ds = load_dataset_sql(today)
+    except Exception as e:  # noqa: BLE001 — DB 다운도 폴백 사유다
+        sql_err = e
+        log.warning("[dataset] SQL 로드 실패, 엑셀 폴백 시도: %s", e)
+
+    need_xlsx = (
+        sql_ds is None
+        or sql_ds.asof < expected
+        or sql_ds.latest("1D") is None
+    )
+    xlsx_ds: Dataset | None = None
+    if need_xlsx and Path(xlsx_path).exists():
+        try:
+            xlsx_ds = load_dataset(Path(xlsx_path), today)
+        except DataFileError as e:
+            log.warning("[dataset] 엑셀 보충 로드 실패: %s", e)
+
+    if sql_ds is None and xlsx_ds is None:
+        raise DataFileError(
+            f"MySQL 도 엑셀도 읽지 못했다 (SQL: {sql_err})"
+        ) from sql_err
+
+    ds = merge_expected_close(sql_ds, xlsx_ds, expected)
+
+    # 캐시 키. 순수 SQL = 기존 sql_data_hash 그대로 — 어제의 캐시가 오늘도
+    # 맞는 한 살아 있어야 한다. 엑셀이 섞이면 병합분 값의 지문을 덧붙인다.
+    from .cache import data_hash, sql_data_hash  # 지연 import (순환 없음)
+
+    if ds.source == "xlsx":
+        ds.data_key = data_hash(Path(xlsx_path), ds.asof)
+    else:
+        ds.data_key = sql_data_hash(ds.asof)
+        if ds.source != "sql":
+            merged = {t: ds.series[t][-1] for t in sorted(ds.series)}
+            fp = _hashlib.sha256(
+                _json.dumps(merged, sort_keys=True).encode()
+            ).hexdigest()[:12]
+            ds.data_key += f":{ds.source}:{fp}"
+    return ds
