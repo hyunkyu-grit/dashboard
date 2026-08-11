@@ -4,8 +4,9 @@
  *
  * 그 요구는 문장 그대로 검증 가능하다: 하루 = <tr> 셋, 80일 = 240행. 여기에
  * 스택이 지켜야 하는 사실 셋을 더 못박는다 — 날짜·하루 요약(평가/캐리/
- * 롤다운/그날 손익)은 하루에 **한 번**(rowSpan=3), 전 기간 KRD 0 인 테너
- * 열은 숨김, Δbp 는 둘째 자리 소수(정수 반올림이 하루 0.17bp 를 지운다). */
+ * 롤다운/그날 손익)은 하루에 **한 번**(rowSpan=3), 전 테너 열 복원
+ * [OWNER, 2026-08-12 — 0 이어도 열은 선다], Δbp 는 둘째 자리 소수(정수
+ * 반올림이 하루 0.17bp 를 지운다). */
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 
@@ -47,14 +48,36 @@ describe("하루 = 가로줄 셋", () => {
     expect(texts.some((t) => t?.includes("+368,131"))).toBe(true); // 롤다운
   });
 
-  it("전 기간 KRD 0인 테너 열은 숨고, 숨겼다고 말한다", () => {
-    const { container, getByText } = render(
+  it("전 기간 KRD 0인 테너 열도 그대로 선다 [OWNER, 2026-08-12 — '물리적으로 잘린 테너들도 복원']", () => {
+    const { container, queryByText } = render(
       <ReconStack days={[day(0)]} tenors={TENORS} />,
     );
     const headers = [...container.querySelectorAll("thead th")].map((h) => h.textContent);
-    expect(headers).not.toContain("10Y");
+    // 10Y 는 이 픽스처에서 KRD 가 전 기간 0 — 종전 폭 규율이 숨기던 열이다.
+    expect(headers).toContain("10Y");
     expect(headers).toContain("6M");
-    getByText(/테너 1개는 숨겼어요/);
+    expect(queryByText(/숨겼어요/)).toBeNull();
+  });
+
+  it("표면을 마우스로 끌면 가로로 팬 되고, 그 제스처의 클릭은 삼켜진다", () => {
+    // 드래그 = pointerdown → 문턱(4px) 너머 pointermove. jsdom 은 레이아웃이
+    // 없어도 scrollLeft 대입은 보존한다 — 팬 수식(시작 scrollLeft − dx)을
+    // 그대로 단언할 수 있다.
+    const { container, getByRole } = render(
+      <ReconStack days={[day(0)]} tenors={TENORS} />,
+    );
+    const pane = container.querySelector("div.overflow-x-auto") as HTMLElement;
+    fireEvent.pointerDown(pane, { pointerType: "mouse", button: 0, clientX: 200, buttons: 1 });
+    fireEvent.pointerMove(pane, { pointerType: "mouse", clientX: 120, buttons: 1 });
+    expect(pane.scrollLeft).toBe(80);
+    fireEvent.pointerUp(pane, { pointerType: "mouse" });
+    // 팬을 끝낸 손이 정렬을 뒤집으면 안 된다 — 직후 클릭 하나는 죽는다.
+    const btn = getByRole("button", { name: /날짜/ });
+    fireEvent.click(btn);
+    expect(btn.textContent).toContain("↑");
+    // 다음 클릭부터는 보통 클릭이다.
+    fireEvent.click(btn);
+    expect(btn.textContent).toContain("↓");
   });
 
   it("Δbp 줄은 둘째 자리 소수를 그대로 보인다", () => {

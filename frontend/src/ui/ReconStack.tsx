@@ -29,8 +29,12 @@
  *
  * 표 규율은 시뮬 일별 대사 표(ResultsTables.KrdDailyTable)에서 그대로 왔다:
  *   - 대사 표는 **원 단위 그대로** [OWNER, 2026-08-10] — 자릿수가 곧 판단.
- *   - KRD 가 전 기간 0인 테너 열은 숨긴다(폭 규율) — 판정은 KRD 하나로,
- *     세 줄이 같은 열 집합을 쓴다.
+ *   - 전 테너 열이 그대로 선다 [OWNER, 2026-08-12 — "물리적으로 잘린
+ *     테너들도 복원"]. KRD 가 전 기간 0인 열을 숨기던 구 폭 규율("좌우
+ *     스크롤 하기 싫음")은 은퇴했다 — 폭은 마우스 드래그 팬(useDragScroll)
+ *     이 받고, 0 인 열은 — 로 선다: 리스크가 없다는 사실도 대사의 일부다.
+ *   - 날짜·구분 열은 스티키다 — 팬으로 먼 테너를 보는 중에도 어느 날의
+ *     어느 줄인지가 안 잘린다(ForwardMatrix 의 스크롤 어포던스 전례).
  *   - 열 폭은 세 지표의 최장 문자열로 잰다(`ch`) — 줄마다 폭이 다르면
  *     격자가 세로로 안 읽힌다.
  *   - KRD 줄은 히트맵(배경=부호, 농도=크기, 글자는 잉크), Δbp·손익 줄은
@@ -40,6 +44,7 @@
 import { useState } from "react";
 
 import { directionVar, tintFor } from "@/theme/sign-tint";
+import { useDragScroll } from "./useDragScroll";
 
 export interface ReconStackDay {
   /** ISO date — the row key and the printed MM-DD */
@@ -68,16 +73,24 @@ function Won({ v }: { v: number | null | undefined }) {
   );
 }
 
-function Th({ children, center, right }: {
+function Th({ children, center, right, corner, style }: {
   children: React.ReactNode;
   center?: boolean;
   right?: boolean;
+  /** 날짜·구분 헤더 — 가로 팬에도 남는 왼쪽 스티키 모서리(본문 스티키 열과
+   * 같은 좌표). z 가 한 칸 높은 이유: 팬 중에 보통 헤더가 이 밑을 지난다. */
+  corner?: boolean;
+  /** 스티키 left 좌표 — `ch` 는 요소 자신의 font-size 로 풀리므로, 13px
+   * 헤더가 14px 표의 컬럼 트랙과 같은 자리를 가리키려면 호출자가 환산해
+   * 넘긴다(아래 구분 헤더의 calc). */
+  style?: React.CSSProperties;
 }) {
   return (
     <th
-      className={`sticky top-0 z-10 bg-tile py-2 text-[13px] font-normal text-ink-2 ${
-        center ? "text-center" : right ? "text-right" : "text-left"
-      }`}
+      style={style}
+      className={`sticky top-0 bg-tile py-2 text-[13px] font-normal text-ink-2 ${
+        corner ? "left-0 z-20" : "z-10"
+      } ${center ? "text-center" : right ? "text-right" : "text-left"}`}
     >
       {children}
     </th>
@@ -100,7 +113,7 @@ function tenorWidth(labels: string[], cells: string[]): string {
 
 export function ReconStack({
   days,
-  tenors: allTenors,
+  tenors,
   note,
   defaultOrder = "asc",
 }: {
@@ -118,6 +131,7 @@ export function ReconStack({
   defaultOrder?: "asc" | "desc";
 }) {
   const [order, setOrder] = useState<"asc" | "desc">(defaultOrder);
+  const { ref: dragRef, handlers: dragHandlers } = useDragScroll<HTMLDivElement>();
   if (days.length === 0) {
     return (
       <p className="py-6 text-center text-[14px] text-ink-2">
@@ -126,12 +140,6 @@ export function ReconStack({
     );
   }
   const shown = order === "asc" ? days : [...days].reverse();
-
-  // KRD 가 전 기간 0인 테너는 숨긴다 — 판정은 KRD 하나로, 세 줄 공통.
-  const tenors = allTenors.filter((t) =>
-    days.some((d) => Math.abs(d.krd[t] ?? 0) >= 0.5),
-  );
-  const hidden = allTenors.length - tenors.length;
 
   const tenorW = tenorWidth(
     tenors,
@@ -156,7 +164,10 @@ export function ReconStack({
   };
 
   return (
-    <div className="overflow-x-auto">
+    /* 잡아 끌 수 있는 표면 [OWNER, 2026-08-12 — "좌우로 드래그"] — 전 테너
+       열이 서면서 폭이 창을 넘는 것이 정상 상태가 됐다. 휠·스크롤바·터치는
+       원래대로 살아 있고, 마우스 드래그가 더해진 것이다. */
+    <div ref={dragRef} {...dragHandlers} className="cursor-grab overflow-x-auto">
       <table
         className="w-full table-fixed text-[14px] tabular-nums"
         style={{
@@ -181,7 +192,7 @@ export function ReconStack({
             {/* 날짜 헤더가 곧 정렬 토글이다 — InstrumentTable 의 정렬 헤더와
                 같은 문법(버튼 + " ↑"/" ↓" 접미). 정렬 대상이 날짜 하나뿐이라
                 화살표는 항상 보인다: 지금 방향이 상태이고, 누르면 뒤집힌다. */}
-            <Th>
+            <Th corner>
               <button
                 type="button"
                 onClick={() => setOrder(order === "asc" ? "desc" : "asc")}
@@ -191,7 +202,9 @@ export function ReconStack({
                 날짜{order === "asc" ? " ↑" : " ↓"}
               </button>
             </Th>
-            <Th>구분</Th>
+            {/* 13px 헤더의 ch ≠ 14px 트랙의 ch — 날짜 트랙(7ch@14px)만큼
+                왼쪽으로 붙이려면 환산이 필요하다(Th 의 style 주석). */}
+            <Th corner style={{ left: "calc(7ch * 14 / 13)" }}>구분</Th>
             {tenors.map((t) => (
               <Th key={t} center>
                 {t}
@@ -214,12 +227,23 @@ export function ReconStack({
                   // 하루의 경계만 헤어라인 — 세 줄이 한 덩어리로 읽힌다.
                   className={mi === 0 ? "border-t border-edge" : undefined}
                 >
+                  {/* 날짜·구분은 스티키 — 팬으로 먼 테너를 보는 중에도 행의
+                      정체성이 남는다. 불투명 bg 는 §G(sticky-opaque): 밑을
+                      지나는 히트맵 틴트가 비치면 안 된다. 구분 셀의 13px 는
+                      안쪽 span 에 있다 — td 가 13px 면 left 의 ch 가 트랙과
+                      다른 자로 풀린다(위 헤더와 같은 함정). */}
                   {mi === 0 && (
-                    <td className="py-1 pr-2 align-top" rowSpan={3} title={d.title ?? d.date}>
+                    <td
+                      className="sticky left-0 bg-popover py-1 pr-2 align-top"
+                      rowSpan={3}
+                      title={d.title ?? d.date}
+                    >
                       {d.date.slice(5)}
                     </td>
                   )}
-                  <td className="py-1 pr-2 text-[13px] text-ink-2">{METRIC_LABEL[m]}</td>
+                  <td className="sticky bg-popover py-1 pr-2" style={{ left: "7ch" }}>
+                    <span className="text-[13px] text-ink-2">{METRIC_LABEL[m]}</span>
+                  </td>
                   {tenors.map((t) => {
                     const v = d[m][t] ?? null;
                     return (
@@ -273,13 +297,7 @@ export function ReconStack({
           )}
         </tbody>
       </table>
-      {(hidden > 0 || note) && (
-        <p className="pt-2 text-[13px] text-ink-2">
-          {note}
-          {note && hidden > 0 && " "}
-          {hidden > 0 && `KRD가 전 기간 0인 테너 ${hidden}개는 숨겼어요.`}
-        </p>
-      )}
+      {note && <p className="pt-2 text-[13px] text-ink-2">{note}</p>}
     </div>
   );
 }

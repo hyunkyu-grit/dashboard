@@ -504,6 +504,16 @@ and each row is another full daily revaluation pass.
   the drawer (KRD·Δbp·손익 — 80 days = 240 rows, the owner's own spec),
   drawn by the shared `ui/ReconStack.tsx` that the simulation's 일별 대사
   uses too.
+  - **Every tenor column renders, and the stack drag-pans** [OWNER,
+    2026-08-12 — "좌우로 드래그하는 부분을 만들어서 잘리는 부분도 볼 수
+    있게 … 물리적으로 잘린 테너들도 복원"]: the old width discipline (hide
+    tenor columns whose KRD is 0 for the whole window; the earlier "좌우
+    스크롤 하기 싫음") is retired. A column of zeros says the book HAS no
+    risk there — that fact is part of the reconciliation. The overflow is
+    handled by mouse drag-panning (`ui/useDragScroll`; wheel, scrollbar and
+    touch keep working, a sub-4px gesture stays a click), and 날짜·구분 are
+    sticky-left so a panned row keeps its identity (the ForwardMatrix
+    scroll-affordance precedent).
   - **KRD is T+1-settle basis** [OWNER, 2026-08-11 — 인포맥스 실측 대사]:
     row N's KRD = the book on N's curve VALUED AT the next business day,
     bump-revalued per par node. Measured against the Infomax calculator on
