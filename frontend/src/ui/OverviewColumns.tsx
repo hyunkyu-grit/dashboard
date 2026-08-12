@@ -188,10 +188,21 @@ function ColumnChart({
   policy?: PolicyStep;
 }) {
   const { data, isError, isLoading, isFetching, refetch } = useQuery<SeriesDetail>({
-    // the SAME query key the preview pane uses (§ react-query): moving a row
-    // between the two views is a cache hit, not a second fetch of one series
-    queryKey: ["series", row?.seriesId, "preview"],
-    queryFn: () => fetchSeries(row!.seriesId!, "preview"),
+    /* FULL resolution, not "preview" [OWNER, 2026-08-13 — "커서를 가져다 대면
+     * 지금 월 정보만 확인할 수 있는데, 이거 일간단위로 나오게"]. The ~150-point
+     * preview is a STRIDE DECIMATION of ~2,620 daily closes, so one surviving
+     * point every ~23 days: the crosshair could only ever land on one day a
+     * month, and the tooltip's 날짜/레벨/당일 변화 were that day's, never the
+     * day the reader was pointing at. Thinning is a drawing decision and this
+     * chart is hovered, so it takes the whole series.
+     *
+     * the SAME query key the preview pane uses (§ react-query): moving a row
+     * between the two views is a cache hit, not a second fetch of one series —
+     * and the pane has been on "full" since its own version of this fix, so
+     * the two now genuinely share one entry rather than caching two
+     * resolutions of one series side by side. */
+    queryKey: ["series", row?.seriesId, "full"],
+    queryFn: () => fetchSeries(row!.seriesId!, "full"),
     enabled: !!row?.seriesId,
     staleTime: 30_000,
   });

@@ -102,6 +102,21 @@ showing only its **주요** set, each with **its own chart underneath**.
   nowhere else, so three comparisons can be on screen at once and moving
   between columns never costs the one already up. Each column opens on its own
   first row — the space is never empty and the affordance needs no click.
+- **FULL resolution, never `preview`** [OWNER, 2026-08-13 — "커서를 가져다 대면
+  지금 월 정보만 확인할 수 있는데, 이거 일간단위로 나오게"]. The `preview`
+  artefact is a stride decimation of ~2,620 daily closes down to 150, i.e. one
+  surviving point every ~23 days: the crosshair could only ever land on one day
+  a month, and 날짜 / 레벨 / 당일 변화 were that day's rather than the day being
+  pointed at — and zooming could not recover it, because the intermediate days
+  were never in the payload. **A hovered chart takes the whole series.**
+  Thinning is a decision about DRAWING; it must not decide what the reader can
+  ask about. The side preview pane took this same fix earlier and for its own
+  reason (a 150-point line reads as a polygon at pane width), so both now share
+  the `["series", id, "full"]` query key — one cache entry per series instead of
+  two resolutions of one series side by side.
+  - Ten years across ~670px is ~4 trading days per pixel, so a specific day is
+    reached by ZOOMING (wheel, in place). That is a pixel budget, not a data
+    limit — every trading day is now in the slice being indexed.
 - **The side preview pane is hidden here**, by the same flag that widens the
   left pane (`fullWidth` in `App.tsx`, the matrix mode's mechanism). A fourth
   chart beside three would answer a question nobody asked, in the space the
