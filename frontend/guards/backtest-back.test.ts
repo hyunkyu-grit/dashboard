@@ -159,12 +159,26 @@ describe("the window is parallel to navigation — replace, never push (backtest
    * Back/forward then walk tab/tile state UNDERNEATH the window — they can
    * never close it, so they can never wipe it. The pass-Q nonce + session
    * memory still carry the contents across any traversal that does re-enter
-   * a bt-bearing URL. */
+   * a bt-bearing URL.
+   *
+   * The MECHANISM is the shallow history API, not router.replace
+   * [2026-08-12]: in the production (statically prerendered) build, a
+   * click-handler router.replace of same-page search params can start a
+   * transition that never commits — the window stays open and every later
+   * navigation wedges behind it (CDP-measured; dev was fine, which is why
+   * it survived). history.replaceState is Next's sanctioned shallow write:
+   * useSearchParams updates, no transition exists to wedge. */
   it("open and close both replace — the history collects no window entries", () => {
-    expect(app).toMatch(/openBacktest[\s\S]{0,500}router\.replace/);
-    expect(app).not.toMatch(/openBacktest[\s\S]{0,500}router\.push/);
-    expect(app).toMatch(/closeBacktest[\s\S]{0,200}router\.replace/);
-    expect(app).not.toMatch(/closeBacktest[\s\S]{0,200}router\.back/);
+    expect(app).toMatch(/openBacktest = useCallback[\s\S]{0,400}shallowReplace/);
+    expect(app).not.toMatch(
+      /openBacktest = useCallback[\s\S]{0,400}(router\.push|history\.pushState)/,
+    );
+    expect(app).toMatch(/closeBacktest = useCallback[\s\S]{0,200}shallowReplace/);
+    expect(app).not.toMatch(/closeBacktest = useCallback[\s\S]{0,200}router\.back/);
+    // the shallow helper IS history.replaceState — the pin follows the alias
+    expect(app).toMatch(/shallowReplace = useCallback[\s\S]{0,200}history\.replaceState/);
+    // and no overlay write regressed to a router transition
+    expect(app).not.toMatch(/router\.replace/);
   });
 
   it("every bt write goes through mergeQuery, preserving the tile namespace", () => {
@@ -178,9 +192,11 @@ describe("the window is parallel to navigation — replace, never push (backtest
   });
 
   it("the enlarged view's close is still BACK when the app pushed it", () => {
-    // pass Q's rule lives on where it belongs — the page-like modal
+    // pass Q's rule lives on where it belongs — the page-like modal. The
+    // push is the shallow history API for the same reason as the bt writes;
+    // native back() then pops the shallow entry.
     expect(app).toMatch(/closeEnlarged[\s\S]{0,400}router\.back\(\)/);
-    expect(app).toMatch(/openEnlarged[\s\S]{0,400}router\.push/);
+    expect(app).toMatch(/openEnlarged[\s\S]{0,500}history\.pushState/);
   });
 
   it("the window records what the reader builds, as it changes", () => {

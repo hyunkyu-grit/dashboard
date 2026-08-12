@@ -194,6 +194,34 @@ rule:
 
 ## 6. Current state (as of the 2026-08-12 session)
 
+### 안 닫히는 창 4제(최종?): 프로덕션 라우터 웨지 → 얕은 히스토리 (2026-08-12)
+
+[OWNER — "하 백테스트 또 안 닫히는데 이거 왜 그런거냐 자꾸"]. 세 번째
+안-닫힘이고, 이번 것은 **프로덕션 빌드 전용**이라 dev 로 검증하던 앞의 두
+수정(ba2c1e0·bbd46c5, AnimatePresence 제거 — 그 클래스는 진짜였고 고쳐진
+채로 남는다)을 통과해 살아남았다. ba2c1e0 커밋문의 "배포: 그대로 보이는
+채"가 사실 이놈이었을 가능성이 높다.
+
+- **증상/실측(CDP)**: 정적 프리렌더 프로덕션에서 클릭 핸들러 발
+  `router.replace`(같은 페이지, 쿼리만 변경)가 트랜지션을 시작만 하고
+  영영 커밋하지 않는다 — RSC 요청도 없고, Next 내부가 히스토리에 **옛
+  URL 을 재동기화**만 한다. 창이 안 닫힐 뿐 아니라 **그 뒤로는 라우터
+  전체가 막힌다**(이후 window.next.router.replace 직접 호출도 무시).
+  dev 는 같은 코드로 정상. 신선한 페이지에서 라우터 직접 호출은 정상 —
+  즉 React 이벤트 → startTransition 경로에서만 죽는다.
+- **수정**: App.tsx 의 오버레이 네임스페이스(bt·tile·type·missing) URL
+  쓰기 전부를 Next 14.1+ 공식 **얕은 히스토리**로 —
+  `shallowReplace`(= history.replaceState) / openEnlarged 는
+  history.pushState(닫기 = router.back() 그대로). useSearchParams 에
+  그대로 반영되고(실측: 창 닫힘) 트랜지션이 없어서 막힐 것도 없다.
+  App 에 router.replace/push 는 이제 0곳(가드가 부재를 핀).
+- 검증: 프로덕션 헤드리스 CDP — ✕ 클릭 닫힘·Esc 닫힘·닫은 뒤 라우터
+  건강(?probe 반영) 전부 green. guards/backtest-back 의 닫기-의미 핀을
+  같은 의도(replace-never-push)로 메커니즘만 갱신.
+- ⚠ 근본 원인은 Next 16.2.11 내부(미니파이 청크)라 여기까지만 판다 —
+  Next 를 올릴 때 이 항목을 다시 보고, 재발 시 이 절의 CDP 프로브
+  (scratchpad cdp-close-probe*.mjs 패턴)를 재사용할 것.
+
 ### 대사 스택: 전 테너 열 복원 + 고정 범례 스크롤러 (2026-08-12, 두 패스)
 
 [OWNER 1차 — "좌우로 드래그하는 부분을 만들어서 잘리는 부분도 볼 수 있게

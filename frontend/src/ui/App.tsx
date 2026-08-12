@@ -380,23 +380,36 @@ export function App() {
    * a window is already open REPLACES it (one instance — presence IS the
    * `bt` param); the new nonce seeds fresh, the position stays where the
    * reader put it (floatingWindow.ts). */
+  /* 오버레이 네임스페이스의 URL 쓰기는 **얕은 히스토리**다 [OWNER 증상,
+   * 2026-08-12 — "백테스트 또 안 닫히는데"]. `router.replace` 는 프로덕션
+   * (정적 프리렌더) 빌드에서 클릭 핸들러 발 같은-페이지 쿼리 트랜지션이
+   * 영영 커밋되지 않는 일이 있다 — 창이 안 닫힐 뿐 아니라 그 뒤로는 라우터
+   * 전체가 막힌다(이후의 직접 replace 까지 무시됨; CDP 실측 — 히스토리에
+   * 옛 URL 재동기화만 남고 RSC 요청은 아예 없음. dev 는 정상, 같은 코드).
+   * 창/오버레이는 페이지 이동이 아니므로 Next 가 14.1부터 공식 지원하는
+   * `window.history.replaceState/pushState` 얕은 쓰기로 간다:
+   * useSearchParams 에 그대로 반영되고(실측: 창이 닫힌다) 트랜지션·RSC
+   * 왕복이 없어서 막힐 것도 없다. 서버가 읽지 않는 쿼리 전용 상태에만 —
+   * 이 파일의 bt·tile·type·missing 이 정확히 그것이다. */
+  const shallowReplace = useCallback((qs: string) => {
+    window.history.replaceState(null, "", `/${qs}`);
+  }, []);
   const openBacktest = useCallback(
     (row: Row, from?: string) => {
       const target = row.seriesId ? `series:${row.seriesId}` : row.id;
-      router.replace(
-        `/${mergeQuery(params, {
+      shallowReplace(
+        mergeQuery(params, {
           bt: mintBacktestKey(),
           bti: target,
           btf: from ?? null,
-        })}`,
-        { scroll: false },
+        }),
       );
     },
-    [router, params],
+    [shallowReplace, params],
   );
   const closeBacktest = useCallback(() => {
-    router.replace(`/${mergeQuery(params, clearBtPatch())}`, { scroll: false });
-  }, [router, params]);
+    shallowReplace(mergeQuery(params, clearBtPatch()));
+  }, [shallowReplace, params]);
 
   /* The ENLARGED VIEW (?tile) is a page-like modal again — the backtest no
    * longer squats on its slot. Open PUSHES (a view you navigate into), so
@@ -410,32 +423,28 @@ export function App() {
     (row: Row) => {
       const target = row.seriesId ? `series:${row.seriesId}` : row.id;
       pushedTile.current = true;
-      router.push(`/${mergeQuery(params, { tile: target })}`, { scroll: false });
+      // 얕은 push — 항목은 쌓되(닫기 = back) 트랜지션은 타지 않는다(위 주석).
+      window.history.pushState(null, "", `/${mergeQuery(params, { tile: target })}`);
     },
-    [router, params],
+    [params],
   );
   const closeEnlarged = useCallback(() => {
     if (pushedTile.current) {
       pushedTile.current = false;
       router.back();
     } else {
-      router.replace(`/${mergeQuery(params, { tile: null, type: null })}`, {
-        scroll: false,
-      });
+      shallowReplace(mergeQuery(params, { tile: null, type: null }));
     }
-  }, [router, params]);
+  }, [router, shallowReplace, params]);
 
   const typeParam = params.get("type");
   const chartType: ChartType =
     typeParam === "w" || typeParam === "m" ? typeParam : "line";
   const onChartType = useCallback(
     (t: ChartType) => {
-      router.replace(
-        `/${mergeQuery(params, { type: t === "line" ? null : t })}`,
-        { scroll: false },
-      );
+      shallowReplace(mergeQuery(params, { type: t === "line" ? null : t }));
     },
-    [router, params],
+    [shallowReplace, params],
   );
 
   /* An unknown `?tile=` used to render the ordinary screen with the bogus
@@ -464,14 +473,13 @@ export function App() {
    * the COMPLETE row set for the same reason. */
   useEffect(() => {
     if (!btKey || !rowsComplete || btRow) return;
-    router.replace(
-      `/${mergeQuery(params, {
+    shallowReplace(
+      mergeQuery(params, {
         ...clearBtPatch(),
         missing: btiParam ?? btKey,
-      })}`,
-      { scroll: false },
+      }),
     );
-  }, [btKey, btiParam, rowsComplete, btRow, router, params]);
+  }, [btKey, btiParam, rowsComplete, btRow, shallowReplace, params]);
 
   /* Clear a `?tile=` that names nothing — but only once the row set is
    * COMPLETE.
@@ -487,11 +495,10 @@ export function App() {
     if (!tileParam || !rowsComplete || enlargedRow) return;
     // strip ONLY the tile namespace — an open backtest window survives a
     // stale tile link (mergeQuery carries `bt` and friends forward)
-    router.replace(
-      `/${mergeQuery(params, { tile: null, type: null, missing: tileParam })}`,
-      { scroll: false },
+    shallowReplace(
+      mergeQuery(params, { tile: null, type: null, missing: tileParam }),
     );
-  }, [tileParam, rowsComplete, enlargedRow, router, params]);
+  }, [tileParam, rowsComplete, enlargedRow, shallowReplace, params]);
 
   /* `scrollIntoViewSafely`, not a bare `behavior: "smooth"`: an explicit
    * behaviour argument OUTRANKS `scroll-behavior: auto` from the
