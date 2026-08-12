@@ -37,15 +37,12 @@
  * visible without a click.
  */
 
-import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
-import {
-  fetchSeries,
-  type PolicyStep,
-  type SeriesDetail,
-} from "@/lib/api";
+import { type PolicyStep } from "@/lib/api";
 import { dirClass, fmtDelta, levelHeadText, levelHeadTitle } from "@/lib/format";
+
+import { useUiStore } from "@/state/ui";
 
 import { levelText } from "./cells";
 import { GroupBox, GroupBoxTitle } from "./GroupBox";
@@ -54,6 +51,7 @@ import { ErrorState, LoadingState } from "./DataState";
 import { PreviewChart } from "./PreviewChart";
 import { RangeCells, RangeHeader } from "./RangeCells";
 import { useCdReference } from "./useCdReference";
+import { useChartSeries } from "./useChartSeries";
 import {
   BASIS_ORDER,
   cmpKey,
@@ -187,25 +185,18 @@ function ColumnChart({
   height: number;
   policy?: PolicyStep;
 }) {
-  const { data, isError, isLoading, isFetching, refetch } = useQuery<SeriesDetail>({
-    /* FULL resolution, not "preview" [OWNER, 2026-08-13 — "커서를 가져다 대면
-     * 지금 월 정보만 확인할 수 있는데, 이거 일간단위로 나오게"]. The ~150-point
-     * preview is a STRIDE DECIMATION of ~2,620 daily closes, so one surviving
-     * point every ~23 days: the crosshair could only ever land on one day a
-     * month, and the tooltip's 날짜/레벨/당일 변화 were that day's, never the
-     * day the reader was pointing at. Thinning is a drawing decision and this
-     * chart is hovered, so it takes the whole series.
-     *
-     * the SAME query key the preview pane uses (§ react-query): moving a row
-     * between the two views is a cache hit, not a second fetch of one series —
-     * and the pane has been on "full" since its own version of this fix, so
-     * the two now genuinely share one entry rather than caching two
-     * resolutions of one series side by side. */
-    queryKey: ["series", row?.seriesId, "full"],
-    queryFn: () => fetchSeries(row!.seriesId!, "full"),
-    enabled: !!row?.seriesId,
-    staleTime: 30_000,
-  });
+  /* 차트 종류는 **읽는 사람의 전역 설정**이라 스토어에서 바로 읽는다 [OWNER,
+   * 2026-08-13]. 표와 열과 슬롯을 거쳐 내려보내지 않는 것은 그 셋 중 무엇도
+   * 차트 종류와 상관이 없기 때문이다 — 지나가기만 하는 prop 세 개는 나중에
+   * 하나가 빠져도 아무도 모른다. 테마가 같은 자리에서 같은 길로 온다. */
+  const chartType = useUiStore((s) => s.chartType);
+  /* 선이면 FULL 해상도, 캔들이면 주/월 막대 — 한 훅이 그 답을 진다
+   * (`useChartSeries`). 선 쪽이 `preview` 가 아닌 이유가 거기 적혀 있다
+   * [OWNER, 2026-08-13 — "커서를 가져다 대면 지금 월 정보만 확인할 수 있는데,
+   * 이거 일간단위로 나오게"]: 150점 프리뷰는 2,620 영업일을 23일 간격으로
+   * 솎아낸 것이라 크로스헤어가 한 달에 한 점밖에 못 잡았다. */
+  const { points, bars, stats, isError, isLoading, isFetching, refetch } =
+    useChartSeries(row?.seriesId, chartType);
   const cd = useCdReference(row?.unit, row?.seriesId);
 
   if (!row) {
@@ -235,10 +226,12 @@ function ColumnChart({
         />
       )}
       {isLoading && <LoadingState />}
-      {data && (
+      {(points || bars) && (
         <PreviewChart
-          points={data.points}
-          stats={data.stats}
+          points={points}
+          bars={bars}
+          chartType={chartType}
+          stats={stats}
           unit={row.unit}
           width={width}
           height={height}

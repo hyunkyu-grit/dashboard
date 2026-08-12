@@ -44,7 +44,7 @@ import {
   type PolicyStep,
   type Unit,
 } from "@/lib/api";
-import { fmtDelta, fmtLevel } from "@/lib/format";
+import { fmtChangePct, fmtDelta, fmtLevel } from "@/lib/format";
 import {
   assertNoCssVars,
   onThemeChange,
@@ -58,11 +58,10 @@ import {
   withAlpha,
 } from "@/theme/bridge";
 import { assertDomainRendered } from "@/theme/domainGuard";
+import type { ChartType } from "@/ui/chartType";
 import { candleSpans, extremeMarks, lineSpans, type Span } from "@/ui/extremes";
 import { policyAxisMode, snapPolicyToTimes } from "@/ui/policyLine";
 import { dateLabels } from "@/ui/timeAxis";
-
-export type ChartType = "line" | Interval;
 
 interface LineDetail {
   points: HistoryPoint[];
@@ -513,7 +512,6 @@ function renderTip(hover: Hover | null, stats: Stats | null, unit: Unit, isCandl
   if (!hover) return null;
   if (isCandle && hover.bar) {
     const b = hover.bar;
-    const chg = b.o !== 0 ? ((b.c - b.o) / b.o) * 100 : 0;
     return (
       <>
         <div className="mb-1 font-semibold">{hover.t}</div>
@@ -521,7 +519,11 @@ function renderTip(hover: Hover | null, stats: Stats | null, unit: Unit, isCandl
         <Row k="고가" v={fmtLevel(b.h, unit)} />
         <Row k="저가" v={fmtLevel(b.l, unit)} />
         <Row k="종가" v={fmtLevel(b.c, unit)} />
-        <Row k="등락률" v={`${chg >= 0 ? "+" : "−"}${Math.abs(chg).toFixed(2)}%`} />
+        {/* 등락률 is ONE quantity with ONE grammar (lib/format): the preview
+            chart's candle card prints it too, and this used to be an inline
+            toFixed(2) that also fabricated `+0.00%` on a zero open — which
+            spreads and butterflies really do have. */}
+        <Row k="등락률" v={fmtChangePct(b.o, b.c)} />
       </>
     );
   }

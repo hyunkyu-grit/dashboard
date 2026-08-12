@@ -19,7 +19,9 @@ import { entryLevelText } from "../src/ui/BacktestWindow";
 import { levelText, rangeText } from "../src/ui/cells";
 import {
   CURVE_READOUTS,
+  POPUP_CANDLE_READOUTS,
   POPUP_READOUTS,
+  PREVIEW_CANDLE_READOUTS,
   PREVIEW_READOUTS,
 } from "../src/ui/readouts";
 import type { Row } from "../src/ui/rows";
@@ -29,6 +31,27 @@ describe("the popup is a superset of the preview (§C)", () => {
     const popup = new Set(POPUP_READOUTS);
     for (const r of PREVIEW_READOUTS) {
       expect(popup.has(r), `popup is missing the preview readout "${r}"`).toBe(true);
+    }
+  });
+
+  it("and in CANDLE mode too (2026-08-13)", () => {
+    // the preview draws candles now, so the rule has a second mode to hold in
+    const popup = new Set(POPUP_CANDLE_READOUTS);
+    for (const r of PREVIEW_CANDLE_READOUTS) {
+      expect(popup.has(r), `popup candle mode is missing "${r}"`).toBe(true);
+    }
+  });
+
+  it("a candle card shows the BAR, not window statistics", () => {
+    /* 시가·고가·저가·종가·등락률 answers "what did this week do"; 52주
+     * 최고/최저/평균 answers "where does this level sit in its year". Stacking
+     * both would put nine rows in a 140px card, and they are not the same
+     * question. Stated so a future pass does not "unify" them. */
+    for (const set of [PREVIEW_CANDLE_READOUTS, POPUP_CANDLE_READOUTS]) {
+      expect(set).toContain("open");
+      expect(set).toContain("changePct");
+      expect(set).not.toContain("rangeHigh");
+      expect(set).not.toContain("dailyChange");
     }
   });
 });

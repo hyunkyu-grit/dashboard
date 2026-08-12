@@ -46,6 +46,33 @@ export function windowExtremes(
   return { hi, lo };
 }
 
+/** The same scan over SPANS — the preview chart's rule applied to a window that
+ * may be candles [OWNER, 2026-08-13]. A candle's extent is its WICK, so the
+ * high of the window is the max wick high and the low is the min wick low; on a
+ * line window the spans are closes twice over and this returns exactly what
+ * `windowExtremes` does.
+ *
+ * That equivalence is the point, and `guards/candle-mode.test.ts` pins it: the
+ * preview's y-domain, its 최고/최저 dots and their labels all read this one
+ * result in BOTH modes, so a dot claiming "this is the high" cannot land
+ * anywhere but where the domain was stretched to.
+ *
+ * TIES take the FIRST occurrence — the preview's stated rule, deliberately
+ * unlike `extremeMarks` below (a zooming chart marks the newest print). Two
+ * surfaces, one rule each, both written down. */
+export function spanExtremes(
+  spans: readonly Span[],
+): WindowExtremes | null {
+  if (!spans.length) return null;
+  let hi = 0;
+  let lo = 0;
+  for (let i = 1; i < spans.length; i++) {
+    if (spans[i].hi > spans[hi].hi) hi = i;
+    if (spans[i].lo < spans[lo].lo) lo = i;
+  }
+  return { hi, lo };
+}
+
 /* ——— Visible-range extremes for the ZOOMABLE chart (2026-08-03) ———
  *
  * The preview above has no zoom, so its window IS its `points` prop and

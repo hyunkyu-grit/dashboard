@@ -24,9 +24,10 @@ import { useEffect, useMemo, useState } from "react";
 
 import { fetchDv01, type WallSummary } from "@/lib/api";
 import { dirClass, fmtBp, fmtRate } from "@/lib/format";
+import { useUiStore } from "@/state/ui";
 import { BASIS_LABELS, TIME_BASES, type TimeBasis } from "@/theme/ramp";
-import type { ChartType } from "@/wall/DetailChart";
 
+import { CHART_TYPES, type ChartType } from "./chartType";
 import { ERROR_SENTENCE } from "./copy";
 import { LoadingState } from "./DataState";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -153,14 +154,18 @@ function StrategyRegion() {
   );
 }
 
-const CHART_TYPES: { id: ChartType; label: string }[] = [
-  { id: "line", label: "선" },
-  { id: "w", label: "주봉" },
-  { id: "m", label: "월봉" },
-];
-
-/** 선 · 주봉 · 월봉 selector (popup only — candles need width the preview lacks,
- * §G). The type lives in the URL alongside ?tile so a view can be linked. */
+/** 선 · 주봉 · 월봉 selector.
+ *
+ * NO LONGER POPUP-ONLY [OWNER, 2026-08-13]. §G used to read "candles need
+ * width the preview lacks" and confined both the candles and this control to
+ * the sheet; the owner reversed it, so the mode is now a global preference
+ * (`ui/chartType.ts`) that every time-series chart follows.
+ *
+ * The control stays here ANYWAY, beside the toolbar's copy of it, and that is
+ * not a duplicate state — both write the one store. It is a duplicate REACH:
+ * this sheet is a modal over a dimmed screen, so the toolbar is unclickable
+ * while it is open, and a reader who wants candles for the chart they are
+ * looking at would otherwise have to close the sheet to ask for them. */
 function ChartTypeToggle({
   chartType,
   onChartType,
@@ -190,17 +195,11 @@ function ChartTypeToggle({
   );
 }
 
-function Body({
-  row,
-  summary,
-  chartType,
-  onChartType,
-}: {
-  row: Row;
-  summary: WallSummary;
-  chartType: ChartType;
-  onChartType: (t: ChartType) => void;
-}) {
+function Body({ row, summary }: { row: Row; summary: WallSummary }) {
+  /* 툴바와 같은 스토어를 읽는다 — 팝업이 자기 사본을 들면 두 컨트롤이 서로
+     다른 답을 보여 주게 된다. */
+  const chartType = useUiStore((s) => s.chartType);
+  const onChartType = useUiStore((s) => s.setChartType);
   // Pay/Receive side. It was lifted here so the diagram and the carry panel
   // could share one sign convention; carry is gone, so the diagram is the
   // only consumer left. Kept lifted — the popup is the natural owner, and a
@@ -255,14 +254,10 @@ function Body({
 export function EnlargedView({
   row,
   summary,
-  chartType,
-  onChartType,
   onClose,
 }: {
   row: Row;
   summary: WallSummary;
-  chartType: ChartType;
-  onChartType: (t: ChartType) => void;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -306,12 +301,7 @@ export function EnlargedView({
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-edge" />
         <ErrorBoundary fallback={ERROR_SENTENCE}>
-          <Body
-            row={row}
-            summary={summary}
-            chartType={chartType}
-            onChartType={onChartType}
-          />
+          <Body row={row} summary={summary} />
         </ErrorBoundary>
       </motion.div>
     </motion.div>

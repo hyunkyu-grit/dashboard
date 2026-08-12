@@ -46,8 +46,18 @@ describe("the failure is retryable, and stays on screen", () => {
   });
 
   it("stage-2 detail has its own retry — not only the first fetch", () => {
+    // the retry comes off the ChartSeries hook now (candle session): whichever
+    // query the current chart type ran is the one the button re-runs
     expect(preview).toMatch(/refetch/);
-    expect(preview).toMatch(/<ErrorState[\s\S]{0,120}onRetry=\{onRetry\}/);
+    expect(preview).toMatch(/<ErrorState[\s\S]{0,120}onRetry=\{refetch\}/);
+  });
+
+  it("the overview's three charts retry the same way (candle session)", () => {
+    // they used to hold their own useQuery; both surfaces share the hook, so a
+    // retry cannot exist on one and be missing on the other
+    const overview = code("ui/OverviewColumns.tsx");
+    expect(overview).toMatch(/useChartSeries/);
+    expect(overview).toMatch(/<ErrorState[\s\S]{0,160}onRetry=\{\(\) => void refetch\(\)\}/);
   });
 
   it("the button says it is working, so a slow retry is not a dead click", () => {

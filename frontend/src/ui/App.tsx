@@ -26,8 +26,7 @@ import { CommandBar } from "@/wall/CommandBar";
 import { getTile } from "@/wall/tileRegistry";
 
 import { ChangeLog } from "./ChangeLog";
-
-import type { ChartType } from "@/wall/DetailChart";
+import { asChartType, CHART_TYPES, type ChartType } from "./chartType";
 
 import { mintBacktestKey } from "./backtestMemory";
 import { BottomStrip, STRIP_H, useStripCollapsed } from "./BottomStrip";
@@ -164,19 +163,62 @@ function PreviewSheet({
 }
 
 
+/** 선 · 주봉 · 월봉 — 툴바의 세그먼티드 컨트롤 [OWNER, 2026-08-13 "모드
+ * 설정하면 원하면 캔들차트로 보여줄 수 있게"].
+ *
+ * 킷 문법 그대로다(Segmented Control/Active, On): 고른 칸은 **액센트 채움 +
+ * on-accent 라벨**, 안 고른 칸은 요소 불투명도가 아니라 잉크 층위(§G). 팝업의
+ * 같은 컨트롤과 같은 배열(`CHART_TYPES`)을 읽으므로 한쪽만 항목이 늘 수 없다.
+ *
+ * 툴바 캡슐 하나를 통째로 쓰고 변화로그·테마 그룹 옆에 선다 — 성질이 다른
+ * 컨트롤을 한 캡슐에 넣으면 구분선이 무엇을 가르는지가 사라진다. */
+function ChartTypeBar({
+  chartType,
+  onChartType,
+}: {
+  chartType: ChartType;
+  onChartType: (t: ChartType) => void;
+}) {
+  return (
+    <div className="flex h-6 items-center overflow-hidden rounded-full bg-ink/[0.08]">
+      {CHART_TYPES.map((c) => (
+        <button
+          key={c.id}
+          type="button"
+          onClick={() => onChartType(c.id)}
+          aria-pressed={c.id === chartType}
+          title={`${c.label} 차트`}
+          className={
+            c.id === chartType
+              ? "flex h-6 items-center bg-accent px-3 text-[14px] font-medium text-on-accent"
+              : "flex h-6 items-center px-3 text-[14px] font-medium text-ink-1 transition-colors hover:text-ink"
+          }
+        >
+          {c.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Header({
   events,
   onFocus,
+  showChartType,
   sidebarOpen,
   onSidebarOpen,
 }: {
   events: EventCluster[];
   onFocus: (id: string) => void;
+  /** 차트가 있는 섹션인가 — 차트 종류 컨트롤을 띄울지 정한다. */
+  showChartType: boolean;
   sidebarOpen: boolean;
   onSidebarOpen: (v: boolean) => void;
 }) {
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
+  const chartType = useUiStore((s) => s.chartType);
+  const setChartType = useUiStore((s) => s.setChartType);
   return (
     <header
       /* 툴바 — 킷 Titlebars and Toolbars/Medium, Liquid Glass 위에 [2026-08-07].
@@ -218,6 +260,13 @@ function Header({
         ◧
       </button>
       <span className="flex-1" />
+      {/* 차트 종류 — 차트가 있는 섹션에서만 [OWNER, 2026-08-13].
+          Simulation 과 Lab 에는 시계열 차트가 없다. 늘 띄워 두면 아무것도 안
+          하는 컨트롤이 되고, HIG 가 툴바에서 가장 싫어하는 것이 그것이다.
+          테마와 다른 점이 여기다: 테마는 어느 화면에서나 화면을 바꾼다. */}
+      {showChartType && (
+        <ChartTypeBar chartType={chartType} onChartType={setChartType} />
+      )}
       {/* TOOLBAR BUTTON GROUP, observed in the kit (Titlebars and Toolbars -
           Medium - Buttons, sizes 1 through 6): adjacent toolbar controls do not
           sit as separate pills. They share ONE 24px capsule and are divided by
@@ -437,15 +486,27 @@ export function App() {
     }
   }, [router, shallowReplace, params]);
 
-  const typeParam = params.get("type");
-  const chartType: ChartType =
-    typeParam === "w" || typeParam === "m" ? typeParam : "line";
-  const onChartType = useCallback(
-    (t: ChartType) => {
-      shallowReplace(mergeQuery(params, { type: t === "line" ? null : t }));
-    },
-    [shallowReplace, params],
-  );
+  /* 차트 종류: **스토어가 정본**이다 [OWNER, 2026-08-13].
+   *
+   * 예전에는 `?type=` 이 정본이었고 팝업만 그걸 읽었다. 이제 이것은 한 화면의
+   * 성질이 아니라 읽는 사람의 환경설정이고 — 화면의 모든 차트가 따라간다 —
+   * 환경설정은 URL 에 있으면 안 된다: 누가 링크를 보내면 받는 사람의 설정이
+   * 같이 바뀐다.
+   *
+   * `?type=` 은 **한 번 읽고 만다**. 예전 링크가 그 종류로 열리도록 마운트에서
+   * 스토어에 심고, 그 뒤로는 아무도 쓰지 않는다. 심는 것이 효과인 것은 URL 이
+   * 렌더 밖의 입력이기 때문이고, `params` 를 의존성에 넣지 않는 것은 이것이
+   * **씨앗**이지 동기화가 아니기 때문이다 — 뒤로 가기로 옛 `?type=` 이 돌아와도
+   * 방금 고른 종류를 되돌리지 않는다. */
+  const setChartType = useUiStore((s) => s.setChartType);
+  const seededType = useRef(false);
+  useEffect(() => {
+    if (seededType.current) return;
+    seededType.current = true;
+    const seed = asChartType(params.get("type"));
+    if (seed) setChartType(seed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 씨앗은 한 번뿐
+  }, [setChartType]);
 
   /* An unknown `?tile=` used to render the ordinary screen with the bogus
    * parameter still in the URL, no sheet and no message (Pass A finding).
@@ -565,6 +626,7 @@ export function App() {
         <Header
           events={summary?.events ?? []}
           onFocus={focusFromChangeLog}
+          showChartType={section === "main" || section === "backtest"}
           sidebarOpen={sidebarOpen}
           onSidebarOpen={setSidebarOpen}
         />
@@ -739,8 +801,6 @@ export function App() {
           <EnlargedView
             row={enlargedRow}
             summary={summary}
-            chartType={chartType}
-            onChartType={onChartType}
             onClose={closeEnlarged}
           />
         </ErrorBoundary>

@@ -5,18 +5,21 @@
  * floating tooltip and a calendar heatmap below; a sentence for forwards /
  * volatility (no stage-2 history). Clicking the chart opens the enlarged view. */
 
-import { useQuery } from "@tanstack/react-query";
 import { useRef } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
-import { fetchSeries, type PolicyStep } from "@/lib/api";
+import { type PolicyStep } from "@/lib/api";
 import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
 
+import { useUiStore } from "@/state/ui";
+
 import { AnimatedNumber } from "./AnimatedNumber";
+import type { ChartType } from "./chartType";
 import { ErrorState, LoadingState } from "./DataState";
 import { ENTER, EXIT, instant, PRESS_SCALE } from "./motion";
 import { PreviewChart } from "./PreviewChart";
 import { useCdReference } from "./useCdReference";
+import { type ChartSeries, useChartSeries } from "./useChartSeries";
 import type { Row } from "./rows";
 
 /* The hover chart is now PANE-SIZED, not a thumbnail [OWNER, 2026-07-31 —
@@ -104,18 +107,17 @@ export function PreviewPane({
    * absent on ratio (§policy). */
   policy?: PolicyStep;
 }) {
-  const { data, isError, isLoading, isFetching, refetch } = useQuery({
-    // preview resolution: ~150 downsampled line points (§16); the enlarged view
-    // fetches full resolution under a distinct key.
-    /* FULL resolution, not "preview". The ~150-point preview was cut for a
-     * 220px thumbnail; across a pane-width chart that is one point per ~3.5
-     * weeks and the line reads as a polygon. react-query caches per id, so
-     * re-hovering a row costs nothing after the first look. */
-    queryKey: ["series", row?.seriesId, "full"],
-    queryFn: () => fetchSeries(row!.seriesId!, "full"),
-    enabled: !!row?.seriesId,
-    staleTime: 30_000,
-  });
+  /* 차트 종류는 읽는 사람의 전역 설정이라 스토어에서 바로 온다 [OWNER,
+   * 2026-08-13] — 테마와 같은 자리, 같은 길. 이 창을 여는 표도, 표를 여는
+   * 셸도 차트 종류를 알 필요가 없다. */
+  const chartType = useUiStore((s) => s.chartType);
+  /* FULL resolution in line mode, never "preview": the ~150-point preview was
+   * cut for a 220px thumbnail, and across a pane-width chart that is one point
+   * per ~3.5 weeks — the line reads as a polygon and the crosshair cannot land
+   * on a day. Candle mode takes the server's weekly/monthly bars instead. Both
+   * answers live in `useChartSeries`, which the overview's three charts share,
+   * so this pane and those cannot disagree about what a mode fetches. */
+  const series = useChartSeries(row?.seriesId, chartType);
   // hooks run before any early return
   const reduced = useReducedMotion() === true;
 
@@ -142,11 +144,8 @@ export function PreviewPane({
             onOpen={onOpen}
             onEnlarge={onEnlarge}
             width={width}
-            data={data}
-            isError={isError}
-            isLoading={isLoading}
-            retrying={isFetching}
-            onRetry={() => void refetch()}
+            series={series}
+            chartType={chartType}
             policy={policy}
             height={height}
           />
@@ -161,11 +160,8 @@ function PreviewBody({
   onOpen,
   onEnlarge,
   width,
-  data,
-  isError,
-  isLoading,
-  retrying,
-  onRetry,
+  series,
+  chartType,
   policy,
   height,
 }: {
@@ -175,12 +171,10 @@ function PreviewBody({
   width: number;
   height: number;
   policy?: PolicyStep;
-  data: Awaited<ReturnType<typeof fetchSeries>> | undefined;
-  isError: boolean;
-  isLoading: boolean;
-  retrying: boolean;
-  onRetry: () => void;
+  series: ChartSeries;
+  chartType: ChartType;
 }) {
+  const { points, bars, stats, isError, isLoading, isFetching, refetch } = series;
   // hooks run before any early return
   const reduced = useReducedMotion() === true;
   const cd = useCdReference(row.unit, row.seriesId);
@@ -206,12 +200,12 @@ function PreviewBody({
       {isError && (
         <ErrorState
           what="이 종목의 과거 흐름을"
-          onRetry={onRetry}
-          retrying={retrying}
+          onRetry={refetch}
+          retrying={isFetching}
         />
       )}
       {isLoading && <LoadingState />}
-      {data && (
+      {(points || bars) && (
         <motion.div
           key={row.seriesId}
           role="button"
@@ -238,8 +232,10 @@ function PreviewBody({
               of the line above it, and volatility clustering is now answered
               numerically by the relative-ATR series. */}
           <PreviewChart
-            points={data.points}
-            stats={data.stats}
+            points={points}
+            bars={bars}
+            chartType={chartType}
+            stats={stats}
             unit={row.unit}
             width={width}
             height={Math.max(CHART_MIN_H, height - HEADER_H)}

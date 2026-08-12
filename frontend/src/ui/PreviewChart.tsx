@@ -1,10 +1,25 @@
 "use client";
 
-/* Preview line chart (DESIGN §2). Hand-rolled SVG so the floating tooltip is
+/* Preview chart (DESIGN §2). Hand-rolled SVG so the floating tooltip is
  * simple and lightweight-charts stays confined to the enlarged view (§11).
  * Blue line (--bw-line, §9 palette cut). Hovering shows a floating card near
  * the cursor:
  * 날짜 · 레벨 · 구간 최고 · 구간 최저 · 구간 평균 · 당일 변화.
+ *
+ * SINCE 2026-08-13 IT ALSO DRAWS CANDLES [OWNER: "모드 설정하면 원하면
+ * 캔들차트로 보여줄 수 있게"]. The mode is the reader's global preference
+ * (`ui/chartType.ts`), not a property of one chart, and it arrives as
+ * `chartType` + `bars`. What changes with it is deliberately SMALL:
+ *
+ *   the ink      one polyline → four paths (몸통·꼬리 × 상승·하락, candlePath.ts)
+ *   the extent   a point is its close; a bar is its wick range (extremes.ts)
+ *   the card     레벨/52주 셋/당일 변화 → 시가·고가·저가·종가·등락률
+ *
+ * Everything else — zoom, pan, the reference lines, the date labels, the
+ * 최고/최저 dots, the crosshair, the backtest click — is written against the
+ * plotted slice and does not know which mode it is in. That is why this is one
+ * component and not two: pass O made every read a function of the slice, and a
+ * candle window is just a slice whose points have three more numbers.
  *
  * ZOOMS IN PLACE (zoom-and-color session) [OWNER: "크게보기 버튼을 안 눌러도
  * 이 창에서 그냥 확대하고 축소하고"]: wheel zooms about the cursor, dragging
@@ -18,12 +33,20 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import type { HistoryPoint, PolicyStep, SeriesStats, Unit } from "@/lib/api";
+import type {
+  HistoryPoint,
+  OhlcBar,
+  PolicyStep,
+  SeriesStats,
+  Unit,
+} from "@/lib/api";
 
 import { fmtAxis, fmtLevel } from "@/lib/format";
 
+import { bodyWidth, candlePaths } from "./candlePath";
 import { panRange, zoomRange, type ViewRange } from "./chartZoom";
-import { windowExtremes } from "./extremes";
+import { type ChartType, isCandleType } from "./chartType";
+import { candleSpans, lineSpans, spanExtremes } from "./extremes";
 import {
   alignSeries,
   policyAxisMode,
@@ -40,6 +63,7 @@ import {
   ReadoutCard,
   ReadoutChange,
   ReadoutLevel,
+  ReadoutPct,
 } from "./ReadoutCard";
 import { dateLabels } from "./timeAxis";
 
@@ -91,6 +115,8 @@ const GRID_FRACS = [0.25, 0.5, 0.75];
 
 export function PreviewChart({
   points,
+  bars,
+  chartType = "line",
   stats,
   unit,
   width,
@@ -102,7 +128,14 @@ export function PreviewChart({
   still,
   hoverDate,
 }: {
-  points: HistoryPoint[];
+  points?: HistoryPoint[];
+  /** 주/월 OHLC 막대 — 캔들 모드에서만 쓰인다 (§G, 서버 집계). */
+  bars?: OhlcBar[];
+  /** 선 · 주봉 · 월봉. 기본값이 "line" 인 것은 호출부 하나가 **영원히 선**이기
+   * 때문이다: 백테스트 문맥 차트는 아래 손익 차트와 인덱스 단위로 수직 정렬돼
+   * 있고 [OWNER: "완전히 수직적으로 얼라인"], 주/월봉은 인덱스 공간 자체를
+   * 바꾸므로 정렬이 조용히 깨진다. 그 차트는 이 prop 을 넘기지 않는다. */
+  chartType?: ChartType;
   stats: SeriesStats | null; // range min/max/avg, precomputed server-side (§16)
   unit: Unit;
   width: number;
@@ -133,10 +166,17 @@ export function PreviewChart({
   hoverDate?: string | null;
 }) {
   const [hi, setHi] = useState<number | null>(null);
-  /* The visible slice, or null = the full span (chartZoom.ts). Series
-   * changes remount this component (the pane keys on seriesId), so the view
-   * resets with the data it indexed. */
-  const [view, setView] = useState<ViewRange | null>(null);
+  /* The visible slice, or null = the full span (chartZoom.ts).
+   *
+   * IT REMEMBERS THE LENGTH IT INDEXED [2026-08-13]. A view is a pair of
+   * INDICES, and indices only mean something against the array they were taken
+   * from — switching 선 → 주봉 takes the same series from 2,621 points to 553
+   * bars, and a leftover {i0: 100, i1: 200} silently becomes a different four
+   * months of a different resolution. It looks entirely normal, which is the
+   * dangerous part. A view whose length no longer matches is discarded during
+   * render (no effect, no extra pass — the overview's rule), which also covers
+   * the case this used to rely on remounting for: a series switch. */
+  const [view, setView] = useState<{ r: ViewRange; len: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   /* pan gesture — event-time snapshot of where the drag started and what it
    * started from; `moved` is what separates a pan from the backtest click */
@@ -146,7 +186,13 @@ export function PreviewChart({
   const justDragged = useRef(false);
 
   const plotW = width - PAD.left - PAD.right;
-  const len = points.length;
+  /* WHICH ARRAY IS PLOTTED. Candle mode needs bars and falls back to the line
+   * whenever they have not arrived (or are too short to be a chart) — a mode
+   * switch must never blank a chart that has data to show. */
+  const candle = isCandleType(chartType) && (bars?.length ?? 0) >= 2;
+  const srcLine = points ?? [];
+  const srcBars = bars ?? [];
+  const len = candle ? srcBars.length : srcLine.length;
 
   /* Wheel = zoom about the cursor. A native non-passive listener, because the
    * page must not scroll under a chart being zoomed and React's root-attached
@@ -159,31 +205,50 @@ export function PreviewChart({
       e.preventDefault();
       const rect = el.getBoundingClientRect();
       const frac = (e.clientX - rect.left - PAD.left) / plotW;
-      setView((v) => zoomRange(v, len, frac, e.deltaY > 0 ? 1.25 : 0.8));
+      setView((v) => {
+        const cur = v && v.len === len ? v.r : null;
+        const next = zoomRange(cur, len, frac, e.deltaY > 0 ? 1.25 : 0.8);
+        return next && { r: next, len };
+      });
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, [plotW, len, still]);
 
-  if (points.length < 2 || !stats) return null;
+  // a line window needs its 52-week stats (the card prints three of them); a
+  // candle window prints the bar itself and needs none
+  if (len < 2 || (!candle && !stats)) return null;
 
-  /* the slice everything below plots; a view left over from longer data
-   * (a refetch) falls back to the full span rather than indexing off the end */
-  const pts =
-    view && view.i1 < points.length
-      ? points.slice(view.i0, view.i1 + 1)
-      : points;
+  /* the slice everything below plots. `view.len` is checked, not just the end
+   * index: a stale view from another array length is not a window into this
+   * one (see the state's comment). */
+  const vr = view && view.len === len ? view.r : null;
+  const barsPlot = candle ? (vr ? srcBars.slice(vr.i0, vr.i1 + 1) : srcBars) : [];
+  const ptsPlot = candle ? [] : vr ? srcLine.slice(vr.i0, vr.i1 + 1) : srcLine;
+
+  /* THE PLOTTED SLICE, as the rest of this component sees it.
+   *
+   *   `pts`   {t, v} per x-position — v is the close in both modes. The line
+   *           path, the crosshair dot, the date labels, the marks and BOTH
+   *           reference overlays read this and stay mode-blind.
+   *   `spans` each x-position's vertical extent: a close twice over on a line,
+   *           the wick range on a candle. The y-domain and the 최고/최저 dots
+   *           read this, so a candle's domain holds its wicks. */
+  const pts: { t: string; v: number }[] = candle
+    ? barsPlot.map((b) => ({ t: b.t, v: b.c }))
+    : ptsPlot;
+  const spans = candle ? candleSpans(barsPlot) : lineSpans(ptsPlot);
 
   const plotH = height - PAD.top - PAD.bottom;
-  // y-domain from the PLOTTED points, not from stats: the stats are 52-week
-  // (annual-stats session) while the line shows the visible slice — a
+  // y-domain from the PLOTTED slice, not from stats: the stats are 52-week
+  // (annual-stats session) while the chart shows the visible slice — a
   // domain from annual stats would clip the 2020-21 trough. The same scan
   // yields the marked extremes (pass O): domain and dots share one source,
   // so the dot claiming "high" sits exactly where the domain was stretched —
   // and both re-derive from the slice as the reader zooms.
-  const ext = windowExtremes(pts)!; // pts.length >= 2, checked above
-  let lo = pts[ext.lo].v;
-  let hi2 = pts[ext.hi].v;
+  const ext = spanExtremes(spans)!; // len >= 2, checked above
+  let lo = spans[ext.lo].lo;
+  let hi2 = spans[ext.hi].hi;
   /* How the overlay meets this axis is a UNIT question (policyLine.ts):
    *
    *   shared    (%)  — the references are in the instrument's own unit, so the
@@ -233,7 +298,15 @@ export function PreviewChart({
     mode === "secondary" && refDomain
       ? (v: number) => PAD.top + (1 - (v - refMin) / (refMax - refMin)) * plotH
       : y;
-  const path = pts.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
+  const path = candle
+    ? ""
+    : pts.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
+  /* Candle ink: four paths, not two per bar (candlePath.ts explains the
+   * arithmetic and why it is a module). The step is measured from the SAME x
+   * formula everything else uses, so bodies stay centred on the crosshair and
+   * on the 최고/최저 dots at every zoom. */
+  const cw = candle ? bodyWidth(plotW / Math.max(1, pts.length - 1)) : 0;
+  const candles = candle ? candlePaths(barsPlot, x, y, cw) : null;
 
   const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -256,9 +329,9 @@ export function PreviewChart({
    * click); `justDragged` carries it across the pointerup→click boundary. */
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     justDragged.current = false;
-    if (e.button !== 0 || !view) return;
+    if (e.button !== 0 || !vr) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { px: e.clientX, base: view, moved: false };
+    drag.current = { px: e.clientX, base: vr, moved: false };
   };
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const d = drag.current;
@@ -266,7 +339,8 @@ export function PreviewChart({
     const dx = e.clientX - d.px;
     if (Math.abs(dx) > 3) d.moved = true;
     const span = d.base.i1 - d.base.i0 + 1;
-    setView(panRange(d.base, len, (-dx / plotW) * (span - 1)));
+    const next = panRange(d.base, len, (-dx / plotW) * (span - 1));
+    setView(next && { r: next, len });
   };
   const onPointerUp = () => {
     justDragged.current = drag.current?.moved ?? false;
@@ -296,8 +370,11 @@ export function PreviewChart({
   const hIdx =
     hi != null && hi < pts.length ? hi : extIdx != null && extIdx >= 0 ? extIdx : null;
   const hp = hIdx != null ? pts[hIdx] : null;
+  /** the hovered BAR, candle mode only — the card prints its five values. */
+  const hbar = candle && hIdx != null ? barsPlot[hIdx] : null;
   // daily change arrives precomputed per point (§16) — no client differencing.
-  const dailyChange = hp ? hp.d : null;
+  // Candle mode has none: a weekly bar has no "당일", it has 등락률.
+  const dailyChange = candle ? null : (hIdx != null ? ptsPlot[hIdx].d : null);
   const tipLeft =
     hIdx != null
       ? Math.min(width - READOUT_CARD_W - 10, Math.max(0, x(hIdx) + 10))
@@ -470,13 +547,52 @@ export function PreviewChart({
             </g>
           );
         })}
-        <polyline
-          points={path}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.6}
-          strokeLinejoin="round"
-        />
+        {/* THE SUBJECT. One polyline, or four candle paths — same slot in the
+            stack, over the references and under the annotations.
+
+            상승 빨강 / 하락 파랑 (§9 direction tokens, never the line blue):
+            a candle body HAS a sign, which is exactly the condition §9 sets
+            for spending the direction pair on a fill. The wick is the same
+            hue a shade quieter (stroke at 0.75) so a dense window reads as
+            bars rather than as a hedge of vertical lines.
+
+            `data-candle` is the guard's anchor — candle-mode.test.ts asserts
+            the four paths exist and carry direction tokens, because a candle
+            chart that has silently fallen back to a line still looks fine. */}
+        {candle && candles ? (
+          <g data-candle="">
+            <path
+              data-candle-part="up-wick"
+              d={candles.up.wicks}
+              className="stroke-up"
+              strokeWidth={1}
+              strokeOpacity={0.75}
+              fill="none"
+            />
+            <path
+              data-candle-part="down-wick"
+              d={candles.down.wicks}
+              className="stroke-down"
+              strokeWidth={1}
+              strokeOpacity={0.75}
+              fill="none"
+            />
+            <path data-candle-part="up-body" d={candles.up.bodies} className="fill-up" />
+            <path
+              data-candle-part="down-body"
+              d={candles.down.bodies}
+              className="fill-down"
+            />
+          </g>
+        ) : (
+          <polyline
+            points={path}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.6}
+            strokeLinejoin="round"
+          />
+        )}
         {/* Dated marks (ChartMark) — drawn over the line so a 진입 dot is
             never buried under it, under the extremes/crosshair so the marks
             annotate rather than compete. Snap and skip rules live in the
@@ -553,11 +669,15 @@ export function PreviewChart({
             high sits above its dot, the low below, each clamped inside the
             plot and end-anchored near the edges. */}
         {[
-          { k: "hi", i: ext.hi },
-          { k: "lo", i: ext.lo },
-        ].map(({ k, i }) => {
+          // the MARKED VALUE is the span's edge, not the close: on a candle the
+          // window's high is a wick tip, and a dot at that bar's close would
+          // float below the very point it claims to mark. On a line the two are
+          // the same number (a close-only span), so this is one expression.
+          { k: "hi", i: ext.hi, v: spans[ext.hi].hi },
+          { k: "lo", i: ext.lo, v: spans[ext.lo].lo },
+        ].map(({ k, i, v }) => {
           const px = x(i);
-          const py = y(pts[i].v);
+          const py = y(v);
           const anchor =
             px < PAD.left + plotW * 0.08
               ? "start"
@@ -585,8 +705,8 @@ export function PreviewChart({
                       readout card's own vocabulary. A flat window prints its
                       one value bare: it is neither a high nor a low. */}
                   {ext.lo !== ext.hi
-                    ? `${k === "hi" ? "최고" : "최저"} ${fmtLevel(pts[i].v, unit)}`
-                    : fmtLevel(pts[i].v, unit)}
+                    ? `${k === "hi" ? "최고" : "최저"} ${fmtLevel(v, unit)}`
+                    : fmtLevel(v, unit)}
                 </text>
               )}
             </g>
@@ -642,13 +762,19 @@ export function PreviewChart({
               strokeWidth={1}
               strokeOpacity={0.25}
             />
-            <circle cx={x(hIdx)} cy={y(hp.v)} r={3} fill="currentColor" />
+            {/* The dot marks the LINE's value under the cursor. A candle has
+                no single value to sit on — the bar under the hairline already
+                shows all four — and a dot pinned at its close would read as a
+                fifth number the bar does not have. */}
+            {!candle && (
+              <circle cx={x(hIdx)} cy={y(hp.v)} r={3} fill="currentColor" />
+            )}
           </>
         )}
       </svg>
       {/* the way back out, only there when there is somewhere to come back
           from. Its clicks are its own — never the backtest's. */}
-      {view && (
+      {vr && (
         <button
           type="button"
           onClick={(e) => {
@@ -665,18 +791,36 @@ export function PreviewChart({
         // the shared card (pass N) — the idle curve's tooltip is the same
         // component, so the two cannot drift into two grammars for one quantity
         <ReadoutCard title={hp.t} left={tipLeft}>
-          <ReadoutLevel k={READOUT_LABEL.level} v={hp.v} unit={unit} />
-          {/* 52-week stats (annual-stats session) — the chart still shows the
-              full history, only the statistics narrow; the popup, which
-              zooms, uses visible-range "구간" stats (§F). */}
-          <ReadoutLevel k={READOUT_LABEL.rangeHigh} v={stats.max} unit={unit} />
-          <ReadoutLevel k={READOUT_LABEL.rangeLow} v={stats.min} unit={unit} />
-          <ReadoutLevel k={READOUT_LABEL.rangeAvg} v={stats.avg} unit={unit} />
-          <ReadoutChange
-            k={READOUT_LABEL.dailyChange}
-            v={dailyChange}
-            unit={unit}
-          />
+          {hbar ? (
+            /* CANDLE: the five values of one BAR (§G), the same five the popup
+               prints and in the same order — 등락률 through the shared
+               formatter, so the two surfaces cannot round it differently.
+               No 52주 rows: this card answers "what did this week do", which
+               is a different question from "where does this level sit in its
+               year", and nine rows do not fit 140px. */
+            <>
+              <ReadoutLevel k={READOUT_LABEL.open} v={hbar.o} unit={unit} />
+              <ReadoutLevel k={READOUT_LABEL.high} v={hbar.h} unit={unit} />
+              <ReadoutLevel k={READOUT_LABEL.low} v={hbar.l} unit={unit} />
+              <ReadoutLevel k={READOUT_LABEL.close} v={hbar.c} unit={unit} />
+              <ReadoutPct k={READOUT_LABEL.changePct} open={hbar.o} close={hbar.c} />
+            </>
+          ) : (
+            <>
+              <ReadoutLevel k={READOUT_LABEL.level} v={hp.v} unit={unit} />
+              {/* 52-week stats (annual-stats session) — the chart still shows
+                  the full history, only the statistics narrow; the popup,
+                  which zooms, uses visible-range "구간" stats (§F). */}
+              <ReadoutLevel k={READOUT_LABEL.rangeHigh} v={stats!.max} unit={unit} />
+              <ReadoutLevel k={READOUT_LABEL.rangeLow} v={stats!.min} unit={unit} />
+              <ReadoutLevel k={READOUT_LABEL.rangeAvg} v={stats!.avg} unit={unit} />
+              <ReadoutChange
+                k={READOUT_LABEL.dailyChange}
+                v={dailyChange}
+                unit={unit}
+              />
+            </>
+          )}
         </ReadoutCard>
       )}
     </div>

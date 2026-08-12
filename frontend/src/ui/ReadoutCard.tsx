@@ -20,7 +20,7 @@
  */
 
 import type { Unit } from "@/lib/api";
-import { dirClass, fmtDelta, fmtLevel } from "@/lib/format";
+import { dirClass, fmtChangePct, fmtDelta, fmtLevel } from "@/lib/format";
 
 /** The card's fixed width. The callers clamp `left` against it so the card
  * never leaves the plot; it is exported so they clamp against the real number
@@ -40,6 +40,15 @@ export const READOUT_LABEL = {
   rangeLow: "52주 최저",
   rangeAvg: "52주 평균",
   dailyChange: "당일 변화",
+  /* 캔들 모드의 다섯 줄 [OWNER, 2026-08-13]. 팝업이 이미 이 낱말로 쓰고 있었고
+     (§G), 작은 차트가 캔들을 그리게 되면서 같은 낱말이 두 표면에 필요해졌다.
+     레벨 다섯 줄이 아니라 **한 봉의 다섯 값**이라 52주 통계 자리와 겹치지
+     않는다 — 캔들 툴팁은 저 위 넷을 아예 안 쓴다. */
+  open: "시가",
+  high: "고가",
+  low: "저가",
+  close: "종가",
+  changePct: "등락률",
 } as const;
 
 /** Floating card, pinned near the top of the plot rather than following the
@@ -79,6 +88,31 @@ export function ReadoutLevel({
     <div className="flex justify-between">
       <span className="opacity-50">{k}</span>
       <span className="tabular-nums">{fmtLevel(v, unit)}</span>
+    </div>
+  );
+}
+
+/** A candle's 등락률 row — the change line of the CANDLE card, sitting where
+ * `ReadoutChange` sits on the line card and coloured by the same rule. The
+ * percent itself comes from `fmtChangePct` (lib/format), which both this card
+ * and the popup's tooltip call: 등락률 is one quantity and it gets one grammar.
+ * A zero open has no percent change and the formatter says so with the em dash;
+ * the hue goes with it, because an em dash has no direction. */
+export function ReadoutPct({
+  k,
+  open,
+  close,
+}: {
+  k: string;
+  open: number;
+  close: number;
+}) {
+  return (
+    <div className="mt-1 flex justify-between">
+      <span className="opacity-50">{k}</span>
+      <span className={`tabular-nums ${dirClass(open === 0 ? null : close - open)}`}>
+        {fmtChangePct(open, close)}
+      </span>
     </div>
   );
 }

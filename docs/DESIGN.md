@@ -1403,15 +1403,56 @@ backtest window without touching its state.
   **금통위, FOMC and BOJ only** (`COUNTDOWN_KINDS`) — what moves the KRW
   curve, in that order. ECB and LPR render as chart rules but are never the
   next event.
-- **Chart type: 선 · 주봉 · 월봉 [Session 16 §G].** A selector in the popup
-  (line only in the preview — candles need width it lacks). Closes-only data
-  means a true daily candle is impossible (open would equal close), so no 일봉;
-  candles aggregate closes into weekly/monthly OHLC **server-side** (`?interval=
-  w|m`, §16). Bodies use 상승 빨강 / 하락 파랑 (direction tokens, not the line
-  blue, §9). The tooltip changes with the type: line → 레벨 · 당일 변화; candle
-  → 시가 · 고가 · 저가 · 종가 · 등락률. Chart type lives in the URL (`?type=`).
-  `assertDomainRendered` applies to candles too, and the rendered domain must
-  span every supplied bar — a silently dropped bar is worse on a candle chart.
+- **Chart type: 선 · 주봉 · 월봉 — ONE GLOBAL PREFERENCE [Session 16 §G;
+  scope reversed by OWNER 2026-08-13, "지금은 차트가 라인차트만 나오는데 (차트
+  전부 얘기하는 거임) 모드 설정하면 원하면 캔들차트로 보여줄 수 있게"].**
+
+  This used to read "a selector in the popup — line only in the preview,
+  candles need width it lacks". The owner reversed it: **every time-series
+  chart follows the mode**, the toolbar carries the selector, and the popup
+  keeps its own copy of the same control only because it is a modal over a
+  dimmed screen and the toolbar is unreachable while it is open. Both write
+  one store (`state/ui.ts`), rendered from one list (`ui/chartType.ts`).
+
+  - **It is a PREFERENCE, so it is not in the URL.** `?type=` was the source
+    of truth when only the popup knew about candles; a link carrying a
+    reader's global setting would change the recipient's screen. The
+    parameter is now READ ONCE at mount to seed the store — old links still
+    open on the type they named — and never written. Persistence is
+    `localStorage`, adopted in `syncUiFromDom` beside the theme and the basis.
+  - **No 일봉, and it is a DATA fact.** The source is closes only
+    (`mkt_irs_close`), so a daily open would equal its close — 2,600 bodyless
+    bars. Candles aggregate closes into weekly/monthly OHLC **server-side**
+    (`?interval=w|m`, §16). If a daily OHLC source ever lands, the assertion
+    in `guards/candle-mode.test.ts` is the place that says so.
+  - **Width is a real cost and it was accepted.** 553 weekly bars across a
+    668px overview column is 1.21px per bar and reads as a comb at full span
+    (monthly is 5.2px and reads cleanly). Zoom is the answer and it works —
+    the body width scales with the visible spacing, clamped to [1px, 14px].
+    That trade is the reason the old ruling confined candles to the popup;
+    the owner chose the reach over the density.
+  - Bodies use 상승 빨강 / 하락 파랑 (direction tokens, not the line blue,
+    §9); wicks take the same hue at 0.75 stroke opacity. 시가 = 종가 counts as
+    up, and a doji still gets a 1px body — an unmoved week is not a missing
+    week.
+  - **The extent of a bar is its WICK.** The y-domain and the 최고/최저 marks
+    both read `extremes.ts` spans, so a dot claiming "this is the high" sits
+    on the wick tip the domain was stretched to. A close-based scan would
+    mark the wrong bar AND float the dot off it.
+  - The tooltip changes with the type: line → 레벨 · 52주 셋 · 당일 변화;
+    candle → 시가 · 고가 · 저가 · 종가 · 등락률. A candle card carries NO
+    window statistic — "what did this week do" and "where does this level sit
+    in its year" are different questions, and nine rows do not fit a 140px
+    card. 등락률 goes through `fmtChangePct` on both surfaces, which returns
+    the em dash on a zero open rather than fabricating `+0.00%` (spreads and
+    butterflies cross zero).
+  - **The backtest's context chart is exempt and stays a line.** It is
+    pixel-aligned index-by-index with the P&L chart below it [OWNER: "완전히
+    수직적으로 얼라인"], and weekly bars change the index space itself, so the
+    sibling could not follow. `PreviewChart` defaults to `"line"` and that
+    call site passes nothing.
+  - `assertDomainRendered` applies to candles too, and the rendered domain must
+    span every supplied bar — a silently dropped bar is worse on a candle chart.
 - A block beneath the chart naming and explaining the instrument (§C1): a
   noun-final subtitle plus short 해요체 sentences keyed to its kind, **one fact
   each** (register reversed 2026-08-05, §15; `ui/gloss.ts`, pinned by

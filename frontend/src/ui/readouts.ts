@@ -18,7 +18,13 @@ export type Readout =
   | "rangeAvg"
   | "dailyChange"
   | "crosshair"
-  | "lastValue"; // popup-only badge (LWC lastValueVisible)
+  | "lastValue" // popup-only badge (LWC lastValueVisible)
+  // candle mode (§G) — a BAR's five values, not statistics of a window
+  | "open"
+  | "high"
+  | "low"
+  | "close"
+  | "changePct";
 
 /** PreviewChart (hand-rolled SVG) tooltip + crosshair. */
 export const PREVIEW_READOUTS: Readout[] = [
@@ -62,4 +68,36 @@ export const POPUP_READOUTS: Readout[] = [
   "dailyChange",
   "crosshair",
   "lastValue",
+];
+
+/* ——— CANDLE MODE [OWNER, 2026-08-13] ———
+ *
+ * The two surfaces answer the same question about one BAR, so they carry the
+ * same five readouts and the parity rule above applies unchanged: the popup
+ * must be a superset of the preview in candle mode too. They are equal today,
+ * and stated separately rather than aliased so that a future popup-only
+ * addition does not silently become a preview promise.
+ *
+ * There is no window statistic here on purpose. 52주 최고/최저/평균 answer
+ * "where does this level sit in its year"; a candle answers "what did this
+ * week do", and stacking both would put nine rows in a 140px card.
+ */
+export const PREVIEW_CANDLE_READOUTS: Readout[] = [
+  "date",
+  "open",
+  "high",
+  "low",
+  "close",
+  "changePct",
+  "crosshair",
+];
+
+export const POPUP_CANDLE_READOUTS: Readout[] = [
+  "date",
+  "open",
+  "high",
+  "low",
+  "close",
+  "changePct",
+  "crosshair",
 ];

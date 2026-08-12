@@ -29,6 +29,28 @@ export function fmtLevel(v: number | null | undefined, unit: Unit): string {
   return v.toFixed(1);
 }
 
+/** A candle's 등락률 — (종가 − 시가) / 시가, 2dp, signed (§G).
+ *
+ * ONE function because two surfaces print it: the popup's candle tooltip and,
+ * since 2026-08-13, the preview chart's. It lived inline in DetailChart as a
+ * bare `toFixed(2)`, which is exactly the second-display-grammar failure this
+ * module exists to prevent (readout-parity).
+ *
+ * A ZERO OPEN HAS NO PERCENT CHANGE and prints the em dash. The inline version
+ * returned `+0.00%` there, which is not a rounding — it is a fabricated number
+ * on a bar that moved. Spreads and butterflies cross zero, so this is a real
+ * bar in this product, not a theoretical one.
+ */
+export function fmtChangePct(
+  open: number | null | undefined,
+  close: number | null | undefined,
+): string {
+  if (open == null || close == null || open === 0) return EMDASH;
+  const pct = ((close - open) / open) * 100;
+  const s = `${Math.abs(pct).toFixed(2)}%`;
+  return pct < 0 ? `${MINUS}${s}` : `+${s}`;
+}
+
 /** Signed change, unit-aware. A ratio's change is a ratio difference at 2dp
  * with no unit; bp/% changes stay at 1dp (fmtBp). Null → em dash. */
 export function fmtDelta(v: number | null | undefined, unit: Unit): string {

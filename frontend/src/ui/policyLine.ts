@@ -57,8 +57,16 @@ export interface PolicySegment {
   rate: number;
 }
 
+/* The projection targets are typed by WHAT THEY READ — a date axis, `{t}` —
+ * and not as `HistoryPoint[]`. Since 2026-08-13 the same charts also plot
+ * weekly/monthly OHLC bars, and a bar is a perfectly good x-axis for both
+ * references: what these functions need is an ordered list of dates, which is
+ * the only field they ever touch. Asking for `v` and `d` here would have made
+ * candle mode fabricate a close it does not use. */
+type DateAxis = readonly { t: string }[];
+
 /** First index whose date is on or after `iso`; `points.length` if none. */
-function indexAtOrAfter(points: HistoryPoint[], iso: string): number {
+function indexAtOrAfter(points: DateAxis, iso: string): number {
   let lo = 0;
   let hi = points.length;
   while (lo < hi) {
@@ -74,7 +82,7 @@ function indexAtOrAfter(points: HistoryPoint[], iso: string): number {
  * series that ends before the first decision, or a `through` before the
  * series begins. */
 export function policySegments(
-  points: HistoryPoint[],
+  points: DateAxis,
   policy: PolicyStep | undefined,
 ): PolicySegment[] {
   if (!policy || points.length < 2) return [];
@@ -212,7 +220,7 @@ export function snapPolicyToTimes(
  * `null` before CD's first observation; the caller breaks the line there
  * rather than drawing a flat lead-in nobody measured. */
 export function alignSeries(
-  points: HistoryPoint[],
+  points: DateAxis,
   ref: HistoryPoint[] | undefined,
 ): (number | null)[] {
   if (!ref || !ref.length) return [];

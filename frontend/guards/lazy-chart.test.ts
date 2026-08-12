@@ -100,12 +100,26 @@ describe("lightweight-charts stays off the first-load path", () => {
     expect(text).toMatch(/ssr:\s*false/);
   });
 
-  it("a type-only import is still allowed", () => {
-    // erased at compile time, so it does not pull the module into the chunk;
-    // banning it would push callers to re-declare the union by hand.
+  it("ChartType comes from the library-free module, not from the chart", () => {
+    /* It used to be declared in `wall/DetailChart` and type-imported from
+     * there — safe, because a type import is erased, but backwards: the
+     * toolbar control and the ui STORE need this union too, and neither has
+     * any business naming the popup's chart file. It lives in `ui/chartType`
+     * since the candle session (2026-08-13): that module has no values at all
+     * beyond its labels, so anything may import it any way it likes.
+     *
+     * The rule this protects is unchanged and is the next assertion: nothing
+     * but the popup may VALUE-import DetailChart. */
     const text = code("ui/EnlargedView.tsx");
-    expect(text).toMatch(/import\s+type\s*\{[^}]*ChartType[^}]*\}\s*from/);
+    expect(text).toMatch(/import\s*\{[^}]*type ChartType[^}]*\}\s*from\s*["']\.\/chartType["']/);
     expect(valueImports(text, "@/wall/DetailChart")).toBe(false);
+    // and the chart itself now consumes the shared definition rather than
+    // exporting its own — two unions named ChartType would drift
+    const chart = code("wall/DetailChart.tsx");
+    expect(chart).toMatch(/import type \{ ChartType \} from "@\/ui\/chartType"/);
+    expect(chart, "DetailChart re-declares ChartType").not.toMatch(
+      /export type ChartType/,
+    );
   });
 
   it("the loading boundary shows the shared waiting state, not nothing", () => {

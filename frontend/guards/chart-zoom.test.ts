@@ -102,9 +102,24 @@ describe("wiring, pinned in source", () => {
   });
 
   it("panning starts only on a zoomed chart, from an event-time snapshot", () => {
-    expect(chart).toMatch(/if \(e\.button !== 0 \|\| !view\) return/);
+    // `vr` is the view AFTER the length check (below) — the pan must start
+    // from the window actually being drawn, never from a stale one
+    expect(chart).toMatch(/if \(e\.button !== 0 \|\| !vr\) return/);
     expect(chart).toMatch(/setPointerCapture/);
-    expect(chart).toMatch(/base: view/);
+    expect(chart).toMatch(/base: vr/);
+  });
+
+  it("a view is discarded when it indexes a different-length array (candle session)", () => {
+    /* A ViewRange is a pair of INDICES and they only mean something against
+     * the array they were taken from. 선 → 주봉 takes one series from 2,621
+     * points to 553 bars, and a surviving {i0,i1} would silently name a
+     * different window of a different resolution — a picture that looks
+     * completely normal. The state carries the length it indexed and the
+     * render drops any view that no longer matches. */
+    expect(chart).toMatch(/useState<\{ r: ViewRange; len: number \} \| null>/);
+    expect(chart).toMatch(/const vr = view && view\.len === len \? view\.r : null/);
+    // and every writer re-stamps the length it just indexed
+    expect(chart).toMatch(/\{ r: next, len \}/);
   });
 
   it("the way back out exists and is its own click target", () => {
