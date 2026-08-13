@@ -87,13 +87,14 @@ export function InstrumentTable({
   rows,
   onSelect,
   selectedId,
-  height = '70vh',
+  height = 560,
   compact = false,
 }: {
   rows: Row[];
   onSelect: (row: Row) => void;
   selectedId?: string;
-  height?: string;
+  /** PIXELS, and it must be a number — see the comment on the `height` prop below. */
+  height?: number;
   compact?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -252,9 +253,14 @@ export function InstrumentTable({
         variant="ruled"
         bordered
         tableLayout="fixed"
-        /* `maxHeight` computes to `none` on CDS's scroll container (measured), so
-           the window is never constrained and the virtualiser sees the whole
-           document as its viewport. `height` is the prop that lands. */
+        /* CDS GAP — the type lies about this prop.
+           `TableProps.height` is typed `React.CSSProperties['height']`, so a
+           string like '70vh' type-checks. The implementation does
+           `'--table-height': \`${height}px\`` unconditionally, producing
+           `70vhpx` — an invalid value, which resolves to `none` and leaves the
+           scroll container unconstrained. The virtualiser then has no viewport
+           and windows against the whole document.
+           It must be a NUMBER of pixels. Measured, not inferred. */
         height={height}
         compact={compact}
         accessibilityLabel="종목"
