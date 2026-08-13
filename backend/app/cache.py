@@ -1,0 +1,136 @@
+"""On-disk cache for the own-history distributions (Session final Pass D).
+
+The forward-matrix own-history percentiles bootstrap each historical date's
+curve once and reprice all 168 forwards (~13s), and the curve heatmap scans
+every node's history. That is a one-time computation over a file that changes
+once a day, so it should not be paid on every restart.
+
+The cache is keyed by a hash of the source data file PLUS a schema version.
+On a match the payload is loaded; on a miss or mismatch it is recomputed and
+rewritten — and that recompute is logged LOUDLY, because a cache keyed to the
+wrong data is worse than no cache, and this project's recurring defect is
+silent degradation.
+
+SCHEMA_VERSION exists because the trap fired (annual-stats session): the
+forwards payload's `range10y` was renamed `range1y`, the DATA had not
+changed, and the disk cache silently served the old shape to new frontend
+code. Bump it whenever a cached payload's SHAPE changes.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import os
+from pathlib import Path
+from typing import Callable
+
+log = logging.getLogger("sauron.cache")
+
+DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache"
+
+# Bump on ANY change to a cached payload's shape (field renames included).
+# 4 = WTD/QTD dropped from every deltas/values block, and KEY_FORWARDS
+#     re-picked (3Mx3M/9Mx3M in, 2Yx2Y/3Yx3Y out) — both change the cached
+#     forwards payload's shape and content, and a v3 cache would be served
+#     with the old keys still in it.
+# v5 (2026-08-03, V-PASS V5): forward derivation SKIPS dates whose curve
+# cannot price the span (curve_prices_span) — 3Mx3M loses its ten served-0.0%
+# rows from early 2016, and short-start cells' movePct/range histories shrink
+# by the same dates. Same xlsx bytes, different derived content: without the
+# bump a v4 cache would keep serving the zeros.
+# v6 (2026-08-04): the regret replay restricts to the 주요 sets [OWNER] —
+# same xlsx bytes, different cached `regret` content (44 → 29 lines); a v5
+# cache would keep serving the non-주요 lines.
+# v7 (2026-08-05): the 전일종가 rule drops today-dated rows at load — the
+# SAME xlsx bytes now produce different dataset content on different days
+# (the intraday row a Tuesday load drops is included by a Wednesday load).
+# The bump clears v6 caches; the `asof` component below is what keeps the
+# key honest ACROSS days from here on.
+SCHEMA_VERSION = 7
+
+
+def data_hash(path: Path, asof: "object | None" = None) -> str:
+    """SHA-256 of the source file's bytes + the payload schema version, plus
+    the dataset's effective as-of date when given — changes iff the data, the
+    cached payloads' shape, OR the 전일종가 cutoff's effect changes.
+
+    `asof` exists because file bytes stopped determining content (v7): a row
+    dated "today" is dropped at load, so the same file re-read after midnight
+    yields a different dataset. Callers that cache derived payloads MUST pass
+    `dataset.asof`; the bytes-only form remains for content-change checks."""
+    digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    tail = f":{asof.isoformat()}" if asof is not None else ""
+    return f"{digest}:v{SCHEMA_VERSION}{tail}"
+
+
+def sql_data_hash(asof: "object | None" = None) -> str:
+    """`data_hash` 의 MySQL 판 — 해시할 **바이트가 없을 때**의 캐시 키.
+
+    CLAUDE.md 가 이 이동에서 유일하게 못 박아 둔 것이 이 자리다:
+
+        `app/cache.py` keys the disk cache on a HASH OF THE XLSX BYTES. With
+        the source in MySQL that key has nothing to hash, and a cache keyed to
+        the wrong data is worse than no cache (this project's recurring defect
+        is silent staleness). It has to become a table watermark —
+        `MAX(updated_at)` plus a row count.
+
+    그 지시대로 **테이블 워터마크**(마지막 날짜 + 행 수)가 바이트 해시를 대신
+    한다. 행이 늘거나 마지막 날짜가 밀리면 키가 바뀌고 캐시가 무효가 된다.
+    `asof` 는 엑셀 판과 같은 이유로 붙는다 — 같은 테이블도 전일종가 컷 때문에
+    날이 바뀌면 다른 데이터셋이 된다.
+
+    **못 잡는 것**: 이 테이블에는 `updated_at` 이 없다(컬럼이 irs_date + 값 15개
+    뿐, PK 도 인덱스도 없음). 과거 행의 값이 조용히 수정되면 날짜도 행 수도 안
+    바뀌므로 이 키는 그대로다. 잡으려면 값 전체의 해시가 필요하고 그건 매번
+    2,600행 × 16열을 읽는 일이라, 그 비용을 치를지는 별도 판단으로 남긴다.
+    [미해결, 2026-08-07]
+    """
+    from .mysqldb import watermark
+
+    last, rows = watermark()
+    tail = f":{asof.isoformat()}" if asof is not None else ""
+    return f"sql:{last}:{rows}:v{SCHEMA_VERSION}{tail}"
+
+
+def cached(
+    name: str,
+    current_hash: str,
+    compute: Callable[[], object],
+    cache_dir: Path = DEFAULT_CACHE_DIR,
+) -> object:
+    """Return the cached payload for `name` if its stored hash matches
+    `current_hash`; otherwise compute, persist, and return it. Loud on miss."""
+    f = Path(cache_dir) / f"{name}.json"
+    if f.exists():
+        try:
+            blob = json.loads(f.read_text(encoding="utf-8"))
+            if blob.get("hash") == current_hash:
+                log.info("[cache] %s: loaded from disk (hash match)", name)
+                return blob["payload"]
+            log.warning(
+                "[cache] %s: STALE — source data changed, recomputing", name
+            )
+        # AttributeError/TypeError are in here for a reason: a file holding
+        # valid JSON that is not an object (`[1,2,3]`, `null`) has no `.get`,
+        # and that used to escape as a crash on startup rather than a
+        # recompute. Every unreadable cache must degrade the same way.
+        except (OSError, ValueError, KeyError, AttributeError, TypeError) as e:
+            log.warning("[cache] %s: unreadable (%s), recomputing", name, e)
+    else:
+        log.warning("[cache] %s: MISSING, computing", name)
+
+    payload = compute()
+    Path(cache_dir).mkdir(parents=True, exist_ok=True)
+    # Write through a temp file and rename. A direct write that dies partway
+    # leaves a half file which the next start recovers from — correctly, but
+    # only after paying the full recompute. os.replace is atomic on both
+    # POSIX and Windows, so a killed process leaves either the old file or
+    # the new one, never a torn one.
+    tmp = f.with_suffix(".json.tmp")
+    tmp.write_text(
+        json.dumps({"hash": current_hash, "payload": payload}), encoding="utf-8"
+    )
+    os.replace(tmp, f)
+    return payload
