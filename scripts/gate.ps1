@@ -115,9 +115,18 @@ if (-not $SkipMode2) {
     }
     else {
       Write-Host "backend up after $([int]$sw.Elapsed.TotalSeconds)s" -ForegroundColor Green
+      # Point the suite at the backend WE started. Without this the suite's
+      # BASE stayed on 8100 while -BackendPort moved the process, so an
+      # override silently tested whatever else was on 8100 — on this machine
+      # that is the live service behind the Tailscale Funnel, and
+      # Test-PortListening above would see IT answering and report "backend
+      # up". A mode-2 green taken that way describes a backend that was never
+      # under test (see the BASE comment in tests/test_static_agreement.py).
+      $env:BW_AGREEMENT_PORT = "$BackendPort"
       Invoke-Gate 'mode 2 (agreement)' 'static-vs-live agreement' (Join-Path $repo 'backend') {
         python -m pytest tests/test_static_agreement.py -q
       }
+      Remove-Item Env:\BW_AGREEMENT_PORT -ErrorAction SilentlyContinue
     }
   }
   finally {
