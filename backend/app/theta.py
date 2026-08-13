@@ -143,6 +143,30 @@ def _unit_theta(
     return carry, roll, a_now, a_horizon
 
 
+def _leg_cache(zc: np.ndarray, cd_decimal: float):
+    """테너 → `_unit_theta`, 한 번만 계산하는 조회 함수.
+
+    다리 계산은 이 모듈에서 압도적으로 비싼 부분(측정 0.22ms)인데, 84개
+    패키지가 저마다 자기 다리를 다시 구해서 **237번** 부르고 있었다 — 서로
+    다른 테너는 13개뿐인데. 표 하나당 33ms 였고 그게 `wall_summary` 전체의
+    22.8% 였다.
+
+    `functools.lru_cache` 는 못 쓴다: 커브가 numpy 배열이라 해시가 안 된다.
+    그래서 커브와 CD 를 클로저로 묶은 조회 함수를 표 만들 때 한 번 세운다 —
+    캐시의 수명이 그 커브의 수명과 같아지므로 낡은 커브의 값이 살아남을 수가
+    없다. `theta_for`/`theta_for_package` 는 안 받으면 자기 것을 하나 만든다
+    (한 종목만 볼 때는 캐시가 무의미하고, 테스트가 그렇게 부른다)."""
+    cache: dict[float, tuple[float, float, float, float]] = {}
+
+    def leg(tenor_years: float) -> tuple[float, float, float, float]:
+        hit = cache.get(tenor_years)
+        if hit is None:
+            hit = cache[tenor_years] = _unit_theta(zc, tenor_years, cd_decimal)
+        return hit
+
+    return leg
+
+
 def _block(carry: float, roll: float, dv01: float, a_h_ref: float) -> dict:
     """현금 캐리·롤다운(원)을 화면이 읽는 블록으로. `dv01` 은 기준 다리의
     DV01(원/bp), `a_h_ref` 는 그 다리의 호라이즌 연금."""
@@ -161,17 +185,23 @@ def _block(carry: float, roll: float, dv01: float, a_h_ref: float) -> dict:
     }
 
 
-def theta_for(zc: np.ndarray, tenor_years: float, cd_decimal: float) -> dict:
+def theta_for(
+    zc: np.ndarray, tenor_years: float, cd_decimal: float, leg=None
+) -> dict:
     """아웃라이트 한 테너의 세타 블록 (페이 기준, 원 단위, `NOTIONAL` 기준).
-    `perDv01` 만 노셔널에 무관하다."""
-    carry_u, roll_u, a_now, a_h = _unit_theta(zc, tenor_years, cd_decimal)
+    `perDv01` 만 노셔널에 무관하다. `leg` 은 `_leg_cache` 의 조회 함수."""
+    carry_u, roll_u, a_now, a_h = (leg or _leg_cache(zc, cd_decimal))(tenor_years)
     return _block(
         carry_u * NOTIONAL, roll_u * NOTIONAL, a_now * BP * NOTIONAL, a_h
     )
 
 
 def theta_for_package(
-    zc: np.ndarray, tenor_years: list[float], kind: str, cd_decimal: float
+    zc: np.ndarray,
+    tenor_years: list[float],
+    kind: str,
+    cd_decimal: float,
+    leg=None,
 ) -> dict:
     """스프레드·플라이의 세타 블록 — **DV01 중립으로 짠 방향 +1 패키지**.
 
@@ -197,7 +227,8 @@ def theta_for_package(
     if len(coefs) != len(tenor_years):
         raise ValueError(f"{kind}: {len(tenor_years)} legs, {len(coefs)} coefficients")
 
-    legs = [_unit_theta(zc, t, cd_decimal) for t in tenor_years]
+    get = leg or _leg_cache(zc, cd_decimal)
+    legs = [get(t) for t in tenor_years]
     a_ref = legs[PACKAGE_REF][2]
     a_h_ref = legs[PACKAGE_REF][3]
 
@@ -230,6 +261,8 @@ def theta_table(dataset: Dataset) -> tuple[dict[str, dict], dict]:
         return {}, meta
 
     zc = bootstrap_zero_curve(par_rates_at(dataset, dataset.asof))
+    # 다리 계산을 테너당 한 번으로 — 근거는 `_leg_cache`.
+    leg = _leg_cache(zc, cd)
 
     def priceable(tenor: str) -> float | None:
         # 호가가 없는 노드에는 세타를 붙이지 않는다. 커브가 보간으로 값을
@@ -246,7 +279,7 @@ def theta_table(dataset: Dataset) -> tuple[dict[str, dict], dict]:
     for tenor in THETA_TENORS:
         t = priceable(tenor)
         if t is not None:
-            out[tenor] = theta_for(zc, t, cd)
+            out[tenor] = theta_for(zc, t, cd, leg)
 
     # 스프레드·플라이. 다리 하나라도 값을 못 내면 그 패키지도 안 낸다 —
     # 다리 둘로 그린 플라이는 완성돼 보이면서 틀린다(백테스트 창의 같은 규칙).
@@ -256,6 +289,8 @@ def theta_table(dataset: Dataset) -> tuple[dict[str, dict], dict]:
         ts = [priceable(leg) for leg in legs]
         if any(t is None for t in ts):
             continue
-        out[sid] = theta_for_package(zc, [t for t in ts if t is not None], kind, cd)
+        out[sid] = theta_for_package(
+            zc, [t for t in ts if t is not None], kind, cd, leg
+        )
 
     return out, meta

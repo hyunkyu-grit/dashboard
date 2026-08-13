@@ -303,6 +303,14 @@ rule:
   `withThetaData(ALL_COLUMNS,false)` 로 굳혀 뒀다 — 그냥 `ALL_COLUMNS` 를 두면
   꼬리 바닥이 안 그리는 트랙의 폭을 예약해 매 행 끝에 죽은 공간이 남는다(한
   빌드 동안 실제로 그랬다).
+- **성능**: 다리 계산이 종목마다 되풀이돼 `_unit_theta` 를 **237번** 부르고
+  있었다(서로 다른 테너는 13개뿐 — 84개 패키지가 저마다 자기 다리를 다시
+  구했다). 표 하나 33ms 로 `wall_summary` 전체의 22.8% 였다. 커브·CD 를 묶은
+  조회 함수(`_leg_cache`)를 표당 하나 세워 **33ms → 3.4ms**, `wall_summary`
+  는 145 → 116ms. 값은 원 단위까지 불변(위 실측 숫자 그대로). `lru_cache` 는
+  못 쓴다 — 커브가 numpy 배열이라 해시가 안 된다. 캐시 수명 = 그 커브의 수명.
+  [OWNER, 2026-08-13 — 시뮬·백테스트 계산 성능 레인이 동시에 돌고 있어 요약
+  경로에 22.8% 를 얹어 두고 넘기지 않는다.]
 - 검증: pytest 381 pass(신규 `test_theta.py` 15) · vitest 905 pass(신규
   `guards/theta-column.test.ts` 14) · `pnpm build` 통과 · `build_static.py`
   재굽기에 `theta`/`thetaBasis` 실림 확인 · prod 빌드를 :3100 에 띄우고
