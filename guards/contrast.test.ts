@@ -103,16 +103,35 @@ describe('direction hues clear 4.5:1 on every painted surface', () => {
     ).toEqual([]);
   });
 
-  // The rejected surfaces stay measured. If CDS lightens one, this test turns
-  // red and the constraint gets revisited on purpose rather than by accident.
+  /* The rejected surfaces stay measured [pass 2, C3]. Two things are asserted,
+   * and they are different things:
+   *   1. the surfaces STILL fail — if CDS lightens either value, this turns red
+   *      and the constraint gets revisited on purpose rather than by accident;
+   *   2. nothing in v2 paints them at all, so no signed number can land there
+   *      by a route the first assertion would not notice. */
   for (const surface of REJECTED_FOR_DIRECTION) {
     it(`light · ${surface} is still too dark for the frozen pair`, () => {
       const bg = (defaultTheme.lightColor as Record<string, string>)[surface];
       const { up, down } = readPair('light');
-      expect(contrast(up, bg)).toBeLessThan(FLOOR);
-      expect(contrast(down, bg)).toBeLessThan(FLOOR);
+      const cUp = contrast(up, bg);
+      const cDown = contrast(down, bg);
+      expect(cUp, `up on ${surface} = ${cUp.toFixed(2)}:1 — CDS changed it`).toBeLessThan(FLOOR);
+      expect(cDown, `down on ${surface} = ${cDown.toFixed(2)}:1 — CDS changed it`).toBeLessThan(
+        FLOOR,
+      );
     });
   }
+
+  it('no v2 component paints a rejected surface at all', () => {
+    const painted = paintedInSource();
+    const forbidden = painted.filter((s) =>
+      (REJECTED_FOR_DIRECTION as readonly string[]).includes(s),
+    );
+    expect(
+      forbidden,
+      `v2 paints a surface the frozen hues cannot sit on: ${forbidden.join(', ')}`,
+    ).toEqual([]);
+  });
 
   for (const { name, palette } of schemes) {
     const pair = readPair(name);

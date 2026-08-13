@@ -20,12 +20,16 @@
  * Change the hues too and any difference observed has two possible causes, which
  * is the same as having no result.
  *
- * ── Two pairs, not one ───────────────────────────────────────────────────────
- * v1's palette is a LIGHT pair and a DARK pair; the session prompt named only the
- * light pair. The dark pair is the same frozen decision expressed for the other
- * surface (v1 §9: the light pair measures ~3.4:1 on a dark tile, which is why the
- * dark values exist at all). Carrying both over is completing the archive, not
- * retuning it. See REPORT_v2.md → Provisional.
+ * ── Two pairs, not one — SETTLED [pass 2] ────────────────────────────────────
+ * v1's palette is a LIGHT pair and a DARK pair; the first session prompt named
+ * only the light pair. The dark pair is the same frozen decision expressed for
+ * the other surface (v1 §9: the light pair measures ~3.4:1 on a dark tile, which
+ * is why the dark values exist at all). Carrying both is completing the archive,
+ * not retuning it.
+ *
+ * This was Provisional in REPORT_v2.md and is now settled: **both pairs are
+ * frozen**, the contrast guard covers both schemes, and no hue is retuned. Four
+ * values, no more, and none of them is a style choice.
  */
 
 :root {

@@ -7,14 +7,20 @@ import { describe, expect, it } from 'vitest';
  * Every colour literal in v2 lives in ONE file. A hex pasted into a component is
  * a palette fork that no contrast guard can see.
  *
- * ── Why comments are stripped and string literals are NOT ─────────────────────
- * The session prompt asked for both. Comments, yes: prose describing a removed
- * rule tripped this class of guard four times in v1, and a comment cannot paint
- * anything. String literals, no — and this is a deliberate deviation, recorded in
- * REPORT_v2.md → Provisional. In a `.ts`/`.tsx` file a colour IS a string literal
+ * ── Why comments are stripped and string literals are NOT — SETTLED [pass 2] ──
+ * The first session prompt asked for both. Comments, yes: prose describing a
+ * removed rule tripped this class of guard four times in v1, and a comment cannot
+ * paint anything.
+ *
+ * String literals, NO. In a `.ts`/`.tsx` file a colour IS a string literal
  * (`style={{ color: '#d92d3c' }}`), so stripping them would blind the guard to
- * precisely the thing it exists to catch, leaving a test that passes by being
- * unable to look. The stated purpose survives; the letter does not.
+ * precisely the thing it exists to catch — leaving a test that passes by being
+ * unable to look. This was Provisional; the owner accepted the reasoning and it
+ * is now settled.
+ *
+ * **Do not "fix" this back.** A future session reading the original instruction
+ * will be tempted to add string-literal stripping for consistency with the
+ * prompt's letter. That change would make this file green and useless.
  */
 
 const ROOT = path.resolve(import.meta.dirname, '..');
