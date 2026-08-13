@@ -109,10 +109,20 @@ export function InstrumentTable({
   selectedId,
   height = 560,
   compact = false,
+  levelHeader,
+  divider = true,
 }: {
   rows: Row[];
   onSelect: (row: Row) => void;
   selectedId?: string;
+  /** The 현재 column's header is the DATA DATE, not the word 현재 — the number under
+   * it is a close, and a column that says "현재" over yesterday's close is the
+   * silent-staleness defect wearing a label. */
+  levelHeader?: string;
+  /** 주요 / 전체 divider. Only meaningful in tenor order: once rows are sorted by
+   * |change| the two sets interleave and a divider would be drawing a line through
+   * the middle of the answer. */
+  divider?: boolean;
   /** PIXELS, and it must be a number — see the comment on the `height` prop below. */
   height?: number;
   compact?: boolean;
@@ -173,9 +183,25 @@ export function InstrumentTable({
 
   const modelRows = table.getRowModel().rows;
 
+  /* The list the virtualizer actually walks: rows, with one sentinel where 주요 ends.
+   * The sentinel is a list item rather than a sticky overlay because it has to scroll
+   * with the rows it separates — a divider that floats is a legend, not a divider. */
+  type Item = { kind: 'row'; row: Row } | { kind: 'divider'; label: string };
+  const display = useMemo<Item[]>(() => {
+    const asRows = modelRows.map((r) => ({ kind: 'row' as const, row: r.original }));
+    if (!divider || sortCol != null) return asRows;
+    const firstRest = asRows.findIndex((i) => !i.row.key);
+    if (firstRest <= 0) return asRows;
+    return [
+      ...asRows.slice(0, firstRest),
+      { kind: 'divider' as const, label: '전체' },
+      ...asRows.slice(firstRest),
+    ];
+  }, [modelRows, divider, sortCol]);
+
   const scrollEl = useScrollElement(hostRef, rows.length > 0);
   const virtualizer = useVirtualizer({
-    count: modelRows.length,
+    count: display.length,
     getScrollElement: () => scrollEl,
     estimateSize: () => ROW_H,
     overscan: OVERSCAN,
@@ -315,7 +341,7 @@ export function InstrumentTable({
               <TextCaption as="span">종목</TextCaption>
             </TableCell>
             <TableCell as="th" scope="col" justifyContent="flex-end">
-              <TextCaption as="span">현재</TextCaption>
+              <TextCaption as="span">{levelHeader ?? '현재'}</TextCaption>
             </TableCell>
             {cols.bases.map((b) => {
               const { end, ...cell } = sortable(b);
@@ -339,8 +365,20 @@ export function InstrumentTable({
           ) : null}
 
           {items.map((vi) => {
-            const row = modelRows[vi.index]?.original;
-            if (!row) return null;
+            const item = display[vi.index];
+            if (!item) return null;
+            if (item.kind === 'divider') {
+              return (
+                <tr key="sr-divider" data-sr-divider style={{ height: ROW_H }}>
+                  <td colSpan={6} style={{ padding: '0 8px', border: 0 }}>
+                    <TextCaption as="span" color="fgMuted">
+                      {item.label}
+                    </TextCaption>
+                  </td>
+                </tr>
+              );
+            }
+            const row = item.row;
             return (
               <TableRow
                 key={row.id}

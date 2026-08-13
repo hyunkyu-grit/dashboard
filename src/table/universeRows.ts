@@ -39,7 +39,17 @@ type UniverseRow = {
 export type UniversePayload = {
   asof: string;
   rows: UniverseRow[];
-  sources: Record<string, { table: string; asof: string | null }>;
+  sources: Record<
+    string,
+    {
+      table: string;
+      asof: string | null;
+      /** Business days behind, and the level the BACKEND decided. The browser does not
+       * get a second opinion on what "stale" means. */
+      ageBusinessDays: number | null;
+      level: 'current' | 'behind' | 'stale';
+    }
+  >;
   absent: AbsentClass[];
 };
 

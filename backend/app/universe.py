@@ -273,14 +273,61 @@ def build_universe() -> dict[str, Any]:
     asof = max(
         [cdates[-1] if cdates else dt.date.min, idates[-1] if idates else dt.date.min],
     )
+
+    # Freshness is computed HERE, per source, for the same reason the swap monitor
+    # computes its own: a browser that decides what "stale" means is a second opinion,
+    # and the two will disagree on the day it matters. Business days, Seoul.
+    def _age(d: dt.date | None) -> int | None:
+        if d is None:
+            return None
+        n, cur = 0, d
+        today = dt.date.today()
+        while cur < today:
+            cur += dt.timedelta(days=1)
+            if cur.weekday() < 5:
+                n += 1
+        return n
+
+    def _level(age: int | None) -> str:
+        if age is None:
+            return "stale"
+        return "current" if age <= 1 else ("behind" if age <= 3 else "stale")
+
+    fut_asof = None
+    for code in futures_raw:
+        rows_f = futures_raw[code]
+        if rows_f:
+            d = rows_f[-1][0]
+            d = d.date() if hasattr(d, "date") else d
+            fut_asof = d if fut_asof is None else max(fut_asof, d)
     return {
         "asof": asof.isoformat(),
         "rows": rows,
         "sources": {
-            "govt": {"table": "sim_portfolio.credit_matrix", "asof": cdates[-1].isoformat() if cdates else None},
-            "credit": {"table": "sim_portfolio.credit_matrix", "asof": cdates[-1].isoformat() if cdates else None},
-            "bss": {"table": "credit_matrix x mkt_irs_close", "asof": asof.isoformat()},
-            "futures": {"table": "infomax.daily_ktb_price / daily_lktb_price", "asof": None},
+            "govt": {
+                "table": "sim_portfolio.credit_matrix",
+                "asof": cdates[-1].isoformat() if cdates else None,
+                "ageBusinessDays": _age(cdates[-1] if cdates else None),
+                "level": _level(_age(cdates[-1] if cdates else None)),
+            },
+            "credit": {
+                "table": "sim_portfolio.credit_matrix",
+                "asof": cdates[-1].isoformat() if cdates else None,
+                "ageBusinessDays": _age(cdates[-1] if cdates else None),
+                "level": _level(_age(cdates[-1] if cdates else None)),
+            },
+            "bss": {
+                "table": "credit_matrix × mkt_irs_close",
+                "asof": asof.isoformat(),
+                "ageBusinessDays": _age(asof),
+                "level": _level(_age(asof)),
+            },
+            "futures": {
+                "table": "infomax.daily_ktb_price / daily_lktb_price",
+                "asof": fut_asof.isoformat() if fut_asof else None,
+                "ageBusinessDays": _age(fut_asof),
+                "level": _level(_age(fut_asof)),
+            },
         },
         # Named so the screen can say WHY a class is empty rather than just being bare.
         "absent": [
