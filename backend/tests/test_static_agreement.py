@@ -12,6 +12,10 @@ leaving a later session to rediscover why it never fires:
     cd backend && python -m uvicorn app.main:app --port 8100
     python -m pytest tests/test_static_agreement.py -q
 
+The port is overridable with `BW_AGREEMENT_PORT`, which is how `gate.ps1` mode 2
+points this suite at the backend it started rather than at whatever happens to
+be on 8100 (see the comment on `BASE` below).
+
 A skipped test proves nothing, which is why the drift it guards against is
 also structurally prevented: `app/payloads.py` is the single source of every
 body, and both the HTTP handlers and the pipeline call it. This test checks the
@@ -22,6 +26,7 @@ did not change the content on the way out.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -38,7 +43,21 @@ from app.static_paths import (  # noqa: E402
     series_path,
 )
 
-BASE = "http://127.0.0.1:8100"
+# The port is an INPUT, not a constant, and that is load-bearing rather than
+# tidy. `gate.ps1` mode 2 starts its own backend on `-BackendPort` and then runs
+# this suite; while this line said 8100 unconditionally, an override moved the
+# backend and left the suite still asking 8100. On this machine 8100 is the
+# LIVE service (a Tailscale Funnel proxies the public internet into it), so a
+# mode-2 run with production up did not merely test the wrong process — it
+# reported agreement for a backend that was never the one under test, and
+# `Test-PortListening` saw production still answering and called it "backend
+# up". Every past mode-2 green taken while production was running is therefore
+# unattributable (MEMO-1B §1, REPORT_memo1c §3).
+#
+# Default unchanged, so a bare `pytest tests/test_static_agreement.py` against a
+# hand-started :8100 behaves exactly as before.
+_PORT = os.environ.get("BW_AGREEMENT_PORT", "8100")
+BASE = f"http://127.0.0.1:{_PORT}"
 PUBLIC = REPO / "frontend" / "public"
 
 # A sample, not the whole set: one of each id shape, because the shapes are
@@ -66,9 +85,11 @@ def _backend_up() -> bool:
 pytestmark = pytest.mark.skipif(
     not _backend_up(),
     reason=(
-        "no backend on :8100 — this test compares the committed static files "
+        f"no backend on :{_PORT} — this test compares the committed static files "
         "against the live API and cannot gate. Start it with "
-        "`python -m uvicorn app.main:app --port 8100` and re-run."
+        f"`python -m uvicorn app.main:app --port {_PORT}` and re-run "
+        "(BW_AGREEMENT_PORT overrides the port; gate.ps1 sets it from "
+        "-BackendPort)."
     ),
 )
 

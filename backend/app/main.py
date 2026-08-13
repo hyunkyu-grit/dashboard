@@ -64,7 +64,10 @@ from irs_pricer.core.errors import CurveBootstrapError
 from irs_pricer.engine import curve_cache
 
 from . import instruments as instruments_mod
+from . import calendar_cache
+from . import df_cache
 from . import payloads
+from . import schedule_cache
 from .backtest import BacktestError, Position, book_recon, run_backtest
 from .cache import cached
 from .curves import build_basis_curves
@@ -105,6 +108,23 @@ async def lifespan(app: FastAPI):
         curve_cache.uninstall()
     else:
         curve_cache.install()
+    # The BACKTEST's equivalent, and a separate cache with a separate switch —
+    # `BW_SCHEDULE_CACHE=0` (see app/schedule_cache.py). It memoises the ISDA
+    # schedule build, which the reference book was doing 39,804 times to produce
+    # 6 distinct schedules. Installed here rather than at import so the default
+    # for tests and scripts stays the unmemoized engine, exactly as
+    # curve_cache's does; `install()` reads the flag itself.
+    schedule_cache.install()
+    # MEMO-1C: the residual the schedule memo could not reach — `select_fixing`
+    # walking back to F(R). 515,473 calls over 40 distinct inputs on the
+    # reference book (app/calendar_cache.py). `BW_CALENDAR_CACHE=0` disables it.
+    calendar_cache.install()
+    # MEMO-2: the scalar discount-factor lookup, memoized PER CURVE. It was
+    # 74% of simulation cost and ~4/5 of that is numpy dispatch, not
+    # arithmetic; the same (curve, t) pair is asked 20-98x per run.
+    # Installs on BOTH copies of the port (backtest + simulation) — they are
+    # different function objects. `BW_DF_CACHE=0` disables it.
+    df_cache.install()
     logging.getLogger("irs_pricer").info("simulation data dir: %s", DATA_DIR)
     yield
 
