@@ -51,3 +51,28 @@ export const DIRECTION_SURFACES = ['bg', 'bgElevation1', 'bgElevation2'] as cons
 export const REJECTED_FOR_DIRECTION = ['bgAlternate', 'bgSecondary'] as const;
 
 export type DirectionSurface = (typeof DIRECTION_SURFACES)[number];
+
+/**
+ * A denser space scale, MEASURED but NOT SELECTED.
+ *
+ * V2.7 measures row height and hands the number to the owner; choosing a
+ * density is a separate decision (§2). This exists so the third measurement in
+ * that report is a real render rather than an extrapolation, and so the owner
+ * can see what a custom scale buys over CDS `compact`.
+ *
+ * Only the small end moves. The large steps are page rhythm and have nothing to
+ * do with a table row.
+ */
+export const sauronDenseTheme: ThemeConfig = {
+  ...sauronTheme,
+  id: 'sauron-v2-dense',
+  space: {
+    ...sauronTheme.space,
+    '0.25': 1,
+    '0.5': 2,
+    '0.75': 3,
+    '1': 4,
+    '1.5': 6,
+    '2': 8,
+  },
+};

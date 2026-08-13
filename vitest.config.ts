@@ -9,6 +9,10 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}', 'guards/**/*.test.{ts,tsx}'],
     globals: true,
+    /* CDS ships ESM with extensionless relative imports (`./Table`), which
+     * node's resolver rejects. Inlining routes the package through Vite's
+     * resolver, which handles them — the same path the Next build takes. */
+    server: { deps: { inline: [/@coinbase[\\/]cds-/] } },
   },
   resolve: {
     alias: { '@': path.resolve(import.meta.dirname, 'src') },
