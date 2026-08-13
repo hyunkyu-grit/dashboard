@@ -31,12 +31,27 @@ export function CandidateB({ bars, height = 420 }: { bars: Bar[]; height?: numbe
       const up = cs.getPropertyValue('--sr-up').trim();
       const down = cs.getPropertyValue('--sr-down').trim();
 
+      /* D4.3 — chrome removal. No gridlines, no axis lines; value labels float
+       * right in muted ink; date captions are sparse and unticked. The muted ink
+       * is READ from the CDS token rather than restated, same as the direction
+       * pair — the library takes strings and cannot resolve a custom property. */
+      const muted = cs.getPropertyValue('--color-fgMuted').trim() || cs.color;
+
       const chart = lw.createChart(el, {
         height,
-        layout: { background: { color: 'transparent' }, textColor: cs.color },
+        layout: { background: { color: 'transparent' }, textColor: muted },
         grid: { horzLines: { visible: false }, vertLines: { visible: false } },
-        rightPriceScale: { borderVisible: false },
-        timeScale: { borderVisible: false },
+        rightPriceScale: {
+          borderVisible: false,
+          scaleMargins: { top: 0.12, bottom: 0.12 },
+        },
+        timeScale: {
+          borderVisible: false,
+          ticksVisible: false,
+          fixLeftEdge: true,
+          fixRightEdge: true,
+        },
+        crosshair: { horzLine: { labelVisible: false } },
       });
 
       const series = chart.addCandlestickSeries({
@@ -51,6 +66,21 @@ export function CandidateB({ bars, height = 420 }: { bars: Bar[]; height?: numbe
       series.setData(
         bars.map((b) => ({ time: b.t as never, open: b.o, high: b.h, low: b.l, close: b.c })),
       );
+
+      /* A dot at the last point — the "where are we now" marker. It is the only
+       * mark on the chart that is not a bar, which is the point of it. */
+      const last = bars[bars.length - 1];
+      if (last) {
+        series.setMarkers([
+          {
+            time: last.t as never,
+            position: 'inBar',
+            shape: 'circle',
+            color: last.c >= last.o ? up : down,
+          },
+        ]);
+      }
+
       chart.timeScale().fitContent();
 
       /* B4 evidence: recompute visible-range high/low whenever the range moves.

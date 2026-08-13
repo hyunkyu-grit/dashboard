@@ -44,3 +44,24 @@ export function tintStyle(v: number | null | undefined): React.CSSProperties | u
     backgroundColor: `color-mix(in srgb, ${hue} ${Math.round(alpha * 100)}%, transparent)`,
   };
 }
+
+/**
+ * D4.1 — the sign as a GLYPH, not only as a hue.
+ *
+ * v1's rule is that sign must stay legible in monochrome; a bare `+` / `−`
+ * satisfied it thinly (a minus is one thin stroke, and at caption size on a
+ * tinted cell it is easy to lose). An arrow carries direction in its shape, so
+ * the colour becomes reinforcement rather than the only channel.
+ *
+ * Zero gets no arrow: it has no direction, and drawing one would claim it does.
+ */
+export function directionGlyph(v: number | null | undefined): string {
+  if (v == null || v === 0) return '';
+  return v > 0 ? '↗' : '↘';
+}
+
+/** The number without its sign — the arrow carries that now. Keeps the digits
+ * `tabular-nums`-aligned, which a leading `+`/`−` of differing width did not. */
+export function unsignedDelta(text: string): string {
+  return text.replace(/^[+\u2212-]/, '');
+}

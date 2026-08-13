@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@coinbase/cds-web/buttons';
+import { Chip } from '@coinbase/cds-web/chips';
 import { HStack, VStack } from '@coinbase/cds-web/layout';
 import { TextBody, TextCaption, TextTitle3 } from '@coinbase/cds-web/typography';
 
@@ -66,18 +67,21 @@ export default function Home() {
         </Button>
       </HStack>
 
-      {/* The screener set is fixed and stays on one row — no column picker and
-          nothing user-addable (v1 §4 low user freedom, carried). */}
+      {/* D4.5 — chips, not the placeholder Buttons. The set is FIXED and stays on
+          one row: the full set is deliberately not exposed and there is no column
+          picker (v1 §4 low user freedom, carried). */}
       <HStack gap={1}>
         {GROUPS.map((g) => (
-          <Button
+          <Chip
             key={g}
             size="s"
-            variant={g === group ? 'primary' : 'secondary'}
+            inverted={g === group}
+            className="sr-pill"
+            data-active={g === group}
             onClick={() => setGroup(g)}
           >
             {GROUP_LABEL[g]}
-          </Button>
+          </Chip>
         ))}
       </HStack>
 

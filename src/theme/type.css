@@ -1,0 +1,83 @@
+/* D4 — the type stack unifies on Pretendard (SIL OFL).
+ *
+ * The reason is not taste. Mixed Latin/Hangul inside one cell is this product's
+ * normal case ("IRS 3Y", "회사 AA− 3Y"), and two faces mean two baselines, two
+ * sets of metrics, and a column width computed from format maxima that no longer
+ * holds for half the strings in the column.
+ *
+ * ── local() first, and what is NOT here ──────────────────────────────────────
+ * `local()` comes first so an installed copy wins — no download, no FOUT, and on
+ * this desk Pretendard IS installed (v1 ships `--font-sans: "Pretendard Variable",
+ * Pretendard, sans-serif`).
+ *
+ * **No font file is self-hosted, and that is a gap, not a decision.** Session §0
+ * limits stack additions to the two TanStack packages, so the `pretendard` npm
+ * package could not be added, and fetching a binary was outside this pass. A
+ * machine without Pretendard installed therefore falls back. Recorded in the
+ * report; hotlinking was not done and must not be.
+ *
+ * ── FOUT / fallback width ────────────────────────────────────────────────────
+ * `font-display: swap` is deliberately NOT used: a swap would relayout the table
+ * and jump every column width, which is the one thing column widths derived from
+ * format maxima must never do. With `local()`-only sources there is no network
+ * fetch and so no swap moment — the face is either present at first paint or it
+ * is not. The fallback chain is ordered by metric closeness to Pretendard for
+ * Hangul first (Malgun Gothic on Windows, Apple SD Gothic Neo on macOS), so a
+ * miss changes the face without changing the line box.
+ */
+
+@font-face {
+  font-family: 'Pretendard SR';
+  src:
+    local('Pretendard Variable'),
+    local('PretendardVariable'),
+    local('Pretendard');
+  font-weight: 100 900;
+  font-style: normal;
+}
+
+:root {
+  --sr-font-sans:
+    'Pretendard SR', 'Pretendard Variable', Pretendard, -apple-system, 'Apple SD Gothic Neo',
+    'Malgun Gothic', system-ui, sans-serif;
+}
+
+/* CDS resolves its own faces through `--fontFamily-*`; pointing those at the
+ * stack above is what actually changes the rendered face, since every CDS text
+ * component reads them. One declaration, not a per-component override. */
+body,
+[class*='sauron-v2'] {
+  --fontFamily-display1: var(--sr-font-sans);
+  --fontFamily-display2: var(--sr-font-sans);
+  --fontFamily-display3: var(--sr-font-sans);
+  --fontFamily-title1: var(--sr-font-sans);
+  --fontFamily-title2: var(--sr-font-sans);
+  --fontFamily-title3: var(--sr-font-sans);
+  --fontFamily-title4: var(--sr-font-sans);
+  --fontFamily-headline: var(--sr-font-sans);
+  --fontFamily-body: var(--sr-font-sans);
+  --fontFamily-label1: var(--sr-font-sans);
+  --fontFamily-label2: var(--sr-font-sans);
+  --fontFamily-caption: var(--sr-font-sans);
+  --fontFamily-legal: var(--sr-font-sans);
+}
+
+/* Numbers keep tabular figures everywhere they line up in a column. CDS's
+ * `tabularNumbers` prop already does this per component; this is the floor for
+ * anything that renders digits without going through it. */
+.sr-up,
+.sr-down,
+.sr-flat {
+  font-variant-numeric: tabular-nums;
+}
+
+/* D4.4 — period / basis selectors as pills. The active pill carries a faint tint
+ * of the direction hue rather than a fill, so the selector never competes with a
+ * signed number for the same visual weight. */
+.sr-pill {
+  border-radius: 999px;
+}
+
+.sr-pill[data-active='true'] {
+  background: color-mix(in srgb, var(--sr-up) 12%, transparent);
+}

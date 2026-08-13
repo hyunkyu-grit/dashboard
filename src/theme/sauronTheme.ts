@@ -3,6 +3,20 @@ import { defaultTheme } from '@coinbase/cds-web/themes/defaultTheme';
 import type { ThemeConfig } from '@coinbase/cds-web/core/theme';
 
 /**
+ * One face for Latin and Hangul both.
+ *
+ * Mixed Latin/Hangul inside one cell is this product's normal case ("IRS 3Y",
+ * "회사 AA− 3Y"). Two faces mean two baselines, two sets of metrics, and a column
+ * width computed from format maxima that holds for only half the strings in the
+ * column.
+ *
+ * `local()` resolution only — see `theme/type.css` for why no file is
+ * self-hosted and why that is recorded as a gap rather than a decision.
+ */
+const SR_FONT_STACK =
+  "'Pretendard Variable', Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif";
+
+/**
  * v2's theme, derived from CDS `defaultTheme`.
  *
  * It is deliberately a thin derivation right now. This spike has ONE independent
@@ -28,6 +42,15 @@ export const sauronTheme: ThemeConfig = {
    * padding, which is `--space-1` top and bottom. 8 → 6 removes the 4.58 px.
    * Tuned to land on the number rather than accepting what falls out. */
   space: { ...defaultTheme.space, '1': 6 },
+
+  /* D4 — the face, set through the THEME and not through CSS.
+   * CDS's ThemeProvider emits `--fontFamily-*` as inline styles on its wrapper
+   * (measured: 698 inline custom properties), and no stylesheet rule can beat an
+   * inline style on the same element. A `body { --fontFamily-body: … }` override
+   * was tried first and computed to `Noto Sans KR` — CDS's own value, unchanged. */
+  fontFamily: Object.fromEntries(
+    Object.keys(defaultTheme.fontFamily).map((k) => [k, SR_FONT_STACK]),
+  ) as ThemeConfig['fontFamily'],
 };
 
 /**

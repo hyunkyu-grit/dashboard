@@ -23,7 +23,7 @@ import { ALL_COLUMNS, visibleColumns, type VisibleColumns } from './columns';
 import type { Row } from './rows';
 import { HEADER_H, OVERSCAN, ROW_H } from './rowHeight';
 import { byAbsChange, byTenor, unmappedRows } from './sortKey';
-import { directionClass, tintStyle } from './tint';
+import { directionClass, directionGlyph, tintStyle, unsignedDelta } from './tint';
 import { ROW_ATTR, ROW_SELECTOR, useFlipReorder } from './useFlipReorder';
 
 const BASIS_LABEL: Record<BasisKey, string> = { d1: '1D', mtd: 'MTD', ytd: 'YTD' };
@@ -331,7 +331,9 @@ export function InstrumentTable({
                       noWrap
                       className={directionClass(row.changes[b])}
                     >
-                      {fmtDelta(row.changes[b], row.unit)}
+                      {directionGlyph(row.changes[b])}
+                      {directionGlyph(row.changes[b]) ? ' ' : ''}
+                      {unsignedDelta(fmtDelta(row.changes[b], row.unit))}
                     </TextLabel2>
                   </TableCell>
                 ))}

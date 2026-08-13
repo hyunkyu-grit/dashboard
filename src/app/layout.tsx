@@ -5,6 +5,7 @@ import '@coinbase/cds-web/defaultFontStyles';
 import '@coinbase/cds-web/globalStyles';
 
 import '@/theme/direction.css';
+import '@/theme/type.css';
 
 import { Providers } from './providers';
 
