@@ -19,6 +19,15 @@ import type { ThemeConfig } from '@coinbase/cds-web/core/theme';
 export const sauronTheme: ThemeConfig = {
   ...defaultTheme,
   id: 'sauron-v2',
+  /* ROW_H is 48 and the row must actually BE 48 — virtualisation computes spacer
+   * heights from it, so a row that is 52.58 makes the scrollbar lie.
+   *
+   * The height is not set on the `<tr>`: an inline `height` there is a MINIMUM,
+   * and CDS's cell content overrides it upward (measured — the inline 48px was
+   * present and the row still rendered 52.58). It comes from the cell's inner
+   * padding, which is `--space-1` top and bottom. 8 → 6 removes the 4.58 px.
+   * Tuned to land on the number rather than accepting what falls out. */
+  space: { ...defaultTheme.space, '1': 6 },
 };
 
 /**

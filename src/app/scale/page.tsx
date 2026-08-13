@@ -72,7 +72,7 @@ export default function ScaleHarness() {
         <InstrumentTable
           rows={rows}
           onSelect={() => undefined}
-          maxHeight="80vh"
+          height="80vh"
           compact={dense}
         />
       ) : (

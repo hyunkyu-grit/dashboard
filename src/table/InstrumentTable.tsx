@@ -2,10 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { HStack } from '@coinbase/cds-web/layout';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@coinbase/cds-web/tables';
 import { useSortableCell } from '@coinbase/cds-web/tables/hooks/useSortableCell';
-import { HStack } from '@coinbase/cds-web/layout';
 import { TextCaption, TextLabel2 } from '@coinbase/cds-web/typography';
+import {
+  getCoreRowModel,
+  useReactTable,
+  type ColumnDef,
+  type SortingState,
+} from '@tanstack/react-table';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 import type { BasisKey } from '@/lib/api';
 import { fmtDelta } from '@/lib/format';
@@ -14,21 +21,17 @@ import { levelText } from './cells';
 import { colSpecs, colStyle } from './colgroup';
 import { ALL_COLUMNS, visibleColumns, type VisibleColumns } from './columns';
 import type { Row } from './rows';
+import { HEADER_H, OVERSCAN, ROW_H } from './rowHeight';
 import { byAbsChange, byTenor, unmappedRows } from './sortKey';
 import { directionClass, tintStyle } from './tint';
 import { ROW_ATTR, ROW_SELECTOR, useFlipReorder } from './useFlipReorder';
 
-/** Header labels. 종목 and 현재 always render; the rest are ladder rungs. */
 const BASIS_LABEL: Record<BasisKey, string> = { d1: '1D', mtd: 'MTD', ytd: 'YTD' };
 
-/** The sticky header's surface. MUST be fully opaque — a translucent sticky
- * header lets body rows read through it while scrolling, which is the one
- * thing a sticky header exists to prevent. `guards/sticky-opaque.test.ts`
- * asserts the token has alpha 1 in both schemes. */
+/** The sticky header's surface. MUST be fully opaque — guarded. */
 export const STICKY_SURFACE = 'bg' as const;
 
-/** Measure the table font's '0' advance once. Widths derive from format maxima
- * × this number (v1 §4), so it has to be the real advance, not an assumption. */
+/** Measure the table font's '0' advance. Widths derive from format maxima × this. */
 function useChPx(ref: React.RefObject<HTMLElement | null>): number {
   const [ch, setCh] = useState(8);
   useEffect(() => {
@@ -58,80 +61,66 @@ function useContainerWidth(ref: React.RefObject<HTMLElement | null>): number {
   return w;
 }
 
-/* Presentational only. No refs, no per-row listeners: interaction is delegated
- * from the container (see `InstrumentTable`), which is both the only path CDS
- * leaves open — `TableRow` has no `forwardRef` — and the right architecture at
- * a thousand rows [OWNER ruling].
- *
- * MEASURED: `TableRow` DOES forward `data-*`, `tabIndex`, `role` and
- * `aria-selected` to the `<tr>` (guards/cds-tablerow-dom.test.tsx), so focus
- * stays on the row. Only `ref` is missing. */
-function BodyRow({
-  row,
-  cols,
-  selected,
-}: {
-  row: Row;
-  cols: VisibleColumns;
-  selected: boolean;
-}) {
-  return (
-    <TableRow {...{ [ROW_ATTR]: row.id }} tabIndex={0} aria-selected={selected}>
-      <TableCell>
-        <TextLabel2 as="span" noWrap>
-          {row.label}
-        </TextLabel2>
-      </TableCell>
-
-      <TableCell justifyContent="flex-end">
-        <TextLabel2 as="span" tabularNumbers noWrap>
-          {levelText(row)}
-        </TextLabel2>
-      </TableCell>
-
-      {cols.bases.map((b) => (
-        <TableCell key={b} justifyContent="flex-end" style={tintStyle(row.changes[b])}>
-          <TextLabel2 as="span" tabularNumbers noWrap className={directionClass(row.changes[b])}>
-            {fmtDelta(row.changes[b], row.unit)}
-          </TextLabel2>
-        </TableCell>
-      ))}
-
-      <TableCell justifyContent="flex-end">
-        <TextLabel2 as="span" tabularNumbers noWrap>
-          {cols.range52 && row.pct != null ? `${Math.round(row.pct)}%` : ''}
-        </TextLabel2>
-      </TableCell>
-    </TableRow>
-  );
+/**
+ * CDS owns the scrolling element and hands out no ref to it — the same gap as
+ * `TableRow`. It is found by walking up from the `<table>` to the first ancestor
+ * that actually scrolls. This fails LOUDLY (the virtualizer gets nothing and
+ * renders no rows) rather than silently, which is why it is acceptable.
+ */
+function useScrollElement(hostRef: React.RefObject<HTMLElement | null>, ready: boolean) {
+  const [el, setEl] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!ready) return;
+    const table = hostRef.current?.querySelector('table');
+    let node: HTMLElement | null = table?.parentElement ?? null;
+    while (node) {
+      const oy = getComputedStyle(node).overflowY;
+      if (oy === 'auto' || oy === 'scroll') break;
+      node = node.parentElement;
+    }
+    setEl(node);
+  }, [hostRef, ready]);
+  return el;
 }
 
 export function InstrumentTable({
   rows,
   onSelect,
   selectedId,
-  maxHeight = '70vh',
+  height = '70vh',
   compact = false,
 }: {
   rows: Row[];
   onSelect: (row: Row) => void;
   selectedId?: string;
-  maxHeight?: string;
+  height?: string;
   compact?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const chPx = useChPx(hostRef);
   const width = useContainerWidth(hostRef);
 
-  const [sortCol, setSortCol] = useState<BasisKey | null>(null);
-  const [asc, setAsc] = useState(false);
-  const flip = useFlipReorder(hostRef);
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const sortCol = (sorting[0]?.id ?? null) as BasisKey | null;
+  const asc = sorting[0]?.desc === false;
 
   const cols = useMemo<VisibleColumns>(
     () => (width > 0 ? visibleColumns(width, chPx, sortCol) : ALL_COLUMNS),
     [width, chPx, sortCol],
   );
 
+  /**
+   * OUR comparator, verbatim. TanStack owns the sorting STATE (which column,
+   * which direction) and the header affordance; it does not own the ordering.
+   *
+   * `manualSorting` rather than a registered `sortingFn`, and the reason is the
+   * contract: a row with no print keeps tenor order BEHIND the ones that have one,
+   * in both directions. TanStack inverts a `sortingFn` wholesale for the
+   * descending pass, which would float the no-print rows to the top; its
+   * `sortUndefined` escape hatch keys on `undefined` and these are `null`.
+   * The comparator is not reimplemented in TanStack's vocabulary — it is the same
+   * function this table has always used.
+   */
   const ordered = useMemo(() => {
     const copy = [...rows];
     copy.sort(sortCol ? byAbsChange(sortCol, asc) : byTenor);
@@ -140,27 +129,55 @@ export function InstrumentTable({
 
   const unmapped = useMemo(() => unmappedRows(rows), [rows]);
 
-  /* The header affordance comes from CDS; the COMPARATOR does not (see
-   * sortKey.ts). `useSortableCell` gives the click target, the sort glyph and
-   * `aria-sort`; what a click means is still ours. */
+  const columns = useMemo<ColumnDef<Row>[]>(
+    () => [
+      { id: 'label', accessorKey: 'label' },
+      { id: 'level', accessorKey: 'now' },
+      ...cols.bases.map((b) => ({ id: b, accessorFn: (r: Row) => r.changes[b] })),
+      { id: 'range52', accessorKey: 'pct' },
+    ],
+    [cols.bases],
+  );
+
+  const table = useReactTable({
+    data: ordered,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    manualSorting: true,
+    getRowId: (r) => r.id,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  const modelRows = table.getRowModel().rows;
+
+  const scrollEl = useScrollElement(hostRef, rows.length > 0);
+  const virtualizer = useVirtualizer({
+    count: modelRows.length,
+    getScrollElement: () => scrollEl,
+    estimateSize: () => ROW_H,
+    overscan: OVERSCAN,
+  });
+
+  const items = virtualizer.getVirtualItems();
+  const totalSize = virtualizer.getTotalSize();
+  const padTop = items.length > 0 ? items[0].start : 0;
+  const padBottom = items.length > 0 ? totalSize - items[items.length - 1].end : 0;
+
+  const flip = useFlipReorder(hostRef);
+
   const sortable = useSortableCell<BasisKey>({
-    sortBy: sortCol ?? ('' as BasisKey),
+    sortBy: (sortCol ?? '') as BasisKey,
     sortDirection: sortCol == null ? undefined : asc ? 'ascending' : 'descending',
     onChange: (key) => {
       flip.snapshot();
-      if (key === sortCol) setAsc((v) => !v);
-      else {
-        setSortCol(key);
-        setAsc(false);
-      }
+      setSorting((prev) =>
+        prev[0]?.id === key ? [{ id: key, desc: !prev[0].desc }] : [{ id: key, desc: true }],
+      );
     },
   });
 
-  const specs = colSpecs(cols, chPx);
-
-  /* ONE listener each, on the container. Resolving the row with `closest()`
-   * costs one walk per event; a listener per row costs a thousand registrations
-   * per render. */
+  /* ── delegation, unchanged in kind ──────────────────────────────────────── */
   const rowFromEvent = useCallback(
     (target: EventTarget | null): Row | undefined => {
       const tr = (target as HTMLElement | null)?.closest?.(ROW_SELECTOR);
@@ -183,29 +200,67 @@ export function InstrumentTable({
       if (e.key !== 'Enter' && e.key !== ' ') return;
       const row = rowFromEvent(e.target);
       if (!row) return;
-      e.preventDefault(); // Space would scroll the table under the cursor
+      e.preventDefault();
       onSelect(row);
     },
     [rowFromEvent, onSelect],
   );
 
+  /**
+   * Focus survival across virtualization.
+   *
+   * A focused row can scroll out of the window and unmount, which drops focus to
+   * `<body>` — the keyboard user loses their place with nothing on screen saying
+   * so. The row identity is remembered on focus; when that row re-mounts, focus
+   * returns to it. While it is unmounted the CONTAINER holds focus, so the
+   * delegated key handler still has somewhere to fire and Tab order does not jump
+   * to the end of the document.
+   */
+  const focusedId = useRef<string | null>(null);
+  const onFocusCapture = useCallback((e: React.FocusEvent) => {
+    const tr = (e.target as HTMLElement).closest?.(ROW_SELECTOR);
+    const id = tr?.getAttribute(ROW_ATTR);
+    if (id) focusedId.current = id;
+  }, []);
+
+  useEffect(() => {
+    const want = focusedId.current;
+    if (!want) return;
+    const host = hostRef.current;
+    if (!host) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && host.contains(active)) return;
+    const el = host.querySelector<HTMLTableRowElement>(
+      `${ROW_SELECTOR}[${ROW_ATTR}="${CSS.escape(want)}"]`,
+    );
+    if (el) el.focus({ preventScroll: true });
+    else host.focus({ preventScroll: true });
+  }, [items]);
+
+  const specs = colSpecs(cols, chPx);
+
   return (
     <div
       ref={hostRef}
+      tabIndex={-1}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
+      onFocusCapture={onFocusCapture}
       style={{ width: '100%' }}
     >
       <Table
         variant="ruled"
         bordered
         tableLayout="fixed"
-        maxHeight={maxHeight}
+        /* `maxHeight` computes to `none` on CDS's scroll container (measured), so
+           the window is never constrained and the virtualiser sees the whole
+           document as its viewport. `height` is the prop that lands. */
+        height={height}
         compact={compact}
         accessibilityLabel="종목"
       >
-        {/* THE single width source. Nothing else in v2 declares a column width;
-            guards/colgroup-single-source.test.ts enforces it. */}
+        {/* THE single width source — unchanged by virtualization. A spacer row
+            consumes no width authority under `table-layout: fixed`; measured in D0. */}
         <colgroup>
           {specs.map((s) => (
             <col key={s.key} style={colStyle(s)} />
@@ -213,7 +268,7 @@ export function InstrumentTable({
         </colgroup>
 
         <TableHeader sticky>
-          <TableRow backgroundColor={STICKY_SURFACE}>
+          <TableRow backgroundColor={STICKY_SURFACE} style={{ height: HEADER_H }}>
             <TableCell as="th" scope="col">
               <TextCaption as="span">종목</TextCaption>
             </TableCell>
@@ -235,14 +290,62 @@ export function InstrumentTable({
         </TableHeader>
 
         <TableBody>
-          {ordered.map((row) => (
-            <BodyRow key={row.id} row={row} cols={cols} selected={row.id === selectedId} />
-          ))}
+          {padTop > 0 ? (
+            <tr data-sr-spacer="top" aria-hidden>
+              <td colSpan={specs.length} style={{ height: padTop, padding: 0, border: 0 }} />
+            </tr>
+          ) : null}
+
+          {items.map((vi) => {
+            const row = modelRows[vi.index]?.original;
+            if (!row) return null;
+            return (
+              <TableRow
+                key={row.id}
+                {...{ [ROW_ATTR]: row.id }}
+                tabIndex={0}
+                aria-selected={row.id === selectedId}
+                style={{ height: ROW_H }}
+              >
+                <TableCell>
+                  <TextLabel2 as="span" noWrap>
+                    {row.label}
+                  </TextLabel2>
+                </TableCell>
+                <TableCell justifyContent="flex-end">
+                  <TextLabel2 as="span" tabularNumbers noWrap>
+                    {levelText(row)}
+                  </TextLabel2>
+                </TableCell>
+                {cols.bases.map((b) => (
+                  <TableCell key={b} justifyContent="flex-end" style={tintStyle(row.changes[b])}>
+                    <TextLabel2
+                      as="span"
+                      tabularNumbers
+                      noWrap
+                      className={directionClass(row.changes[b])}
+                    >
+                      {fmtDelta(row.changes[b], row.unit)}
+                    </TextLabel2>
+                  </TableCell>
+                ))}
+                <TableCell justifyContent="flex-end">
+                  <TextLabel2 as="span" tabularNumbers noWrap>
+                    {cols.range52 && row.pct != null ? `${Math.round(row.pct)}%` : ''}
+                  </TextLabel2>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+
+          {padBottom > 0 ? (
+            <tr data-sr-spacer="bottom" aria-hidden>
+              <td colSpan={specs.length} style={{ height: padBottom, padding: 0, border: 0 }} />
+            </tr>
+          ) : null}
         </TableBody>
       </Table>
 
-      {/* Quiet, and it stays quiet: this is a note, not a control. There is no
-          column picker — v1 withheld one deliberately (§4 low user freedom). */}
       <HStack justifyContent="space-between" paddingY={0.5}>
         <TextCaption as="span" color="fgMuted">
           {cols.hidden > 0 ? `${cols.hidden}개 열이 폭에 맞춰 숨었어요` : ''}
