@@ -31,3 +31,18 @@ holidays>=0.45
 # never showed up in an import scan of the file headers, and why it was the
 # easiest of the four to miss.
 python-dateutil>=2.8
+
+# IRS closes come from MySQL, not the workbook [OWNER, 2026-08-07]:
+# `app/mysqldb.py` imports sqlalchemy at MODULE SCOPE (line 35) and builds a
+# `mysql+pymysql://` URL, so SQLAlchemy loads the pymysql driver by name at
+# connect time — which is why pymysql never appears in an import scan either.
+# `app/main.py` imports the dataset loader at import time, so a host without
+# these does not degrade: it fails on the first import, before serving anything.
+#
+# The header above says this file "WAS INCOMPLETE AND THE APP COULD NOT HAVE
+# STARTED FROM IT". It was still true of these two, for the same reason it was
+# true of the first four — every run has been on a machine that already had
+# them. Reported by sauron-v2's BACKEND.md (which could not write to this tree)
+# and carried unfixed through four passes before this one was scoped to do it.
+sqlalchemy>=2.0
+pymysql>=1.1
