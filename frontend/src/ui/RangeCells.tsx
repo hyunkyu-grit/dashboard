@@ -61,12 +61,22 @@ export const SLIDER_LABEL = "위치";
  * do not fit in a sub-column header and ride in `THETA_TITLE` instead. */
 export const THETA_LABEL = "세타/DV01백만";
 
-/** The header's tooltip — the three facts the label had no room for. §15's
- * register: 해요체, one sentence one fact. */
+/** The header's tooltip — the facts the label had no room for. §15's register:
+ * 해요체, one sentence one fact.
+ *
+ * The DIRECTION sentence is the one that had to change when spreads and flies
+ * joined [OWNER, 2026-08-13 — "스프레드랑 버터플라이까지 부탁할게"]. "페이
+ * 기준" is true of an outright and meaningless on a butterfly. What actually
+ * holds across all three is the product's own +1 — long the quoted value —
+ * which the dropdown already names 페이 / 스티프너 / 벨리 페이
+ * (`BacktestWindow.directionLabel`). Naming the three costs one clause and
+ * keeps the column readable on every tab; "+1 방향" would have been correct
+ * and unreadable. */
 export const THETA_TITLE =
   "커브가 그대로일 때 3개월 뒤 손익이에요 (캐리 + 롤다운). " +
-  "고정 지급(페이) 기준이라 마이너스가 역캐리이자 헤지비용이에요. " +
-  "DV01 백만원당이라 테너끼리 바로 비교돼요.";
+  "아웃라이트는 페이, 스프레드는 스티프너, 플라이는 벨리 페이 기준이라 " +
+  "마이너스면 그 방향을 잡았을 때 시간이 돈을 가져가요. " +
+  "DV01 백만원당이라 종목끼리 바로 비교돼요 — 스프레드·플라이는 다리 하나의 DV01이에요.";
 
 /** high, low, mean — the order the labels declare. */
 export function rangeValues(row: Row): (number | null)[] {

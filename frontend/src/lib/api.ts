@@ -80,25 +80,33 @@ export interface SeriesSummary {
    * live in `derive.py`; the browser reads the verdict and never re-derives
    * it, so there is exactly one place to change which rows sit on top. */
   key: boolean;
-  /** 테너별 세타 [OWNER, 2026-08-13] — OUTRIGHT SWAP TENORS ONLY. Absent (or
-   * null) on 1D/3M, on every spread/fly, and on volatility rows; the column
-   * draws an em dash there. Every convention behind these numbers is stated
-   * in `backend/app/theta.py` — do not re-derive any of them here (§16). */
+  /** 세타 [OWNER, 2026-08-13] — outright swap tenors, spreads and flies.
+   * Absent (or null) on 1D/3M, forwards and volatility; the column draws an
+   * em dash there. Every convention behind these numbers is stated in
+   * `backend/app/theta.py` — do not re-derive any of them here (§16). */
   theta?: Theta | null;
 }
 
-/** Carry + rolldown over a frozen curve, PAY-side, in won. The column reads
- * `perDv01`; the rest is the cell's tooltip. `cash`/`carry`/`roll`/`dv01`
- * stand on `thetaBasis.notional` (100억); `perDv01` does not depend on it. */
+/** Carry + rolldown over a frozen curve, in won, for the instrument's own +1
+ * direction (페이 / 스티프너 / 벨리 페이). The column reads `perDv01`; the
+ * rest is the cell's tooltip.
+ *
+ * `cash`/`carry`/`roll`/`dv01` stand on `thetaBasis.notional` (100억) — for a
+ * package that is the REFERENCE leg's notional (the long leg, or the belly),
+ * with the others weighted DV01-neutral against it. `perDv01` does not depend
+ * on the notional at all. */
 export interface Theta {
   perDv01: number; // 원, per 1,000,000원 of DV01 — what the column prints
   cash: number; // 원, at the basis notional
   carry: number; // 원, the coupon-differential accrual
   roll: number; // 원, the frozen-curve mark change
-  dv01: number; // 원/bp, the basis notional's DV01
-  beBp: number; // bp the (T−h) rate must RISE to cancel the theta
-  entry: number; // % — the curve's own par rate, not the quoted level
-  rollIn: number; // % — where it marks after the horizon
+  /** 원/bp. An outright's own DV01; for a spread or fly the REFERENCE LEG's,
+   * because the package is DV01-neutral and its net is zero — see
+   * `backend/app/theta.py::theta_for_package`. */
+  dv01: number;
+  /** bp the row's own QUOTED VALUE must move to cancel the theta: the rate for
+   * an outright, the spread for a package. Signed in the quote's direction. */
+  beBp: number;
 }
 
 /** What the 세타 column means, stated once for the table rather than repeated

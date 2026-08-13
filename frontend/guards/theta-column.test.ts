@@ -76,10 +76,24 @@ describe("the header carries the normaliser, not just the noun", () => {
   it("the label names DV01, so the number cannot be read as cash", () => {
     expect(THETA_LABEL).toContain("DV01");
     // and the facts that did not fit ride in the tooltip instead of being
-    // dropped: horizon, side, and what the sign means
+    // dropped: the horizon, and what the sign means
     expect(THETA_TITLE).toContain("3개월");
-    expect(THETA_TITLE).toContain("페이");
-    expect(THETA_TITLE).toContain("역캐리");
+    expect(THETA_TITLE).toContain("캐리");
+  });
+
+  it("the tooltip names the direction for EVERY kind the column serves", () => {
+    /* "페이 기준" was true while the column was outrights only. With spreads
+     * and flies on it [OWNER, 2026-08-13] that clause is meaningless on two
+     * thirds of the rows, and a sign whose direction the reader cannot name
+     * is a sign they will guess at. The product already names all three
+     * (`BacktestWindow.directionLabel` at +1), so the tooltip uses those
+     * words rather than inventing "+1 방향". */
+    for (const word of ["페이", "스티프너", "벨리"]) {
+      expect(THETA_TITLE, `direction unnamed for ${word}`).toContain(word);
+    }
+    // and it says whose DV01 the package rows are divided by — the net is
+    // zero, so an unqualified "DV01" would be a number with no denominator
+    expect(THETA_TITLE).toContain("다리");
   });
 
   it("the header renders the label and the tooltip together", () => {
@@ -167,47 +181,37 @@ describe("a table with no theta draws no 세타 column", () => {
     /* The bug this pins, caught on screen and not by the unit tests above:
      * the table receives EVERY instrument the app knows and filters per tab.
      * Asking `rows.some(r => r.theta)` therefore answered "does anything,
-     * anywhere, have a theta" — true on every tab — so 스프레드 rendered a
-     * full column of em dashes while the code read as if it would not. */
-    const outright: Row = { ...row(THETA), id: "1Y", group: "outright" };
-    const spread: Row = {
-      ...row(null),
-      id: "1Y-10Y",
-      label: "1s10s",
-      group: "spread",
-      unit: "bp",
-    };
-    const both = [outright, spread];
+     * anywhere, have a theta" — true on every tab — so a tab with none
+     * rendered a full column of em dashes while the code read as if it would
+     * not. 포워드 is the standing example: the engine has no forward-leg
+     * construction, so those rows never carry one. */
+    const both: Row[] = [
+      { ...row(THETA), id: "1Y", group: "outright" },
+      {
+        ...row(null),
+        id: "1Yx1Y",
+        label: "1Yx1Y",
+        group: "forward",
+        seriesId: "1Yx1Y",
+      },
+    ];
+    const render = (filter: Group) =>
+      renderToStaticMarkup(
+        createElement(InstrumentTable, {
+          rows: both,
+          asOf: "2026-08-12",
+          filter,
+          activeId: null,
+          pinnedId: null,
+          onHover: () => undefined,
+          onPin: () => undefined,
+          matrixOpen: false,
+          onToggleMatrix: () => undefined,
+        }),
+      );
 
-    const spreadTab = renderToStaticMarkup(
-      createElement(InstrumentTable, {
-        rows: both,
-        asOf: "2026-08-12",
-        filter: "spread" as Group,
-        activeId: null,
-        pinnedId: null,
-        onHover: () => undefined,
-        onPin: () => undefined,
-        matrixOpen: false,
-        onToggleMatrix: () => undefined,
-      }),
-    );
-    expect(spreadTab).not.toContain(THETA_LABEL);
-
-    const outrightTab = renderToStaticMarkup(
-      createElement(InstrumentTable, {
-        rows: both,
-        asOf: "2026-08-12",
-        filter: "outright" as Group,
-        activeId: null,
-        pinnedId: null,
-        onHover: () => undefined,
-        onPin: () => undefined,
-        matrixOpen: false,
-        onToggleMatrix: () => undefined,
-      }),
-    );
-    expect(outrightTab).toContain(THETA_LABEL);
+    expect(render("forward")).not.toContain(THETA_LABEL);
+    expect(render("outright")).toContain(THETA_LABEL);
   });
 });
 

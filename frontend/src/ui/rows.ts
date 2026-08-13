@@ -71,8 +71,10 @@ export interface Row {
    * on (§3). Server-decided for every group, including forwards (whose flag
    * arrives as `keyForward`); the browser holds no copy of the owner's list. */
   key: boolean;
-  /** 3개월 세타(캐리+롤다운), 페이 기준 [OWNER, 2026-08-13]. Outright swap
-   * tenors only — null everywhere else, and the column draws an em dash.
+  /** 3개월 세타(캐리+롤다운) [OWNER, 2026-08-13]. Outrights, spreads and
+   * flies; null on forwards / volatility / 1D / 3M, where the column draws an
+   * em dash. Signed for the instrument's own +1 direction — 페이 for an
+   * outright, 스티프너 for a spread, 벨리 페이 for a fly.
    * Read straight through: every convention is `backend/app/theta.py`. */
   theta?: Theta | null;
 }

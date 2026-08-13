@@ -50,14 +50,15 @@ def wall_summary(dataset: Dataset, bases: dict, events: list,
         summarize(dataset, sid, sid.replace("-", "/"), kind, bases)
         for sid, kind, _legs in derived_ids()
     ]
-    # 테너별 세타 [OWNER, 2026-08-13]. `summarize` 안이 아니라 여기서 붙는다 —
-    # 그 함수는 한 시리즈의 값만 보는 순수 함수고, 세타는 커브 전체를 본다.
-    # 아웃라이트에만 붙는 이유는 theta.py 의 주석에 있다(스프레드·플라이는
-    # DV01 중립이라 순 DV01 이 0 에 붙고, 그걸로 나눈 값은 숫자가 아니다).
-    # 값이 없는 테너에는 키 자체가 없다 — 화면이 그 부재를 em dash 로 그린다.
+    # 세타 [OWNER, 2026-08-13]. `summarize` 안이 아니라 여기서 붙는다 — 그
+    # 함수는 한 시리즈의 값만 보는 순수 함수고, 세타는 커브 전체를 본다.
+    # 스프레드·플라이도 받는다 [OWNER, 같은 날 — "스프레드랑 버터플라이까지"]:
+    # DV01 중립이라 순 DV01 은 0 이지만, 커브 트레이드의 리스크 단위는 순
+    # DV01 이 아니라 다리 DV01 이다 (theta.theta_for_package 에 근거).
+    # 값이 없는 종목에는 키 자체가 없다 — 화면이 그 부재를 em dash 로 그린다.
     thetas, theta_basis = theta_table(dataset)
-    for o in outrights:
-        o["theta"] = thetas.get(o["id"])
+    for row in (*outrights, *derived):
+        row["theta"] = thetas.get(row["id"])
     # The whole-curve extreme (§I) is the one cross-sectional statement left
     # here: it is a fact about the CURVE, stated once above the table. The 한 줄
     # ladder's two cross-sectional rungs used to run at this point and are gone
