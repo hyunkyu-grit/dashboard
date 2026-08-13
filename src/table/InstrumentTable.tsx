@@ -31,21 +31,41 @@ const BASIS_LABEL: Record<BasisKey, string> = { d1: '1D', mtd: 'MTD', ytd: 'YTD'
 /** The sticky header's surface. MUST be fully opaque — guarded. */
 export const STICKY_SURFACE = 'bg' as const;
 
-/** Measure the table font's '0' advance. Widths derive from format maxima × this. */
-function useChPx(ref: React.RefObject<HTMLElement | null>): number {
-  const [ch, setCh] = useState(8);
+/** The selector for the element the probe must be measured INSIDE. */
+export const CH_PROBE_HOST = 'tbody tr[data-sr-row] td span';
+
+/**
+ * Measure the '0' advance IN THE CONTEXT THAT RENDERS THE TEXT.
+ *
+ * Column widths come from format maxima × this number, so it has to be the advance
+ * the cells actually draw with. The first version measured on the table's host `div`,
+ * whose inherited face is not the cell's: after the Pretendard change the host still
+ * resolved to CDS's face at 8.881 px while cells rendered at 8.813 px. 0.77% is small;
+ * the structure is what is wrong. It is the same defect class the `<colgroup>` removed
+ * — a width derived in one font context and applied in another — and P3 multiplied the
+ * surface it corrupts.
+ *
+ * So the probe is appended to a real cell's text span. Before any row exists there is
+ * nothing to measure, and the ladder falls back to `ALL_COLUMNS` on a zero width
+ * anyway, so the initial value is only ever used for a frame.
+ *
+ * `guards/ch-context.test.tsx` fails if this selector stops matching what the cells
+ * render, which is the only way the two contexts can silently diverge again.
+ */
+function useChPx(ref: React.RefObject<HTMLElement | null>, ready: boolean): number {
+  const [ch, setCh] = useState(0);
   useEffect(() => {
-    const host = ref.current;
+    const host = ref.current?.querySelector<HTMLElement>(CH_PROBE_HOST);
     if (!host) return;
     const probe = document.createElement('span');
-    probe.textContent = '0'.repeat(10);
+    probe.textContent = '0'.repeat(20);
     probe.style.cssText =
       'position:absolute;visibility:hidden;white-space:pre;font-variant-numeric:tabular-nums';
     host.appendChild(probe);
-    const w = probe.getBoundingClientRect().width / 10;
+    const w = probe.getBoundingClientRect().width / 20;
     host.removeChild(probe);
     if (w > 0) setCh(w);
-  }, [ref]);
+  }, [ref, ready]);
   return ch;
 }
 
@@ -98,17 +118,11 @@ export function InstrumentTable({
   compact?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const chPx = useChPx(hostRef);
   const width = useContainerWidth(hostRef);
 
   const [sorting, setSorting] = useState<SortingState>([]);
   const sortCol = (sorting[0]?.id ?? null) as BasisKey | null;
   const asc = sorting[0]?.desc === false;
-
-  const cols = useMemo<VisibleColumns>(
-    () => (width > 0 ? visibleColumns(width, chPx, sortCol) : ALL_COLUMNS),
-    [width, chPx, sortCol],
-  );
 
   /**
    * OUR comparator, verbatim. TanStack owns the sorting STATE (which column,
@@ -130,14 +144,21 @@ export function InstrumentTable({
 
   const unmapped = useMemo(() => unmappedRows(rows), [rows]);
 
+  /* Stable and ladder-independent. TanStack needs a column list; the ladder decides
+   * what is DRAWN, and every cell is rendered by hand below. Keeping this constant
+   * breaks a dependency cycle — the ch probe must wait for a rendered cell, which
+   * means the virtualizer has to run before it, which it cannot do if the table's
+   * columns depend on the ladder that depends on the probe. */
   const columns = useMemo<ColumnDef<Row>[]>(
     () => [
       { id: 'label', accessorKey: 'label' },
       { id: 'level', accessorKey: 'now' },
-      ...cols.bases.map((b) => ({ id: b, accessorFn: (r: Row) => r.changes[b] })),
+      { id: 'd1', accessorFn: (r: Row) => r.changes.d1 },
+      { id: 'mtd', accessorFn: (r: Row) => r.changes.mtd },
+      { id: 'ytd', accessorFn: (r: Row) => r.changes.ytd },
       { id: 'range52', accessorKey: 'pct' },
     ],
-    [cols.bases],
+    [],
   );
 
   const table = useReactTable({
@@ -161,6 +182,17 @@ export function InstrumentTable({
   });
 
   const items = virtualizer.getVirtualItems();
+  // Only once a cell is actually on the page can the probe measure the face the cells
+  // draw with. Before that `chPx` is 0 and the colgroup declares nothing.
+  const chPx = useChPx(hostRef, items.length > 0);
+
+  /* The ladder, once the probe has a real advance. Until then ALL_COLUMNS: the header
+   * draws every column and the colgroup declares nothing, which is a truthful
+   * "not measured yet" rather than a guess. */
+  const cols = useMemo<VisibleColumns>(
+    () => (width > 0 && chPx > 0 ? visibleColumns(width, chPx, sortCol) : ALL_COLUMNS),
+    [width, chPx, sortCol],
+  );
   const totalSize = virtualizer.getTotalSize();
   const padTop = items.length > 0 ? items[0].start : 0;
   const padBottom = items.length > 0 ? totalSize - items[items.length - 1].end : 0;
@@ -238,7 +270,9 @@ export function InstrumentTable({
     else host.focus({ preventScroll: true });
   }, [items]);
 
-  const specs = colSpecs(cols, chPx);
+  // 0 would collapse every fixed width; before the first measurement the
+  // colgroup declares nothing and the browser lays the table out on content.
+  const specs = chPx > 0 ? colSpecs(cols, chPx) : [];
 
   return (
     <div
@@ -267,11 +301,13 @@ export function InstrumentTable({
       >
         {/* THE single width source — unchanged by virtualization. A spacer row
             consumes no width authority under `table-layout: fixed`; measured in D0. */}
-        <colgroup>
-          {specs.map((s) => (
-            <col key={s.key} style={colStyle(s)} />
-          ))}
-        </colgroup>
+        {specs.length > 0 ? (
+          <colgroup>
+            {specs.map((s) => (
+              <col key={s.key} style={colStyle(s)} />
+            ))}
+          </colgroup>
+        ) : null}
 
         <TableHeader sticky>
           <TableRow backgroundColor={STICKY_SURFACE} style={{ height: HEADER_H }}>
@@ -298,7 +334,7 @@ export function InstrumentTable({
         <TableBody>
           {padTop > 0 ? (
             <tr data-sr-spacer="top" aria-hidden>
-              <td colSpan={specs.length} style={{ height: padTop, padding: 0, border: 0 }} />
+              <td colSpan={6} style={{ height: padTop, padding: 0, border: 0 }} />
             </tr>
           ) : null}
 
@@ -348,7 +384,7 @@ export function InstrumentTable({
 
           {padBottom > 0 ? (
             <tr data-sr-spacer="bottom" aria-hidden>
-              <td colSpan={specs.length} style={{ height: padBottom, padding: 0, border: 0 }} />
+              <td colSpan={6} style={{ height: padBottom, padding: 0, border: 0 }} />
             </tr>
           ) : null}
         </TableBody>
