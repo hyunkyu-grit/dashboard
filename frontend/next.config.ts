@@ -67,9 +67,21 @@ const nextConfig: NextConfig = {
    * It also removes CORS from the picture: the backend allows only
    * localhost:3100, and a proxied request is not a cross-origin one.
    *
-   * Unset — the local default and the current deployment — emits no rule at
-   * all, `/api/backtest` 404s, and the sheet says a backend is needed rather
-   * than drawing an empty chart.
+   * Unset emits no rule at all: `/api/backtest` 404s and the sheet says a
+   * backend is needed rather than drawing an empty chart. That is the local
+   * default.
+   *
+   * WHETHER THE DEPLOYMENT SETS IT IS NOT KNOWABLE FROM THIS REPO — it is a
+   * Vercel project environment variable. This comment used to assert "and the
+   * current deployment" was unset, and that went stale without anything being
+   * able to notice: a Tailscale Funnel now proxies the public internet into
+   * `127.0.0.1:8100`, which exists for no other purpose than to be this
+   * rewrite's target, and a dead backend has been observed surfacing as a 502
+   * on the deployed site — both of which require the rule to be emitted, i.e.
+   * the variable to be set.
+   *
+   * So do not restate the deployment's value here. Read it from the Vercel
+   * project settings, or infer it from the funnel; see DEPLOY_CHECKLIST.
    */
   async rewrites() {
     const origin = process.env.BACKEND_ORIGIN?.replace(/\/$/, "");
