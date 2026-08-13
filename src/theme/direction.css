@@ -1,0 +1,56 @@
+/* THE ONE TOKEN FILE.
+ *
+ * Every hex literal in v2 lives here and nowhere else; `guards/color-source.test.ts`
+ * enforces that. If you need a colour in a component, reference a var from this
+ * file or a CDS token — do not paste a hex.
+ *
+ * ── Why these are OURS and not CDS's ──────────────────────────────────────────
+ * CDS names green `fgPositive` and red `fgNegative`. That is inverted for a KRW
+ * rates desk, where 상승 is red and 하락 is blue, and where "positive" is not even
+ * the right idea — a rate going up is not good news, it is news. Routing direction
+ * through those tokens would make every screen argue with its own design system.
+ * `fgPositive` / `fgNegative` therefore have ZERO references in v2 source.
+ *
+ * ── Why the hexes are frozen ─────────────────────────────────────────────────
+ * These are not style choices, they are measurements carried over from v1's
+ * design doc. `#d92d3c` exists because `#f04452` measured 3.71:1 and was rejected.
+ * The archive transfers only if the values do.
+ *
+ * And this spike has exactly one independent variable — the component layer.
+ * Change the hues too and any difference observed has two possible causes, which
+ * is the same as having no result.
+ *
+ * ── Two pairs, not one ───────────────────────────────────────────────────────
+ * v1's palette is a LIGHT pair and a DARK pair; the session prompt named only the
+ * light pair. The dark pair is the same frozen decision expressed for the other
+ * surface (v1 §9: the light pair measures ~3.4:1 on a dark tile, which is why the
+ * dark values exist at all). Carrying both over is completing the archive, not
+ * retuning it. See REPORT_v2.md → Provisional.
+ */
+
+:root {
+  --sr-up: #d92d3c;
+  --sr-down: #0064ff;
+}
+
+/* CDS's ThemeProvider emits its palette as INLINE CSS variables on a wrapper it
+ * owns — there is no `.cds-dark` class and no data attribute to hang off. So the
+ * dark pair hangs off an attribute THIS APP sets (`providers.tsx`), rather than
+ * off a CDS internal that could move between minor versions. */
+[data-sr-scheme='dark'] {
+  --sr-up: #f16e77;
+  --sr-down: #4c93ff;
+}
+
+.sr-up {
+  color: var(--sr-up);
+}
+
+.sr-down {
+  color: var(--sr-down);
+}
+
+/* A level is ink. Only signed numbers take colour (v1 §4, carried). */
+.sr-flat {
+  color: var(--color-fgMuted);
+}
