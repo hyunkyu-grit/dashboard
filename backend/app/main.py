@@ -65,6 +65,7 @@ from irs_pricer.engine import curve_cache
 
 from . import instruments as instruments_mod
 from . import calendar_cache
+from . import df_cache
 from . import payloads
 from . import schedule_cache
 from .backtest import BacktestError, Position, book_recon, run_backtest
@@ -118,6 +119,12 @@ async def lifespan(app: FastAPI):
     # walking back to F(R). 515,473 calls over 40 distinct inputs on the
     # reference book (app/calendar_cache.py). `BW_CALENDAR_CACHE=0` disables it.
     calendar_cache.install()
+    # MEMO-2: the scalar discount-factor lookup, memoized PER CURVE. It was
+    # 74% of simulation cost and ~4/5 of that is numpy dispatch, not
+    # arithmetic; the same (curve, t) pair is asked 20-98x per run.
+    # Installs on BOTH copies of the port (backtest + simulation) — they are
+    # different function objects. `BW_DF_CACHE=0` disables it.
+    df_cache.install()
     logging.getLogger("irs_pricer").info("simulation data dir: %s", DATA_DIR)
     yield
 
