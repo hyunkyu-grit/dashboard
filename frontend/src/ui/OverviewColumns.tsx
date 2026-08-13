@@ -78,15 +78,17 @@ const CHART_H = 200;
  * shows every column: the overview never drops one (`ALL_COLUMNS`), because
  * showing all six figures at once is the entire reason this tab exists.
  *
- * 세타 IS DELIBERATELY ABSENT HERE [2026-08-13]. The owner asked for it on
- * both surfaces and it was built for both; measured, it does not fit this one.
- * These are three `minmax(0, 1fr)` columns sharing the viewport, and the
- * 아웃라이트 table already spends its whole third — adding ~115px pushed the
- * money column past the group box, where it CLIPPED WITH NO SCROLLBAR. That
- * exact failure is a fixed owner defect on this tab ([OWNER, 2026-08-07 —
- * "100%에서 잘린다"], which is why the tracks are 1fr and not max-content), so
- * re-introducing it to satisfy the newer ask would trade one owner ruling for
- * another. The tenor tables under Backtest carry the column at full width.
+ * 세타 IS DELIBERATELY ABSENT HERE [OWNER, 2026-08-13 — "Main은 걍 냅두자"].
+ * It was asked for on both surfaces and built for both; measured, it does not
+ * fit this one. These are three `minmax(0, 1fr)` columns sharing the viewport
+ * and the 아웃라이트 table already spends its whole third — adding ~115px
+ * pushed the money column past the group box, where it CLIPPED WITH NO
+ * SCROLLBAR. That exact failure is a fixed owner defect on this tab ([OWNER,
+ * 2026-08-07 — "100%에서 잘린다"], which is why the tracks are 1fr and not
+ * max-content). Offered as three ways out — drop 평균 here, print bp here
+ * instead of money, or leave it to Backtest — the owner took the third. So
+ * this is SETTLED, not pending: do not re-open it by re-adding the column.
+ * The tenor tables under Backtest carry it at full width.
  *
  * `withThetaData(..., false)` rather than plain `ALL_COLUMNS`: the constant now
  * reserves the 세타 track in its tail floor, and a floor that reserves width
