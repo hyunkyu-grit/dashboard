@@ -151,90 +151,193 @@ The costs, stated plainly:
 
 ---
 
-## Status — read this before anything else
+## Status
 
-| Pass | State |
-|---|---|
-| Pre-flight | done |
-| Dependency check | done — **v9/v8 discrepancy found and resolved** |
-| D0 — diagnosis and choice | **done** (above) |
-| D1 — implement | **PARTIAL, and the screen is currently wrong** |
-| D2 — re-measure | **not reached** |
-| D3 — guard reconciliation | **not reached** |
-| D4 — visual pass | **not reached** (gated on D0–D3 green; they are not) |
-
-Commit: `a4cc568`. The gates are green (build 0, vitest 73 passed, lint 0) but **green
-gates do not mean the feature works** — at 1,000 rows the table renders 9 rows into a
-48,044 px container. Nothing below claims otherwise.
-
-## What D1 achieved, measured
-
-| | before (pass 2) | after (`a4cc568`) |
+| Pass | State | Commit |
 |---|---|---|
-| table subtree nodes @ 1,000 rows | 43,080 | **469** |
-| rendered `<tr data-sr-row>` | 1,000 | 9 |
-| row height | 52.58 px | **47.99 px** (= `ROW_H` 48) |
-| header vs body column widths | identical | **identical** — `[109.9, 106.8, 71.3, 71.3, 71.3, …]` |
+| Pre-flight | done | — |
+| Dependency check | done — **v9/v8 discrepancy found and resolved** | `a4cc568` |
+| D0 — diagnosis and choice | **green** | `a4cc568` |
+| D1 — implement | **green** | `a4cc568` → `fc46feb` |
+| D2 — re-measure | **green** | `fc46feb` |
+| D3 — guard reconciliation | **green** | `fc46feb` |
+| D4 — visual pass | **green** (gate satisfied: D0–D3 all green) | `b814fe2` |
 
-The colgroup contract survived the branch, which was D0's whole reason for choosing the
-real-`<table>` route.
+Gates at every boundary, three separate commands judged by exit code. Final state:
+**build 0 · vitest 80 passed · lint 0**.
 
-**`ROW_H` landed by tuning, not by accident.** An inline `height` on `<tr>` is a
-*minimum*: the 48 px was present in the DOM and the row still rendered 52.58, because
-CDS's cell content is taller. The height comes from the cell's inner padding
-(`--space-1`, 8 px top and bottom), so the theme's space scale was tuned 8 → 6. Measured
-result 47.99.
+`a4cc568` was committed mid-D1 with the screen still wrong and said so; `fc46feb` is
+where D1 actually landed. Both are kept rather than squashed — the first carries the
+D0 probe evidence.
 
-**The comparator was not reimplemented.** `manualSorting: true`; TanStack owns sorting
-*state* and the header affordance only. A registered `sortingFn` cannot express the
-contract — "a row with no print keeps tenor order **behind** the ones that have one, in
-both directions" — because TanStack inverts a `sortingFn` wholesale for the descending
-pass, floating the no-print rows to the top. Its `sortUndefined` escape hatch keys on
-`undefined`; these values are `null`.
+## What blocked D1, and what it was
 
-**Focus survival** is implemented: the focused row's identity is remembered, the
-container holds focus while that row is unmounted, and focus returns to the row when it
-re-mounts.
+**CDS `Table`'s `height` / `maxHeight` types lie about what they accept.**
 
-## What blocks D1, precisely
+```js
+// @coinbase/cds-web/esm/tables/Table.js
+'--table-height':    `${height}px`,
+'--table-maxHeight': `${maxHeight}px`
+```
 
-**The scroll container is never height-constrained, so the virtualizer has no viewport.**
+The props are typed `React.CSSProperties['height' | 'maxHeight']`, so `'70vh'`
+type-checks — and produces `70vhpx`, an invalid value, which resolves to `none`. The
+scroll container stayed unconstrained, the virtualizer had no viewport, and it
+windowed against the whole document. **It must be a number of pixels.**
 
-- CDS `Table`'s `maxHeight` prop computes to `max-height: none` on the scroll container
-  (measured on the live DOM).
-- Switching to the documented `height` prop did not constrain it either:
-  `clientHeight === scrollHeight === 48044`.
-- With no constrained viewport the virtualizer windows to ~9 rows while the container
-  keeps full document height — the node count falls for the wrong reason and the screen
-  is wrong.
+Found by reading the shipped implementation after the rendered probe showed
+`max-height: none`. Reported, not worked around.
 
-**The next session's first question is who owns the container's height**, not whether
-virtualization works. Everything else in D1 is in place and measured.
+## D2 — re-measured against the same thresholds
 
-Reported rather than worked around, per the standing rule. No replacement API was
-synthesised.
+| # | pass 2 (CDS `Table`) | pass 3 (headless + virtual) | threshold |
+|---|---|---|---|
+| A1 @ 200 | 8,680 nodes | **1,028** | report shape |
+| A1 @ 500 | 21,580 | **1,028** | |
+| A1 @ 1,000 | 43,080 | **1,028** | |
+| A1 @ 2,000 | 86,080 | **1,028** | |
+| A1 @ 5,000 | — | **1,028** | |
+| A2 @ 1,000 | 2,498 ms | **26.3 ms** | ≤ 150 ms — pass |
+| A2b @ 2,000 | — | **24.1 ms** | report |
+| A2b @ 5,000 | — | **53.8 ms** | report |
+| A3 @ 1,000 | 1,000 rows | **0 rows** | ≤ 200 — pass |
+| A4 `/scale` | 194 kB | **214 kB** | report |
+| A4 `/` | 203 kB | **222 kB** | report |
+| A5 mid-scroll | 43,080 nodes, nothing recycled | **1,374 nodes, recycled** | report |
+
+**A1's shape is the answer, not its value.** Flat — identical at 200 and at 5,000
+rows — so node count is bound by the viewport, not by the row count. That is the
+property that was missing.
+
+**A2 is not perfectly flat and is not reported as such.** 26.3 / 24.1 / 53.8 ms at
+1,000 / 2,000 / 5,000 rows: 5× the rows costs about 2× the time. The residual is the
+comparator's O(n log n) over the full set plus row-model construction — real per-row
+work that is not component instantiation.
+
+**A5**: 1,374 nodes mid-scroll, 985 at the end, and the first row in the DOM is
+`SYN414-…` rather than the top row. Rows are genuinely recycled.
+
+### The pass-2 diagnosis is CONFIRMED
+
+Per-row cost fell from ~2.5 ms to ~0.026 ms at 1,000 rows — 95×. **The comparator
+still sorts all 1,000 rows on every click**; only rendering was virtualized. Had the
+cost been comparator work, virtualizing the render could not have moved the number.
+It was per-row component instantiation.
+
+### A3 = 0, stated honestly
+
+Zero is under the cap, but the reason matters: a full re-sort replaces every row in
+the window, so no row has a previous position to fly from. Nothing animates "from a
+position it never occupied" — the failure mode the prompt warned about — but the
+reorder animation is effectively **absent** for a full re-sort, surviving only where
+rows stay inside the window. A behavioural change, not a win.
+
+## D3 — guard reconciliation
+
+| guard | state |
+|---|---|
+| sort-key (`Infinity`, loud, enumerable) | **untouched** — written against the contract, survived as predicted |
+| column ladder | **untouched** |
+| colgroup single source | **still valid** — the real-`<table>` choice kept `<colgroup>` as the one width declaration |
+| sticky-header opacity | **still valid** — `<thead sticky>` + `TableRow backgroundColor` unchanged |
+| `cds-tablerow-dom` | **kept** — `TableRow` is still the row element |
+| `cds-tablecell-dom` (Interactable probe) | **kept** — `TableCell` still renders cells; the finding still explains where `onClick` binds |
+| **virtualization (new)** | asserts 2,000 rows renders **under 2×** the DOM of 200 rows. Pre-virtualization that ratio was exactly 10×. Also asserts spacers are `aria-hidden`, carry no `data-sr-row`, and that `ROW_H` is a number |
+
+`guards/setup.ts` was added: jsdom has no `ResizeObserver`. It is a stub that lets
+components mount so structure can be asserted; **no test asserts a pixel there.**
+
+## D4 — the closed list, item by item
+
+| # | item | outcome |
+|---|---|---|
+| 1 | arrow glyphs on signed numbers | **applied** — `↗` / `↘`, bare `+`/`−` removed; rendered `"↘ 0.1"` |
+| 2 | two-step label/value typography | **no surface** — see below |
+| 3 | chart chrome removal + stipple | **partial** — chrome removed, stipple not delivered |
+| 4 | period selector as pills | **style only** — no such selector exists to apply it to |
+| 5 | screener chips | **applied** — CDS `Chip`, one row, full set still not exposed |
+| 6 | vertical hairlines at section boundaries only | **already satisfied — verified, not changed** |
+
+**Item 2 has nowhere to land.** v2 has no detail or gauge block; building one is a
+new panel, which D4 forbids, and the table body is explicitly excluded. Applied
+nowhere, and not faked.
+
+**Item 3's stipple could not be built.** `lightweight-charts` v4's area series takes
+colour strings, not patterns; a dot fill needs a custom series plugin, which is new
+charting work rather than the minimum needed to read thresholds. Applied instead: no
+gridlines, no axis lines, muted value labels (reading `--color-fgMuted`), unticked
+date captions, and a dot marker on the last bar.
+
+**Item 4** has a `.sr-pill` style and the screener uses it, but v2 has no time-basis
+or horizon selector — the chart's interval is a query parameter, not UI — and new
+selectors are forbidden.
+
+**Item 6, verified from the shipped CSS**: `variant="ruled"` paints only
+`border-bottom` on cells and `box-shadow: inset 0 -1px` on header cells. There are no
+vertical borders anywhere. `bordered` paints the container edge, which is a section
+boundary. The rule already holds.
+
+### Font — Pretendard, and what it cost
+
+The face is set **through the theme object**, not through CSS. CDS emits
+`--fontFamily-*` as inline styles on its wrapper, and no stylesheet rule beats an
+inline style on the same element; a `body { --fontFamily-body: … }` override was
+tried first and computed to CDS's own value unchanged. Verified after the change: the
+text `<span>` renders `"Pretendard Variable"`.
+
+**No font file is self-hosted.** §0 limits stack additions to the two TanStack
+packages, so the `pretendard` npm package could not be added, and fetching a binary
+was outside this pass. `local()` resolution only — which works on this desk, where
+Pretendard is installed. **This is a gap, not a decision.** Hotlinking was not done.
+
+`font-display: swap` is deliberately absent: a swap relayouts the table and jumps
+every column width, which is the one thing format-derived widths must never do. With
+`local()`-only sources there is no fetch and so no swap moment.
+
+#### Ladder thresholds, old vs new
+
+| | old (CDS face) | new (Pretendard) |
+|---|---|---|
+| rendered column widths | `[109.9, 106.8, 71.3, 71.3, 71.3]` | `[109.9, 106.8, 71.3, 71.3, 71.3]` |
+| `0` advance used by the ladder | 8.881 px | 8.881 px |
+| `0` advance in the cell's text | 8.881 px | **8.813 px** |
+
+**They did not move — and that is the finding.** `useChPx` measures the `0` advance
+in the **host div's** context, whose inherited face did not change. The advance in the
+**cell's text** context, which is what the columns actually render in, is 8.813 px
+under Pretendard — a 0.77% difference the ladder never sees.
+
+The ladder is therefore insensitive to the face the cells are drawn in. That is the
+same class of defect the `<colgroup>` change removed: a width derived in one font
+context and applied in another. **Not fixed here** — D4's list is closed and this is
+not on it. It is the first correctness item for the next pass.
 
 ## Verdict
 
-**Not available.** The headless branch is not far enough along to say whether it solved
-the scale problem. A2/A2b/A3/A5 were not re-measured, so the per-row-instantiation
-diagnosis from pass 2 is **neither confirmed nor refuted** by this session. The 43,080 →
-469 node drop is consistent with it but is not the measurement that tests it, and
-inferring a verdict from an adjacent number is exactly what the prompt forbids.
+**Yes — the headless branch solved the scale problem, and for the reason claimed.**
+
+Sort-click at 1,000 rows went 2,498 ms → 26.3 ms against a 150 ms threshold; node
+count went 43,080 → 1,028 and is flat from 200 to 5,000 rows; rows recycle on scroll.
+The comparator was not changed and still sorts every row, so the improvement isolates
+to render cost — **confirming** pass 2's per-row-instantiation diagnosis rather than
+merely being consistent with it.
+
+The cost is 20 kB of route JS and three structural constraints: constant row height,
+scroll element found by DOM query, no variable row heights.
 
 ## Owner decisions
 
-1. **`ROW_H` = 48 px**, in `src/table/rowHeight.ts`, and it is now a real dial: one edit
-   changes density and nothing else moves. The theme space scale is tuned to land on it
-   (`--space-1: 8 → 6`).
-2. **`@tanstack/react-table` pinned to `^8.21.3`**, not the `9.1.2` that `pnpm add`
-   resolves. v9 is a different architecture with no `useReactTable`, no
-   `getCoreRowModel`, and no `sortingFn`. If v9 is wanted later it is a rewrite of this
-   layer, not an upgrade.
-3. **D0's choice** — real `<table>` with spacer rows — and its three costs: row height
-   must stay constant, the scroll element is found by DOM query, variable row heights are
-   out.
-4. The D4 font table (old vs new ladder thresholds) **does not exist**; D4 was not run.
+1. **`ROW_H` = 48 px** (`src/table/rowHeight.ts`) — one edit, one visible effect. The
+   theme space scale is tuned to land on it (`--space-1: 8 → 6`), because an inline
+   `height` on `<tr>` is only a minimum and CDS's cell content overrode it upward.
+2. **`@tanstack/react-table` pinned `^8.21.3`.** v9 — what `pnpm add` resolves — has
+   no `useReactTable`, no `getCoreRowModel`, no `sortingFn`. Moving to v9 later is a
+   rewrite of this layer, not an upgrade.
+3. **D0's choice**: real `<table>` + spacer rows, and its three costs.
+4. **The font width table above**: thresholds unchanged, and the reason is a latent
+   measurement-context bug worth fixing next.
+5. **`manualSorting`** rather than a registered `sortingFn`, to keep nulls last in
+   both directions.
 
 ## How to look at it
 
@@ -243,53 +346,60 @@ cd sauron-v2
 pnpm build && pnpm start          # :3200
 ```
 
-- `http://localhost:3200/` — the product screen.
-- `http://localhost:3200/scale?n=1000` — the harness. **This currently renders 9 rows
-  into a 48,044 px container.** That is the open bug, not a rendering artefact.
-- `http://localhost:3200/chart?c=b&n=520` — pass 2's chart, unchanged.
+- **`http://localhost:3200/`** — the product screen. Look first at the screener
+  **chips** (one row, active one inverted), the **`↗` / `↘`** arrows on the change
+  columns, and the type: Pretendard for Latin and Hangul alike.
+- **`http://localhost:3200/scale?n=1000`** — 1,000 rows, virtualized. Scroll it: the
+  scrollbar should be honest and rows should not blank out. Click `1D` to sort.
+- **`http://localhost:3200/chart?c=b&n=520`** — chart with chrome removed.
 
-Outstanding real-screen items, both still outstanding: **chart drag-pan** (pass 2) and
-**everything in D4**, which was not run.
+**Owner verification required** — nothing here is claimed to look right:
+
+1. **Chart drag-pan**, outstanding since pass 2. Synthetic pointer events did not
+   move it; it needs a real mouse.
+2. **Everything in D4.** Only what was *applied* is reported; how it reads is yours.
+3. **Whether `ROW_H` 48 is right**, now that it is a dial.
 
 ## Deferred (aesthetic)
 
-Carried forward unchanged from pass 2 — CDS row height and 16 px body type read airier
-than v1; screener still placeholder `Button`s, not chips; sort glyphs tight against the
-header label; 52주 shows a bare percentage where v1 has a position track; no hairline or
-geometry work; tint reads stronger on CDS white; chart harness unstyled; chart date axis
-Korean by locale accident; zoom has no visible affordance.
+Carried forward: styling beyond D4's list; 52주 shows a bare percentage where v1 has
+a position track; tint reads stronger on CDS white than on v1's `#f8f8f8`; the chart's
+date axis is Korean by locale accident; zoom has no visible affordance.
 
 New this pass:
 
-- **The space scale was tuned for one number.** `--space-1: 6` was chosen to make rows
-  48 px; it also moves every other 8 px gap in the app. Nothing was checked for that
-  side effect, because D4 was not reached.
-- **Spacer rows are `aria-hidden` but still real rows.** Whether a screen reader's row
-  count should report 1,000 or 9 is undecided and unexamined.
-- **The 9-row render looks like a short table, not a broken one** — which is exactly why
-  it is called out in `## How to look at it` rather than left to be discovered.
+- **The stipple fill (D4.3) is missing**, and the area under the line is simply absent
+  rather than filled another way.
+- **No detail or gauge block exists**, so D4.2 had nowhere to land. Whatever block
+  eventually holds the two-step typography is unbuilt.
+- **`.sr-pill`'s active tint uses the up-hue** for a selector that has nothing to do
+  with direction. It reads as "selected" but borrows a meaning-carrying colour.
+- **`--space-1: 6` was chosen to hit `ROW_H`** and also moves every other 8 px gap in
+  the app. Nothing was surveyed for that side effect.
+- **Spacer rows are `aria-hidden`**, but a screen reader still meets 22 rows where the
+  table claims 1,000. Undecided.
+- **The arrow glyphs come from the text font**, not an icon set, so their weight
+  shifts with the face.
 
 ## Provisional
 
-1. **D0's choice**: real `<table>` + spacer rows over `div`/grid. Reasoning and probe
-   above; the deciding factor is that `<colgroup>` is single-source structurally where a
-   grid template is single-source only by convention.
-2. **Pinned `@tanstack/react-table@^8.21.3`** after v9 resolved by default. Selecting the
-   version whose API the prompt specifies is not synthesising a replacement.
-3. **`manualSorting` instead of a registered `sortingFn`**, to keep the null-ordering
-   contract. The comparator is unchanged; only who calls it moved.
-4. **Space scale tuned 8 → 6** to land `ROW_H`, rather than setting a height that CDS
-   would override upward.
-5. **Committed a state whose screen is wrong**, clearly labelled in the commit message
-   and here. The alternative — reverting to pass 2's table — would have discarded the
-   D0 probe evidence and the working parts along with the bug.
-6. **Stopped at D1 rather than pushing into D2–D4.** D2's measurements would have been
-   taken against a table that is not rendering correctly, and D4 is explicitly gated on
-   D0–D3 being green.
+1. **D0's choice**: real `<table>` + spacer rows over `div`/grid — `<colgroup>` is
+   single-source structurally where a grid template is single-source by convention.
+2. **Pinned `@tanstack/react-table@^8.21.3`** after v9 resolved by default.
+3. **`manualSorting`** instead of a registered `sortingFn`.
+4. **Space scale tuned 8 → 6** to land `ROW_H` rather than fighting CDS's cell padding.
+5. **`height` passed as a pixel number**, because the prop's type accepts strings the
+   implementation cannot use.
+6. **Committed `a4cc568` with a wrong screen**, labelled as such, rather than
+   discarding the D0 probe evidence.
+7. **Did not fix the `useChPx` measurement-context bug** — real and measured, but not
+   on D4's closed list.
+8. **Did not build a detail/gauge block** for D4.2 rather than inventing a panel.
+9. **jsdom stubs in `guards/setup.ts`** rather than skipping the virtualization guard.
 
 ## Files touched outside the commits
 
-None. Everything is in `a4cc568`.
+None. Everything is in `a4cc568`, `fc46feb`, `b814fe2`, and this report.
 
 ---
 
@@ -305,8 +415,7 @@ closing   47122287 인트로 커튼 — 시작할 때 커브 아홉 장이 피�
           ahead 3, dirty: data/irsdata.xlsx
 ```
 
-**Identical.** No commit was made in that tree by this session and no byte was written to
-it. This session's only interaction with it was the two `git status` / `git log` reads
-above. The tree did not move during the session; the IntroCurtain work that changed it
-was committed by the concurrent session *before* this one started, which is why the
-baseline already contained it.
+**Identical.** No commit was made in that tree by this session and no byte was written
+to it. The tree did not move during the session — the concurrent session's IntroCurtain
+work was already committed before this one started, which is why the baseline contains
+it and the closing check matches.
