@@ -14,6 +14,7 @@ import type {
   BasisKey,
   ForwardsPayload,
   SeriesSummary,
+  Theta,
   Unit,
   VolatilityPayload,
   WallSummary,
@@ -70,6 +71,10 @@ export interface Row {
    * on (§3). Server-decided for every group, including forwards (whose flag
    * arrives as `keyForward`); the browser holds no copy of the owner's list. */
   key: boolean;
+  /** 3개월 세타(캐리+롤다운), 페이 기준 [OWNER, 2026-08-13]. Outright swap
+   * tenors only — null everywhere else, and the column draws an em dash.
+   * Read straight through: every convention is `backend/app/theta.py`. */
+  theta?: Theta | null;
 }
 
 /** Provenance of every Row field (§16). `dto` = read straight from the API;
@@ -95,6 +100,7 @@ export const ROW_FIELD_SOURCE: Record<keyof Row, "dto" | "format"> = {
   startLabel: "format",
   quoted: "dto",
   key: "dto",
+  theta: "dto",
 };
 
 /** lexicographic compare of numeric sort keys (§6). */
@@ -193,6 +199,7 @@ function fromSummary(s: SeriesSummary, group: Group, label: string): Row {
     movePct: s.movePct,
     quoted: s.quoted ?? undefined,
     key: s.key,
+    theta: s.theta ?? null,
   };
 }
 

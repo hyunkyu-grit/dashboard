@@ -29,6 +29,7 @@ import {
   gridTemplate,
   visibleColumns,
   type VisibleColumns,
+  withThetaData,
 } from "./columns";
 import {
   EXIT,
@@ -78,6 +79,10 @@ const RANGE_COL_NAME = "52주 레인지";
 
 /** The position track's noun for the same note (pass N). */
 const SLIDER_COL_NAME = "52주 내 위치";
+
+/** 세타's noun for the same note [OWNER, 2026-08-13]. Spelled out where the
+ * sub-header could not be: the note is prose, so it has the room. */
+const THETA_COL_NAME = "3개월 세타 (DV01 백만원당)";
 
 /* 탭의 정의는 ui/tabs.ts 로 옮겼다 [2026-08-07]. 탭은 이제 표 안의 세그먼티드
  * 컨트롤이 아니라 셸의 사이드바(ui/Sidebar.tsx)이고, 표와 셸이 함께 읽는
@@ -259,9 +264,11 @@ function TableRow({
           {fmtDelta(row.changes[b], row.unit)}
         </div>
       ))}
-      {/* 52주 고점/저점/평균 + 위치 track — levels, so ink, and not sortable
+      {/* 52주 고점/저점/평균 + 위치 track + 세타 — ink, and not sortable
           (RangeCells) */}
-      {visible.range52 && <RangeCells row={row} slider={visible.slider} />}
+      {visible.range52 && (
+        <RangeCells row={row} slider={visible.slider} theta={visible.theta} />
+      )}
     </motion.div>
   );
 }
@@ -510,17 +517,40 @@ export function InstrumentTable({
 
   // The column ladder (columns session): which columns fit the measured
   // width, sorted column forced in; header and body share the template.
-  const visible = useMemo(
+  const widthCols = useMemo(
     () => visibleColumns(tableW, chPx, sortCol),
     [tableW, chPx, sortCol],
+  );
+  /* …and whether 세타 applies to what this tab lists (see `withThetaData`).
+   *
+   * Read off the TAB'S GROUP, not off `rows` (which is every instrument the
+   * app knows — the 스프레드 tab would then keep a column of em dashes because
+   * some outright elsewhere has a theta) and not off `shown` (the screener
+   * chips and the forward start filter both narrow that, and a column that
+   * appears and disappears as chips are toggled is a layout that flinches).
+   * Group membership is the stable fact, and it is the one the rule is about.
+   *
+   * `hiddenNames` below stays on `widthCols`: that note names what the WIDTH
+   * dropped, and a column that does not apply to spreads was never hidden. */
+  const thetaApplies = useMemo(
+    () =>
+      (filter === "all" ? rows : rows.filter((r) => r.group === filter)).some(
+        (r) => r.theta,
+      ),
+    [rows, filter],
+  );
+  const visible = useMemo(
+    () => withThetaData(widthCols, thetaApplies),
+    [widthCols, thetaApplies],
   );
   const template = gridTemplate(visible);
   const hiddenNames = [
     ...BASIS_ORDER.filter((b) => !visible.bases.includes(b)).map(
       (b) => BASIS_HEAD[b],
     ),
-    ...(visible.range52 ? [] : [RANGE_COL_NAME]),
-    ...(visible.slider ? [] : [SLIDER_COL_NAME]),
+    ...(widthCols.range52 ? [] : [RANGE_COL_NAME]),
+    ...(widthCols.slider ? [] : [SLIDER_COL_NAME]),
+    ...(widthCols.theta ? [] : [THETA_COL_NAME]),
   ];
 
   return (
@@ -726,13 +756,18 @@ export function InstrumentTable({
                 </div>
               ))}
               {visible.range52 ? (
-                // when only the position track is dropped, the hidden-column
-                // note rides in the range header's filler track — the one
-                // slot that still exists in that state
+                // when only the tail rungs (위치, 세타) are dropped, the
+                // hidden-column note rides in the range header's filler track
+                // — the one slot that still exists in that state. Keyed off
+                // `hidden` rather than off one rung's flag: with two tail
+                // rungs, testing `slider` alone left 세타 dropping silently,
+                // and a column that vanishes without saying so is the exact
+                // condition this note exists to prevent.
                 <RangeHeader
                   slider={visible.slider}
-                  note={visible.slider ? undefined : `${visible.hidden}열 숨김`}
-                  noteTitle={visible.slider ? undefined : hiddenNames.join(" · ")}
+                  theta={visible.theta}
+                  note={visible.hidden ? `${visible.hidden}열 숨김` : undefined}
+                  noteTitle={visible.hidden ? hiddenNames.join(" · ") : undefined}
                 />
               ) : (
                 // what is hidden, stated (Pass B) — a statement, not a

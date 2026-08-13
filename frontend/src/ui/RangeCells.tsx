@@ -1,6 +1,14 @@
-/* The table's last column: 52-week high / low / mean (pass L), plus the
- * POSITION TRACK (pass N) — where the current level sits inside that range,
- * as a low→high slider with a marker.
+/* The table's last column: 52-week high / low / mean (pass L), the POSITION
+ * TRACK (pass N) — where the current level sits inside that range, as a
+ * low→high slider with a marker — and, since 2026-08-13, 세타.
+ *
+ * 세타 is the one thing here that is NOT a 52-week statistic. It is here
+ * because the owner put it here ("Backtest 기준 위치 오른쪽에 남는 칸에"), and
+ * the placement is the point: carry and rolldown were only reachable by
+ * opening the backtest window and pressing 실행, and the number needs neither
+ * — a frozen curve makes it a closed form off today's curve alone. Its three
+ * rules below are the same three, with the money grammar (`krw.ts`) standing
+ * in for `fmtLevel` in rule 1 and rule 2 argued explicitly at its call site.
  *
  * It replaced the 한 줄 sentence and keeps its slot, its width behaviour and
  * its role as the elastic column — only the contents changed, from a Korean
@@ -29,8 +37,11 @@
  * width, immediately right of 평균; it has its own ladder rung and drops
  * first (columns.ts). */
 
+import { fmtDelta } from "@/lib/format";
+
 import { rangeTemplate } from "./columns";
 import { rangeText } from "./cells";
+import { fmtKrw, fmtKrwFromMan, manUnits } from "./krw";
 import type { Row } from "./rows";
 
 /** Sub-labels, in render order. The window is named once, on the first label,
@@ -40,6 +51,22 @@ export const RANGE_LABELS = ["52주 고점", "저점", "평균"] as const;
 
 /** The position track's own label — scoped by the same adjacency. */
 export const SLIDER_LABEL = "위치";
+
+/** 3개월 세타, DV01 백만원당 [OWNER, 2026-08-13].
+ *
+ * The label has to carry the NORMALISER or the number is unreadable: "세타"
+ * alone reads as cash, and this is cash PER UNIT OF RISK — the whole reason
+ * the column exists is that the two rank the tenors in opposite orders (100억
+ * 기준으로는 10Y가 제일 크고, 리스크당으로는 1Y가 6배 크다). Horizon and side
+ * do not fit in a sub-column header and ride in `THETA_TITLE` instead. */
+export const THETA_LABEL = "세타/DV01백만";
+
+/** The header's tooltip — the three facts the label had no room for. §15's
+ * register: 해요체, one sentence one fact. */
+export const THETA_TITLE =
+  "커브가 그대로일 때 3개월 뒤 손익이에요 (캐리 + 롤다운). " +
+  "고정 지급(페이) 기준이라 마이너스가 역캐리이자 헤지비용이에요. " +
+  "DV01 백만원당이라 테너끼리 바로 비교돼요.";
 
 /** high, low, mean — the order the labels declare. */
 export function rangeValues(row: Row): (number | null)[] {
@@ -96,17 +123,19 @@ function RangeTrack({ row }: { row: Row }) {
  * at the table's 13px, which is the only reason header and body line up. */
 export function RangeHeader({
   slider = true,
+  theta = false,
   note,
   noteTitle,
 }: {
   slider?: boolean;
+  theta?: boolean;
   note?: string;
   noteTitle?: string;
 }) {
   return (
     <div
       role="columnheader"
-      style={{ gridTemplateColumns: rangeTemplate(slider) }}
+      style={{ gridTemplateColumns: rangeTemplate(slider, theta) }}
       className="grid text-ink-2"
     >
       {RANGE_LABELS.map((label) => (
@@ -120,6 +149,14 @@ export function RangeHeader({
       {slider && (
         <span className="whitespace-nowrap pr-3 text-right text-[11px]">
           {SLIDER_LABEL}
+        </span>
+      )}
+      {theta && (
+        <span
+          className="whitespace-nowrap pr-3 text-right text-[11px]"
+          title={THETA_TITLE}
+        >
+          {THETA_LABEL}
         </span>
       )}
       {note ? (
@@ -136,13 +173,42 @@ export function RangeHeader({
   );
 }
 
-/** One row's three statistics and the track. `tabular-nums` + the fixed
+/** The cell's own tooltip: the 100억 figures the column had no room for, plus
+ * the breakeven. Additive AT DISPLAYED PRECISION by the `splitKrw` precedent —
+ * the total and the roll round once each and the CARRY IS THEIR DIFFERENCE in
+ * 만-units, so a reader who subtracts the two parts always gets the total back.
+ * Rounding all three separately can miss by a 만원, and this repo has shipped
+ * that exact lie once already (see `krw.ts`). */
+export function thetaTitle(t: NonNullable<Row["theta"]>): string {
+  const uCash = manUnits(t.cash);
+  const uRoll = manUnits(t.roll);
+  const uCarry = uCash - uRoll;
+  return (
+    `100억 기준 ${fmtKrwFromMan(uCash)}` +
+    ` — 캐리 ${fmtKrwFromMan(uCarry)} + 롤다운 ${fmtKrwFromMan(uRoll)}. ` +
+    `이 100억의 DV01 은 ${fmtKrw(t.dv01)}/bp 예요. ` +
+    // the breakeven is a bp MOVE, so it prints in the move grammar the change
+    // columns use — `fmtDelta`, not a local toFixed (readout-parity pins that
+    // this file owns no rounding of its own)
+    `3개월 안에 ${fmtDelta(t.beBp, "bp")}bp 움직여야 본전이에요.`
+  );
+}
+
+/** One row's three statistics, the track, and 세타. `tabular-nums` + the fixed
  * sub-tracks are what make the digits line up vertically down the table. */
-export function RangeCells({ row, slider = true }: { row: Row; slider?: boolean }) {
+export function RangeCells({
+  row,
+  slider = true,
+  theta = false,
+}: {
+  row: Row;
+  slider?: boolean;
+  theta?: boolean;
+}) {
   return (
     <div
       role="cell"
-      style={{ gridTemplateColumns: rangeTemplate(slider) }}
+      style={{ gridTemplateColumns: rangeTemplate(slider, theta) }}
       className="grid text-ink"
     >
       {rangeValues(row).map((v, i) => (
@@ -154,6 +220,22 @@ export function RangeCells({ row, slider = true }: { row: Row; slider?: boolean 
         </span>
       ))}
       {slider && <RangeTrack row={row} />}
+      {/* 세타 — INK, not a signed hue, although it IS a signed money value and
+          §5 reserves colour for exactly those. The row it sits in already
+          spends that hue on RATE direction (the 어제/MTD/YTD columns), and two
+          meanings of one colour in one row is worse than none. The sign glyph
+          `fmtKrw` prints carries the direction on its own, which is also what
+          monochrome-first asks for. Em dash where there is no value: spreads,
+          flies, forwards, volatility and the 1D/3M nodes have no swap theta,
+          and an empty cell would read as a loading state. */}
+      {theta && (
+        <span
+          className="pr-3 text-right tabular-nums"
+          title={row.theta ? thetaTitle(row.theta) : undefined}
+        >
+          {row.theta ? fmtKrw(row.theta.perDv01) : "—"}
+        </span>
+      )}
       <span />
     </div>
   );

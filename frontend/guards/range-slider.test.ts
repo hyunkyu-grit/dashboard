@@ -107,13 +107,21 @@ describe("the track drops at its own threshold, inside the ladder", () => {
     w.label + w.level + 3 * w.delta + w.range + w.rangeSub;
 
   it("present at its threshold, gone one pixel below — 52주 unaffected", () => {
+    // at exactly the track's own threshold the track is in and 세타 is not
+    // (세타 sits one rung further out, 2026-08-13) — so the note already has
+    // one column to state, and the track's own drop takes it to two
     const wide = visibleColumns(Math.ceil(full), CH, null);
     expect(wide.slider).toBe(true);
-    expect(wide.hidden).toBe(0);
+    expect(wide.theta).toBe(false);
+    expect(wide.hidden).toBe(1);
     const narrow = visibleColumns(Math.ceil(full) - w.rangeSub, CH, null);
     expect(narrow.slider).toBe(false);
     expect(narrow.range52).toBe(true);
-    expect(narrow.hidden).toBe(1);
+    expect(narrow.hidden).toBe(2);
+    // and with room for both, nothing is hidden at all
+    const widest = visibleColumns(Math.ceil(full + w.theta), CH, null);
+    expect(widest.theta).toBe(true);
+    expect(widest.hidden).toBe(0);
   });
 
   it("the header states the drop instead of leaving a silent gap", () => {

@@ -80,6 +80,34 @@ export interface SeriesSummary {
    * live in `derive.py`; the browser reads the verdict and never re-derives
    * it, so there is exactly one place to change which rows sit on top. */
   key: boolean;
+  /** 테너별 세타 [OWNER, 2026-08-13] — OUTRIGHT SWAP TENORS ONLY. Absent (or
+   * null) on 1D/3M, on every spread/fly, and on volatility rows; the column
+   * draws an em dash there. Every convention behind these numbers is stated
+   * in `backend/app/theta.py` — do not re-derive any of them here (§16). */
+  theta?: Theta | null;
+}
+
+/** Carry + rolldown over a frozen curve, PAY-side, in won. The column reads
+ * `perDv01`; the rest is the cell's tooltip. `cash`/`carry`/`roll`/`dv01`
+ * stand on `thetaBasis.notional` (100억); `perDv01` does not depend on it. */
+export interface Theta {
+  perDv01: number; // 원, per 1,000,000원 of DV01 — what the column prints
+  cash: number; // 원, at the basis notional
+  carry: number; // 원, the coupon-differential accrual
+  roll: number; // 원, the frozen-curve mark change
+  dv01: number; // 원/bp, the basis notional's DV01
+  beBp: number; // bp the (T−h) rate must RISE to cancel the theta
+  entry: number; // % — the curve's own par rate, not the quoted level
+  rollIn: number; // % — where it marks after the horizon
+}
+
+/** What the 세타 column means, stated once for the table rather than repeated
+ * down it. `cd` null ⇒ no row carries a theta (carry cannot be invented). */
+export interface ThetaBasis {
+  horizonMonths: number;
+  notional: number;
+  side: "pay";
+  cd: number | null;
 }
 
 export interface ChangeEvent {
@@ -158,6 +186,7 @@ export interface WallSummary {
   events: EventCluster[];
   regret: RegretEntry[];
   policy: PolicyStep;
+  thetaBasis: ThetaBasis;
 }
 
 export async function fetchWallSummary(): Promise<WallSummary> {

@@ -28,6 +28,7 @@ from .derive import (
     series_values,
     summarize,
 )
+from .theta import theta_table
 from .volatility import relative_atr_for
 
 
@@ -49,6 +50,14 @@ def wall_summary(dataset: Dataset, bases: dict, events: list,
         summarize(dataset, sid, sid.replace("-", "/"), kind, bases)
         for sid, kind, _legs in derived_ids()
     ]
+    # 테너별 세타 [OWNER, 2026-08-13]. `summarize` 안이 아니라 여기서 붙는다 —
+    # 그 함수는 한 시리즈의 값만 보는 순수 함수고, 세타는 커브 전체를 본다.
+    # 아웃라이트에만 붙는 이유는 theta.py 의 주석에 있다(스프레드·플라이는
+    # DV01 중립이라 순 DV01 이 0 에 붙고, 그걸로 나눈 값은 숫자가 아니다).
+    # 값이 없는 테너에는 키 자체가 없다 — 화면이 그 부재를 em dash 로 그린다.
+    thetas, theta_basis = theta_table(dataset)
+    for o in outrights:
+        o["theta"] = thetas.get(o["id"])
     # The whole-curve extreme (§I) is the one cross-sectional statement left
     # here: it is a fact about the CURVE, stated once above the table. The 한 줄
     # ladder's two cross-sectional rungs used to run at this point and are gone
@@ -63,6 +72,9 @@ def wall_summary(dataset: Dataset, bases: dict, events: list,
         "curveBanner": banner,  # §I: whole-curve extreme stated once, not per row
         "outrights": outrights,
         "derived": derived,
+        # 세타 열이 자기를 설명하는 데 필요한 기준 — 호라이즌·노셔널·부호
+        # 방향·그날의 CD. 행마다 되풀이할 값이 아니라 표 전체에 한 번이다.
+        "thetaBasis": theta_basis,
         # BOK base rate as step corners (§policy). Every %-unit chart draws it;
         # `through` bounds the carry and is not the reader's axis end.
         "policy": policy,

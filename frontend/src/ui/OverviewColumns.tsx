@@ -46,7 +46,7 @@ import { useUiStore } from "@/state/ui";
 
 import { levelText } from "./cells";
 import { GroupBox, GroupBoxTitle } from "./GroupBox";
-import { ALL_COLUMNS, BASIS_HEAD, gridTemplate } from "./columns";
+import { ALL_COLUMNS, BASIS_HEAD, gridTemplate, withThetaData } from "./columns";
 import { ErrorState, LoadingState } from "./DataState";
 import { PreviewChart } from "./PreviewChart";
 import { RangeCells, RangeHeader } from "./RangeCells";
@@ -76,8 +76,23 @@ const CHART_H = 200;
 
 /** THE column template — the instrument table's, unmodified. Every column
  * shows every column: the overview never drops one (`ALL_COLUMNS`), because
- * showing all six figures at once is the entire reason this tab exists. */
-const TEMPLATE = gridTemplate(ALL_COLUMNS);
+ * showing all six figures at once is the entire reason this tab exists.
+ *
+ * 세타 IS DELIBERATELY ABSENT HERE [2026-08-13]. The owner asked for it on
+ * both surfaces and it was built for both; measured, it does not fit this one.
+ * These are three `minmax(0, 1fr)` columns sharing the viewport, and the
+ * 아웃라이트 table already spends its whole third — adding ~115px pushed the
+ * money column past the group box, where it CLIPPED WITH NO SCROLLBAR. That
+ * exact failure is a fixed owner defect on this tab ([OWNER, 2026-08-07 —
+ * "100%에서 잘린다"], which is why the tracks are 1fr and not max-content), so
+ * re-introducing it to satisfy the newer ask would trade one owner ruling for
+ * another. The tenor tables under Backtest carry the column at full width.
+ *
+ * `withThetaData(..., false)` rather than plain `ALL_COLUMNS`: the constant now
+ * reserves the 세타 track in its tail floor, and a floor that reserves width
+ * for something the sub-grid does not draw is dead space at the end of every
+ * row — which is what this surface showed for one build. */
+const TEMPLATE = gridTemplate(withThetaData(ALL_COLUMNS, false));
 
 function Head({ asOf }: { asOf?: string }) {
   return (
@@ -274,6 +289,7 @@ function Column({
    * not a claim, and it becomes true again if the row comes back. */
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = shown.find((r) => r.id === selectedId) ?? shown[0] ?? null;
+
 
   return (
     /* 열 하나 = **그룹박스** 하나 [OWNER, 2026-08-07]. sauron.html 의 `.ov` 가

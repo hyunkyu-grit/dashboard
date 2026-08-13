@@ -83,7 +83,11 @@ describe("the cell carries no colour or tint (§5)", () => {
     // track, derived in markerPct from the same values the numbers print,
     // never a per-value colour or width.
     expect((src.match(/style=\{/g) ?? []).length).toBe(3);
-    expect((src.match(/gridTemplateColumns: rangeTemplate\(slider\)/g) ?? []).length).toBe(2);
+    // 세타 rides the SAME shared sub-grid — it took a `theta` argument, not a
+    // template of its own, so header and body still resolve one definition
+    expect(
+      (src.match(/gridTemplateColumns: rangeTemplate\(slider, theta\)/g) ?? []).length,
+    ).toBe(2);
     expect(src).toMatch(/style=\{\{ left: `\$\{pct\}%` \}\}/);
   });
 });

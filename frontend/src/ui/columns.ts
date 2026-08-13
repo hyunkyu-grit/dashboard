@@ -19,9 +19,10 @@
  * the reader cannot see is unreadable, so the sort column is promoted to
  * slot 3 and whatever it displaced falls off the end. Ladder:
  *   1 종목 · 2 레벨 (헤더 = 데이터 일자) · [3 sorted] · 어제 · YTD · MTD · 52주
- *   · 위치 (the position track — first to go, last to return; then 52주)
- * Neither 52주 nor 위치 is sortable: they never enter the sort slot and their
- * headers carry no control. Dropping/restoring never animates — it is a
+ *   · 위치 (the position track) · 세타 (first to go, last to return; then 위치,
+ *   then 52주)
+ * None of 52주, 위치 or 세타 is sortable: they never enter the sort slot and
+ * their headers carry no control. Dropping/restoring never animates — it is a
  * layout change, not a state change. Pinned by guards/table-grid.test.ts.
  */
 
@@ -58,6 +59,12 @@ export const WIDEST = {
   /** Change columns: sign + three integer digits + 1dp (`−999.9`); the ratio
    * delta (`−1.23`) is narrower. */
   delta: "−999.9",
+  /** The 세타 column's values, through `fmtKrw` — money, so the widest is the
+   * 억 rollover, not today's data. Today the column runs −397만 … −2,495만
+   * (all four digits), but the front end is a RATIO — carry over a small
+   * annuity — and a 100bp CD-vs-IRS gap at 6M puts it past 1억. Sizing to
+   * today's range would clip exactly on the day the number matters most. */
+  theta: "−1억 2,345만원",
 };
 
 /** Glyphs in the 현재 track: the wider of its values and its header, which
@@ -111,12 +118,32 @@ const RANGE_W_SLIDER = `calc(${(RANGE_SUBS + 1) * WIDEST.level.length}ch + ${
   (RANGE_SUBS + 1) * RANGE_PAD
 }px)`;
 
+/** The 세타 sub-column [OWNER, 2026-08-13 — "위치 오른쪽에 남는 칸에"]. It sits
+ * where the reader pointed: immediately right of the position track, inside the
+ * 52주 cell, with the cell's trailing slack still trailing it.
+ *
+ * IT IS A TRACK, NOT THE SLACK. Dropping the value into the existing filler
+ * would have cost nothing — but that filler is `minmax(0, 1fr)`, so its width
+ * is whatever the table has left over, and at a narrow container it is ZERO. A
+ * number that silently vanishes is the opposite of "바로 눈에 띄게". With a
+ * track of its own it follows the house rule instead: columns DROP rather than
+ * shrink, visibly and by the ladder.
+ *
+ * The cushion is bigger than RANGE_PAD's for the reason stated there — `ch` is
+ * the DIGIT advance and 억/만/원 are Korean, wider than a digit at the same
+ * size. Three of them ride in the widest rendering, at roughly 5.3px of excess
+ * each over the 7.74px runtime `ch`, plus `pr-3`. 30px covers both with room;
+ * shrink it only against a fresh measurement, never from the arithmetic. */
+export const THETA_PAD = 30;
+const THETA_W = `calc(${WIDEST.theta.length}ch + ${THETA_PAD}px)`;
+
 /** The sub-grid INSIDE the 52주 cell — the fixed tracks (three numbers, plus
  * the position track when it fits), then a filler that takes the slack.
  * Shared by the header's sub-labels and every body cell, exactly as
  * `gridTemplate` is shared by the header row and every body row. */
-export function rangeTemplate(slider: boolean): string {
-  return `repeat(${RANGE_SUBS + (slider ? 1 : 0)}, ${RANGE_SUB_W}) minmax(0, 1fr)`;
+export function rangeTemplate(slider: boolean, theta = false): string {
+  const fixed = `repeat(${RANGE_SUBS + (slider ? 1 : 0)}, ${RANGE_SUB_W})`;
+  return `${fixed}${theta ? ` ${THETA_W}` : ""} minmax(0, 1fr)`;
 }
 
 /** Change-column priority (slots 4–6): 어제 first, then YTD, then MTD.
@@ -133,7 +160,11 @@ export interface VisibleColumns {
   /** the 52주 position track (pass N). Implies `range52` — the marker's frame
    * of reference is the three numbers beside it, so it can never outlive them. */
   slider: boolean;
-  hidden: number; // how many columns are dropped (bases + 52주 + 위치)
+  /** the 세타 column [OWNER, 2026-08-13]. Implies `slider`: it was placed BY
+   * its neighbour ("위치 오른쪽"), and a column that outlived the thing it was
+   * positioned against would be somewhere the owner never put it. */
+  theta: boolean;
+  hidden: number; // how many columns are dropped (bases + 52주 + 위치 + 세타)
 }
 
 /** Fixed column widths in px for a measured `ch` (the '0' advance in the
@@ -146,6 +177,7 @@ export function colPx(chPx: number): {
   delta: number;
   rangeSub: number;
   range: number;
+  theta: number;
 } {
   const rangeSub = WIDEST.level.length * chPx + RANGE_PAD;
   return {
@@ -154,6 +186,7 @@ export function colPx(chPx: number): {
     delta: WIDEST.delta.length * chPx + COL_PAD.delta,
     rangeSub,
     range: RANGE_SUBS * rangeSub,
+    theta: WIDEST.theta.length * chPx + THETA_PAD,
   };
 }
 
@@ -178,18 +211,43 @@ export function visibleColumns(
   }
   const range52 =
     included.length === ladder.length && used + w.range <= containerPx;
-  // the position track is the ladder's last rung: it returns only after the
-  // three numbers it is read against, and drops before anything else
+  // the position track returns only after the three numbers it is read
+  // against, and 세타 only after the track it was placed beside — so the tail
+  // restores 52주 → 위치 → 세타 and drops in exactly the reverse order
   const slider = range52 && used + w.range + w.rangeSub <= containerPx;
+  const theta = slider && used + w.range + w.rangeSub + w.theta <= containerPx;
   return {
     bases: BASIS_CANON.filter((b) => included.includes(b)),
     range52,
     slider,
+    theta,
     hidden:
       BASIS_LADDER.length - included.length +
       (range52 ? 0 : 1) +
-      (slider ? 0 : 1),
+      (slider ? 0 : 1) +
+      (theta ? 0 : 1),
   };
+}
+
+/** Width says the 세타 column FITS; this says whether it APPLIES.
+ *
+ * 세타 exists for outright swap tenors only — a spread or a fly is weighted
+ * DV01-neutral, so there is no net risk to divide by, and forwards, volatility
+ * and the 1D/3M nodes are not swaps at all. On those surfaces every cell would
+ * be an em dash, and this product has already retired one column for exactly
+ * that (the backtest's 진입 par, which printed either a duplicate or a dash:
+ * "a column that is either a duplicate or a dash earns no width" [OWNER,
+ * 2026-08-03]). So a table with no theta anywhere does not draw the column.
+ *
+ * This is NOT a ladder drop and must never be counted as one: the width note
+ * says "N열 숨김", and a column that does not apply here was not hidden from
+ * the reader — there was nothing to hide. Callers keep `hidden` on the
+ * width-derived value. */
+export function withThetaData(
+  v: VisibleColumns,
+  hasAny: boolean,
+): VisibleColumns {
+  return v.theta && !hasAny ? { ...v, theta: false } : v;
 }
 
 /** Every column visible — the initial state before the first measurement. */
@@ -197,6 +255,7 @@ export const ALL_COLUMNS: VisibleColumns = {
   bases: BASIS_CANON,
   range52: true,
   slider: true,
+  theta: true,
   hidden: 0,
 };
 
@@ -206,9 +265,15 @@ export const ALL_COLUMNS: VisibleColumns = {
  * card (hairlines/hover) and the header's hidden-column note has a slot. */
 export function gridTemplate(v: VisibleColumns): string {
   const deltas = v.bases.length ? ` repeat(${v.bases.length}, ${DELTA_W})` : "";
-  const tail = v.range52
-    ? `minmax(${v.slider ? RANGE_W_SLIDER : RANGE_W}, 1fr)`
-    : "minmax(0, 1fr)";
+  // the 52주 cell's FLOOR has to cover whatever sub-tracks it holds — the
+  // three numbers, the position track, and 세타 — or the sub-grid overflows
+  // the cell it lives in and every row's tail slides left of its header
+  const floor = v.slider
+    ? v.theta
+      ? `calc(${RANGE_W_SLIDER} + ${THETA_W})`
+      : RANGE_W_SLIDER
+    : RANGE_W;
+  const tail = v.range52 ? `minmax(${floor}, 1fr)` : "minmax(0, 1fr)";
   return `${LABEL_W} ${LEVEL_W}${deltas} ${tail}`;
 }
 

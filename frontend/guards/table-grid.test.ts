@@ -21,8 +21,10 @@ import {
   RANGE_PAD,
   RANGE_SUBS,
   rangeTemplate,
+  THETA_PAD,
   visibleColumns,
   WIDEST,
+  withThetaData,
 } from "../src/ui/columns";
 import { levelHeadText } from "../src/lib/format";
 import { InstrumentTable } from "../src/ui/InstrumentTable";
@@ -37,18 +39,47 @@ describe("column widths derive from the format, not the data", () => {
   const range = `calc(${(RANGE_SUBS + 1) * WIDEST.level.length}ch + ${
     (RANGE_SUBS + 1) * RANGE_PAD
   }px)`;
+  // 세타 [OWNER, 2026-08-13] is a FIFTH fixed sub-track, and unlike the other
+  // four it is sized by the money grammar, not the level grammar — so it has
+  // its own glyph count and its own cushion.
+  const thetaW = `calc(${WIDEST.theta.length}ch + ${THETA_PAD}px)`;
+  const tailFloor = `calc(${range} + ${thetaW})`;
 
   it("the template is a constant built only from the WIDEST renderings", () => {
     const label = `calc(${WIDEST.label.length}ch + 30px)`;
     const delta = `calc(${WIDEST.delta.length}ch + 18px)`;
     expect(GRID_TEMPLATE).toBe(
-      `${label} ${level} repeat(3, ${delta}) minmax(${range}, 1fr)`,
+      `${label} ${level} repeat(3, ${delta}) minmax(${tailFloor}, 1fr)`,
     );
   });
 
   it("52주 is the only flexible track, floored so it never clips to zero", () => {
     expect(GRID_TEMPLATE.match(/1fr/g)).toHaveLength(1);
-    expect(GRID_TEMPLATE.endsWith(`minmax(${range}, 1fr)`)).toBe(true);
+    expect(GRID_TEMPLATE.endsWith(`minmax(${tailFloor}, 1fr)`)).toBe(true);
+  });
+
+  it("the tail floor covers EVERY sub-track the cell holds", () => {
+    // The cell's floor and the sub-grid inside it are written in two places;
+    // if the floor forgets a track the sub-grid overflows its own cell and
+    // every row's tail slides left of the header that names it. Assert the
+    // floor mentions each fixed track's width exactly as the sub-grid does.
+    expect(GRID_TEMPLATE).toContain(range);
+    expect(GRID_TEMPLATE).toContain(thetaW);
+    expect(rangeTemplate(true, true)).toContain(thetaW);
+    expect(rangeTemplate(true, false)).not.toContain(thetaW);
+  });
+
+  it("the 세타 cushion clears the money grammar's Korean glyphs", () => {
+    // `ch` is the DIGIT advance; 억/만/원 are wider at the same size, and the
+    // widest rendering carries three of them. Measured at 13px body type the
+    // excess is ~5.3px each over the 7.74px runtime ch. Plus pr-3. This is the
+    // assertion that stops THETA_PAD being "simplified" down to RANGE_PAD.
+    const KOREAN_EXCESS_PX = 3 * 5.3;
+    const PR3 = 12;
+    for (const ch of [6.5, 7.74, 9]) {
+      const room = colPx(ch).theta - WIDEST.theta.length * ch - PR3;
+      expect(room - KOREAN_EXCESS_PX, `at ch ${ch}`).toBeGreaterThan(0);
+    }
   });
 
   it("the 52주 floor is derived sub-columns — never a magic number", () => {
@@ -98,7 +129,16 @@ describe("column widths derive from the format, not the data", () => {
     expect(rangeTemplate(true)).toBe(
       `repeat(${RANGE_SUBS + 1}, ${sub}) minmax(0, 1fr)`,
     );
-    for (const t of [rangeTemplate(false), rangeTemplate(true)]) {
+    // 세타 joins as a fifth fixed track, still ahead of the slack — the money
+    // column has to align down the table exactly as the level ones do.
+    expect(rangeTemplate(true, true)).toBe(
+      `repeat(${RANGE_SUBS + 1}, ${sub}) ${thetaW} minmax(0, 1fr)`,
+    );
+    for (const t of [
+      rangeTemplate(false),
+      rangeTemplate(true),
+      rangeTemplate(true, true),
+    ]) {
       expect(t.match(/1fr/g)).toHaveLength(1);
       expect(t.endsWith("minmax(0, 1fr)")).toBe(true);
     }
@@ -167,10 +207,16 @@ describe("the column priority ladder (columns session)", () => {
   const w = colPx(CH);
   const LADDER_IDS = ["d1", "ytd", "mtd"] as const;
 
-  function widthFor(nBases: number, range52: boolean, slider = false): number {
+  function widthFor(
+    nBases: number,
+    range52: boolean,
+    slider = false,
+    theta = false,
+  ): number {
     return (
       w.label + w.level + nBases * w.delta +
-      (range52 ? w.range : 0) + (slider ? w.rangeSub : 0)
+      (range52 ? w.range : 0) + (slider ? w.rangeSub : 0) +
+      (theta ? w.theta : 0)
     );
   }
 
@@ -181,17 +227,19 @@ describe("the column priority ladder (columns session)", () => {
       expect(new Set(v.bases)).toEqual(new Set(LADDER_IDS.slice(0, n)));
       expect(v.range52).toBe(false);
       expect(v.slider).toBe(false);
-      // +2: the 52주 numbers and the position track are both still hidden
-      expect(v.hidden).toBe(LADDER_IDS.length - n + 2);
+      expect(v.theta).toBe(false);
+      // +3: the 52주 numbers, the position track and 세타 are all still hidden
+      expect(v.hidden).toBe(LADDER_IDS.length - n + 3);
     }
     const all = visibleColumns(
-      widthFor(LADDER_IDS.length, true, true) + 1,
+      widthFor(LADDER_IDS.length, true, true, true) + 1,
       CH,
       null,
     );
     expect(all.bases).toEqual(["d1", "mtd", "ytd"]);
     expect(all.range52).toBe(true);
     expect(all.slider).toBe(true);
+    expect(all.theta).toBe(true);
     expect(all.hidden).toBe(0);
   });
 
@@ -203,10 +251,10 @@ describe("the column priority ladder (columns session)", () => {
     // TABLE-CONTENT px: the smallest container at which each column appears.
     const RUNTIME_CH = 7.74;
     const rw = colPx(RUNTIME_CH);
-    const at = (n: number, r: boolean, s = false) =>
+    const at = (n: number, r: boolean, s = false, t = false) =>
       Math.ceil(
         rw.label + rw.level + n * rw.delta +
-        (r ? rw.range : 0) + (s ? rw.rangeSub : 0),
+        (r ? rw.range : 0) + (s ? rw.rangeSub : 0) + (t ? rw.theta : 0),
       );
     // Two change columns fewer since 2026-07-31 (WTD/QTD deleted), so the
     // full set now fits 129px earlier than it did — the per-column figures
@@ -217,6 +265,7 @@ describe("the column priority ladder (columns session)", () => {
     expect(at(3, false)).toBe(389); // MTD — the last change column
     expect(at(3, true)).toBe(600); // 52주 — was 729 with five change columns
     expect(at(3, true, true)).toBe(671); // 위치 — the position track (pass N)
+    expect(at(3, true, true, true)).toBe(786); // 세타 (2026-08-13)
   });
 
   it("the sorted column is NEVER dropped — it takes slot 3", () => {
@@ -243,32 +292,44 @@ describe("the column priority ladder (columns session)", () => {
       const v = visibleColumns(px, CH, "mtd");
       const sum =
         w.label + w.level + v.bases.length * w.delta +
-        (v.range52 ? w.range : 0) + (v.slider ? w.rangeSub : 0);
+        (v.range52 ? w.range : 0) + (v.slider ? w.rangeSub : 0) +
+        (v.theta ? w.theta : 0);
       expect(sum, `at ${px}px`).toBeLessThanOrEqual(Math.max(px, w.label + w.level));
     }
   });
 
-  it("the position track is first to go; 52주 second; both return in reverse", () => {
-    // one px short of fitting the track: everything else visible, track hidden
+  it("세타 is first to go; then 위치; then 52주; all return in reverse", () => {
+    // one px short of fitting 세타: everything else visible, 세타 hidden
+    const noTheta = visibleColumns(widthFor(3, true, true, true) - 1, CH, null);
+    expect(noTheta.bases.length).toBe(3);
+    expect(noTheta.range52).toBe(true);
+    expect(noTheta.slider).toBe(true);
+    expect(noTheta.theta).toBe(false);
+    expect(noTheta.hidden).toBe(1);
+    // one px short of fitting the track: 세타 went with it
     const noSlider = visibleColumns(widthFor(3, true, true) - 1, CH, null);
-    expect(noSlider.bases.length).toBe(3);
     expect(noSlider.range52).toBe(true);
     expect(noSlider.slider).toBe(false);
-    expect(noSlider.hidden).toBe(1);
+    expect(noSlider.theta).toBe(false);
+    expect(noSlider.hidden).toBe(2);
     // one px short of fitting 52주: the track is gone too — never without
     // its frame of reference
     const v = visibleColumns(widthFor(3, true) - 1, CH, null);
     expect(v.bases.length).toBe(3);
     expect(v.range52).toBe(false);
     expect(v.slider).toBe(false);
-    expect(v.hidden).toBe(2);
+    expect(v.theta).toBe(false);
+    expect(v.hidden).toBe(3);
   });
 
-  it("the track NEVER shows without the numbers it is read against", () => {
-    for (let px = 60; px <= 980; px += 3) {
+  it("no tail column ever shows without the one it was placed against", () => {
+    for (let px = 60; px <= 1100; px += 3) {
       for (const sort of [null, "mtd"] as const) {
         const v = visibleColumns(px, CH, sort);
         expect(!v.slider || v.range52, `slider without 52주 at ${px}px`).toBe(true);
+        // 세타 was positioned "위치 오른쪽" [OWNER]; without 위치 there is no
+        // such place, so it cannot outlive it
+        expect(!v.theta || v.slider, `세타 without 위치 at ${px}px`).toBe(true);
       }
     }
   });
@@ -366,20 +427,34 @@ describe("rendered grids: one template, and no font-size on a ch-track container
   ];
 
   it("header and body render THE template — no second outer value exists", () => {
-    // before the first width measurement every column renders (ALL_COLUMNS),
-    // so the one legal outer template is the frozen full one, and the only
-    // other grids on the surface are the 52주 sub-grids
+    // Before the first width measurement every column renders (ALL_COLUMNS),
+    // so the legal outer templates are the frozen full one and its 세타-less
+    // twin — the latter is not a ladder drop but the applies/does-not-apply
+    // rule (`withThetaData`): a 스프레드 or 포워드 surface has no swap theta,
+    // and 2026-08-13 is when that stopped being a column of em dashes. The
+    // only other grids on the surface are the 52주 sub-grids.
+    const OUTER = [gridTemplate(ALL_COLUMNS), gridTemplate(withThetaData(ALL_COLUMNS, false))];
+    expect(new Set(OUTER).size, "the two outer shapes must differ").toBe(2);
     const allowed = new Set([
-      gridTemplate(ALL_COLUMNS),
+      ...OUTER,
+      rangeTemplate(true, true),
       rangeTemplate(true),
       rangeTemplate(false),
     ]);
     for (const [name, markup] of SURFACES) {
       const tags = gridTags(markup);
-      const outer = tags.filter((t) => templateOf(t) === gridTemplate(ALL_COLUMNS));
+      const outer = tags.filter((t) => OUTER.includes(templateOf(t)));
       // at least a header row and two body rows carry it (the overview: three
       // Head rows and six body rows)
       expect(outer.length, `${name}: outer grids`).toBeGreaterThanOrEqual(3);
+      // A tab is ONE table, so it resolves ONE shape — a grid that switched
+      // between its header and its rows is the drift this file exists to
+      // catch. The overview is three independent columns side by side, and
+      // 아웃라이트 carrying 세타 while 스프레드 does not is the rule working.
+      expect(
+        new Set(outer.map(templateOf)).size,
+        `${name}: too many outer templates`,
+      ).toBeLessThanOrEqual(name === "overview" ? 2 : 1);
       for (const t of tags) {
         expect(allowed.has(templateOf(t)), `${name}: stray template in ${t}`).toBe(true);
       }

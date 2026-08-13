@@ -140,9 +140,14 @@ describe("the 전체 overview", () => {
   it("prints all six figures — it never drops a column to fit", () => {
     /* The table drops columns when space runs out; the overview must not.
      * Showing 어제·MTD·YTD·52주 고/저/평 at once is the entire reason the tab
-     * exists. It renders ALL_COLUMNS and never calls the ladder. */
-    expect(overview).toMatch(/gridTemplate\(ALL_COLUMNS\)/);
-    expect(overview).not.toContain("visibleColumns");
+     * exists. It builds from ALL_COLUMNS and NEVER calls the width ladder —
+     * that second clause is the load-bearing one and is asserted directly.
+     *
+     * 세타 (2026-08-13) is not a counter-example: `withThetaData` is the
+     * applies/does-not-apply rule, not the ladder. A 스프레드 column has no
+     * swap theta to print, and no width was consulted to decide that. */
+    expect(overview).toMatch(/ALL_COLUMNS/);
+    expect(overview).not.toContain("visibleColumns(");
     expect(overview).toMatch(/BASIS_ORDER\.map/);
   });
 
@@ -155,6 +160,8 @@ describe("the 전체 overview", () => {
     expect(overview).toMatch(/from "\.\/columns"/);
     expect(overview).toMatch(/<RangeCells row=\{row\} \/>/);
     expect(overview).toMatch(/<RangeHeader \/>/);
+    // header and body resolve ONE template — never two literals
+    expect((overview.match(/gridTemplateColumns: TEMPLATE/g) ?? []).length).toBe(2);
     // no private grid, no private type scale
     expect(overview).not.toMatch(/const GRID =/);
     expect(overview).not.toMatch(/\dch /);
