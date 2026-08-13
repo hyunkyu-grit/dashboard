@@ -64,6 +64,7 @@ from irs_pricer.core.errors import CurveBootstrapError
 from irs_pricer.engine import curve_cache
 
 from . import instruments as instruments_mod
+from . import calendar_cache
 from . import payloads
 from . import schedule_cache
 from .backtest import BacktestError, Position, book_recon, run_backtest
@@ -113,6 +114,10 @@ async def lifespan(app: FastAPI):
     # for tests and scripts stays the unmemoized engine, exactly as
     # curve_cache's does; `install()` reads the flag itself.
     schedule_cache.install()
+    # MEMO-1C: the residual the schedule memo could not reach — `select_fixing`
+    # walking back to F(R). 515,473 calls over 40 distinct inputs on the
+    # reference book (app/calendar_cache.py). `BW_CALENDAR_CACHE=0` disables it.
+    calendar_cache.install()
     logging.getLogger("irs_pricer").info("simulation data dir: %s", DATA_DIR)
     yield
 
