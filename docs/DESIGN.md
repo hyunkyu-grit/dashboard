@@ -2566,6 +2566,59 @@ paths never):
   takes a beat and the button says the server is working; reduced motion
   sees a still label.
 
+### 인트로 커튼 [OWNER, 2026-08-13 — "시작할 때 멋있는 웹사이트처럼"]
+
+The owner asked for an animated opening. It is the ONE place in this product
+where motion is not carrying a state change, and it is allowed because it is
+not on the working surface: the curtain covers the screen before the first
+payload lands and is gone by the time the reader has anything to read. §14's
+"chrome only, never decorative" rule is unchanged **for every surface behind
+it**. Do not read this section as licence to animate the table, the panes, or
+the charts.
+
+Two things the owner chose, and one that follows from them:
+
+- **Intro only.** Not an ambient background. `ui/IntroCurtain.tsx` mounts once
+  and never comes back; the app underneath is untouched.
+- **Drawn from this product's own data, not a video file.** Nine REAL KRW IRS
+  par curves (2016-07 → 2026-08, 13 tenors each) are baked into
+  `ui/introCurves.ts` — the curtain paints before any fetch resolves, so it
+  cannot ask the backend for them. A video was rejected for three reasons:
+  stock footage says nothing about this market, a 3–10MB download makes the
+  start genuinely slower, and it would need a light and a dark cut.
+- **So the drawing uses the product's own grammar.** The fan is ramped by §9
+  time-basis opacity (older curve → fainter and thinner), the focused curve
+  carries §5's marker dots on the thirteen quoted tenors, and the four tenor
+  labels follow `timeAxis.ts`'s "3–4 orientation marks, not an axis" rule. No
+  ink in the fan exceeds the ramp's `mtd` stop — the background never reaches
+  table weight.
+
+**THE LOAD-BEARING RULE: THE CURTAIN ALWAYS LEAVES.** It is the only layer
+above `Z_MODAL` and the reader cannot dismiss it, so a curtain that stays is an
+app that is locked. Three separate mechanisms, because one was not enough:
+
+1. `INTRO_MAX_MS` (4s) lifts it **whether or not data ever arrives**. This is
+   not defensive decoration — measured against an unreachable backend,
+   `isError` took **82 seconds** to appear (react-query's retry pacing; the
+   same number §17's diagnosis records). The curtain lifted correctly at 82s,
+   but for those 82s the shell and sidebar were covered, which made the failure
+   WORSE than having no intro at all.
+2. Unmounting is driven by a `setTimeout`, never by an animation-completion
+   callback — `ba2c1e0` and `a344fb2e` are two occasions in this repo where a
+   lost exit event left a surface mounted forever.
+3. `pointer-events-none` the instant the lift starts, so a stuck fade still
+   leaves a usable app.
+
+`ready` is `!!summary || isError` — a failure lifts the curtain exactly like a
+success does, because §17's rule that a failure must be VISIBLE outranks the
+intro. `guards/intro-curtain.test.ts` pins all of it.
+
+Length is `INTRO_MIN_MS` (1s), and it is one constant: the fan takes 976ms to
+open, so anything shorter cuts the drawing off mid-stroke, and the guard holds
+`INTRO_MIN_MS ≥ BLOOM_END_MS` and `≤ 2s`. Reduced motion draws the completed
+picture once, with no loop and no hold — the preference asks for no animation,
+not for a blank screen.
+
 ## 15. Voice & copy [rewritten Session 15; REGISTER REVERSED 2026-08-05]
 
 > **REVERSAL [OWNER, 2026-08-05]. The register is 해요체. Everything in

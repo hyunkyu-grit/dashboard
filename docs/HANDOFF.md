@@ -78,6 +78,9 @@ cd frontend; pnpm vitest run; pnpm lint; pnpm build
 - `ui/App.tsx` — the shell. One continuous surface pinned to the viewport;
   owns the lifted `tab` + `pinned`/`hovered` state; right pane = `PreviewPane`
   when a row is active, else `CurveView`. Uses `useMeasure` for pane width.
+- `ui/IntroCurtain.tsx` + `ui/introCurves.ts` — 인트로 커튼 (DESIGN §14
+  「인트로」). 첫 payload 전까지만 전체를 덮고 **반드시** 걷힌다. 커브 아홉 장은
+  실측 상수이고 고정 — 굽기 때 갱신하지 않는다.
 - `ui/InstrumentTable.tsx` — left pane. Sliding-underline tabs, controlled
   `filter`/`onFilter`, sortable columns, forward start-filter + matrix toggle,
   group headings, the quoted/interpolated dot marker.
@@ -193,6 +196,45 @@ rule:
 ---
 
 ## 6. Current state (as of the 2026-08-13 session)
+
+### 인트로 커튼 — 시작할 때 커브 아홉 장이 피어난다 (2026-08-13)
+
+[OWNER — "swap-monitor 기준으로 시작할 때 멋있는 웹사이트처럼 뒤에 영상같은 거
+움직이게 할 수 잇나?"]. 오너 결정 둘: **인트로에만**(상시 배경 아님),
+**실제 영상 파일이 아니라 앱 데이터로 그린 생성 애니메이션**. 스펙은
+DESIGN §14 「인트로 커튼」.
+
+- `ui/introCurves.ts` — 순수 모듈. data/irsdata.xlsx 에서 뽑은 **실측 파 커브
+  아홉 장**(2016-07 → 2026-08, 13 테너)과 타임라인 수학. 커튼은 첫 fetch 전에
+  그려지므로 백엔드에 물어볼 수가 없어서 박아 넣었다. **이 아홉 장은 굽기와
+  무관하게 고정** — 매일 다시 뽑으면 커튼 그림이 매일 달라진다.
+- `ui/IntroCurtain.tsx` — canvas 한 장 + 로크업. §9 시간 램프로 부채를 칠하고
+  (오래될수록 옅고 가늘게), 포커스 커브에 §5 마디 점, 아래에 테너 방향표 넷.
+  색·서체 전부 테마 브릿지.
+- `ui/layers.ts` — `Z_CURTAIN`(`z-[60]`) 신설. 모달보다 위인 유일한 층.
+
+**이 화면에서 유일하게 중요한 성질은 "반드시 걷힌다" 다.** 사용자가 닫을 수
+없는 최상단이라, 남는 순간 앱이 잠긴다. 세 겹으로 막았다:
+
+1. `INTRO_MAX_MS`(4초) — **데이터가 오든 말든** 걷는다. 방어적 장식이 아니라
+   실측 결과다: 백엔드가 닿지 않는 빌드로 재현하니 `isError` 가 뜨기까지
+   **82초**가 걸렸다(react-query 6회 재시도, §17 진단이 적어 둔 "24초에도
+   81초에도" 와 같은 자리). 커튼은 82초에 정확히 걷혔지만 그동안 셸과
+   사이드바까지 덮여 있었다 — 상한이 없으면 이 인트로가 **실패를 더 나쁘게**
+   만든다. 상한을 넣은 뒤 4초에 걷히고 사이드바가 살아나는 것까지 확인했다.
+2. 언마운트는 `setTimeout` 이 결정한다. AnimatePresence 도, exit 완료 콜백도
+   쓰지 않는다 — `ba2c1e0`·`a344fb2e` 가 exit 유실로 창이 안 닫힌 두 전례다.
+3. 걷기 시작하는 순간 `pointer-events-none`.
+
+`ready = !!summary || isError` — 실패도 성공과 똑같이 커튼을 걷는다(§17 이
+인트로보다 우선한다). 길이는 `INTRO_MIN_MS`(1초) 한 상수이고, 부채가 펴지는 데
+976ms 라 그보다 짧으면 그리다 만 그림에서 걷힌다(가드가 부등식을 지킨다).
+짧게 하려면 그 숫자만 내리고, 끄려면 App.tsx 에서 `<IntroCurtain>` 을 뺀다.
+
+가드 `guards/intro-curtain.test.ts` (35+3항). 라이트·다크 양쪽, 걷힘, 실패
+경로 전부 프로덕션 빌드(`npx next start --port 3100`)로 눈으로 확인했다.
+**reduced-motion 정지화면 경로는 브라우저로는 못 봤다** — OS 선호를 켜야 해서,
+가드와 코드 경로로만 확인된 상태다.
 
 ### 선 · 주봉 · 월봉 — 캔들이 팝업 밖으로 (2026-08-13)
 

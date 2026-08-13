@@ -44,6 +44,7 @@ import { classify } from "./gloss";
 import { diagramSpec } from "./payReceiveModel";
 import { BacktestWindow, BOOKABLE_GROUPS } from "./BacktestWindow";
 import { InstrumentTable } from "./InstrumentTable";
+import { IntroCurtain } from "./IntroCurtain";
 import {
   DEFAULT_GROUP,
   sectionOf,
@@ -608,6 +609,12 @@ export function App() {
 
   return (
     <MotionConfig reducedMotion="user">
+    {/* 인트로 커튼 [OWNER, 2026-08-13] — 첫 데이터가 오기 전까지만 전체를 덮는다.
+        `ready` 에 isError 가 들어가는 것이 요점이다: 백엔드가 죽었을 때 커튼이
+        버티면 안정화 세션이 고친 "실패가 대기처럼 보인다" 가 더 나쁜 형태로
+        돌아온다. 커튼 뒤에서는 ErrorState 가 이미 그려져 있고, 커튼은 그것을
+        보여 주려고 걷힌다. */}
+    <IntroCurtain ready={!!summary || isError} />
     {/* Full-bleed (§H, Session 16): the surface fills the window edge to edge —
         no outer card, no radius, no page-coloured gutter. The window edge is the
         boundary; structure comes from the header hairline, the pane divider, and

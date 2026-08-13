@@ -45,3 +45,13 @@ export const Z_WINDOW = "z-[45]";
 /** Modals: the enlarged view, the mobile preview sheet. Above chrome AND
  * above the floating window. */
 export const Z_MODAL = "z-50";
+
+/** 인트로 커튼 [OWNER, 2026-08-13]. 모달보다도 위인 유일한 것 — 첫 데이터가
+ * 오기 전의 화면을 통째로 덮는 것이 일이라, 그 밑에서 무엇이 열려 있든 (딥링크
+ * `?tile=` 로 열린 확대 뷰가 대표적이다) 커튼이 이긴다. 반대로 두면 커튼이
+ * 덮으려던 「아직 아무것도 없는 화면」이 모달 모양으로 새어 나온다.
+ *
+ * 규칙 하나가 붙는다: 이것은 **스스로 걷히는** 레이어여야 한다. 사용자가 닫을
+ * 수 없는 최상단 레이어이므로, 남는 순간 앱이 잠긴다. IntroCurtain 이 사라짐을
+ * 애니메이션 콜백이 아니라 타이머에 맡기는 이유다. */
+export const Z_CURTAIN = "z-[60]";
