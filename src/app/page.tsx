@@ -21,6 +21,8 @@ import { buildRows, GROUP_LABEL, type Group, type Row } from '@/table/rows';
 import { SCREENERS } from '@/table/screener';
 import { fetchUniverse, toRows, type UniversePayload } from '@/table/universeRows';
 import { ErrorState, FreshnessChip, LoadingState } from '@/ui/DataState';
+import { PreviewPane } from '@/ui/PreviewPane';
+import { useUrlState } from '@/ui/useUrlState';
 
 /** Swap groups first (v1's), then the live classes P0a found beside them. */
 const GROUPS: Group[] = [
@@ -57,9 +59,16 @@ export default function Home() {
   const [data, setData] = useState<Loaded>();
   const [error, setError] = useState<string>();
   const [retrying, setRetrying] = useState(false);
-  const [group, setGroup] = useState<Group>('outright');
-  const [screener, setScreener] = useState<string>();
-  const [selectedId, setSelectedId] = useState<string>();
+  /* Screen state lives in the URL so a view is linkable and the back button works.
+   * Filters use replaceState — a chip press is not a destination; the selected row
+   * uses pushState, because closing a selection is the one step back a reader expects.
+   * Neither goes through the router (see useUrlState for the production defect that
+   * ruling came out of). */
+  const [groupParam, setGroupParam] = useUrlState('g', 'outright');
+  const [screener, setScreener] = useUrlState('s');
+  const [selectedId, setSelectedId] = useUrlState('r', undefined, 'push');
+  const group = (GROUPS.includes(groupParam as Group) ? groupParam : 'outright') as Group;
+  const setGroup = setGroupParam;
 
   const load = useCallback(async () => {
     setError(undefined);
@@ -129,6 +138,7 @@ export default function Home() {
             onClick={() => {
               setGroup(g);
               setScreener(undefined);
+              setSelectedId(undefined);
             }}
           >
             {GROUP_LABEL[g]}
@@ -149,7 +159,7 @@ export default function Home() {
               inverted={s.id === screener}
               className="sr-pill"
               data-active={s.id === screener}
-              onClick={() => setScreener((cur) => (cur === s.id ? undefined : s.id))}
+              onClick={() => setScreener(screener === s.id ? undefined : s.id)}
             >
               {s.label}
             </Chip>
@@ -177,13 +187,20 @@ export default function Home() {
               </TextCaption>
             </VStack>
           ) : (
-            <InstrumentTable
-              rows={shown}
-              onSelect={(r: Row) => setSelectedId(r.id)}
-              selectedId={selectedId}
-              levelHeader={fresh.asof}
-              divider={!active}
-            />
+            <HStack gap={2} alignItems="flex-start" width="100%">
+              <VStack width="100%" maxWidth={760}>
+                <InstrumentTable
+                  rows={shown}
+                  onSelect={(r: Row) => setSelectedId(r.id)}
+                  selectedId={selectedId}
+                  levelHeader={fresh.asof}
+                  divider={!active}
+                />
+              </VStack>
+              <VStack width="100%" minWidth={380}>
+                <PreviewPane row={shown.find((r) => r.id === selectedId)} />
+              </VStack>
+            </HStack>
           )}
 
           {/* An asset class with no live source says why. Structure without data is a

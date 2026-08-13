@@ -76,7 +76,7 @@ from .forwards import forwards_payload
 from .policy import load_base_rate, policy_step
 from .regret import regret_payload
 from .staleness import dataset_freshness
-from .universe import build_universe
+from .universe import build_universe, universe_series
 from .volatility import volatility_payload
 
 # `DATA_PATH`(data/irsdata.xlsx)는 없어졌다 [OWNER, 2026-08-07] — IRS 종가는
@@ -330,6 +330,15 @@ def universe() -> dict:
     스프레드, 국채선물 — read from live tables. Cached like the other payloads: the
     inputs only move once a day."""
     return cached("universe", _dataset.data_key, build_universe)
+
+
+@router.get("/api/universe/series/{series_id:path}")
+def universe_series_route(series_id: str) -> dict:
+    """V2-LOCAL. History for one expanded-universe row, for the preview pane."""
+    try:
+        return universe_series(series_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"unknown universe series {series_id}")
 
 
 @router.get("/api/forwards")

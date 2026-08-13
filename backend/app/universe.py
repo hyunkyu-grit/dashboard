@@ -337,3 +337,54 @@ def build_universe() -> dict[str, Any]:
              "reason": "테이블이 없어요. 3년과 10년만 있어요."},
         ],
     }
+
+
+def universe_series(rid: str) -> dict[str, Any]:
+    """History for ONE universe row.
+
+    Targeted rather than served out of the summary payload: 120 series x ~1,600 points
+    would be a multi-megabyte response to draw one line. Each branch re-queries only
+    the legs that row needs, which is a single indexed scan.
+
+    The series is built by the SAME code paths the summary uses — same 0.0-is-absent
+    rule, same inner join for spreads — so a chart and its row can never disagree
+    about what the number was.
+    """
+    with engine().connect() as conn:
+        if rid.startswith("FUT-"):
+            code = rid.split("-")[1]
+            tbl = "daily_ktb_price" if code == "KTB3" else "daily_lktb_price"
+            col = {"IY": "선물내재수익률", "BS": "저평가"}.get(rid.split("-")[-1], "종가")
+            unit = "%" if col == "선물내재수익률" else "가격"
+            rows = conn.execute(text(
+                f"SELECT 일자, `{col}` FROM infomax.`{tbl}` ORDER BY 일자"
+            )).fetchall()
+            pts = [
+                {"t": (r[0].date() if hasattr(r[0], "date") else r[0]).isoformat(), "v": float(r[1])}
+                for r in rows if r[1] is not None
+            ]
+            return {"id": rid, "unit": unit, "points": pts}
+
+        cdates, curves = _fetch_curves(conn)
+        ktb = curves.get("KTB", {})
+
+        if rid.startswith("GOVT-"):
+            lbl = rid.split("-", 1)[1]
+            s = ktb.get(lbl, [])
+            pts = [{"t": d.isoformat(), "v": v} for d, v in zip(cdates, s) if v is not None]
+            return {"id": rid, "unit": "%", "points": pts}
+
+        if rid.startswith("BSS-"):
+            lbl = rid.split("-", 1)[1]
+            idates, irs = _fetch_irs(conn)
+            d, spread = _align(cdates, ktb.get(lbl, []), idates, irs.get(lbl, []))
+            return {"id": rid, "unit": "bp",
+                    "points": [{"t": x.isoformat(), "v": round(v * 100, 4)} for x, v in zip(d, spread)]}
+
+        if rid.startswith("CRD-"):
+            _, bt, lbl = rid.split("-", 2)
+            d, spread = _align(cdates, curves.get(bt, {}).get(lbl, []), cdates, ktb.get(lbl, []))
+            return {"id": rid, "unit": "bp",
+                    "points": [{"t": x.isoformat(), "v": round(v * 100, 4)} for x, v in zip(d, spread)]}
+
+    raise KeyError(rid)
