@@ -65,6 +65,7 @@ from irs_pricer.engine import curve_cache
 
 from . import instruments as instruments_mod
 from . import payloads
+from . import schedule_cache
 from .backtest import BacktestError, Position, book_recon, run_backtest
 from .cache import cached
 from .curves import build_basis_curves
@@ -105,6 +106,13 @@ async def lifespan(app: FastAPI):
         curve_cache.uninstall()
     else:
         curve_cache.install()
+    # The BACKTEST's equivalent, and a separate cache with a separate switch —
+    # `BW_SCHEDULE_CACHE=0` (see app/schedule_cache.py). It memoises the ISDA
+    # schedule build, which the reference book was doing 39,804 times to produce
+    # 6 distinct schedules. Installed here rather than at import so the default
+    # for tests and scripts stays the unmemoized engine, exactly as
+    # curve_cache's does; `install()` reads the flag itself.
+    schedule_cache.install()
     logging.getLogger("irs_pricer").info("simulation data dir: %s", DATA_DIR)
     yield
 
