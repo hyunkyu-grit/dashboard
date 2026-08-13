@@ -1,0 +1,292 @@
+# -*- coding: utf-8 -*-
+"""The expanded universe, read from live tables — no mock market data anywhere.
+
+V2-LOCAL: this module does not exist in braveworld. It reads three live sources the
+swap monitor never touched:
+
+    sim_portfolio.credit_matrix    12 curve types x 13 tenors, daily since 2020-01-02
+    infomax.daily_ktb_price        3Y KTB futures, daily since 2012-01-02
+    infomax.daily_lktb_price       10Y KTB futures, same
+
+and derives the two spreads a KRW desk actually watches. Both legs of both spreads
+come from tables that closed on the same date, so nothing is interpolated and nothing
+is carried forward.
+
+§16 COMPUTATION BOUNDARY. Every number here is finished server-side — level, the three
+deltas, the 52-week statistics and the percentile. The browser formats; it does not
+compute. That rule is why this module exists rather than a fetch in the frontend.
+
+WHAT IS DELIBERATELY ABSENT
+  - issuer-level credit and sector x rating detail. Their source (`infomax.matrix_*`)
+    stopped updating 2026-01-23, seven months ago. A 52-week percentile over a stopped
+    feed is wrong in a way nothing on screen would show, so those rows ship as empty
+    structure rather than as stale numbers.
+  - 5Y futures. There is no table; only 3Y and 10Y exist.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import logging
+from typing import Any, Iterable
+
+from .mysqldb import engine
+from sqlalchemy import text
+
+log = logging.getLogger("sauron.universe")
+
+# credit_matrix tenor columns -> (label, years). 30m is dropped: it has no IRS
+# counterpart and no desk quotes it.
+TENORS: list[tuple[str, str, float]] = [
+    ("rt_6m", "6M", 0.5),
+    ("rt_9m", "9M", 0.75),
+    ("rt_1y", "1Y", 1.0),
+    ("rt_18m", "1.5Y", 1.5),
+    ("rt_2y", "2Y", 2.0),
+    ("rt_3y", "3Y", 3.0),
+    ("rt_5y", "5Y", 5.0),
+    ("rt_7y", "7Y", 7.0),
+    ("rt_10y", "10Y", 10.0),
+]
+
+# The IRS column that pairs with each tenor, for the bond-swap spread.
+IRS_COL = {
+    "6M": "irs_6m", "9M": "irs_9m", "1Y": "irs_1y", "1.5Y": "irs_18m",
+    "2Y": "irs_2y", "3Y": "irs_3y", "5Y": "irs_5y", "7Y": "irs_7y", "10Y": "irs_10y",
+}
+
+# `bond_type` -> display label. KTB is the government curve and is the benchmark every
+# credit spread is measured against, so it is not itself a credit row.
+CURVE_LABEL = {
+    "KTB": "국고", "MSB": "통안", "KDB": "산금", "SPB": "특수",
+    "BD": "은행", "CARD": "카드", "OFB": "기타금융",
+    "CB1": "회사 AAA", "CB2": "회사 AA+", "CB3": "회사 AA",
+    "CB4": "회사 AA−", "CB5": "회사 A",
+}
+CREDIT_TYPES = ["MSB", "KDB", "SPB", "BD", "CARD", "OFB", "CB1", "CB2", "CB3", "CB4", "CB5"]
+
+FUTURES = [
+    ("daily_ktb_price", "KTB3", "3년 국채선물"),
+    ("daily_lktb_price", "KTB10", "10년 국채선물"),
+]
+
+# A year of business days. The 52-week window is trailing 252 observations, the same
+# window v1 settled on after a 10-year window pinned every level at the 99th percentile.
+WINDOW = 252
+
+
+def _stats(series: list[float | None]) -> dict[str, Any]:
+    """52-week high / low / mean / percentile over the trailing window.
+
+    `None` is not zero and is not carried forward — it is skipped, and a window with
+    fewer than two observations yields nulls rather than a percentile computed from
+    one point.
+    """
+    vals = [v for v in series[-WINDOW:] if v is not None]
+    if len(vals) < 2:
+        return {"min": None, "max": None, "avg": None, "pct": None}
+    lo, hi = min(vals), max(vals)
+    now = vals[-1]
+    pct = None if hi == lo else round((now - lo) / (hi - lo) * 100, 1)
+    return {
+        "min": round(lo, 4),
+        "max": round(hi, 4),
+        "avg": round(sum(vals) / len(vals), 4),
+        "pct": pct,
+    }
+
+
+def _deltas(series: list[float | None], dates: list[dt.date], unit: str) -> dict[str, float | None]:
+    """D-1 / MTD / YTD change. In bp for a %-quoted level, in the row's own unit for a
+    spread that is already bp."""
+    if not series or series[-1] is None:
+        return {"d1": None, "mtd": None, "ytd": None}
+    now = series[-1]
+    today = dates[-1]
+    scale = 100.0 if unit == "%" else 1.0
+
+    def prior(pred) -> float | None:
+        for i in range(len(dates) - 2, -1, -1):
+            if pred(dates[i]) and series[i] is not None:
+                return series[i]
+        return None
+
+    d1 = series[-2] if len(series) > 1 else None
+    mtd = prior(lambda d: d.month != today.month or d.year != today.year)
+    ytd = prior(lambda d: d.year != today.year)
+    return {
+        "d1": None if d1 is None else round((now - d1) * scale, 4),
+        "mtd": None if mtd is None else round((now - mtd) * scale, 4),
+        "ytd": None if ytd is None else round((now - ytd) * scale, 4),
+    }
+
+
+def _row(
+    rid: str, label: str, kind: str, unit: str,
+    series: list[float | None], dates: list[dt.date],
+    sort_key: list[float], key: bool,
+) -> dict[str, Any]:
+    """A SeriesSummary-shaped row — the same shape the swap monitor's builder already
+    consumes, so the frontend needs no second row vocabulary."""
+    now = series[-1] if series else None
+    stats = _stats(series)
+    deltas = _deltas(series, dates, unit)
+    return {
+        "id": rid,
+        "label": label,
+        "kind": kind,
+        "unit": unit,
+        "now": None if now is None else round(now, 4),
+        "deltas": deltas,
+        "basisValues": {"d1": None, "mtd": None, "ytd": None},
+        "range1y": stats,
+        "sortKey": sort_key,
+        "quoted": True,
+        "movePct": None,
+        "key": key,
+    }
+
+
+def _fetch_curves(conn) -> tuple[list[dt.date], dict[str, dict[str, list[float | None]]]]:
+    """credit_matrix, pivoted to {bond_type: {tenor_label: [values by date]}}."""
+    cols = ", ".join(f"`{c}`" for c, _, _ in TENORS)
+    rows = conn.execute(text(
+        f"SELECT bas_dt, bond_type, {cols} FROM sim_portfolio.credit_matrix ORDER BY bas_dt"
+    )).fetchall()
+
+    dates: list[dt.date] = []
+    seen: set[dt.date] = set()
+    for r in rows:
+        if r[0] not in seen:
+            seen.add(r[0])
+            dates.append(r[0])
+    idx = {d: i for i, d in enumerate(dates)}
+
+    out: dict[str, dict[str, list[float | None]]] = {}
+    for r in rows:
+        bt = r[1]
+        by_tenor = out.setdefault(bt, {lbl: [None] * len(dates) for _, lbl, _ in TENORS})
+        for j, (_, lbl, _) in enumerate(TENORS):
+            v = r[2 + j]
+            # 0.0 in this feed means "no such point on this curve" (MSB past 3Y), not a
+            # zero rate. Treating it as a level would draw a curve that collapses.
+            by_tenor[lbl][idx[r[0]]] = None if v in (None, 0.0) else float(v)
+    return dates, out
+
+
+def _fetch_irs(conn) -> tuple[list[dt.date], dict[str, list[float | None]]]:
+    cols = ", ".join(sorted(set(IRS_COL.values())))
+    rows = conn.execute(text(
+        f"SELECT irs_date, {cols} FROM sim_portfolio.mkt_irs_close ORDER BY irs_date"
+    )).mappings().fetchall()
+    dates = [r["irs_date"] for r in rows]
+    by_tenor: dict[str, list[float | None]] = {}
+    for lbl, col in IRS_COL.items():
+        by_tenor[lbl] = [None if r[col] is None else float(r[col]) for r in rows]
+    return dates, by_tenor
+
+
+def _align(a_dates: list[dt.date], a: list[float | None],
+           b_dates: list[dt.date], b: list[float | None]) -> tuple[list[dt.date], list[float | None]]:
+    """Inner join on date. A spread is only defined where BOTH legs printed — joining
+    on the union and carrying one leg forward would invent a spread that never traded."""
+    bmap = {d: v for d, v in zip(b_dates, b)}
+    dates, out = [], []
+    for d, v in zip(a_dates, a):
+        w = bmap.get(d)
+        if v is not None and w is not None:
+            dates.append(d)
+            out.append(v - w)
+    return dates, out
+
+
+def build_universe() -> dict[str, Any]:
+    """Every live row outside swaps. Raises on a dead database rather than returning
+    an empty universe that looks like a quiet market."""
+    with engine().connect() as conn:
+        cdates, curves = _fetch_curves(conn)
+        idates, irs = _fetch_irs(conn)
+        futures_raw = {}
+        for tbl, code, _ in FUTURES:
+            futures_raw[code] = conn.execute(text(
+                f"SELECT 일자, 종가, 선물내재수익률, 저평가 FROM infomax.`{tbl}` ORDER BY 일자"
+            )).fetchall()
+
+    rows: list[dict[str, Any]] = []
+
+    # ── 국고 현물 ────────────────────────────────────────────────────────────
+    ktb = curves.get("KTB", {})
+    for _, lbl, yrs in TENORS:
+        s = ktb.get(lbl)
+        if not s or s[-1] is None:
+            continue
+        rows.append(_row(f"GOVT-{lbl}", f"국고 {lbl}", "govt", "%", s, cdates, [yrs], yrs in (1, 3, 5, 10)))
+
+    # ── 크레딧 스프레드 (해당 곡선 − 국고, 같은 테너) ──────────────────────────
+    for bt in CREDIT_TYPES:
+        cur = curves.get(bt)
+        if not cur:
+            continue
+        for _, lbl, yrs in TENORS:
+            gs, cs = ktb.get(lbl), cur.get(lbl)
+            if not gs or not cs:
+                continue
+            d, spread = _align(cdates, cs, cdates, gs)
+            if not spread:
+                continue
+            rows.append(_row(
+                f"CRD-{bt}-{lbl}", f"{CURVE_LABEL[bt]} {lbl}", "credit", "bp",
+                [v * 100 for v in spread], d, [yrs, CREDIT_TYPES.index(bt)],
+                yrs == 3.0,
+            ))
+
+    # ── 본드스왑스프레드 (국고 − IRS) ────────────────────────────────────────
+    for _, lbl, yrs in TENORS:
+        gs = ktb.get(lbl)
+        if not gs or lbl not in IRS_COL:
+            continue
+        d, spread = _align(cdates, gs, idates, irs[lbl])
+        if not spread:
+            continue
+        rows.append(_row(
+            f"BSS-{lbl}", f"BSS {lbl}", "bss", "bp",
+            [v * 100 for v in spread], d, [yrs], yrs in (3, 5, 10),
+        ))
+
+    # ── 국채선물 ────────────────────────────────────────────────────────────
+    for tbl, code, name in FUTURES:
+        raw = futures_raw[code]
+        if not raw:
+            continue
+        fdates = [r[0].date() if hasattr(r[0], "date") else r[0] for r in raw]
+        close = [None if r[1] is None else float(r[1]) for r in raw]
+        imp = [None if r[2] is None else float(r[2]) for r in raw]
+        cheap = [None if r[3] is None else float(r[3]) for r in raw]
+        yrs = 3.0 if code == "KTB3" else 10.0
+        rows.append(_row(f"FUT-{code}", f"{name} 가격", "futures", "가격", close, fdates, [yrs, 0], True))
+        rows.append(_row(f"FUT-{code}-IY", f"{name} 내재금리", "futures", "%", imp, fdates, [yrs, 1], True))
+        # 저평가 is the vendor's own basis figure, already in the right unit. It is read,
+        # not derived — deriving it would need the CTD basket this contract does not have
+        # (KTB futures are cash-settled against a synthetic basket).
+        rows.append(_row(f"FUT-{code}-BS", f"{name} 저평가", "futures", "가격", cheap, fdates, [yrs, 2], True))
+
+    asof = max(
+        [cdates[-1] if cdates else dt.date.min, idates[-1] if idates else dt.date.min],
+    )
+    return {
+        "asof": asof.isoformat(),
+        "rows": rows,
+        "sources": {
+            "govt": {"table": "sim_portfolio.credit_matrix", "asof": cdates[-1].isoformat() if cdates else None},
+            "credit": {"table": "sim_portfolio.credit_matrix", "asof": cdates[-1].isoformat() if cdates else None},
+            "bss": {"table": "credit_matrix x mkt_irs_close", "asof": asof.isoformat()},
+            "futures": {"table": "infomax.daily_ktb_price / daily_lktb_price", "asof": None},
+        },
+        # Named so the screen can say WHY a class is empty rather than just being bare.
+        "absent": [
+            {"id": "issuer", "label": "종목별 크레딧",
+             "reason": "출처 infomax.matrix_* 가 2026-01-23 에 멈췄어요. 멈춘 피드로 52주 통계를 내면 화면에 안 보이는 방식으로 틀려요."},
+            {"id": "fut5y", "label": "5년 국채선물",
+             "reason": "테이블이 없어요. 3년과 10년만 있어요."},
+        ],
+    }

@@ -76,6 +76,7 @@ from .forwards import forwards_payload
 from .policy import load_base_rate, policy_step
 from .regret import regret_payload
 from .staleness import dataset_freshness
+from .universe import build_universe
 from .volatility import volatility_payload
 
 # `DATA_PATH`(data/irsdata.xlsx)는 없어졌다 [OWNER, 2026-08-07] — IRS 종가는
@@ -321,6 +322,14 @@ def series_detail(series_id: str, res: str = "full", interval: str | None = None
         return payloads.series_detail(_dataset, series_id, res, interval)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"unknown series {series_id}")
+
+
+@router.get("/api/universe")
+def universe() -> dict:
+    """V2-LOCAL route. The expanded universe — 국고 현물, 크레딧 스프레드, 본드스왑
+    스프레드, 국채선물 — read from live tables. Cached like the other payloads: the
+    inputs only move once a day."""
+    return cached("universe", _dataset.data_key, build_universe)
 
 
 @router.get("/api/forwards")

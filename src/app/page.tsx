@@ -17,28 +17,57 @@ import {
 } from '@/lib/api';
 import { InstrumentTable } from '@/table/InstrumentTable';
 import { buildRows, GROUP_LABEL, type Group, type Row } from '@/table/rows';
+import { fetchUniverse, toRows, type UniversePayload } from '@/table/universeRows';
 
 import { useScheme } from './providers';
 
-const GROUPS: Group[] = ['outright', 'spread', 'fly', 'forward', 'vol'];
+/** Swap groups first (v1's), then the live classes P0a found sitting beside them. */
+const GROUPS: Group[] = [
+  'outright',
+  'spread',
+  'fly',
+  'forward',
+  'vol',
+  'govt',
+  'bss',
+  'credit',
+  'futures',
+];
+
+/** Which feed each group's freshness comes from. IRS and the universe close on the
+ * same day today, but they are different feeds and must be able to disagree on screen
+ * — averaging them away is the silent-staleness defect this product keeps having. */
+const SOURCE_OF: Record<Group, 'irs' | 'universe'> = {
+  outright: 'irs',
+  spread: 'irs',
+  fly: 'irs',
+  forward: 'irs',
+  vol: 'irs',
+  govt: 'universe',
+  bss: 'universe',
+  credit: 'universe',
+  futures: 'universe',
+};
 
 export default function Home() {
   const { scheme, toggleScheme } = useScheme();
   const [summary, setSummary] = useState<WallSummary>();
   const [forwards, setForwards] = useState<ForwardsPayload>();
   const [vol, setVol] = useState<VolatilityPayload>();
+  const [universe, setUniverse] = useState<UniversePayload>();
   const [error, setError] = useState<string>();
   const [group, setGroup] = useState<Group>('outright');
   const [selectedId, setSelectedId] = useState<string>();
 
   useEffect(() => {
     let live = true;
-    Promise.all([fetchWallSummary(), fetchForwards(), fetchVolatility()])
-      .then(([s, f, v]) => {
+    Promise.all([fetchWallSummary(), fetchForwards(), fetchVolatility(), fetchUniverse()])
+      .then(([s, f, v, u]) => {
         if (!live) return;
         setSummary(s);
         setForwards(f);
         setVol(v);
+        setUniverse(u);
       })
       .catch((e: unknown) => {
         if (live) setError(e instanceof Error ? e.message : String(e));
@@ -48,28 +77,31 @@ export default function Home() {
     };
   }, []);
 
-  const rows = useMemo(
-    () => (summary ? buildRows(summary, forwards, vol) : []),
-    [summary, forwards, vol],
-  );
+  const rows = useMemo(() => {
+    const swaps = summary ? buildRows(summary, forwards, vol) : [];
+    const rest = universe ? toRows(universe) : [];
+    return [...swaps, ...rest];
+  }, [summary, forwards, vol, universe]);
 
   const shown = useMemo(() => rows.filter((r) => r.group === group), [rows, group]);
 
+  const asof = SOURCE_OF[group] === 'irs' ? summary?.asof : universe?.asof;
+  const sourceLabel = SOURCE_OF[group] === 'irs' ? 'IRS 종가' : '민평·선물 종가';
+
   return (
     <VStack background="bg" minHeight="100vh" gap={2} padding={3}>
-      <HStack alignItems="center" gap={2}>
-        <TextTitle3 as="h1">KRW IRS Monitor</TextTitle3>
+      <HStack alignItems="baseline" gap={2}>
+        <TextTitle3 as="h1">KRW Rates Monitor</TextTitle3>
         <TextCaption as="span" color="fgMuted">
-          {summary ? `${summary.asof} 종가` : ''}
+          {asof ? `${asof} · ${sourceLabel}` : ''}
         </TextCaption>
         <Button size="s" variant="secondary" onClick={toggleScheme}>
           {scheme}
         </Button>
       </HStack>
 
-      {/* D4.5 — chips, not the placeholder Buttons. The set is FIXED and stays on
-          one row: the full set is deliberately not exposed and there is no column
-          picker (v1 §4 low user freedom, carried). */}
+      {/* The screener set is fixed and stays on one row: no column picker and nothing
+          user-addable (v1 §4 low user freedom, carried). */}
       <HStack gap={1}>
         {GROUPS.map((g) => (
           <Chip
@@ -94,11 +126,25 @@ export default function Home() {
           불러오는 중이에요
         </TextBody>
       ) : (
-        <InstrumentTable
-          rows={shown}
-          onSelect={(r: Row) => setSelectedId(r.id)}
-          selectedId={selectedId}
-        />
+        <>
+          <InstrumentTable
+            rows={shown}
+            onSelect={(r: Row) => setSelectedId(r.id)}
+            selectedId={selectedId}
+          />
+
+          {/* An asset class with no live source says why. Structure without data is a
+              fact about the feed; structure that stays silent reads as a bug. */}
+          {universe && universe.absent.length > 0 ? (
+            <VStack gap={0.5} paddingY={1}>
+              {universe.absent.map((a) => (
+                <TextCaption key={a.id} as="span" color="fgMuted">
+                  {a.label} — {a.reason}
+                </TextCaption>
+              ))}
+            </VStack>
+          ) : null}
+        </>
       )}
     </VStack>
   );

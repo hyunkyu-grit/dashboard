@@ -26,6 +26,9 @@ export function fmtLevel(v: number | null | undefined, unit: Unit): string {
   if (v == null) return EMDASH;
   if (unit === "%") return v.toFixed(4);
   if (unit === "ratio") return v.toFixed(2);
+  // 가격: futures price points. Three places, because 저평가 lives in the third —
+  // at two it prints as -0.0 and reads as "no basis".
+  if (unit === "가격") return v.toFixed(3);
   return v.toFixed(1);
 }
 

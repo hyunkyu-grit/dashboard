@@ -38,7 +38,10 @@ export type BasisKey = "d1" | "mtd" | "ytd";
 
 /** Level/change unit. `ratio` is the dimensionless volatility ratio (§ vol):
  * shown to two decimals, its change is a ratio difference, never bp. */
-export type Unit = "%" | "bp" | "ratio";
+/* V2-LOCAL: "가격" added for KTB futures. Price and 저평가 are quoted in price
+ * points, not bp — printing them through the bp formatter rounded 저평가 −0.028 to
+ * "-0.0", which is a number that says the basis is flat when it is not. */
+export type Unit = "%" | "bp" | "ratio" | "가격";
 
 /* A `SparkPoint`/`spark` field used to ride along on every summary row — 150
  * points per row, 92.3% of the stage-1 payload — and no component read it. It

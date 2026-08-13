@@ -24,7 +24,21 @@ import type {
  * the tenor set it would have been 56 under 28. Two-leg and three-leg are
  * different instruments read for different reasons, so they are different
  * tabs — and butterflies deliberately do NOT appear on the 전체 overview. */
-export type Group = "outright" | "spread" | "fly" | "forward" | "vol";
+/* V2-LOCAL: widened for the expanded universe. The five swap groups are v1's and are
+ * untouched; the four after them are the live classes P0a found sitting beside the
+ * swap monitor (국고 현물, 크레딧 스프레드, 본드스왑스프레드, 국채선물). Rows of every
+ * group go through this same builder shape, so the comparator, the ladder and the tint
+ * ramp need no second vocabulary. */
+export type Group =
+  | "outright"
+  | "spread"
+  | "fly"
+  | "forward"
+  | "vol"
+  | "govt"
+  | "credit"
+  | "bss"
+  | "futures";
 
 export const BASIS_ORDER: BasisKey[] = ["d1", "mtd", "ytd"];
 
@@ -34,6 +48,10 @@ export const GROUP_LABEL: Record<Group, string> = {
   fly: "버터플라이",
   forward: "포워드",
   vol: "변동성",
+  govt: "국고",
+  credit: "크레딧",
+  bss: "본드스왑",
+  futures: "국채선물",
 };
 
 /** The three groups the 전체 overview columns show, left to right (§전체).
