@@ -238,9 +238,14 @@ describe("the mode is ONE global preference", () => {
   });
 
   it("every surface reads that one store — no local copies", () => {
+    /* EnlargedView is UNREFERENCED since 2026-08-13 [OWNER — 크게보기 removal]
+     * but stays on disk under the restoration rule, so it stays in this list:
+     * the day it is re-wired it must already obey the shared store, and a
+     * guard dropped now is a guard nobody thinks to restore with it. Every
+     * other entry here is live. */
     for (const f of [
       "ui/App.tsx", // the toolbar control
-      "ui/EnlargedView.tsx", // the popup's control
+      "ui/EnlargedView.tsx", // the retired popup's control (kept restorable)
       "ui/PreviewPane.tsx", // the side pane's chart
       "ui/OverviewColumns.tsx", // the three column charts
     ]) {

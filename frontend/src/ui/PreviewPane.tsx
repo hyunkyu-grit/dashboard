@@ -44,33 +44,25 @@ function Sentence({ children }: { children: React.ReactNode }) {
 // dimensionless ratio carries no unit suffix (§ vol); % and bp keep theirs.
 const UNIT_SUFFIX: Record<Row["unit"], string> = { "%": "%", bp: "bp", ratio: "" };
 
-function Header({
-  row,
-  onEnlarge,
-}: {
-  row: Row;
-  /** opens the enlarged view (?tile) — absent for rows with no history */
-  onEnlarge?: (row: Row) => void;
-}) {
+function Header({ row }: { row: Row }) {
   return (
     <div className="mb-3">
       {/* the 한 줄 fragment that sat opposite the name is gone with the column
           (pass L); the pane's own readouts already carry the 52-week range */}
+      {/* 크게 보기 IS GONE [OWNER, 2026-08-13 — "이제 그러면 크게보기탭을
+          없애면 될 듯"]. It was the only way into the enlarged view, so the
+          view goes with it. What that view still held that this pane did not
+          is now here or beside it: candles are a GLOBAL chart type since
+          2026-08-13 (`chartType.ts` — the popup used to be the only surface
+          that knew them), the DV01 figure it printed is in the 세타 column's
+          own tooltip, and its four-basis readout restates the table's own
+          columns. `ui/EnlargedView.tsx` and `wall/DetailChart.tsx` stay ON
+          DISK, unreferenced — this repo's restoration rule, and the same
+          file's own history: it was kept unreferenced from 2026-07-31 to
+          08-03 and came back whole rather than being rebuilt. */}
       <div className="flex items-baseline">
         <span className="text-[18px] font-semibold">{row.label}</span>
         <span className="flex-1" />
-        {/* the enlarged view's way in (backtest-window session): the CHART
-            click belongs to the backtest [OWNER], so the bigger view gets a
-            named, quiet control instead of a gesture. */}
-        {onEnlarge && (
-          <button
-            type="button"
-            onClick={() => onEnlarge(row)}
-            className="text-[13px] opacity-50 hover:opacity-100"
-          >
-            크게 보기
-          </button>
-        )}
       </div>
       <div className="mt-0.5 flex items-baseline gap-2">
         <AnimatedNumber
@@ -91,15 +83,12 @@ function Header({
 export function PreviewPane({
   row,
   onOpen,
-  onEnlarge,
   width,
   height,
   policy,
 }: {
   row: Row | null;
   onOpen: (row: Row, from?: string) => void;
-  /** opens the enlarged view (?tile) — the 크게 보기 control in the header */
-  onEnlarge: (row: Row) => void;
   width: number;
   /** the pane's measured height; the chart takes what the header leaves */
   height: number;
@@ -142,7 +131,6 @@ export function PreviewPane({
           <PreviewBody
             row={row}
             onOpen={onOpen}
-            onEnlarge={onEnlarge}
             width={width}
             series={series}
             chartType={chartType}
@@ -158,7 +146,6 @@ export function PreviewPane({
 function PreviewBody({
   row,
   onOpen,
-  onEnlarge,
   width,
   series,
   chartType,
@@ -167,7 +154,6 @@ function PreviewBody({
 }: {
   row: Row;
   onOpen: (row: Row, from?: string) => void;
-  onEnlarge: (row: Row) => void;
   width: number;
   height: number;
   policy?: PolicyStep;
@@ -193,7 +179,7 @@ function PreviewBody({
 
   return (
     <>
-      <Header row={row} onEnlarge={onEnlarge} />
+      <Header row={row} />
       {/* stage-2 detail: its own retry, so a failed series fetch does not
           require reloading the page or moving to another row and back
           (stability session, Pass B) */}

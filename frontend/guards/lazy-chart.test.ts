@@ -11,6 +11,12 @@
  * one module may import the library, and every path reaching that module goes
  * through a dynamic import.
  *
+ * 2026-08-13: `ui/EnlargedView` is UNREFERENCED (the 크게 보기 entrance was
+ * removed [OWNER]), so `wall/DetailChart` and the library with it are off the
+ * bundle entirely rather than merely off the first chunk. The edge rule is
+ * asserted unchanged: the file stays on disk under the restoration rule, and
+ * re-wiring it must not be the day the 196 KB walks back onto first load.
+ *
  * Reader choice matters here and is worth stating, because getting it wrong
  * fails confusingly (it did, while this was being written). A module specifier
  * IS a string literal, so `identifiers()` — which blanks string CONTENTS —

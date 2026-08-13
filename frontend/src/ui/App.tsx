@@ -32,7 +32,6 @@ import { mintBacktestKey } from "./backtestMemory";
 import { BottomStrip, STRIP_H, useStripCollapsed } from "./BottomStrip";
 import { CurveView } from "./CurveView";
 import { ErrorState, LoadingState } from "./DataState";
-import { EnlargedView } from "./EnlargedView";
 import { ErrorBoundary } from "./ErrorBoundary";
 import {
   GroupBox,
@@ -105,13 +104,11 @@ const PANE_PAD = PAGE_X_PX + PANE_DIVIDER_INSET;
 function PreviewSheet({
   row,
   onOpen,
-  onEnlarge,
   onClose,
   policy,
 }: {
   row: Row;
   onOpen: (row: Row) => void;
-  onEnlarge: (row: Row) => void;
   onClose: () => void;
   policy?: PolicyStep;
 }) {
@@ -150,7 +147,6 @@ function PreviewSheet({
             <PreviewPane
               row={row}
               onOpen={onOpen}
-              onEnlarge={onEnlarge}
               width={w}
               // the sheet is capped at 85vh; the chart takes a readable slice of it
               height={Math.round(window.innerHeight * 0.5)}
@@ -296,7 +292,6 @@ function Header({
 export function App() {
   const router = useRouter();
   const params = useSearchParams();
-  const tileParam = params.get("tile");
 
   const {
     data: summary,
@@ -404,17 +399,17 @@ export function App() {
     syncUiFromDom();
   }, []);
 
-  // Esc unpins — but only as the LAST layer: the enlarged view and the
-  // backtest window each close themselves on Esc, and one press must peel
-  // one layer, not the popup and the pin together.
+  // Esc unpins — but only as the LAST layer: the backtest window closes
+  // itself on Esc, and one press must peel one layer, not the window and the
+  // pin together. The enlarged view was the third rung and is gone
+  // [OWNER, 2026-08-13]; two layers, same rule.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !tileParam && !params.get("bt"))
-        setPinned(null);
+      if (e.key === "Escape" && !params.get("bt")) setPinned(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tileParam, params]);
+  }, [params]);
 
   /* THE BACKTEST WINDOW IS PARALLEL, NOT A PAGE (backtest-window session).
    * Its namespace — `bt` (instance nonce, pass Q), `bti` (seed instrument),
@@ -461,31 +456,13 @@ export function App() {
     shallowReplace(mergeQuery(params, clearBtPatch()));
   }, [shallowReplace, params]);
 
-  /* The ENLARGED VIEW (?tile) is a page-like modal again — the backtest no
-   * longer squats on its slot. Open PUSHES (a view you navigate into), so
-   * CLOSE IS BACK (pass Q's rule, unchanged): one step, one meaning, no
-   * popup residue in the stack. A cold link replaces instead of backing out
-   * of the site. `type` (선/주봉/월봉) rides beside it; both writes preserve
-   * the bt namespace through `mergeQuery`, so navigating the enlarged view
-   * never touches the backtest window. */
-  const pushedTile = useRef(false);
-  const openEnlarged = useCallback(
-    (row: Row) => {
-      const target = row.seriesId ? `series:${row.seriesId}` : row.id;
-      pushedTile.current = true;
-      // 얕은 push — 항목은 쌓되(닫기 = back) 트랜지션은 타지 않는다(위 주석).
-      window.history.pushState(null, "", `/${mergeQuery(params, { tile: target })}`);
-    },
-    [params],
-  );
-  const closeEnlarged = useCallback(() => {
-    if (pushedTile.current) {
-      pushedTile.current = false;
-      router.back();
-    } else {
-      shallowReplace(mergeQuery(params, { tile: null, type: null }));
-    }
-  }, [router, shallowReplace, params]);
+  /* The ENLARGED VIEW and its whole `?tile` namespace are GONE [OWNER,
+   * 2026-08-13 — "이제 그러면 크게보기탭을 없애면 될 듯"]. It had one
+   * entrance, the pane header's 크게 보기, and PreviewPane.tsx records what
+   * the view held and where each part lives now. `ui/EnlargedView.tsx` and
+   * `wall/DetailChart.tsx` stay on disk unreferenced (restoration rule), so
+   * bringing it back is re-wiring rather than rebuilding — which is exactly
+   * how it came back the last time it was retired. */
 
   /* 차트 종류: **스토어가 정본**이다 [OWNER, 2026-08-13].
    *
@@ -516,11 +493,6 @@ export function App() {
    * what the compiler lint rejects, and the URL is the honest home for it. */
   const missingTile = params.get("missing");
 
-  const enlargedRow = useMemo(
-    () => rowForTarget(rows, tileParam),
-    [tileParam, rows],
-  );
-
   /* The backtest window: presence IS the `bt` nonce; `bti` names its seed
    * instrument in the same target grammar `tile` uses. */
   const btKey = params.get("bt");
@@ -531,8 +503,14 @@ export function App() {
   );
 
   /* A `bt` whose seed instrument names nothing (a stale link) is cleared and
-   * said — the tile-missing rule, applied to the other namespace. Waits for
-   * the COMPLETE row set for the same reason. */
+   * said. It waits for the COMPLETE row set, and that word is load-bearing:
+   * guarding on `rows.length === 0` is not the same thing and shipped a bug
+   * once — the summary lands first and contributes only outrights and
+   * spreads, so between it and the forwards / volatility payloads `rows` is
+   * non-empty while every forward and vol id in it is still "unknown", and a
+   * cold shared link to one of those cleared itself. (Found by walking the
+   * built site, Pass H. The rule was written for the `?tile` namespace, which
+   * retired on 2026-08-13; `bt` is the survivor and keeps the lesson.) */
   useEffect(() => {
     if (!btKey || !rowsComplete || btRow) return;
     shallowReplace(
@@ -542,25 +520,6 @@ export function App() {
       }),
     );
   }, [btKey, btiParam, rowsComplete, btRow, shallowReplace, params]);
-
-  /* Clear a `?tile=` that names nothing — but only once the row set is
-   * COMPLETE.
-   *
-   * This was guarded on `rows.length === 0`, which is not the same thing and
-   * the difference shipped a bug: the summary lands first and contributes only
-   * outrights and spreads, so for the window between it and the forwards /
-   * volatility payloads, `rows` is non-empty while every forward and vol id in
-   * it is still "unknown". A cold shared link to one of those cleared itself.
-   * Found by walking the built site (Pass H): `?tile=series:vol:10Y` opened
-   * cold landed on `?missing=` every time. */
-  useEffect(() => {
-    if (!tileParam || !rowsComplete || enlargedRow) return;
-    // strip ONLY the tile namespace — an open backtest window survives a
-    // stale tile link (mergeQuery carries `bt` and friends forward)
-    shallowReplace(
-      mergeQuery(params, { tile: null, type: null, missing: tileParam }),
-    );
-  }, [tileParam, rowsComplete, enlargedRow, shallowReplace, params]);
 
   /* `scrollIntoViewSafely`, not a bare `behavior: "smooth"`: an explicit
    * behaviour argument OUTRANKS `scroll-behavior: auto` from the
@@ -679,7 +638,7 @@ export function App() {
           />
         )}
         {!summary && !isError && <LoadingState />}
-        {/* an unknown ?tile= id: the parameter is cleared and said, rather
+        {/* an unknown `bt` seed: the parameter is cleared and said, rather
             than leaving a bogus URL rendering nothing (Pass B) */}
         {missingTile && (
           <p className={`pb-2 text-center text-[13px] opacity-55 ${PAGE_X}`}>
@@ -759,7 +718,6 @@ export function App() {
                           <PreviewPane
                             row={previewRow}
                             onOpen={openBacktest}
-                            onEnlarge={openEnlarged}
                             width={paneW - PANE_PAD}
                             height={Math.max(360, paneH - PANE_PAD)}
                             policy={summary.policy}
@@ -786,32 +744,12 @@ export function App() {
           <PreviewSheet
             row={pinned}
             onOpen={openBacktest}
-            onEnlarge={openEnlarged}
             onClose={() => setPinned(null)}
             policy={summary.policy}
           />
         )}
       </AnimatePresence>
 
-      {/* the enlarged view (?tile) — a modal over everything, including the
-          floating window; closing it leaves the window exactly as it was.
-          NO AnimatePresence — see the backtest window's note below: both
-          surfaces are unmounted BY A ROUTER WRITE, and that unmount must not
-          wait on an exit animation's completion. EnlargedView's own exit
-          props are inert without a presence wrapper and simply never run. */}
-      {enlargedRow && summary && (
-        <ErrorBoundary
-          key="enlarged"
-          region="popup"
-          fallback="큰 화면을 그리지 못했어요"
-        >
-          <EnlargedView
-            row={enlargedRow}
-            summary={summary}
-            onClose={closeEnlarged}
-          />
-        </ErrorBoundary>
-      )}
 
       {/* the floating backtest window (?bt) — parallel to everything above:
           tabs, pins and the enlarged view all keep working underneath it.

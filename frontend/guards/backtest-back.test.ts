@@ -191,12 +191,21 @@ describe("the window is parallel to navigation — replace, never push (backtest
     expect(app).toMatch(/bt: mintBacktestKey\(\)/);
   });
 
-  it("the enlarged view's close is still BACK when the app pushed it", () => {
-    // pass Q's rule lives on where it belongs — the page-like modal. The
-    // push is the shallow history API for the same reason as the bt writes;
-    // native back() then pops the shallow entry.
-    expect(app).toMatch(/closeEnlarged[\s\S]{0,400}router\.back\(\)/);
-    expect(app).toMatch(/openEnlarged[\s\S]{0,500}history\.pushState/);
+  it("the enlarged view is gone, and so is its whole namespace", () => {
+    /* [OWNER, 2026-08-13 — "이제 그러면 크게보기탭을 없애면 될 듯"]. This
+     * used to assert that its close was BACK. The view had exactly one
+     * entrance and it was removed, so what is worth pinning now is that no
+     * REMNANT survives: a `?tile` reader with nothing to open, or a dangling
+     * open/close pair, is the residue class this file exists for. The files
+     * themselves stay on disk unreferenced (restoration rule) — that is why
+     * this checks App and PreviewPane, not the filesystem. */
+    for (const src of [app, code("ui/PreviewPane.tsx")]) {
+      expect(src).not.toMatch(/openEnlarged|closeEnlarged|onEnlarge/);
+      expect(src).not.toMatch(/["']tile["']/);
+      expect(src).not.toMatch(/<EnlargedView/);
+    }
+    // and the pin's Esc is now the LAST of two layers, not three
+    expect(app).toMatch(/Escape["']\s*&&\s*!params\.get\(["']bt["']\)/);
   });
 
   it("the window records what the reader builds, as it changes", () => {

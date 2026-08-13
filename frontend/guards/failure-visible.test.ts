@@ -80,10 +80,11 @@ describe("one failing region does not blank the app", () => {
     // the strip; each named region must sit inside its own
     expect(app).toMatch(/region="table"[\s\S]{0,200}<InstrumentTable/);
     expect(app).toMatch(/region="strip"[\s\S]{0,120}<BottomStrip/);
-    // two popups since the backtest-window session: the enlarged view and
-    // the floating backtest window, each behind its own boundary
-    expect(app).toMatch(/region="popup"[\s\S]{0,200}<EnlargedView/);
+    // ONE popup since 2026-08-13: the floating backtest window. The enlarged
+    // view was the second and retired with its entrance [OWNER] — its
+    // boundary went with it rather than being left wrapping nothing.
     expect(app).toMatch(/region="popup"[\s\S]{0,600}<BacktestWindow/);
+    expect(app).not.toMatch(/<EnlargedView/);
   });
 
   it("the strip's fallback is bar-sized, not a centred block", () => {
@@ -97,13 +98,14 @@ describe("one failing region does not blank the app", () => {
   });
 });
 
-describe("an unknown ?tile= is cleared and said", () => {
+describe("an unknown stale link is cleared and said", () => {
+  /* The `?tile` namespace retired with the enlarged view [OWNER, 2026-08-13].
+   * `bt` is the survivor and it kept the rule AND the lesson — the wording
+   * below is the tile one, applied to the namespace that still exists. */
+
   it("the parameter is replaced, and the id survives into the notice", () => {
-    // namespace-preserving since the backtest-window session: only the tile
-    // family is stripped, so an open backtest window survives a stale link
-    expect(app).toMatch(
-      /mergeQuery\(params, \{ tile: null, type: null, missing: tileParam \}\)/,
-    );
+    // namespace-preserving: only the bt family is stripped
+    expect(app).toMatch(/missing: btiParam \?\? btKey/);
     expect(app).toMatch(/missingTile &&/);
   });
 
@@ -112,11 +114,11 @@ describe("an unknown ?tile= is cleared and said", () => {
      * summary lands first and contributes only outrights and spreads, so in
      * the window before the forwards and volatility payloads arrive, `rows` is
      * non-empty while every forward and vol id in it is still unknown — and a
-     * cold `?tile=series:vol:10Y` cleared itself every time. Pinned as the
-     * completeness flag rather than the row count so the distinction cannot
-     * quietly revert. */
-    expect(app).toMatch(/if \(!tileParam \|\| !rowsComplete \|\| enlargedRow\) return;/);
-    expect(app).not.toMatch(/rows\.length === 0 \|\| enlargedRow/);
+     * cold link to one of those cleared itself. Pinned as the completeness
+     * flag rather than the row count so the distinction cannot quietly
+     * revert. */
+    expect(app).toMatch(/if \(!btKey \|\| !rowsComplete \|\| btRow\) return;/);
+    expect(app).not.toMatch(/rows\.length === 0/);
   });
 
   it("completeness means every row-contributing payload has settled", () => {
