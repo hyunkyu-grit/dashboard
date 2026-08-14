@@ -51,6 +51,7 @@ describe("the displayed split stays tied to the raw engine fields", () => {
     const u = splitKrw(pnl, val);
     expect(fmtKrwFromMan(u.uVal)).toBe("+10억 9,133만원");
     expect(u.uRoll).toBe(0);
+    expect(u.uStart).toBe(0); // 구 세션 복원 경로도 그대로 보존된다
     expect(fmtKrwFromMan(u.uCarry)).toBe("+82만원");
     expect(fmtKrwFromMan(u.uPnl)).toBe("+10억 9,215만원");
     // the tie: the residual-derived carry equals the raw carry's own units
@@ -63,24 +64,28 @@ describe("the displayed split stays tied to the raw engine fields", () => {
     // edges; pnl reconstructed WITH the server's ±1원 rounding slack, so the
     // sweep exercises exactly the inputs the API contract permits.
     // [2026-08-11 — 3분해] rolldown rounds on its own like valuation; carry
-    // stays the residual, so its tie tolerance grows to TWO units (two
-    // independent roundings now sit between it and the raw carry).
+    // stays the residual, so its tie tolerance grows.
+    // [2026-08-14 — 개시 분리] startup rounds on its own too, so THREE
+    // independent roundings now sit between the residual carry and the raw
+    // carry — the tolerance is three units.
     for (let k = 0; k < 500; k++) {
       const val = (k * 104_729_331 - 999_999_999) % 2_000_000_000;
       const carry = (k * 7_919_777 - 87_654_321) % 50_000_000;
       const roll = (k * 3_331_337 - 23_456_789) % 80_000_000;
+      const start = (k * 1_299_709 - 6_543_211) % 4_000_000;
       const eps = (k % 3) - 1; // −1, 0, +1원 — the server's rounding slack
-      const pnl = val + carry + roll + eps;
-      const u = splitKrw(pnl, val, roll);
+      const pnl = val + carry + roll + start + eps;
+      const u = splitKrw(pnl, val, roll, start);
       expect(u.uPnl).toBe(manUnits(pnl));
       expect(u.uVal).toBe(manUnits(val));
       expect(u.uRoll).toBe(manUnits(roll));
+      expect(u.uStart).toBe(manUnits(start));
       // the row still sums across at displayed precision, by construction
-      expect(u.uVal + u.uRoll + u.uCarry).toBe(u.uPnl);
+      expect(u.uVal + u.uRoll + u.uStart + u.uCarry).toBe(u.uPnl);
       expect(
         Math.abs(u.uCarry - manUnits(carry)),
         `raw carry ${carry} drifted from displayed at k=${k}`,
-      ).toBeLessThanOrEqual(2);
+      ).toBeLessThanOrEqual(3);
     }
   });
 });
@@ -124,6 +129,11 @@ describe("the 손익 구성 table actually uses the additive path", () => {
     const table = src.slice(from, to);
     expect(table).toContain("splitKrw(");
     expect(table).toContain("fmtKrwFromMan(");
+    // 개시 칸은 표에 서 있어야 한다 [OWNER, 2026-08-14]. 서버가 보낸 값을
+    // 그리지 않으면 splitKrw 의 잔차인 캐리가 그 몴까지 조용히 먹는다 —
+    // 숫자가 사라지는 것이 아니라 딱 잘못된 칸으로 간다.
+    expect(table).toContain("uStart");
+    expect(table).toContain("개시손익");
     // an independent rounding of any of the three figures inside this table
     // is the regression — the floor era, back under a new name
     expect(table).not.toMatch(/fmtKrw\(\s*p\.carry/);

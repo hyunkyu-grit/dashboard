@@ -118,6 +118,7 @@ function BacktestReconStack({ recon }: { recon: BacktestRecon }) {
     valuation: r.valuation,
     carry: r.carry,
     rolldown: r.rolldown,
+    startup: r.startup,
     actual: r.actual,
   }));
   return (
@@ -658,10 +659,11 @@ function Result({
         </tbody>
       </table>
 
-      {/* 손익 구성 [OWNER]: the headline split into the three things that
-          made it [2026-08-11 — 교과서 3분해: 평가·캐리·롤다운]. Above the
-          fold, because "was this a rate call or was I just collecting coupon"
-          is a question about the RESULT, not about how the trade was built. */}
+      {/* 손익 구성 [OWNER]: the headline split into the things that made it
+          [2026-08-11 — 교과서 3분해: 평가·캐리·롤다운 · 2026-08-14 — 개시가
+          넷째로]. Above the fold, because "was this a rate call or was I just
+          collecting coupon" is a question about the RESULT, not about how the
+          trade was built. */}
       <table className="mt-5 w-full text-[14px] tabular-nums">
         <thead className="text-left text-ink-2">
           <tr>
@@ -669,6 +671,7 @@ function Result({
             <th className="pb-1 text-right font-normal">평가손익</th>
             <th className="pb-1 text-right font-normal">캐리손익</th>
             <th className="pb-1 text-right font-normal">롤다운손익</th>
+            <th className="pb-1 text-right font-normal">개시손익</th>
             <th className="pb-1 text-right font-normal">합계</th>
           </tr>
         </thead>
@@ -686,7 +689,7 @@ function Result({
             exactly the two-way display it was saved with. */}
         <tbody>
           {result.positions.map((p, i) => {
-            const u = splitKrw(p.pnl, p.valuation, p.rolldown);
+            const u = splitKrw(p.pnl, p.valuation, p.rolldown, p.startup);
             return (
               <tr key={`${p.id}-${i}`} className="border-t border-edge">
                 <td className="py-1.5">{naming.get(p.id)?.label ?? p.id}</td>
@@ -711,6 +714,13 @@ function Result({
                 >
                   {fmtKrwFromMan(u.uRoll)}
                 </td>
+                <td
+                  className={`py-1.5 text-right ${
+                    u.uStart >= 0 ? "text-up" : "text-down"
+                  }`}
+                >
+                  {fmtKrwFromMan(u.uStart)}
+                </td>
                 <td className="py-1.5 text-right font-semibold">
                   {fmtKrwFromMan(u.uPnl)}
                 </td>
@@ -720,7 +730,7 @@ function Result({
           {result.positions.length > 1 &&
             (() => {
               const rows = result.positions.map((p) =>
-                splitKrw(p.pnl, p.valuation, p.rolldown),
+                splitKrw(p.pnl, p.valuation, p.rolldown, p.startup),
               );
               const sum = (f: (u: ReturnType<typeof splitKrw>) => number) =>
                 rows.reduce((a, u) => a + f(u), 0);
@@ -730,6 +740,7 @@ function Result({
                   <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uVal))}</td>
                   <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uCarry))}</td>
                   <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uRoll))}</td>
+                  <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uStart))}</td>
                   <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uPnl))}</td>
                 </tr>
               );
@@ -738,7 +749,9 @@ function Result({
       </table>
       <p className="mt-1.5 text-[13px] opacity-50">
         평가손익 = 금리가 움직인 몫, 캐리손익 = 실제 주고받은 이자, 롤다운손익 =
-        커브가 멈춰도 잔존만기가 줄며 생기는 몫. 셋의 합이 손익이에요.
+        커브가 멈춰도 잔존만기가 줄며 생기는 몫, 개시손익 = 거래일부터 발효일까지
+        하룻밤 몫이에요. 스왑은 다음 영업일에 발효해서 그 하룻밤에는 이자가 붙지
+        않아요. 넷의 합이 손익이에요.
       </p>
 
       <details className="mt-5">

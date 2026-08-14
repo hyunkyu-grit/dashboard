@@ -75,7 +75,8 @@ def test_every_row_is_an_identity(one_y):
     _book, rc = one_y
     assert pnl_rows(rc), "recon produced no rows"
     for r in pnl_rows(rc):
-        assert abs(r["actual"] - (r["valuation"] + r["rolldown"] + r["carry"])) <= 2, r["t"]
+        parts = r["valuation"] + r["rolldown"] + r["carry"] + r["startup"]
+        assert abs(r["actual"] - parts) <= 2, r["t"]
         assert r["residual"] == r["valuation"] - r["estTotal"]
 
 
@@ -93,12 +94,18 @@ def test_daily_rows_sum_to_the_record_scalars(one_y):
     assert abs(
         sum(r["carry"] for r in rows) - last["carry"] - rec["carry"]
     ) <= tol
+    # 개시는 진입일 행에만 선다 — 그 밤이 한 번뿐이므로 [OWNER, 2026-08-14]
+    assert abs(sum(r["startup"] for r in rows) - rec["startup"]) <= tol
     # 진입일 행이 있다: 평가 0(그날 par 로 struck), 세타는 booking 된다.
     # krd 도 0 이다 — 그날 아침엔 포지션이 없었다(기초 리스크의 참값).
     first = rows[0]
     assert first["t"] == rec["entry"]
     assert first["valuation"] == 0
-    assert first["carry"] != 0 or first["rolldown"] != 0
+    # 그 세타는 개시 칸에 선다. 캐리·롤다운은 0 이어야 한다 — 종전에는 그 밤
+    # 전체가 롤다운으로 떨어져 "진입한 날에 롤다운" 이 찍혔다.
+    assert first["startup"] != 0
+    assert first["carry"] == 0 and first["rolldown"] == 0
+    assert all(r["startup"] == 0 for r in rows[1:])
     assert all(v == 0 for v in first["krd"].values())
 
 
@@ -160,7 +167,7 @@ def test_carryover_anchor_carries_tomorrows_risk(one_y):
     last = pnl_rows(rc)[-1]
     assert anchor["t"] > last["t"]  # 다음 영업일 — P&L 창 밖
     assert any(v != 0 for v in anchor["krd"].values())  # 아직 열린 1Y 북
-    for key in ("estTotal", "actual", "valuation", "rolldown", "carry", "residual"):
+    for key in ("estTotal", "actual", "valuation", "rolldown", "carry", "startup", "residual"):
         assert anchor[key] is None, key
     assert anchor["dbp"] == {} and anchor["est"] == {}
 
@@ -188,4 +195,4 @@ def test_frozen_market_recon_is_time_and_nothing_else():
             assert v is None or v == 0.0, (r["t"], lb, v)
         assert r["estTotal"] == 0
         assert abs(r["valuation"]) <= 1
-        assert abs(r["actual"] - (r["rolldown"] + r["carry"])) <= 2
+        assert abs(r["actual"] - (r["rolldown"] + r["carry"] + r["startup"])) <= 2

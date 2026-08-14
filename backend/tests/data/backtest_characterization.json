@@ -1330,7 +1330,8 @@
         "matured": false,
         "notional": 10000000000.0,
         "pnl": 90865936.0,
-        "rolldown": -15622988.0,
+        "rolldown": -15645250.0,
+        "startup": 22263.0,
         "valuation": 67995423.0
       },
       {
@@ -1355,7 +1356,8 @@
         "matured": true,
         "notional": 10000000000.0,
         "pnl": -14271037.0,
-        "rolldown": 7489984.0,
+        "rolldown": 7551390.0,
+        "startup": -61406.0,
         "valuation": -7767847.0
       },
       {
@@ -1387,7 +1389,8 @@
         "matured": false,
         "notional": 5000000000.0,
         "pnl": -43941224.0,
-        "rolldown": -17949441.0,
+        "rolldown": -17770413.0,
+        "startup": -179027.0,
         "valuation": -886818.0
       },
       {
@@ -1426,7 +1429,8 @@
         "matured": false,
         "notional": 5000000000.0,
         "pnl": 11323791.0,
-        "rolldown": 6374778.0,
+        "rolldown": 6342367.0,
+        "startup": 32411.0,
         "valuation": -1440735.0
       },
       {
@@ -1451,7 +1455,8 @@
         "matured": false,
         "notional": 10000000000.0,
         "pnl": 51184039.0,
-        "rolldown": -1618819.0,
+        "rolldown": -1714682.0,
+        "startup": 95863.0,
         "valuation": 16413468.0
       }
     ],
@@ -1638,6 +1643,7 @@
         },
         "residual": -2798,
         "rolldown": -84885,
+        "startup": 0,
         "t": "2024-05-21",
         "valuation": 4477752
       },
@@ -1698,6 +1704,7 @@
         },
         "residual": -2802,
         "rolldown": -84477,
+        "startup": 0,
         "t": "2024-05-22",
         "valuation": 4475707
       },
@@ -1758,6 +1765,7 @@
         },
         "residual": -2805,
         "rolldown": -84067,
+        "startup": 0,
         "t": "2024-05-23",
         "valuation": 4473666
       },
@@ -1818,6 +1826,7 @@
         },
         "residual": -2807,
         "rolldown": -251470,
+        "startup": 0,
         "t": "2024-05-24",
         "valuation": 4471629
       },
@@ -1878,6 +1887,7 @@
         },
         "residual": -2817,
         "rolldown": -83577,
+        "startup": 0,
         "t": "2024-05-27",
         "valuation": 4470755
       },
@@ -1938,6 +1948,7 @@
         },
         "residual": -2819,
         "rolldown": -83163,
+        "startup": 0,
         "t": "2024-05-28",
         "valuation": 4468727
       },
@@ -1998,6 +2009,7 @@
         },
         "residual": -2821,
         "rolldown": -82747,
+        "startup": 0,
         "t": "2024-05-29",
         "valuation": 4466703
       },
@@ -2058,6 +2070,7 @@
         },
         "residual": -2823,
         "rolldown": -82329,
+        "startup": 0,
         "t": "2024-05-30",
         "valuation": 4464682
       },
@@ -2118,6 +2131,7 @@
         },
         "residual": -2826,
         "rolldown": -246229,
+        "startup": 0,
         "t": "2024-05-31",
         "valuation": 4462664
       },
@@ -2178,6 +2192,7 @@
         },
         "residual": -2832,
         "rolldown": -81822,
+        "startup": 0,
         "t": "2024-06-03",
         "valuation": 4461824
       },
@@ -2238,6 +2253,7 @@
         },
         "residual": -2834,
         "rolldown": -81399,
+        "startup": 0,
         "t": "2024-06-04",
         "valuation": 4459816
       },
@@ -2298,6 +2314,7 @@
         },
         "residual": -2835,
         "rolldown": -162116,
+        "startup": 0,
         "t": "2024-06-05",
         "valuation": 4457812
       },
@@ -2358,6 +2375,7 @@
         },
         "residual": -2839,
         "rolldown": -242642,
+        "startup": 0,
         "t": "2024-06-07",
         "valuation": 4456401
       },
@@ -2418,6 +2436,7 @@
         },
         "residual": -2842,
         "rolldown": -80619,
+        "startup": 0,
         "t": "2024-06-10",
         "valuation": 4455590
       },
@@ -2478,6 +2497,7 @@
         },
         "residual": -2843,
         "rolldown": -80190,
+        "startup": 0,
         "t": "2024-06-11",
         "valuation": 4453600
       },
@@ -2538,6 +2558,7 @@
         },
         "residual": -2844,
         "rolldown": -79759,
+        "startup": 0,
         "t": "2024-06-12",
         "valuation": 4451613
       },
@@ -2598,6 +2619,7 @@
         },
         "residual": -2844,
         "rolldown": -79328,
+        "startup": 0,
         "t": "2024-06-13",
         "valuation": 4449630
       },
@@ -2658,6 +2680,7 @@
         },
         "residual": -2845,
         "rolldown": -237175,
+        "startup": 0,
         "t": "2024-06-14",
         "valuation": 4447650
       },
@@ -2718,6 +2741,7 @@
         },
         "residual": -2846,
         "rolldown": -78787,
+        "startup": 0,
         "t": "2024-06-17",
         "valuation": 4446872
       },
@@ -2778,6 +2802,7 @@
         },
         "residual": -2847,
         "rolldown": -78351,
+        "startup": 0,
         "t": "2024-06-18",
         "valuation": 4444901
       },
@@ -2838,6 +2863,7 @@
         },
         "residual": -2846,
         "rolldown": -77913,
+        "startup": 0,
         "t": "2024-06-19",
         "valuation": 4442935
       },
@@ -2898,6 +2924,7 @@
         },
         "residual": -2846,
         "rolldown": -77473,
+        "startup": 0,
         "t": "2024-06-20",
         "valuation": 4440971
       },
@@ -2958,6 +2985,7 @@
         },
         "residual": -2846,
         "rolldown": -231586,
+        "startup": 0,
         "t": "2024-06-21",
         "valuation": 4439011
       },
@@ -3018,6 +3046,7 @@
         },
         "residual": -2845,
         "rolldown": -76915,
+        "startup": 0,
         "t": "2024-06-24",
         "valuation": 4438266
       },
@@ -3078,6 +3107,7 @@
         },
         "residual": -2844,
         "rolldown": -76471,
+        "startup": 0,
         "t": "2024-06-25",
         "valuation": 4436316
       },
@@ -3138,6 +3168,7 @@
         },
         "residual": -2843,
         "rolldown": -76025,
+        "startup": 0,
         "t": "2024-06-26",
         "valuation": 4434369
       },
@@ -3198,6 +3229,7 @@
         },
         "residual": -2842,
         "rolldown": -75578,
+        "startup": 0,
         "t": "2024-06-27",
         "valuation": 4432425
       },
@@ -3258,6 +3290,7 @@
         },
         "residual": 297,
         "rolldown": -228810,
+        "startup": 0,
         "t": "2024-06-28",
         "valuation": -4619857
       },
@@ -3318,6 +3351,7 @@
         },
         "residual": 298,
         "rolldown": -81412,
+        "startup": 0,
         "t": "2024-07-01",
         "valuation": -4623580
       },
@@ -3378,6 +3412,7 @@
         },
         "residual": -119540,
         "rolldown": -62163,
+        "startup": 0,
         "t": "2024-07-02",
         "valuation": -4626519
       },
@@ -3438,6 +3473,7 @@
         },
         "residual": 300,
         "rolldown": -93048,
+        "startup": 0,
         "t": "2024-07-03",
         "valuation": -4509658
       },
@@ -3498,6 +3534,7 @@
         },
         "residual": 299,
         "rolldown": -73987,
+        "startup": 0,
         "t": "2024-07-04",
         "valuation": -4512635
       },
@@ -3558,6 +3595,7 @@
         },
         "residual": 300,
         "rolldown": -6960,
+        "startup": 0,
         "t": "2024-07-05",
         "valuation": -4515606
       },
@@ -3618,6 +3656,7 @@
         },
         "residual": 300,
         "rolldown": -6958,
+        "startup": 0,
         "t": "2024-07-08",
         "valuation": -4519252
       },
@@ -3678,6 +3717,7 @@
         },
         "residual": -27126,
         "rolldown": -2429,
+        "startup": 0,
         "t": "2024-07-09",
         "valuation": -4522204
       },
@@ -3738,6 +3778,7 @@
         },
         "residual": 300,
         "rolldown": -3576,
+        "startup": 0,
         "t": "2024-07-10",
         "valuation": -4497734
       },
@@ -3798,6 +3839,7 @@
         },
         "residual": 300,
         "rolldown": 10748,
+        "startup": 0,
         "t": "2024-07-11",
         "valuation": -4500689
       },
@@ -3858,6 +3900,7 @@
         },
         "residual": 300,
         "rolldown": 24322,
+        "startup": 0,
         "t": "2024-07-12",
         "valuation": -4503640
       },
@@ -3918,6 +3961,7 @@
         },
         "residual": 301,
         "rolldown": 5566,
+        "startup": 0,
         "t": "2024-07-15",
         "valuation": -4507258
       },
@@ -3978,6 +4022,7 @@
         },
         "residual": 300,
         "rolldown": 4147,
+        "startup": 0,
         "t": "2024-07-16",
         "valuation": -4510207
       },
@@ -4038,6 +4083,7 @@
         },
         "residual": 300,
         "rolldown": 2729,
+        "startup": 0,
         "t": "2024-07-17",
         "valuation": -4513155
       },
@@ -4098,6 +4144,7 @@
         },
         "residual": 299,
         "rolldown": 1311,
+        "startup": 0,
         "t": "2024-07-18",
         "valuation": -4516103
       },
@@ -4158,6 +4205,7 @@
         },
         "residual": 298,
         "rolldown": -3584,
+        "startup": 0,
         "t": "2024-07-19",
         "valuation": -4519050
       },
@@ -4218,6 +4266,7 @@
         },
         "residual": 296,
         "rolldown": -3701,
+        "startup": 0,
         "t": "2024-07-22",
         "valuation": -4522655
       },
@@ -4278,6 +4327,7 @@
         },
         "residual": 295,
         "rolldown": -5118,
+        "startup": 0,
         "t": "2024-07-23",
         "valuation": -4525599
       },
@@ -4338,6 +4388,7 @@
         },
         "residual": 293,
         "rolldown": -6535,
+        "startup": 0,
         "t": "2024-07-24",
         "valuation": -4528543
       },
@@ -4398,6 +4449,7 @@
         },
         "residual": 292,
         "rolldown": -7951,
+        "startup": 0,
         "t": "2024-07-25",
         "valuation": -4531486
       },
@@ -4458,6 +4510,7 @@
         },
         "residual": 290,
         "rolldown": -31375,
+        "startup": 0,
         "t": "2024-07-26",
         "valuation": -4534429
       },
@@ -4518,6 +4571,7 @@
         },
         "residual": 286,
         "rolldown": -3479,
+        "startup": 0,
         "t": "2024-07-29",
         "valuation": -4538020
       },
@@ -4578,6 +4632,7 @@
         },
         "residual": 117163,
         "rolldown": -29327,
+        "startup": 0,
         "t": "2024-07-30",
         "valuation": -4540987
       },
@@ -4638,6 +4693,7 @@
         },
         "residual": 277,
         "rolldown": -4158,
+        "startup": 0,
         "t": "2024-07-31",
         "valuation": -4660814
       },
@@ -4698,6 +4754,7 @@
         },
         "residual": 274,
         "rolldown": -42022,
+        "startup": 0,
         "t": "2024-08-01",
         "valuation": -4663760
       },
@@ -4758,6 +4815,7 @@
         },
         "residual": 272,
         "rolldown": -133654,
+        "startup": 0,
         "t": "2024-08-02",
         "valuation": -4666709
       },
@@ -4818,6 +4876,7 @@
         },
         "residual": 266,
         "rolldown": -47102,
+        "startup": 0,
         "t": "2024-08-05",
         "valuation": -4670315
       },
@@ -4878,6 +4937,7 @@
         },
         "residual": 264,
         "rolldown": -48541,
+        "startup": 0,
         "t": "2024-08-06",
         "valuation": -4673260
       },
@@ -4938,6 +4998,7 @@
         },
         "residual": 261,
         "rolldown": -49979,
+        "startup": 0,
         "t": "2024-08-07",
         "valuation": -4676205
       },
@@ -4998,6 +5059,7 @@
         },
         "residual": 257,
         "rolldown": -51417,
+        "startup": 0,
         "t": "2024-08-08",
         "valuation": -4679150
       },
@@ -5058,6 +5120,7 @@
         },
         "residual": 255,
         "rolldown": -161903,
+        "startup": 0,
         "t": "2024-08-09",
         "valuation": -4682093
       },
@@ -5118,6 +5181,7 @@
         },
         "residual": 246,
         "rolldown": -56518,
+        "startup": 0,
         "t": "2024-08-12",
         "valuation": -4685683
       },
@@ -5178,6 +5242,7 @@
         },
         "residual": 243,
         "rolldown": -57955,
+        "startup": 0,
         "t": "2024-08-13",
         "valuation": -4688623
       },
@@ -5238,6 +5303,7 @@
         },
         "residual": 239,
         "rolldown": -119897,
+        "startup": 0,
         "t": "2024-08-14",
         "valuation": -4691562
       },
@@ -5298,6 +5364,7 @@
         },
         "residual": 232,
         "rolldown": -189173,
+        "startup": 0,
         "t": "2024-08-16",
         "valuation": -4694821
       },
@@ -5358,6 +5425,7 @@
         },
         "residual": 221,
         "rolldown": -65609,
+        "startup": 0,
         "t": "2024-08-19",
         "valuation": -4698397
       },
@@ -5418,6 +5486,7 @@
         },
         "residual": 216,
         "rolldown": -67045,
+        "startup": 0,
         "t": "2024-08-20",
         "valuation": -4701331
       },
@@ -5478,6 +5547,7 @@
         },
         "residual": 211,
         "rolldown": -68479,
+        "startup": 0,
         "t": "2024-08-21",
         "valuation": -4704264
       },
@@ -5538,6 +5608,7 @@
         },
         "residual": 207,
         "rolldown": -69913,
+        "startup": 0,
         "t": "2024-08-22",
         "valuation": -4707196
       },
@@ -5598,6 +5669,7 @@
         },
         "residual": 203,
         "rolldown": -217394,
+        "startup": 0,
         "t": "2024-08-23",
         "valuation": -4710127
       },
@@ -5658,6 +5730,7 @@
         },
         "residual": -2733,
         "rolldown": -74127,
+        "startup": 0,
         "t": "2024-08-26",
         "valuation": 4532370
       },
@@ -5718,6 +5791,7 @@
         },
         "residual": -2728,
         "rolldown": -74669,
+        "startup": 0,
         "t": "2024-08-27",
         "valuation": 4530396
       },
@@ -5778,6 +5852,7 @@
         },
         "residual": -2721,
         "rolldown": -75208,
+        "startup": 0,
         "t": "2024-08-28",
         "valuation": 4528427
       },
@@ -5838,6 +5913,7 @@
         },
         "residual": -2715,
         "rolldown": -75746,
+        "startup": 0,
         "t": "2024-08-29",
         "valuation": 4526462
       },
@@ -5898,6 +5974,7 @@
         },
         "residual": -2709,
         "rolldown": -232194,
+        "startup": 0,
         "t": "2024-08-30",
         "valuation": 4524500
       },
@@ -5958,6 +6035,7 @@
         },
         "residual": -2690,
         "rolldown": -79048,
+        "startup": 0,
         "t": "2024-09-02",
         "valuation": 4523710
       },
@@ -6018,6 +6096,7 @@
         },
         "residual": -2683,
         "rolldown": -79578,
+        "startup": 0,
         "t": "2024-09-03",
         "valuation": 4521760
       },
@@ -6078,6 +6157,7 @@
         },
         "residual": -2676,
         "rolldown": -80106,
+        "startup": 0,
         "t": "2024-09-04",
         "valuation": 4519814
       },
@@ -6138,6 +6218,7 @@
         },
         "residual": -2669,
         "rolldown": -80632,
+        "startup": 0,
         "t": "2024-09-05",
         "valuation": 4517872
       },
@@ -6198,6 +6279,7 @@
         },
         "residual": -2662,
         "rolldown": -246816,
+        "startup": 0,
         "t": "2024-09-06",
         "valuation": 4515934
       },
@@ -6258,6 +6340,7 @@
         },
         "residual": -2641,
         "rolldown": -83908,
+        "startup": 0,
         "t": "2024-09-09",
         "valuation": 4515187
       },
@@ -6318,6 +6401,7 @@
         },
         "residual": -2633,
         "rolldown": -84427,
+        "startup": 0,
         "t": "2024-09-10",
         "valuation": 4513260
       },
@@ -6378,6 +6462,7 @@
         },
         "residual": -2626,
         "rolldown": -84944,
+        "startup": 0,
         "t": "2024-09-11",
         "valuation": 4511337
       },
@@ -6438,6 +6523,7 @@
         },
         "residual": -2618,
         "rolldown": -85459,
+        "startup": 0,
         "t": "2024-09-12",
         "valuation": 4509418
       },
@@ -6498,6 +6584,7 @@
         },
         "residual": -2610,
         "rolldown": -532545,
+        "startup": 0,
         "t": "2024-09-13",
         "valuation": 4507503
       },
@@ -6558,6 +6645,7 @@
         },
         "residual": -2563,
         "rolldown": -92053,
+        "startup": 0,
         "t": "2024-09-19",
         "valuation": 4508616
       },
@@ -6618,6 +6706,7 @@
         },
         "residual": -2554,
         "rolldown": -281021,
+        "startup": 0,
         "t": "2024-09-20",
         "valuation": 4506718
       },
@@ -6678,6 +6767,7 @@
         },
         "residual": -2528,
         "rolldown": -95292,
+        "startup": 0,
         "t": "2024-09-23",
         "valuation": 4506045
       },
@@ -6738,6 +6828,7 @@
         },
         "residual": -2519,
         "rolldown": -95793,
+        "startup": 0,
         "t": "2024-09-24",
         "valuation": 4504158
       },
@@ -6798,6 +6889,7 @@
         },
         "residual": -2509,
         "rolldown": -96292,
+        "startup": 0,
         "t": "2024-09-25",
         "valuation": 4502275
       },
@@ -6858,6 +6950,7 @@
         },
         "residual": -2501,
         "rolldown": -96789,
+        "startup": 0,
         "t": "2024-09-26",
         "valuation": 4500395
       },
@@ -6918,6 +7011,7 @@
         },
         "residual": -2491,
         "rolldown": -295192,
+        "startup": 0,
         "t": "2024-09-27",
         "valuation": 4498520
       },
@@ -6978,6 +7072,7 @@
         },
         "residual": -2462,
         "rolldown": -258214,
+        "startup": 0,
         "t": "2024-09-30",
         "valuation": 4497891
       },
@@ -7038,6 +7133,7 @@
         },
         "residual": 256837,
         "rolldown": -316752,
+        "startup": 0,
         "t": "2024-10-02",
         "valuation": 4496785
       },
@@ -7098,6 +7194,7 @@
         },
         "residual": -2427,
         "rolldown": -205971,
+        "startup": 0,
         "t": "2024-10-04",
         "valuation": 4236087
       },
@@ -7158,6 +7255,7 @@
         },
         "residual": -2399,
         "rolldown": -74778,
+        "startup": 0,
         "t": "2024-10-07",
         "valuation": 4235085
       },
@@ -7218,6 +7316,7 @@
         },
         "residual": 27923,
         "rolldown": -135019,
+        "startup": 0,
         "t": "2024-10-08",
         "valuation": 4233122
       },
@@ -7278,6 +7377,7 @@
         },
         "residual": -2371,
         "rolldown": -67654,
+        "startup": 0,
         "t": "2024-10-10",
         "valuation": 4201310
       },
@@ -7338,6 +7438,7 @@
         },
         "residual": -2362,
         "rolldown": -182684,
+        "startup": 0,
         "t": "2024-10-11",
         "valuation": 4199331
       },
@@ -7398,6 +7499,7 @@
         },
         "residual": -2333,
         "rolldown": -62456,
+        "startup": 0,
         "t": "2024-10-14",
         "valuation": 4198317
       },
@@ -7458,6 +7560,7 @@
         },
         "residual": -2323,
         "rolldown": -62960,
+        "startup": 0,
         "t": "2024-10-15",
         "valuation": 4196344
       },
@@ -7518,6 +7621,7 @@
         },
         "residual": -2313,
         "rolldown": -63463,
+        "startup": 0,
         "t": "2024-10-16",
         "valuation": 4194374
       },
@@ -7578,6 +7682,7 @@
         },
         "residual": -2302,
         "rolldown": -63963,
+        "startup": 0,
         "t": "2024-10-17",
         "valuation": 4192408
       },
@@ -7638,6 +7743,7 @@
         },
         "residual": -2291,
         "rolldown": -196348,
+        "startup": 0,
         "t": "2024-10-18",
         "valuation": 4190446
       },
@@ -7698,6 +7804,7 @@
         },
         "residual": -2261,
         "rolldown": -66933,
+        "startup": 0,
         "t": "2024-10-21",
         "valuation": 4189471
       },
@@ -7758,6 +7865,7 @@
         },
         "residual": -2249,
         "rolldown": -67426,
+        "startup": 0,
         "t": "2024-10-22",
         "valuation": 4187519
       },
@@ -7818,6 +7926,7 @@
         },
         "residual": -2238,
         "rolldown": -67918,
+        "startup": 0,
         "t": "2024-10-23",
         "valuation": 4185571
       },
@@ -7878,6 +7987,7 @@
         },
         "residual": -2227,
         "rolldown": -68407,
+        "startup": 0,
         "t": "2024-10-24",
         "valuation": 4183626
       },
@@ -7938,6 +8048,7 @@
         },
         "residual": -2216,
         "rolldown": -209645,
+        "startup": 0,
         "t": "2024-10-25",
         "valuation": 4181684
       },
@@ -7998,6 +8109,7 @@
         },
         "residual": -2182,
         "rolldown": -52331,
+        "startup": 0,
         "t": "2024-10-28",
         "valuation": 4180750
       },
@@ -8058,6 +8170,7 @@
         },
         "residual": -285,
         "rolldown": -54246,
+        "startup": 0,
         "t": "2024-10-29",
         "valuation": -3944672
       },
@@ -8118,6 +8231,7 @@
         },
         "residual": -293,
         "rolldown": -56160,
+        "startup": 0,
         "t": "2024-10-30",
         "valuation": -3946735
       },
@@ -8178,6 +8292,7 @@
         },
         "residual": -301,
         "rolldown": -58075,
+        "startup": 0,
         "t": "2024-10-31",
         "valuation": -3948797
       },
@@ -8238,6 +8353,7 @@
         },
         "residual": -309,
         "rolldown": -184907,
+        "startup": 0,
         "t": "2024-11-01",
         "valuation": -3950858
       },
@@ -8298,6 +8414,7 @@
         },
         "residual": -335,
         "rolldown": -65198,
+        "startup": 0,
         "t": "2024-11-04",
         "valuation": -3953455
       },
@@ -8358,6 +8475,7 @@
         },
         "residual": -343,
         "rolldown": -67114,
+        "startup": 0,
         "t": "2024-11-05",
         "valuation": -3955513
       },
@@ -8418,6 +8536,7 @@
         },
         "residual": -352,
         "rolldown": -69029,
+        "startup": 0,
         "t": "2024-11-06",
         "valuation": -3957571
       },
@@ -8478,6 +8597,7 @@
         },
         "residual": -362,
         "rolldown": -70945,
+        "startup": 0,
         "t": "2024-11-07",
         "valuation": -3959628
       },
@@ -8538,6 +8658,7 @@
         },
         "residual": -371,
         "rolldown": -223533,
+        "startup": 0,
         "t": "2024-11-08",
         "valuation": -3961684
       },
@@ -8598,6 +8719,7 @@
         },
         "residual": -397,
         "rolldown": -78079,
+        "startup": 0,
         "t": "2024-11-11",
         "valuation": -3964267
       },
@@ -8658,6 +8780,7 @@
         },
         "residual": -406,
         "rolldown": -79995,
+        "startup": 0,
         "t": "2024-11-12",
         "valuation": -3966320
       },
@@ -8718,6 +8841,7 @@
         },
         "residual": -416,
         "rolldown": -81911,
+        "startup": 0,
         "t": "2024-11-13",
         "valuation": -3968372
       },
@@ -8778,6 +8902,7 @@
         },
         "residual": -425,
         "rolldown": -83828,
+        "startup": 0,
         "t": "2024-11-14",
         "valuation": -3970423
       },
@@ -8838,6 +8963,7 @@
         },
         "residual": -435,
         "rolldown": -262197,
+        "startup": 0,
         "t": "2024-11-15",
         "valuation": -3972473
       },
@@ -8898,6 +9024,7 @@
         },
         "residual": -463,
         "rolldown": -90972,
+        "startup": 0,
         "t": "2024-11-18",
         "valuation": -3975044
       },
@@ -8958,6 +9085,7 @@
         },
         "residual": -473,
         "rolldown": -92889,
+        "startup": 0,
         "t": "2024-11-19",
         "valuation": -3977091
       },
@@ -9018,6 +9146,7 @@
         },
         "residual": -483,
         "rolldown": -94806,
+        "startup": 0,
         "t": "2024-11-20",
         "valuation": -3979137
       },
@@ -9078,6 +9207,7 @@
         },
         "residual": -493,
         "rolldown": -96722,
+        "startup": 0,
         "t": "2024-11-21",
         "valuation": -3981182
       },
@@ -9138,6 +9268,7 @@
         },
         "residual": -503,
         "rolldown": -300896,
+        "startup": 0,
         "t": "2024-11-22",
         "valuation": -3983226
       },
@@ -9198,6 +9329,7 @@
         },
         "residual": -532,
         "rolldown": -103876,
+        "startup": 0,
         "t": "2024-11-25",
         "valuation": -3985783
       },
@@ -9258,6 +9390,7 @@
         },
         "residual": -543,
         "rolldown": -105794,
+        "startup": 0,
         "t": "2024-11-26",
         "valuation": -3987824
       },
@@ -9318,6 +9451,7 @@
         },
         "residual": -553,
         "rolldown": -107711,
+        "startup": 0,
         "t": "2024-11-27",
         "valuation": -3989864
       },
@@ -9378,6 +9512,7 @@
         },
         "residual": -564,
         "rolldown": -109628,
+        "startup": 0,
         "t": "2024-11-28",
         "valuation": -3991903
       },
@@ -9438,6 +9573,7 @@
         },
         "residual": -574,
         "rolldown": -339627,
+        "startup": 0,
         "t": "2024-11-29",
         "valuation": -3993941
       },
@@ -9498,6 +9634,7 @@
         },
         "residual": -605,
         "rolldown": -116791,
+        "startup": 0,
         "t": "2024-12-02",
         "valuation": -3996484
       },
@@ -9558,6 +9695,7 @@
         },
         "residual": -616,
         "rolldown": -118709,
+        "startup": 0,
         "t": "2024-12-03",
         "valuation": -3998519
       },
@@ -9618,6 +9756,7 @@
         },
         "residual": -626,
         "rolldown": -120626,
+        "startup": 0,
         "t": "2024-12-04",
         "valuation": -4000552
       },
@@ -9678,6 +9817,7 @@
         },
         "residual": -638,
         "rolldown": -122544,
+        "startup": 0,
         "t": "2024-12-05",
         "valuation": -4002585
       },
@@ -9738,6 +9878,7 @@
         },
         "residual": -648,
         "rolldown": -378386,
+        "startup": 0,
         "t": "2024-12-06",
         "valuation": -4004616
       },
@@ -9798,6 +9939,7 @@
         },
         "residual": -681,
         "rolldown": -129715,
+        "startup": 0,
         "t": "2024-12-09",
         "valuation": -4007146
       },
@@ -9858,6 +10000,7 @@
         },
         "residual": -692,
         "rolldown": -131633,
+        "startup": 0,
         "t": "2024-12-10",
         "valuation": -4009174
       },
@@ -9918,6 +10061,7 @@
         },
         "residual": -703,
         "rolldown": -133551,
+        "startup": 0,
         "t": "2024-12-11",
         "valuation": -4011201
       },
@@ -9978,6 +10122,7 @@
         },
         "residual": -715,
         "rolldown": -135468,
+        "startup": 0,
         "t": "2024-12-12",
         "valuation": -4013227
       },
@@ -10038,6 +10183,7 @@
         },
         "residual": -726,
         "rolldown": -417172,
+        "startup": 0,
         "t": "2024-12-13",
         "valuation": -4015252
       },
@@ -10098,6 +10244,7 @@
         },
         "residual": -760,
         "rolldown": -142648,
+        "startup": 0,
         "t": "2024-12-16",
         "valuation": -4017767
       },
@@ -10158,6 +10305,7 @@
         },
         "residual": -771,
         "rolldown": -144566,
+        "startup": 0,
         "t": "2024-12-17",
         "valuation": -4019788
       },
@@ -10218,6 +10366,7 @@
         },
         "residual": -784,
         "rolldown": -146483,
+        "startup": 0,
         "t": "2024-12-18",
         "valuation": -4021809
       },
@@ -10278,6 +10427,7 @@
         },
         "residual": -795,
         "rolldown": -148401,
+        "startup": 0,
         "t": "2024-12-19",
         "valuation": -4023828
       },
@@ -10338,6 +10488,7 @@
         },
         "residual": -807,
         "rolldown": -455981,
+        "startup": 0,
         "t": "2024-12-20",
         "valuation": -4025846
       },
@@ -10398,6 +10549,7 @@
         },
         "residual": -842,
         "rolldown": -155588,
+        "startup": 0,
         "t": "2024-12-23",
         "valuation": -4028346
       },
@@ -10458,6 +10610,7 @@
         },
         "residual": -908,
         "rolldown": -315098,
+        "startup": 0,
         "t": "2024-12-24",
         "valuation": 3973597
       },
@@ -10518,6 +10671,7 @@
         },
         "residual": -882,
         "rolldown": -159507,
+        "startup": 0,
         "t": "2024-12-26",
         "valuation": 3972956
       },
@@ -10578,6 +10732,7 @@
         },
         "residual": -869,
         "rolldown": -486896,
+        "startup": 0,
         "t": "2024-12-27",
         "valuation": 3971764
       },
@@ -10638,6 +10793,7 @@
         },
         "residual": -831,
         "rolldown": -165086,
+        "startup": 0,
         "t": "2024-12-30",
         "valuation": 3971702
       },
@@ -10698,6 +10854,7 @@
         },
         "residual": -817,
         "rolldown": -373689,
+        "startup": 0,
         "t": "2024-12-31",
         "valuation": 3970523
       },
@@ -10758,6 +10915,7 @@
         },
         "residual": 255717,
         "rolldown": -71966,
+        "startup": 0,
         "t": "2025-01-02",
         "valuation": 3969999
       },
@@ -10818,6 +10976,7 @@
         },
         "residual": -827,
         "rolldown": -112866,
+        "startup": 0,
         "t": "2025-01-03",
         "valuation": 3712167
       },
@@ -10878,6 +11037,7 @@
         },
         "residual": -856,
         "rolldown": -40093,
+        "startup": 0,
         "t": "2025-01-06",
         "valuation": 3711760
       },
@@ -10938,6 +11098,7 @@
         },
         "residual": -866,
         "rolldown": -41238,
+        "startup": 0,
         "t": "2025-01-07",
         "valuation": 3710476
       },
@@ -10998,6 +11159,7 @@
         },
         "residual": -875,
         "rolldown": -47051,
+        "startup": 0,
         "t": "2025-01-08",
         "valuation": 3709196
       },
@@ -11058,6 +11220,7 @@
         },
         "residual": 28782,
         "rolldown": -28813,
+        "startup": 0,
         "t": "2025-01-09",
         "valuation": 3707928
       },
@@ -11118,6 +11281,7 @@
         },
         "residual": -893,
         "rolldown": -83732,
+        "startup": 0,
         "t": "2025-01-10",
         "valuation": 3676973
       },
@@ -11178,6 +11342,7 @@
         },
         "residual": -922,
         "rolldown": -30767,
+        "startup": 0,
         "t": "2025-01-13",
         "valuation": 3676569
       },
@@ -11238,6 +11403,7 @@
         },
         "residual": -932,
         "rolldown": -31958,
+        "startup": 0,
         "t": "2025-01-14",
         "valuation": 3675293
       },
@@ -11298,6 +11464,7 @@
         },
         "residual": -943,
         "rolldown": -33145,
+        "startup": 0,
         "t": "2025-01-15",
         "valuation": 3674020
       },
@@ -11358,6 +11525,7 @@
         },
         "residual": -953,
         "rolldown": -34329,
+        "startup": 0,
         "t": "2025-01-16",
         "valuation": 3672751
       },
@@ -11418,6 +11586,7 @@
         },
         "residual": -963,
         "rolldown": -111426,
+        "startup": 0,
         "t": "2025-01-17",
         "valuation": 3671486
       },
@@ -11478,6 +11647,7 @@
         },
         "residual": -995,
         "rolldown": -39951,
+        "startup": 0,
         "t": "2025-01-20",
         "valuation": 3671129
       },
@@ -11538,6 +11708,7 @@
         },
         "residual": -1003,
         "rolldown": -41125,
+        "startup": 0,
         "t": "2025-01-21",
         "valuation": 3669876
       },
@@ -11567,6 +11738,7 @@
         },
         "residual": null,
         "rolldown": null,
+        "startup": null,
         "t": "2025-01-22",
         "valuation": null
       }

@@ -27,6 +27,8 @@ function day(i: number): ReconStackDay {
     valuation: -369066 - i,
     carry: 143836,
     rolldown: 368131,
+    // 개시는 진입일 행에만 선다 — 보통 날은 0 이다 [OWNER, 2026-08-14]
+    startup: 0,
     actual: 142901,
   };
 }
@@ -38,11 +40,11 @@ describe("하루 = 가로줄 셋", () => {
     expect(container.querySelectorAll("tbody tr")).toHaveLength(240);
   });
 
-  it("날짜와 하루 요약(평가·캐리·롤다운·그날 손익)은 하루에 한 번, rowSpan=3", () => {
+  it("날짜와 하루 요약(평가·캐리·롤다운·개시·그날 손익)은 하루에 한 번, rowSpan=3", () => {
     const { container } = render(<ReconStack days={[day(0)]} tenors={TENORS} />);
     const spanned = [...container.querySelectorAll("tbody td[rowspan='3']")];
-    // 날짜 1 + 요약 4
-    expect(spanned).toHaveLength(5);
+    // 날짜 1 + 요약 5
+    expect(spanned).toHaveLength(6);
     const texts = spanned.map((el) => el.textContent);
     expect(texts.some((t) => t?.includes("03-01"))).toBe(true);
     expect(texts.some((t) => t?.includes("+368,131"))).toBe(true); // 롤다운
@@ -69,7 +71,7 @@ describe("하루 = 가로줄 셋", () => {
     expect(pane.className).toContain("max-h-");
   });
 
-  it("범례는 사방 고정 — 헤더 행은 top, 날짜·구분은 left, 요약 다섯은 right", () => {
+  it("범례는 사방 고정 — 헤더 행은 top, 날짜·구분은 left, 요약 여섯은 right", () => {
     // [OWNER, 2026-08-12 2차 — "좌우의 범례 … 열과 행 고정시켜서 스크롤을
     // 움직이더라도 고정"]. 좌표는 컬럼 트랙(ch)과 같은 자로 풀려야 한다 —
     // 13px 헤더는 14/13 환산(calc), 14px 본문 셀은 ch 그대로.
@@ -80,17 +82,18 @@ describe("하루 = 가로줄 셋", () => {
     // 직렬화한다 — 소스의 수식이 아니라 환산된 값으로 단언한다.
     expect(ths[0].style.left).toBe("0px"); // 날짜
     expect(ths[1].style.left).toMatch(/calc\(7\.53\d*ch\)/); // 구분 = 7ch·14/13
-    const tail = ths.slice(-5);
+    const tail = ths.slice(-6);
     expect(tail.map((th) => th.style.right)).toEqual([
-      expect.stringMatching(/calc\(47\.38\d*ch\)/), // 합계 = 44ch·14/13
-      expect.stringMatching(/calc\(35\.53\d*ch\)/), // 평가 = 33ch·14/13
-      expect.stringMatching(/calc\(23\.69\d*ch\)/), // 캐리 = 22ch·14/13
-      expect.stringMatching(/calc\(11\.84\d*ch\)/), // 롤다운 = 11ch·14/13
+      expect.stringMatching(/calc\(59\.23\d*ch\)/), // 합계   = 55ch·14/13
+      expect.stringMatching(/calc\(47\.38\d*ch\)/), // 평가   = 44ch·14/13
+      expect.stringMatching(/calc\(35\.53\d*ch\)/), // 캐리   = 33ch·14/13
+      expect.stringMatching(/calc\(23\.69\d*ch\)/), // 롤다운 = 22ch·14/13
+      expect.stringMatching(/calc\(11\.84\d*ch\)/), // 개시   = 11ch·14/13
       "0px",
     ]);
-    // 본문: 날짜(왼쪽)와 요약 넷(오른쪽)의 rowSpan 셀도 스티키 + 불투명 bg(§G).
+    // 본문: 날짜(왼쪽)와 요약 다섯(오른쪽)의 rowSpan 셀도 스티키 + 불투명 bg(§G).
     const spanned = [...container.querySelectorAll("tbody td[rowspan='3']")] as HTMLElement[];
-    expect(spanned).toHaveLength(5);
+    expect(spanned).toHaveLength(6);
     for (const td of spanned) {
       expect(td.className).toContain("sticky");
       expect(td.className).toMatch(/bg-(tile|page|popover)/);
@@ -116,17 +119,18 @@ describe("하루 = 가로줄 셋", () => {
       valuation: null,
       carry: null,
       rolldown: null,
+      startup: null,
       actual: null,
     };
     const { container } = render(
       <ReconStack days={[day(0), anchor]} tenors={TENORS} />,
     );
     expect(container.querySelectorAll("tbody tr")).toHaveLength(6);
-    // 앵커 블록의 KRD 는 보이고(이월 리스크), 하루 요약 넷은 — 로 선다.
+    // 앵커 블록의 KRD 는 보이고(이월 리스크), 하루 요약 다섯은 — 로 선다.
     expect(container.textContent).toContain("387,162");
     const dashes = [...container.querySelectorAll("tbody td[rowspan='3']")]
       .filter((el) => el.textContent === "—");
-    expect(dashes.length).toBe(4); // 앵커의 평가·캐리·롤다운·그날 손익
+    expect(dashes.length).toBe(5); // 앵커의 평가·캐리·롤다운·개시·그날 손익
   });
 });
 

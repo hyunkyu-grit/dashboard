@@ -393,17 +393,24 @@ export interface BacktestPosition {
   entryValue: number | null;
   exitValue: number | null;
   pnl: number;
-  /** The three parts of `pnl`, which they sum to exactly [OWNER, 2026-08-11
-   * — 교과서 3분해]:
-   *   평가   = what the curve MOVING did (clean change minus the roll chain)
+  /** The FOUR parts of `pnl`, which they sum to exactly [OWNER, 2026-08-11
+   * — 교과서 3분해 · 2026-08-14 — 개시 분리]:
+   *   평가   = what the curve MOVING did (clean change minus the roll chain
+   *            and minus 개시)
    *   롤다운 = clean change from aging alone on the unchanged curve
-   *            (Tuckman unchanged-term-structure, chained day by day)
+   *            (Tuckman unchanged-term-structure, chained day by day from the
+   *            EFFECTIVE date)
    *   캐리   = interest actually earned or paid, settled plus still accruing
+   *   개시   = the trade-date → effective-date night. A KRW CD-IRS starts
+   *            spot, so across that one night nothing accrues and the whole
+   *            theta used to land in 롤다운 — which is why a position showed
+   *            roll-down on the day it was opened.
    * An identity, not an attribution model (see backend/app/backtest.py).
-   * `rolldown` is optional only for results restored from an older session's
-   * memory — the server always sends it now. */
+   * `rolldown`/`startup` are optional only for results restored from an older
+   * session's memory — the server always sends both now. */
   valuation: number;
   rolldown?: number;
+  startup?: number;
   carry: number;
   /** settled cash alone, the part of `carry` that has actually been paid */
   cash: number;
@@ -413,7 +420,8 @@ export interface BacktestPosition {
  * start-of-day per-tenor KRD (the very sensitivities the estimate
  * multiplied — krd × dbp = est closes inside the row [OWNER, 같은 날]), the
  * ACTUAL market Δbp (this is history, not a scenario), the P&L-explain
- * estimate, and the day's actual P&L split 평가/롤다운/캐리. `dbp` is null
+ * estimate, and the day's actual P&L split 평가/롤다운/캐리/개시. `개시` is
+ * nonzero only on a position's own entry row [OWNER, 2026-08-14]. `dbp` is null
  * where the tenor had no quote on one of the two days — unknown, not zero.
  * The last row is the carry-over anchor (`carryover: true`): the final
  * day's CLOSE KRD — tomorrow's risk — with every P&L field null (a day
@@ -428,6 +436,7 @@ export interface BacktestReconRow {
   valuation: number | null;
   rolldown: number | null;
   carry: number | null;
+  startup: number | null;
   residual: number | null;
   carryover?: boolean;
 }

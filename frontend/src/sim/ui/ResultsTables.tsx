@@ -376,6 +376,10 @@ export function KrdDailyTable({ run }: { run: SimulateResponse }) {
     // 구 캐시 응답에는 분리가 없다 — 0 이 아니라 미정의(공란 정책).
     carry: r.carryPnl ?? null,
     rolldown: r.rolldownPnl ?? null,
+    // 개시는 백테스트에만 있는 칸이다 [OWNER, 2026-08-14]: 거래일→발효일
+    // 한 밤을 재는 것인데, 시뮬레이션은 실제 체결일이 없는 미래 경로라 그
+    // 밤 자체가 없다. 0 이 아니라 null — 공란 정책(없는 것과 0 은 다르다).
+    startup: null,
     actual: r.totalActual,
   }));
 

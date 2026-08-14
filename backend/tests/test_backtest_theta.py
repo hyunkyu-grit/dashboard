@@ -113,7 +113,8 @@ def test_frozen_market_valuation_is_rolldown_and_nothing_else(frozen):
     # identity at every point, and no step beyond the budget PER CALENDAR DAY
     # it spans — a weekend ages the swap three days and may step three days
     for a, b in zip(path, path[1:]):
-        assert abs((b["valuation"] + b["rolldown"] + b["carry"]) - b["pnl"]) <= KRW_TOL
+        parts = b["valuation"] + b["rolldown"] + b["carry"] + b["startup"]
+        assert abs(parts - b["pnl"]) <= KRW_TOL
         cal = (dt.date.fromisoformat(b["t"]) - dt.date.fromisoformat(a["t"])).days
         step_bp = abs(b["rolldown"] - a["rolldown"]) / N * 1e4
         assert step_bp <= STEP_BUDGET_BP * cal, (a["t"], b["t"], step_bp, cal)

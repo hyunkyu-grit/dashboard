@@ -36,24 +36,31 @@ export function fmtKrw(v: number): string {
   return fmtKrwFromMan(manUnits(v));
 }
 
-/** 평가 + 캐리 + 롤다운 = 합계, AT DISPLAYED PRECISION, by construction: the
- * total, the valuation and the rolldown round once each, and the carry IS
- * their difference in 만-units — the fmtMove precedent (difference the
- * displayed endpoints) applied to money. Rounding all four independently can
- * miss by a 만원, which is exactly the defect the old carry & roll block was
+/** 평가 + 캐리 + 롤다운 + 개시 = 합계, AT DISPLAYED PRECISION, by construction:
+ * the total, the valuation, the rolldown and the startup round once each, and
+ * the carry IS their difference in 만-units — the fmtMove precedent (difference
+ * the displayed endpoints) applied to money. Rounding all of them independently
+ * can miss by a 만원, which is exactly the defect the old carry & roll block was
  * deleted for.
  *
- * [OWNER, 2026-08-11 — 교과서 3분해] `rolldown` joined the split. It defaults
- * to 0 so a result restored from an older session's memory — whose 평가 still
- * bundles the roll — degrades to the exact two-way display it was saved with
- * (롤다운 0, 캐리 = the old residual). */
+ * [OWNER, 2026-08-11 — 교과서 3분해] `rolldown` joined the split.
+ * [OWNER, 2026-08-14 — 개시 분리] `startup` joined it too: the trade-date →
+ * effective-date night, which used to be reported as 롤다운 and made a
+ * position show roll-down on the very day it was entered (backend
+ * `app/backtest.py` carries the measurements).
+ *
+ * Both default to 0 so a result restored from an older session's memory —
+ * whose 평가 still bundles the roll, and whose 롤다운 still bundles that first
+ * night — degrades to the exact display it was saved with. */
 export function splitKrw(
   pnl: number,
   valuation: number,
   rolldown: number = 0,
-): { uPnl: number; uVal: number; uRoll: number; uCarry: number } {
+  startup: number = 0,
+): { uPnl: number; uVal: number; uRoll: number; uStart: number; uCarry: number } {
   const uPnl = manUnits(pnl);
   const uVal = manUnits(valuation);
   const uRoll = manUnits(rolldown);
-  return { uPnl, uVal, uRoll, uCarry: uPnl - uVal - uRoll };
+  const uStart = manUnits(startup);
+  return { uPnl, uVal, uRoll, uStart, uCarry: uPnl - uVal - uRoll - uStart };
 }
