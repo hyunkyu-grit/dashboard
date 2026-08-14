@@ -69,7 +69,7 @@ export function defaultWindowPos(
  *
  * 여전히 localStorage 가 아니다: 다른 모니터에서 복원된 위치는 아무도 못 찾는
  * 창이 된다. */
-export type WindowKey = "backtest" | "simulation";
+export type WindowKey = "backtest" | "simulation" | "cashbond";
 
 const remembered = new Map<WindowKey, WinPos>();
 

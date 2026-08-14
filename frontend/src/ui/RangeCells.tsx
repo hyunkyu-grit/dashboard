@@ -37,12 +37,12 @@
  * width, immediately right of 평균; it has its own ladder rung and drops
  * first (columns.ts). */
 
+import type { Theta, Unit } from "@/lib/api";
 import { fmtDelta } from "@/lib/format";
 
 import { rangeTemplate } from "./columns";
 import { rangeText } from "./cells";
 import { fmtKrw, fmtKrwFromMan, manUnits } from "./krw";
-import type { Row } from "./rows";
 
 /** Sub-labels, in render order. The window is named once, on the first label,
  * and scopes the three by adjacency — 52주 고점 · 저점 · 평균. Labels are
@@ -79,7 +79,22 @@ export const THETA_TITLE =
   "DV01 백만원당이라 종목끼리 바로 비교돼요 — 스프레드·플라이는 다리 하나의 DV01이에요.";
 
 /** high, low, mean — the order the labels declare. */
-export function rangeValues(row: Row): (number | null)[] {
+/** 이 파일의 셀들이 **실제로 읽는 것 전부**.
+ *
+ * `Row`(IRS 표)와 현금채권 행이 둘 다 이 모양을 만족한다 — 52주 통계와 위치
+ * 트랙과 세타는 종목이 스왑인지 채권인지 알 필요가 없다. 구체 타입 대신 이
+ * 구조로 받아 두면 두 표가 **같은 셀**을 쓰고, 그래야 슬라이더 규칙과 세타
+ * 서식이 갈릴 수가 없다(`PnlSeries` 를 뽑을 때와 같은 판단). */
+export interface RangeRow {
+  unit: Unit;
+  now: number | null;
+  rangeHigh: number | null;
+  rangeLow: number | null;
+  rangeAvg: number | null;
+  theta?: Theta | null;
+}
+
+export function rangeValues(row: RangeRow): (number | null)[] {
   return [row.rangeHigh, row.rangeLow, row.rangeAvg];
 }
 
@@ -94,7 +109,7 @@ export function rangeValues(row: Row): (number | null)[] {
  *   — a zero-width range (high == low) has no interior to place a marker in,
  *     and a row without the statistics has no frame at all — both render as
  *     an empty cell, the graphic's equivalent of the numbers' em dash. */
-export function markerPct(row: Row): number | null {
+export function markerPct(row: RangeRow): number | null {
   const [high, low] = rangeValues(row);
   if (high == null || low == null || row.now == null) return null;
   if (!(high > low)) return null;
@@ -105,7 +120,7 @@ export function markerPct(row: Row): number | null {
 /** The track: 2px ink hairline spanning low→high, a 2×12px full-ink marker at
  * the current level. Sized for the 48px row — measured, the marker is 12px
  * tall against 13px body type, the same visual weight as a digit. */
-function RangeTrack({ row }: { row: Row }) {
+function RangeTrack({ row }: { row: RangeRow }) {
   const pct = markerPct(row);
   if (pct == null) return <span className="pr-3" />;
   return (
@@ -189,7 +204,7 @@ export function RangeHeader({
  * 만-units, so a reader who subtracts the two parts always gets the total back.
  * Rounding all three separately can miss by a 만원, and this repo has shipped
  * that exact lie once already (see `krw.ts`). */
-export function thetaTitle(t: NonNullable<Row["theta"]>): string {
+export function thetaTitle(t: Theta): string {
   const uCash = manUnits(t.cash);
   const uRoll = manUnits(t.roll);
   const uCarry = uCash - uRoll;
@@ -211,7 +226,7 @@ export function RangeCells({
   slider = true,
   theta = false,
 }: {
-  row: Row;
+  row: RangeRow;
   slider?: boolean;
   theta?: boolean;
 }) {

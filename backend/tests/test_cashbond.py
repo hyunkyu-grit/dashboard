@@ -107,7 +107,7 @@ class TestDecomposition:
         })
         book = [
             cb.BondPosition("CB", "KTB", "3Y", 1, N, m.dates[10]),
-            cb.BondPosition("CB", "KTB", "10Y", -1, 2 * N, m.dates[40], m.dates[300]),
+            cb.BondPosition("CB", "KTB", "10Y", 1, 2 * N, m.dates[40], m.dates[300]),
             cb.BondPosition("CB", "KTB", "1Y", 1, N, m.dates[5]),
         ]
         r = cb.run_backtest(m, None, book, SPEC0)
@@ -161,19 +161,35 @@ class TestDecomposition:
         # 기울기 10bp/년 × 0.25년 = 2.5bp, 4.75Y 채권의 DV01 근방
         assert 5e6 < p["rolldown"] < 15e6, p["rolldown"]
 
-    def test_selling_mirrors_buying_except_funding(self):
-        """매도는 매수의 거울이다 — 조달만 빼고. 공매도는 돈이 아니라 채권을
-        빌리는 것이고 그 비용(대차료)은 이 화면이 아는 값이 아니다."""
+    def test_selling_is_refused_rather_than_silently_priced(self):
+        """매수뿐이다 [OWNER, 2026-08-14 — "국고채는 매도는 없는거고"].
+
+        엔진은 부호를 다룰 줄 알지만(아래에서 거울임을 확인한다) **북 단계에서
+        막는다**: 공매도는 채권을 빌리는 것이고 그 대차료를 이 화면은 모른다.
+        모르는 비용을 0 으로 두면 공매도가 늘 이기는 백테스트가 된다."""
+        m = synth(days=200)
+        with pytest.raises(cb.CashBondError, match="매수만"):
+            cb.run_backtest(
+                m, None, [cb.BondPosition("CB", "KTB", "3Y", -1, N, m.dates[10])], SPEC0
+            )
+
+    def test_the_engine_itself_is_sign_symmetric(self):
+        """거절은 상품의 규칙이지 산술의 한계가 아니다 — 다리 단계에서는 부호가
+        정확히 거울이다. 나중에 대차료가 생겨 매도를 열 때, 그때 열 것이 이미
+        맞다는 증거."""
         m = synth(days=200, curve=lambda i: {
             t: 3.0 + 0.05 * cm.TENOR_YEARS[t] + 0.003 * i for t in cm.TENOR_LABELS
         })
         e, x = m.dates[10], m.dates[120]
-        buy = cb.run_backtest(m, None, [cb.BondPosition("CB", "KTB", "3Y", 1, N, e, x)], SPEC0)
-        sell = cb.run_backtest(m, None, [cb.BondPosition("CB", "KTB", "3Y", -1, N, e, x)], SPEC0)
-        b, s = buy["positions"][0], sell["positions"][0]
+        sample = list(range(10, 121))
+        out = []
+        for d in (1, -1):
+            pos = cb.BondPosition("CB", "KTB", "3Y", d, N, e, x)
+            rec, _own, _prev = cb.run_bond_leg(m, pos, cb._bond_leg(m, pos), sample, SPEC0)
+            out.append(rec)
         for k in ("valuation", "carry", "rolldown"):
-            assert abs(b[k] + s[k]) <= 2, k
-        assert s["funding"] == 0
+            assert abs(out[0][k] + out[1][k]) <= 2, k
+        assert out[1]["funding"] == 0  # 조달은 매수 원금에만 붙는다
 
 
 class TestFunding:

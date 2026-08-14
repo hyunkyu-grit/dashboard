@@ -354,7 +354,7 @@ export function App() {
    * 기존 로딩/오류 게이트 밑에 두면 IRS 백엔드가 죽었을 때 조달금리조차 못
    * 고치게 된다. 폭도 같은 이유로 전체다 — 오른쪽 미리보기는 호버된 IRS 행을
    * 그리는 판이고, 이 화면들에는 그런 행이 없다. */
-  const ownView = tab === "cashbond" || tab === "setting";
+  const ownView = tab === "cashbond" || tab === "assetswap" || tab === "setting";
   const fullWidth = matrixOpen || tab === "all" || tab === "sim" || ownView;
 
   // ~120ms hover delay so crossing the table does not strobe the preview (§2).
@@ -602,9 +602,7 @@ export function App() {
         <Header
           events={summary?.events ?? []}
           onFocus={focusFromChangeLog}
-          showChartType={
-            section === "main" || (section === "backtest" && tab !== "cashbond")
-          }
+          showChartType={section === "main" || (section === "backtest" && !ownView)}
           sidebarOpen={sidebarOpen}
           onSidebarOpen={setSidebarOpen}
         />
@@ -643,7 +641,8 @@ export function App() {
             "loading" indefinitely with the backend down. The retry does not
             wait for the fetch layer's retry budget: it is a button. */}
         {tab === "setting" && <SettingView />}
-        {tab === "cashbond" && <CashBondView />}
+        {tab === "cashbond" && <CashBondView kind="CB" policy={summary?.policy} />}
+        {tab === "assetswap" && <CashBondView kind="ASW" policy={summary?.policy} />}
         {!ownView && !summary && isError && (
           <ErrorState
             what="커브를"

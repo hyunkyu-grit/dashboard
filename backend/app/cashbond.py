@@ -210,8 +210,13 @@ def run_bond_leg(
     leg: _BondLeg,
     sample: list[int],
     spec: fd.FundingSpec,
-) -> tuple[dict, dict[int, float]]:
-    """채권 다리 하나를 매일 재평가한다. (요약, {자리: 손익}) 을 돌려준다.
+) -> tuple[dict, dict[int, float], dict[int, float]]:
+    """채권 다리 하나를 매일 재평가한다.
+
+    (요약, {자리: 손익}, {자리: **전영업일** 손익}) 을 돌려준다. 셋째가 있는
+    이유는 차트의 당일 변화 때문이다 — `live` 가 이미 발행점 하루 전까지 값을
+    매기고 있으므로(아래) 공짜에 가깝고, 없으면 화면이 발행점 사이의 차이를
+    "당일" 이라고 부르게 된다. IRS 쪽 `_run_one` 의 `prev_day` 와 같은 규약이다.
 
     부호 규약은 IRS 쪽과 같다: `direction` 이 +1 이면 매수(금리가 내리면 이익),
     −1 이면 매도. 조달은 **매수에만** 붙는다 — 공매도는 돈을 빌리는 것이 아니라
@@ -293,7 +298,11 @@ def run_bond_leg(
         "pnl": round(last, 0),
         "matured": leg.matured,
     }
-    return record, {i: at(i) for i in sample}
+    return (
+        record,
+        {i: at(i) for i in sample},
+        {i: at(i - 1) for i in sample if i - 1 >= 0},
+    )
 
 
 # ── 자산스왑 ────────────────────────────────────────────────────────────────
@@ -329,6 +338,16 @@ def run_backtest(
         raise CashBondError("포지션이 하나는 있어야 합니다.")
     if len(positions) > MAX_POSITIONS:
         raise CashBondError(f"포지션은 최대 {MAX_POSITIONS}개입니다.")
+    # 매수뿐이다 [OWNER, 2026-08-14 — "국고채는 매도는 없는거고"]. 현금채권을
+    # 공매도하려면 채권을 빌려야 하고, 그 대차료는 이 화면이 아는 값이 아니다 —
+    # 모르는 비용을 0 으로 두고 계산하면 공매도가 늘 이기는 백테스트가 된다.
+    # 화면에는 고를 것 자체가 없으므로 여기 걸리는 것은 손으로 만든 URL 뿐이고,
+    # 그때 조용히 값을 내놓는 것보다 거절하는 편이 옳다.
+    for p in positions:
+        if p.direction != 1:
+            raise CashBondError(
+                "현금채권은 매수만 됩니다 — 공매도는 대차료가 필요한데 그 값이 없습니다."
+            )
     spec = spec.validated()
 
     legs = [_bond_leg(m, p) for p in positions]
@@ -347,9 +366,10 @@ def run_backtest(
 
     records: list[dict] = []
     series: list[dict[int, float]] = []
+    prevs: list[dict[int, float]] = []
 
     for p, leg in zip(positions, legs):
-        rec, own = run_bond_leg(m, p, leg, sample, spec)
+        rec, own, own_prev = run_bond_leg(m, p, leg, sample, spec)
         rec = {
             "id": p.id,
             "kind": p.kind,
@@ -369,7 +389,7 @@ def run_backtest(
         }
 
         if p.kind == KIND_ASW:
-            srec, sown = _swap_leg(dataset, p, leg, m, sample, imap, swap_cache)
+            srec, sown, sprev = _swap_leg(dataset, p, leg, m, sample, imap, swap_cache)
             for key in ("valuation", "rolldown", "carry", "startup"):
                 rec[key] = round(rec[key] + srec[key], 0)
             rec["swapPnl"] = srec["pnl"]
@@ -377,25 +397,31 @@ def run_backtest(
             rec["aswSpread"] = round((leg.coupon * 100 - srec["entryRate"]) * 100, 2)
             for i in own:
                 own[i] += sown.get(i, 0.0)
+            for i in own_prev:
+                own_prev[i] += sprev.get(i, 0.0)
             rec["pnl"] = round(own[sample[-1]] if sample else 0.0, 0)
 
         records.append(rec)
         series.append(own)
+        prevs.append(own_prev)
 
-    # 손익 라인. `d` 는 **발행된 두 점 사이의 변화**이고, 그것이 하루인지는
-    # `complete` 가 말한다 — 창이 MAX_POINTS 를 넘어 솎이면 한 걸음이 며칠을
-    # 건넌다. IRS 쪽은 점마다 전영업일을 따로 평가해 진짜 일간 변화를 내지만
-    # (backtest.py 의 `prev_day`), 여기서는 그 비용을 아직 치르지 않았다:
-    # 읽는 화면이 없기 때문이다. 일간이라고 부를 화면이 생기면 그때 그쪽 규약을
-    # 그대로 가져오면 된다. 지금 이름을 `d` 로 둔 것은 모양을 맞춰 두려는 것뿐.
+    # 손익 라인. `d` 는 **늘 1영업일** 변화다 — 발행점 사이가 아니라.
+    # 창이 MAX_POINTS 를 넘어 솎이면 점 사이가 며칠씩 벌어지는데, 그 간격을
+    # "당일" 이라고 부르면 거짓말이 된다. 그래서 각 포지션이 발행점의 **전날**
+    # 손익도 같이 내고(`run_bond_leg` 의 셋째 반환값), 여기서 그 차를 쓴다.
+    # 값싸다: `live` 가 이미 그 날짜들을 평가하고 있다.
+    #
+    # 브라우저에서 빼지 않는 것도 규약이다(§16) — 이미 원 단위로 반올림된
+    # 계열을 화면에서 차분하면 읽는 사람이 보는 두 숫자와 안 맞는 값이 나온다.
     points = []
-    for i in sample:
+    for k, i in enumerate(sample):
         total = round(sum(s.get(i, 0.0) for s in series), 0)
-        points.append({"t": m.dates[i].isoformat(), "pnl": total})
-    for k in range(1, len(points)):
-        points[k]["d"] = round(points[k]["pnl"] - points[k - 1]["pnl"], 0)
-    if points:
-        points[0]["d"] = None
+        d = (
+            None
+            if k == 0
+            else round(total - sum(pd.get(i, 0.0) for pd in prevs), 0)
+        )
+        points.append({"t": m.dates[i].isoformat(), "pnl": total, "d": d})
 
     pnls = [p["pnl"] for p in points]
     return {
@@ -411,8 +437,10 @@ def run_backtest(
     }
 
 
-def _swap_leg(dataset, p: BondPosition, leg: _BondLeg, m: CreditMatrix,
-              sample: list[int], imap: dict[int, int], cache: dict) -> tuple[dict, dict[int, float]]:
+def _swap_leg(
+    dataset, p: BondPosition, leg: _BondLeg, m: CreditMatrix,
+    sample: list[int], imap: dict[int, int], cache: dict,
+) -> tuple[dict, dict[int, float], dict[int, float]]:
     """자산스왑의 IRS 다리 — 채권 매수에 **같은 명목**의 페이 고정 [OWNER,
     2026-08-14 — par-par]. DV01 중립이 아닌 이유는 진입일 스프레드가 표에 보이는
     민평 − IRS 그대로 읽히기 때문이고, 대가는 채권이 par 에서 멀어지면 남는
@@ -438,10 +466,14 @@ def _swap_leg(dataset, p: BondPosition, leg: _BondLeg, m: CreditMatrix,
         exit=m.dates[leg.exit_i],
     )
     isample = sorted({imap[i] for i in sample if i in imap})
-    rec, own, _prev = _run_one(dataset, spos, isample, cache)
+    rec, own, prev = _run_one(dataset, spos, isample, cache)
     back = {i: own.get(imap[i], 0.0) for i in sample if i in imap}
+    # 전영업일도 **IRS 달력의** 하루 전이다. 민평 달력에 없는 날(연말 폐장일
+    # 등 15일)이 그 사이에 끼면 채권 다리와 하루가 어긋나는데, 그 어긋남은
+    # 스왑이 실제로 그날 값이 매겨졌다는 사실 그대로다.
+    back_prev = {i: prev.get(imap[i], 0.0) for i in sample if i in imap}
     rec["entryRate"] = rec["legs"][0]["entryRate"] if rec["legs"] else 0.0
-    return rec, back
+    return rec, back, back_prev
 
 
 # ── 표 ──────────────────────────────────────────────────────────────────────
@@ -523,7 +555,12 @@ def parse_id(series_id: str) -> tuple[str, str, str]:
     return kind, bond_type, tenor
 
 
-def instruments(m: CreditMatrix, dataset) -> dict:
+def instruments(
+    m: CreditMatrix,
+    dataset,
+    spec: fd.FundingSpec | None = None,
+    irs_theta: dict[str, dict] | None = None,
+) -> dict:
     """Cash Bond 표의 행 전부 — 현금채권과 자산스왑.
 
     §16 계산 경계: 수준·변화·백분위·52주 범위를 전부 여기서 내고 브라우저는
@@ -535,7 +572,9 @@ def instruments(m: CreditMatrix, dataset) -> dict:
     """
     from .derive import annual_stats
 
+    spec = (spec or fd.FundingSpec()).validated()
     bases = _basis_indices(m)
+    last = len(m.dates) - 1
     rows: list[dict] = []
     for bond_type in cm.TYPE_ORDER:
         for tenor in m.tenors_for(bond_type):
@@ -562,7 +601,9 @@ def instruments(m: CreditMatrix, dataset) -> dict:
                     "bondType": bond_type,
                     "tenor": tenor,
                     "label": instrument_label(kind, bond_type, tenor),
-                    "unit": "pct" if kind == KIND_CASH else "bp",
+                    # 화면의 단위 어휘 그대로 ("%" | "bp") — IRS 행과 같은 값을
+                    # 써야 같은 포매터(`lib/format.ts:fmtLevel`)를 탄다.
+                    "unit": "%" if kind == KIND_CASH else "bp",
                     "now": round(now, 4),
                     "changes": changes,
                     "pct": stats["pct"],
@@ -571,10 +612,138 @@ def instruments(m: CreditMatrix, dataset) -> dict:
                     "rangeAvg": stats["avg"],
                     # 정렬 키도 서버가 정한다(§6/§16): 종목군 사다리 → 만기.
                     "sortKey": [cm.TYPE_ORDER.index(bond_type), cm.TENOR_YEARS[tenor]],
+                    "theta": _row_theta(m, dataset, bond_type, tenor, kind, last, spec, irs_theta),
                 })
     return {
         "asof": m.asof.isoformat(),
         "from": m.dates[0].isoformat(),
         "types": [{"id": t, "label": cm.BOND_TYPES[t]} for t in cm.TYPE_ORDER],
         "rows": rows,
+        # 세타가 무엇을 뜻하는지는 표 아래에 한 번 적는다 — 행마다 되풀이할
+        # 문장이 아니다. `app/theta.py` 의 `meta` 와 같은 자리·같은 이유.
+        "thetaBasis": {
+            "horizonMonths": round(HORIZON_Y * 12),
+            "notional": NOTIONAL,
+            "side": "buy",
+            "funding": fd.provenance(spec),
+        },
+    }
+
+
+def _row_theta(
+    m: CreditMatrix,
+    dataset,
+    bond_type: str,
+    tenor: str,
+    kind: str,
+    i: int,
+    spec: fd.FundingSpec,
+    irs_theta: dict[str, dict] | None,
+) -> dict | None:
+    """행 하나의 세타. 현금채권은 그대로, 자산스왑은 **두 다리의 합**이다.
+
+    자산스왑의 정규화 분모는 **채권 다리의 DV01** 이다. par-par 라 순 DV01 이
+    0 에 가깝고, 0 에 가까운 수로 나누면 숫자가 폭발한다 — IRS 쪽이 스프레드·
+    플라이에서 기준 다리의 DV01 을 쓰는 것과 같은 이유이고 같은 처리다
+    (`theta.theta_for_package` 의 근거 참조).
+    """
+    bond = theta_for_bond(m, bond_type, tenor, i, spec)
+    if bond is None:
+        return None
+    if kind == KIND_CASH:
+        return bond
+    swap = (irs_theta or {}).get(tenor)
+    if swap is None:
+        return None  # 그 만기에 IRS 세타가 없으면 패키지 세타도 없다
+    cash = bond["cash"] + swap["cash"]
+    dv01 = bond["dv01"]
+    return {
+        "perDv01": round(cash / (dv01 / 1_000_000)) if dv01 else 0,
+        "cash": round(cash),
+        "carry": round(bond["carry"] + swap["carry"]),
+        "roll": round(bond["roll"] + swap["roll"]),
+        "dv01": round(dv01),
+        # 본전은 **스프레드**가 몇 bp 움직여야 하나 — 그 행의 레벨 칸과 같은 단위
+        "beBp": round((cash / dv01) if dv01 else 0.0, 2),
+    }
+
+
+# ── 세타 ────────────────────────────────────────────────────────────────────
+# 표에 상시로 뜨는 열이다 — IRS 쪽 `app/theta.py` 와 **같은 자리·같은 질문**.
+# 그쪽 모듈 주석이 근거를 다 들어 뒀으므로 여기서는 다른 점만 적는다.
+#
+# 다른 점 하나: **캐리가 순캐리다** [OWNER, 2026-08-14 — "조달 포함"].
+# 스왑은 담보 밖에서 돈을 빌리지 않지만 현금채권은 원금을 조달해서 산다. 쿠폰만
+# 세면 3.8% 짜리 채권이 늘 좋아 보이는데, 2.85% 로 조달하면 실제로 남는 것은
+# 그 차이다. 대가는 알고 받는다: **IRS 세타와 정의가 달라지고**, Setting 에서
+# 조달을 바꾸면 이 열이 같이 움직인다.
+#
+# 다른 점 둘: **부호가 매수 기준**이다. IRS 표의 행은 방향이 없어서 페이로
+# 고정했지만, 현금채권은 살 수만 있으므로(매도 거절) 살 때의 숫자가 곧 그 행의
+# 숫자다. 우상향 커브에서 양수로 뜨는 것이 정상이다.
+
+#: `app/theta.py` 와 **같은** 호라이즌·노셔널·bp. 세 값이 갈리면 두 표의 세타를
+#: 나란히 놓고 읽을 수 없다 — 그래서 재정의하지 않고 가져온다.
+from .theta import BP, HORIZON_Y, NOTIONAL  # noqa: E402
+
+
+def dv01_at(y: float, coupon: float, n: int, elapsed: float) -> float:
+    """액면 1 기준 DV01 (원/bp) — 수익률을 ±0.5bp 흔든 clean 가격의 중앙차분.
+
+    해석해를 쓰지 않는 이유는 `price` 가 이 화면의 유일한 가격 정의이기
+    때문이다. 미분을 따로 적으면 규약이 둘이 되고, 둘이 어긋나도 아무도
+    모른다(이 리포가 이미 한 번 겪은 결함 종류).
+    """
+    half = BP / 2
+    up = price(y + half, coupon, n, elapsed)
+    dn = price(y - half, coupon, n, elapsed)
+    return (dn[0] - dn[1]) - (up[0] - up[1])
+
+
+def theta_for_bond(
+    m: CreditMatrix,
+    bond_type: str,
+    tenor: str,
+    i: int,
+    spec: fd.FundingSpec,
+) -> dict | None:
+    """한 현금채권의 세타 블록. 값을 낼 수 없으면 None (표가 em dash 를 그린다).
+
+    호라이즌은 3개월이고 커브는 **동결**이다 — 오늘 커브 하나로 닫힌 식이라
+    백테스트를 돌리지 않아도 나온다. 그것이 이 열의 존재 이유다.
+    """
+    years = cm.TENOR_YEARS[tenor]
+    if years <= HORIZON_Y:
+        # 3개월 뒤엔 이미 만기다. 롤다운을 정의할 자리가 없다.
+        return None
+    try:
+        y0 = cm.yield_at(m, bond_type, i, years)
+        y_roll = cm.yield_at(m, bond_type, i, years - HORIZON_Y)
+    except CreditMatrixError:
+        return None
+
+    n = periods_for(tenor)
+    coupon = y0  # 진입일 par — 표면금리가 곧 그날 민평이다
+
+    # 호라이즌의 마킹: 잔존이 짧아진 채권을 **오늘 커브의** 그 지점으로 값 매김
+    d_h, a_h, paid_h = price(y_roll, coupon, n, HORIZON_Y)
+    clean_h = d_h - a_h
+
+    roll = (clean_h - 1.0) * NOTIONAL          # par 로 샀으므로 기준이 1.0
+    coupon_carry = (a_h + paid_h) * NOTIONAL   # 3개월치 쿠폰(경과 + 받은 것)
+    funding = fd.rate_on(spec, m.dates[i]) * HORIZON_Y * NOTIONAL
+    carry = coupon_carry - funding
+
+    dv01 = dv01_at(y0, coupon, n, 0.0) * NOTIONAL
+    dv01_h = dv01_at(y_roll, coupon, n, HORIZON_Y) * NOTIONAL
+    cash = carry + roll
+    return {
+        "perDv01": round(cash / (dv01 / 1_000_000)) if dv01 else 0,
+        "cash": round(cash),
+        "carry": round(carry),
+        "roll": round(roll),
+        "dv01": round(dv01),
+        # 본전: 이 종목의 **호가값**(민평 수익률)이 몇 bp 올라야 세타가
+        # 상쇄되나. IRS 표의 같은 열과 같은 문장이다.
+        "beBp": round((cash / dv01_h) if dv01_h else 0.0, 2),
     }

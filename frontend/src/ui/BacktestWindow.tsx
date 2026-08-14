@@ -116,10 +116,12 @@ function BacktestReconStack({ recon }: { recon: BacktestRecon }) {
     dbp: r.dbp,
     est: r.est,
     estTotal: r.estTotal,
-    valuation: r.valuation,
+    // 개시는 평가에 접는다 [OWNER, 2026-08-14] — 진입일 행에만 서는 한 밤이고
+    // 총손익 대비 0.005% 라 자기 열을 갖지 않는다. 엔진은 여전히 따로 센다.
+    valuation:
+      r.valuation === null ? null : r.valuation + (r.startup ?? 0),
     carry: r.carry,
     rolldown: r.rolldown,
-    startup: r.startup,
     actual: r.actual,
   }));
   return (
@@ -615,11 +617,14 @@ function Result({
         </tbody>
       </table>
 
-      {/* 손익 구성 [OWNER]: the headline split into the things that made it
-          [2026-08-11 — 교과서 3분해: 평가·캐리·롤다운 · 2026-08-14 — 개시가
-          넷째로]. Above the fold, because "was this a rate call or was I just
-          collecting coupon" is a question about the RESULT, not about how the
-          trade was built. */}
+      {/* 손익 구성 [OWNER]: the headline split into the three things that made
+          it [2026-08-11 — 교과서 3분해: 평가·캐리·롤다운]. Above the fold,
+          because "was this a rate call or was I just collecting coupon" is a
+          question about the RESULT, not about how the trade was built.
+
+          개시(거래일→발효일 한 밤)는 **평가에 접혀 있다** [OWNER, 2026-08-14].
+          엔진은 여전히 그 밤을 따로 세어 롤다운에서 빼 두고(그게 오늘 오전의
+          수정이다), 표시만 합친다 — `ui/krw.ts:splitKrw` 에 근거가 있다. */}
       <table className="mt-5 w-full text-[14px] tabular-nums">
         <thead className="text-left text-ink-2">
           <tr>
@@ -627,7 +632,6 @@ function Result({
             <th className="pb-1 text-right font-normal">평가손익</th>
             <th className="pb-1 text-right font-normal">캐리손익</th>
             <th className="pb-1 text-right font-normal">롤다운손익</th>
-            <th className="pb-1 text-right font-normal">개시손익</th>
             <th className="pb-1 text-right font-normal">합계</th>
           </tr>
         </thead>
@@ -670,13 +674,6 @@ function Result({
                 >
                   {fmtKrwFromMan(u.uRoll)}
                 </td>
-                <td
-                  className={`py-1.5 text-right ${
-                    u.uStart >= 0 ? "text-up" : "text-down"
-                  }`}
-                >
-                  {fmtKrwFromMan(u.uStart)}
-                </td>
                 <td className="py-1.5 text-right font-semibold">
                   {fmtKrwFromMan(u.uPnl)}
                 </td>
@@ -696,7 +693,6 @@ function Result({
                   <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uVal))}</td>
                   <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uCarry))}</td>
                   <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uRoll))}</td>
-                  <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uStart))}</td>
                   <td className="py-1.5 text-right">{fmtKrwFromMan(sum((u) => u.uPnl))}</td>
                 </tr>
               );
@@ -705,9 +701,9 @@ function Result({
       </table>
       <p className="mt-1.5 text-[13px] opacity-50">
         평가손익 = 금리가 움직인 몫, 캐리손익 = 실제 주고받은 이자, 롤다운손익 =
-        커브가 멈춰도 잔존만기가 줄며 생기는 몫, 개시손익 = 거래일부터 발효일까지
-        하룻밤 몫이에요. 스왑은 다음 영업일에 발효해서 그 하룻밤에는 이자가 붙지
-        않아요. 넷의 합이 손익이에요.
+        커브가 멈춰도 잔존만기가 줄며 생기는 몫. 셋의 합이 손익이에요. 거래일부터
+        발효일까지 하룻밤은 평가손익이 안고 있어요 — 스왑이 다음 영업일에
+        발효해서 그 밤에는 이자가 안 붙거든요.
       </p>
 
       <details className="mt-5">

@@ -75,7 +75,8 @@ from . import creditmatrix
 from . import funding
 from .curves import build_basis_curves
 from .dataset import load_dataset_merged
-from .derive import basis_dates, derived_ids
+from .derive import basis_dates, derived_ids, series_history
+from .theta import theta_table
 from .dv01 import build_dv01_table
 from .events import detect_event_clusters
 from .forwards import forwards_payload
@@ -444,31 +445,54 @@ def funding_settings(
 
 
 @router.get("/api/cashbond/instruments")
-def cashbond_instruments() -> dict:
+def cashbond_instruments(
+    basis: str = funding.DEFAULT_BASIS,
+    spreadBp: float = funding.DEFAULT_SPREAD_BP,
+) -> dict:
+    """표의 행 전부, 세타까지 계산해서.
+
+    조달을 쿼리로 받는 이유는 **세타가 순캐리**이기 때문이다 [OWNER,
+    2026-08-14] — Setting 을 바꾸면 이 표의 세타 열이 같이 움직여야 한다.
+    다른 열(수준·변화·백분위·52주)은 조달과 무관하므로 값이 바뀌지 않는다.
+    """
+    spec = _funding_spec(basis, spreadBp)
     try:
-        return cashbond.instruments(creditmatrix.load(), _dataset)
+        # IRS 세타는 자산스왑 행이 자기 스왑 다리 몫으로 쓴다. 커브 하나로
+        # 닫힌 식이라 매 요청 다시 계산해도 싸고(측정 33ms), 데이터가 갱신되면
+        # 자동으로 따라온다 — 여기 캐시를 두면 그 갱신을 놓친다.
+        irs_theta, _basis = theta_table(_dataset)
+        return cashbond.instruments(creditmatrix.load(), _dataset, spec, irs_theta)
     except (cashbond.CashBondError, creditmatrix.CreditMatrixError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
 
 @router.get("/api/cashbond/series/{series_id}")
 def cashbond_series(series_id: str) -> dict:
-    """한 종목의 전 기간 시계열 — 표를 눌렀을 때 뜨는 차트가 읽는다."""
+    """한 종목의 전 기간 시계열 — 표를 눌렀을 때 뜨는 차트가 읽는다.
+
+    IRS 쪽 `/api/series/{id}` 와 **같은 몸통**(`derive.series_history`)을 쓴다.
+    같은 차트 컴포넌트(PreviewChart)가 먹을 모양이어야 하기 때문이다: 점마다
+    전일 대비(`d`, 늘 bp)와 52주 min/max/avg 가 붙어야 툴팁이 선다. 여기서
+    직접 만들면 두 화면이 같은 질문에 다른 정밀도로 답하게 된다.
+
+    `unit` 을 넘기는 것이 요점이다 — 현금채권은 %(그래서 `d` 가 ×100 되어 bp),
+    자산스왑은 이미 bp(그대로)다.
+    """
     try:
         m = creditmatrix.load()
         kind, bond_type, tenor = cashbond.parse_id(series_id)
         values = cashbond.series_for(m, _dataset, series_id)
     except (cashbond.CashBondError, creditmatrix.CreditMatrixError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    unit = "%" if kind == cashbond.KIND_CASH else "bp"
+    pairs = [
+        (d.isoformat(), v) for d, v in zip(m.dates, values) if v is not None
+    ]
     return {
         "id": series_id,
         "label": cashbond.instrument_label(kind, bond_type, tenor),
-        "unit": "pct" if kind == cashbond.KIND_CASH else "bp",
-        "points": [
-            {"t": d.isoformat(), "v": v}
-            for d, v in zip(m.dates, values)
-            if v is not None
-        ],
+        "unit": unit,
+        **series_history(pairs, unit),
     }
 
 

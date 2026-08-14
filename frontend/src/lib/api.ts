@@ -411,7 +411,12 @@ export interface BacktestPosition {
    *            roll-down on the day it was opened.
    * An identity, not an attribution model (see backend/app/backtest.py).
    * `rolldown`/`startup` are optional only for results restored from an older
-   * session's memory — the server always sends both now. */
+   * session's memory — the server always sends both now.
+   *
+   * **화면은 개시를 평가에 접는다** [OWNER, 2026-08-14 — "개시손익 적으면 걍
+   * 무시해도 될 거 같은데"]. 서버가 넷을 따로 보내는 것은 그대로다 — 접는
+   * 자리는 `ui/krw.ts:splitKrw` 한 곳이고, 다시 펴려면 거기만 고치면 된다.
+   * 엔진이 그 밤을 롤다운에서 빼 두는 것(오늘 오전의 수정)은 유지된다. */
   valuation: number;
   rolldown?: number;
   startup?: number;
@@ -594,8 +599,9 @@ export interface CashBondRow {
   bondType: string;       // "KTB"
   tenor: string;          // "3Y"
   label: string;          // "국고채 3Y"
-  /** 현금채권은 수익률(%), 자산스왑은 스프레드(bp). */
-  unit: "pct" | "bp";
+  /** 현금채권은 수익률(%), 자산스왑은 스프레드(bp). IRS 행과 같은 어휘라
+   * 같은 포매터를 탄다. */
+  unit: Unit;
   now: number;
   changes: Record<BasisKey, number | null>;
   pct: number | null;
@@ -603,6 +609,14 @@ export interface CashBondRow {
   rangeLow: number | null;
   rangeAvg: number | null;
   sortKey: number[];
+  /** 세타 — 3개월 캐리+롤다운, DV01 백만원당 [OWNER, 2026-08-14].
+   *
+   * IRS 표의 같은 열과 **정의가 하나 다르다**: 캐리가 순캐리(쿠폰 − 조달)다.
+   * 현금채권은 원금을 조달해서 사므로 그 이자를 빼야 실제로 버는 돈이고,
+   * 그래서 Setting 의 조달을 바꾸면 이 열이 같이 움직인다. 부호는 **매수**
+   * 기준(스왑 표는 페이 기준) — 이 표의 행은 살 수만 있다.
+   * 자산스왑 행은 두 다리의 합이고, 분모는 채권 다리의 DV01 이다. */
+  theta: Theta | null;
 }
 
 export interface CashBondInstruments {
@@ -610,6 +624,13 @@ export interface CashBondInstruments {
   from: string;
   types: { id: string; label: string }[];
   rows: CashBondRow[];
+  /** 세타 열이 무엇을 뜻하는지 — 표 아래에 한 번 적는다. */
+  thetaBasis: {
+    horizonMonths: number;
+    notional: number;
+    side: "buy";
+    funding: FundingProvenance;
+  };
 }
 
 /** 조달 기준의 출처 — 화면이 "이 숫자가 어디서 왔는가" 를 말할 수 있게. */
@@ -667,9 +688,9 @@ export interface CashBondBacktest {
   from: string;
   to: string;
   complete: boolean;
-  /** `d` 는 **발행된 두 점 사이의** 변화이고, 그것이 하루인지는 `complete` 가
-   * 말한다 — IRS 백테스트의 `d`(늘 1영업일)와 다른 규약이니 "당일 변화" 로
-   * 읽지 말 것. 백엔드 `app/cashbond.py` 에 왜 그렇게 뒀는지가 있다. */
+  /** 북 총계와 그 날의 **1영업일** 변화(`d`, 첫 점은 null). 점이 며칠씩
+   * 떨어져 그려져도 `d` 는 늘 하루다 — 서버가 발행점마다 전영업일을 따로
+   * 평가한다(IRS 백테스트와 같은 규약). 브라우저에서 차분하지 않는다(§16). */
   points: { t: string; pnl: number; d: number | null }[];
   pnl: number;
   maxProfit: number;
@@ -688,13 +709,26 @@ async function liveJson<T>(url: string, what: string): Promise<T> {
   return r.json();
 }
 
-export async function fetchCashBondInstruments(): Promise<CashBondInstruments> {
-  return liveJson(cashbondInstrumentsUrl(), "cashbond/instruments");
+export async function fetchCashBondInstruments(funding: {
+  basis: string;
+  spreadBp: number;
+}): Promise<CashBondInstruments> {
+  // 조달이 쿼리로 가는 이유는 세타가 순캐리이기 때문이다 — 나머지 열은 안 바뀐다
+  return liveJson(cashbondInstrumentsUrl(funding.basis, funding.spreadBp), "cashbond/instruments");
 }
 
-export async function fetchCashBondSeries(
-  id: string,
-): Promise<{ id: string; label: string; unit: "pct" | "bp"; points: { t: string; v: number }[] }> {
+/** 한 종목의 전 기간 시계열. IRS 쪽 `fetchSeries` 와 **같은 몸통**이라
+ * `PreviewChart` 가 그대로 먹는다 — 점마다 전일 대비(`d`, 늘 bp)와 52주
+ * min/max/avg 가 붙어 있다(백엔드 `derive.series_history`). */
+export interface CashBondSeries {
+  id: string;
+  label: string;
+  unit: Unit;
+  points: HistoryPoint[];
+  stats: SeriesStats | null;
+}
+
+export async function fetchCashBondSeries(id: string): Promise<CashBondSeries> {
   return liveJson(cashbondSeriesUrl(id), "cashbond/series");
 }
 

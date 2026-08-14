@@ -51,7 +51,6 @@ import {
   orderRows,
   type Row,
 } from "./rows";
-import { SCREENERS } from "./screener";
 import type { TabId } from "./tabs";
 import { GroupBox } from "./GroupBox";
 import { columnCue } from "./tint";
@@ -319,7 +318,6 @@ export function InstrumentTable({
   const [sortCol, setSortCol] = useState<BasisKey | null>(null);
   const [sortAsc, setSortAsc] = useState(false);
   const [startFilter, setStartFilter] = useState<string>("all");
-  const [screener, setScreener] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // Column ladder measurements (columns session): the table's content width
   // (ResizeObserver) and the real `ch` advance in its font (probe span, re-
@@ -355,7 +353,7 @@ export function InstrumentTable({
   // screener animate; a tab / start-filter switch is a view change and
   // snaps), the pre-change row positions, and the viewport window.
   const [flipSnap, setFlipSnap] = useState<{
-    cause: "sort" | "screener" | "other";
+    cause: "sort" | "other";
     scrollTop: number;
     viewH: number;
     tops: ReadonlyMap<string, number>;
@@ -391,7 +389,6 @@ export function InstrumentTable({
   // horizontal padding (see the container's className below).
   const isSim = filter === "sim";
   const divided = DIVIDED.includes(filter as Group);
-  const activeScreener = SCREENERS.find((s) => s.id === screener) ?? null;
 
   const startOptions = useMemo(() => {
     const s: string[] = [];
@@ -408,12 +405,10 @@ export function InstrumentTable({
     if (isForward && startFilter !== "all") {
       base = base.filter((r) => r.startLabel === startFilter);
     }
-    // a screener preset is a filter on top of the active tab (§D)
-    if (activeScreener) base = base.filter(activeScreener.test);
     // ordering lives in rows.ts so it can be tested without a DOM; only a
     // CHANGE column can ever be the sort column (pass L)
     return orderRows(base, sortCol, sortAsc, divided);
-  }, [rows, filter, startFilter, sortCol, sortAsc, isForward, divided, activeScreener]);
+  }, [rows, filter, startFilter, sortCol, sortAsc, isForward, divided]);
 
   /* Interleave the 주요 / 전체 group headings (§3). Was forwards-only; every
    * instrument tab draws it now, with the group's own noun in the heading.
@@ -465,7 +460,7 @@ export function InstrumentTable({
    * missing measurement). That default is wrong here, so the window is
    * applied to the FLIP decision too (see `flip=` below), not just to the
    * measuring. */
-  const snapReorder = (cause: "sort" | "screener" | "other") => {
+  const snapReorder = (cause: "sort" | "other") => {
     if (cause === "other") {
       setFlipSnap({ cause, scrollTop: 0, viewH: 800, tops: new Map() });
       return;
@@ -501,7 +496,7 @@ export function InstrumentTable({
   // when orderKey changes; culled to the viewport's neighbourhood AND capped
   // at FLIP_MAX_ANIMATED rows (pass B); instant above FLIP_MAX_ROWS and under
   // prefers-reduced-motion (routed through instant(), not left to MotionConfig).
-  const orderKey = `${sortCol ?? ""}|${sortAsc}|${screener ?? ""}`;
+  const orderKey = `${sortCol ?? ""}|${sortAsc}`;
   const flipOn = reorderAnimates(flipSnap.cause, shown.length);
   /* The destination window, computed against the SAME arithmetic the snapshot
    * used, so "was measured" and "may animate" cannot disagree. Without this a
@@ -568,53 +563,11 @@ export function InstrumentTable({
         </p>
       )}
 
-      {/* Screener presets (§D): a second row of chips, a filter on top of the
-          active tab — one at a time, click again clears. Not a sidebar.
-          Hidden on 전체, which is no longer a list: the chips filter ROWS, and
-          there are no rows there to filter — only three fixed 주요 sets. Hidden
-          on 연구실 and 시뮬레이션 for the same reason — neither is a row list,
-          and a filter that visibly does nothing when clicked reads as broken. */}
-      {!isOverview && !isLab && !isSim && (
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {SCREENERS.map((sc) => {
-          const on = screener === sc.id;
-          return (
-            <button
-              key={sc.id}
-              type="button"
-              onClick={() => {
-                snapReorder("screener");
-                setScreener(on ? null : sc.id);
-              }}
-              /* ON stays the INK pill even though selection may now carry the
-                 blue [OWNER, 2026-08-06]. The kit's matching control is
-                 Buttons - Toggle, whose on-state is an accent LABEL on a 6
-                 percent accent fill — and that pairing measures 4.26:1 with this
-                 product's blue, under the 4.5 text floor §9 holds every label
-                 to. A solid blue pill would clear it, but then a filter chip and
-                 a tab would look identical while meaning different things: the
-                 tab picks the list, the chip narrows it. Ink keeps them apart. */
-              /* On the kit's ONE ladder step, like every other control in this
-                 pane: 24 tall, 13/Medium, r=6. It was 28 tall with a 12px label
-                 and a capsule — a height that pairs with 13 in the kit, a size
-                 that is not on its type scale at all, and a shape that belongs
-                 to 28. macOS sizes controls by PANE, not by importance: a window
-                 runs Regular throughout and Small is for dense inspectors. */
-              className={`flex h-6 items-center rounded-control px-3 text-[13px] font-medium transition-colors ${
-                on
-                  ? "bg-ink text-page"
-                  : "border border-edge opacity-65 hover:opacity-100"
-              }`}
-            >
-              {sc.label}
-            </button>
-          );
-        })}
-      </div>
-      )}
-      {activeScreener && !isOverview && !isLab && !isSim && (
-        <p className="mt-1.5 text-[12px] opacity-55">{activeScreener.description}</p>
-      )}
+      {/* 스크리너 칩(오늘 많이 움직인 것 · 52주 고점권 · 저점권 · 되돌림)은
+          은퇴했다 [OWNER, 2026-08-14 — "스크리너 칩은 이제 스왑에서도 없애기"].
+          표 자체가 정렬과 52주·위치·세타 열로 같은 질문에 답하고 있어서, 칩은
+          같은 답을 두 번 주는 두 번째 문법이었다. `ui/screener.ts` 의 프리셋
+          정의는 남겨 둔다 — 연구실이 그 어휘를 쓴다. */}
 
       {/* forward-tab secondary controls (§3): narrow by start point, or flip
           to the 21×8 matrix */}
@@ -787,7 +740,7 @@ export function InstrumentTable({
               <AnimatePresence
                 initial={false}
                 mode="popLayout"
-                custom={flipOn && flipSnap.cause === "screener"}
+                custom={false}
               >
                 {items.map((it, i) =>
                   it.row ? (
@@ -810,7 +763,7 @@ export function InstrumentTable({
                           flipSnap.viewH,
                         )
                       }
-                      enter={flipOn && flipSnap.cause === "screener"}
+                      enter={false}
                       reduced={reduced}
                       template={template}
                       visible={visible}

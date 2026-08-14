@@ -98,7 +98,11 @@ function liveUrl(path: string, query?: string): string {
   return IS_STATIC ? `${path}${q}` : `${API_BASE}${path}${q}`;
 }
 
-export const cashbondInstrumentsUrl = () => liveUrl("/api/cashbond/instruments");
+export const cashbondInstrumentsUrl = (basis: string, spreadBp: number) =>
+  liveUrl(
+    "/api/cashbond/instruments",
+    `basis=${encodeURIComponent(basis)}&spreadBp=${spreadBp}`,
+  );
 
 export const cashbondSeriesUrl = (id: string) =>
   liveUrl(`/api/cashbond/series/${encodeURIComponent(id)}`);

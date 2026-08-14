@@ -19,7 +19,7 @@
  * 번인 사실을 세 번 반복하지 않는다. 행 단위 합계 칸만 줄마다 다르다:
  * KRD 줄은 테너 합(= 평행 DV01), Δbp 줄은 비움(테너 합이 무의미), 손익
  * 줄은 엔진의 추정 합계. 대사 문장은 열 순서가 그대로 말한다 — 손익 줄의
- * 합계(추정) vs 평가 = 선형화 잔차, 평가 + 캐리 + 롤다운 + 개시 = 그날 손익.
+ * 합계(추정) vs 평가 = 선형화 잔차, 평가 + 캐리 + 롤다운 = 그날 손익.
  *
  * 백테스트 창과 시뮬레이션 결과가 **같은 컴포넌트**를 쓴다 — WindowDrawer 의
  * 전례("껍데기가 두 벌이면 '둘 다에 존재한다'가 곧 거짓"). 틴트 헬퍼는 공용
@@ -65,9 +65,10 @@ export interface ReconStackDay {
   estTotal: number | null;
   valuation: number | null;
   carry: number | null;
+  /** 롤다운. 개시(거래일→발효일 한 밤)는 여기 **없다** — 엔진이 따로 세어
+   * 빼 두고, 화면은 그것을 평가에 접는다 [OWNER, 2026-08-14]. 어댑터가 합친
+   * 값을 `valuation` 으로 넘긴다. */
   rolldown: number | null;
-  /** 개시 — 거래일→발효일 한 밤 [OWNER, 2026-08-14]. 진입일 행에만 선다. */
-  startup: number | null;
   actual: number | null;
 }
 
@@ -193,7 +194,7 @@ export function ReconStack({
         <table
           className="table-fixed text-[14px] tabular-nums"
           style={{
-            width: `calc(7ch + 5ch + ${tenors.length} * (${tenorW}) + 6 * 11ch)`,
+            width: `calc(7ch + 5ch + ${tenors.length} * (${tenorW}) + 5 * 11ch)`,
           }}
         >
           <colgroup>
@@ -203,10 +204,9 @@ export function ReconStack({
               <col key={t} style={{ width: tenorW }} />
             ))}
             {/* 꼬리 열 11ch — 한글 헤더("합계(추정)")가 접히지 않는 폭.
-                여섯이다 [OWNER, 2026-08-14 — 개시 분리]. 여기 개수를 바꾸면
-                위 `width` 의 계수와 아래 sticky right 오프셋 계단을 같이
-                옮겨야 한다: 셋이 어긋나면 고정 열 사이로 밑이 샌다. */}
-            <col style={{ width: "11ch" }} />
+                다섯이다. 여기 개수를 바꾸면 위 `width` 의 계수와 아래 sticky
+                right 오프셋 계단을 같이 옮겨야 한다: 셋이 어긋나면 고정 열
+                사이로 밑이 샌다(2026-08-14 에 여섯으로 늘렸다 되돌리며 실측). */}
             <col style={{ width: "11ch" }} />
             <col style={{ width: "11ch" }} />
             <col style={{ width: "11ch" }} />
@@ -236,12 +236,11 @@ export function ReconStack({
                   {t}
                 </Th>
               ))}
-              {/* 오른쪽 범례 여섯 — 뒤에서부터 11ch 트랙씩 쌓인다. */}
-              <Th right pin style={{ right: "calc(55ch * 14 / 13)" }}>합계</Th>
-              <Th right pin style={{ right: "calc(44ch * 14 / 13)" }}>평가</Th>
-              <Th right pin style={{ right: "calc(33ch * 14 / 13)" }}>캐리</Th>
-              <Th right pin style={{ right: "calc(22ch * 14 / 13)" }}>롤다운</Th>
-              <Th right pin style={{ right: "calc(11ch * 14 / 13)" }}>개시</Th>
+              {/* 오른쪽 범례 다섯 — 뒤에서부터 11ch 트랙씩 쌓인다. */}
+              <Th right pin style={{ right: "calc(44ch * 14 / 13)" }}>합계</Th>
+              <Th right pin style={{ right: "calc(33ch * 14 / 13)" }}>평가</Th>
+              <Th right pin style={{ right: "calc(22ch * 14 / 13)" }}>캐리</Th>
+              <Th right pin style={{ right: "calc(11ch * 14 / 13)" }}>롤다운</Th>
               <Th right pin style={{ right: 0 }}>그날 손익</Th>
             </tr>
           </thead>
@@ -300,7 +299,7 @@ export function ReconStack({
                         폰트의 '0' 진행폭이고 미디엄의 0 이 살짝 넓어 44ch 가
                         13px 어긋난다(실측) — 굵기는 안쪽 span 이 진다.
                         불투명 bg 는 §G. */}
-                    <td className="sticky bg-popover py-1 pl-2 text-right" style={{ right: "55ch" }}>
+                    <td className="sticky bg-popover py-1 pl-2 text-right" style={{ right: "44ch" }}>
                       <span className="font-medium">
                         {total === null ? (
                           <span className="text-ink-3">—</span>
@@ -315,33 +314,24 @@ export function ReconStack({
                       <>
                         <td
                           className="sticky bg-popover py-1 pl-2 text-right align-top"
-                          style={{ right: "44ch" }}
+                          style={{ right: "33ch" }}
                           rowSpan={3}
                         >
                           <Won v={d.valuation} />
                         </td>
                         <td
                           className="sticky bg-popover py-1 pl-2 text-right align-top"
-                          style={{ right: "33ch" }}
+                          style={{ right: "22ch" }}
                           rowSpan={3}
                         >
                           <Won v={d.carry} />
                         </td>
                         <td
                           className="sticky bg-popover py-1 pl-2 text-right align-top"
-                          style={{ right: "22ch" }}
-                          rowSpan={3}
-                        >
-                          <Won v={d.rolldown} />
-                        </td>
-                        {/* 개시 = 거래일→발효일 한 밤. 포지션의 진입일 행에만
-                            서고 나머지 날은 0 이다 [OWNER, 2026-08-14]. */}
-                        <td
-                          className="sticky bg-popover py-1 pl-2 text-right align-top"
                           style={{ right: "11ch" }}
                           rowSpan={3}
                         >
-                          <Won v={d.startup} />
+                          <Won v={d.rolldown} />
                         </td>
                         <td
                           className="sticky bg-popover py-1 pl-2 text-right align-top"

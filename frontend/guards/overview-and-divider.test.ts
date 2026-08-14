@@ -125,7 +125,7 @@ describe("the 전체 overview", () => {
     /* 현금채권·Setting 도 같은 깃발을 탄다 [2026-08-14]. 오른쪽 미리보기는
      * 호버된 IRS 행을 그리는 판인데 두 화면에는 그런 행이 아예 없다 — 옆에
      * 남겨 두면 직전 탭에서 보던 종목의 차트가 딴 화면 옆에 붙어 선다. */
-    expect(app).toMatch(/const ownView = tab === "cashbond" \|\| tab === "setting"/);
+    expect(app).toMatch(/const ownView = tab === "cashbond" \|\| tab === "assetswap"/);
     expect(app).toMatch(/\|\| ownView;/);
   });
 
@@ -323,18 +323,24 @@ describe("the tab set", () => {
     expect(BACKTEST_TABS.some((t) => sectionIds.has(t.id))).toBe(false);
   });
 
-  it("Backtest 하위는 자산군 다섯 + 현금채권 [OWNER, 2026-08-14]", () => {
-    /* 현금채권이 `Group` 이 아닌 것이 요점이다 — buildRows 가 읽는 값이 아니라
-     * 딴 표(민평 SQL)다. 여기서 그것을 못박아, 누가 Group 에 밀어 넣으면
-     * 타입이 아니라 이 핀이 먼저 말한다. */
+  it("Backtest 하위는 자산군 다섯 + 현금채권 + 자산스왑 [OWNER, 2026-08-14]", () => {
+    /* 둘 다 `Group` 이 아닌 것이 요점이다 — buildRows 가 읽는 값이 아니라 딴
+     * 표(민평 SQL)다. 여기서 그것을 못박아, 누가 Group 에 밀어 넣으면 타입이
+     * 아니라 이 핀이 먼저 말한다.
+     *
+     * 자산스왑이 현금채권 **다음**인 것도 규칙이다 [OWNER, 2026-08-14 —
+     * "자산스왑은 분리해서 현금채권 밑에"]: 채권을 먼저 보고 그 위에 스왑을
+     * 얹는 순서라 목록도 그 순서여야 한다. */
     expect(BACKTEST_TABS.map((t) => t.id)).toEqual([
       ...GROUP_TABS.map((t) => t.id),
       "cashbond",
+      "assetswap",
     ]);
     expect(sectionOf("cashbond")).toBe("backtest");
+    expect(sectionOf("assetswap")).toBe("backtest");
     expect(sectionOf("setting")).toBe("setting");
     expect(tabForSection("setting", "spread")).toBe("setting");
-    expect(tabForSection("backtest", "cashbond")).toBe("cashbond");
+    expect(tabForSection("backtest", "assetswap")).toBe("assetswap");
   });
 
   it("섹션과 탭이 서로를 정확히 되돌린다", () => {

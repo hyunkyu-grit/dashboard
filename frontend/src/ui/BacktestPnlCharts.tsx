@@ -13,6 +13,24 @@ import { useState } from "react";
 
 import type { BacktestResult, HistoryPoint } from "@/lib/api";
 
+/** `PnlChart` 가 실제로 읽는 것 **전부**.
+ *
+ * `BacktestResult`(IRS 북)와 `CashBondBacktest`(현금채권) 둘 다 이 모양을
+ * 만족하고, 차트는 그 둘의 차이를 알 필요가 없다 — 그리는 것은 누적 손익
+ * 하나뿐이다. 프롭을 구체 타입 대신 이 구조로 좁혀 두면, 셋째 결과 타입이
+ * 생겨도 여기를 고칠 일이 없고 **반대로 이 네 필드가 사라지면 타입이 먼저
+ * 말한다**.
+ *
+ * `d` 는 두 출처 모두 **1영업일** 변화다(서버가 발행점마다 전영업일을 따로
+ * 평가한다). 호버 카드가 "당일" 이라고 적을 수 있는 근거가 그것이고, 그
+ * 성질이 깨지면 카드가 조용히 거짓말을 하게 된다. */
+export interface PnlSeries {
+  from: string;
+  to: string;
+  pnl: number;
+  points: { t: string; pnl: number; d: number | null }[];
+}
+
 import { fmtKrw } from "./krw";
 import { CHART_PAD } from "./PreviewChart";
 
@@ -39,7 +57,7 @@ export function PnlChart({
   width,
   height,
 }: {
-  result: BacktestResult;
+  result: PnlSeries;
   width: number;
   height: number;
 }) {
@@ -205,7 +223,8 @@ export function LinkedPnlChart({
   onHover,
 }: {
   pts: HistoryPoint[];
-  result: BacktestResult;
+  /** `PnlChart` 와 같은 구조 프롭 — IRS 북과 현금채권이 둘 다 이 모양이다. */
+  result: PnlSeries;
   width: number;
   height: number;
   hoverIso: string | null;

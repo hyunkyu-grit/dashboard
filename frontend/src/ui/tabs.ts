@@ -22,7 +22,7 @@ import { GROUP_LABEL, type Group } from "./rows";
 
 /** 탭 = 행 필터 · 오버뷰 · 시뮬레이션 · 연구실 · 현금채권 · 설정.
  * 자산군 다섯의 내부 값은 그대로다. */
-export type TabId = Group | "all" | "sim" | "lab" | "cashbond" | "setting";
+export type TabId = Group | "all" | "sim" | "lab" | "cashbond" | "assetswap" | "setting";
 
 export type SectionId = "main" | "backtest" | "simulation" | "lab" | "setting";
 
@@ -32,7 +32,7 @@ export type SectionId = "main" | "backtest" | "simulation" | "lab" | "setting";
  * IRS 행 빌더(`rows.ts:buildRows`)가 읽는 값이고, 현금채권은 그 표의 행이
  * 아니라 딴 표다(민평 SQL, 자기 백테스트). 같은 열거로 묶으면 buildRows 가
  * 절대 만들 수 없는 필터 값을 받게 된다. */
-export type BacktestTab = Group | "cashbond";
+export type BacktestTab = Group | "cashbond" | "assetswap";
 
 /** 사이드바의 최상위. 라벨은 영문 그대로 — 오너가 그렇게 부른다.
  * 글리프는 sauron.html 이 같은 자리(전체·시뮬레이션·연구실)에 쓰던 문자다. */
@@ -61,7 +61,7 @@ export const sectionOf = (t: TabId): SectionId =>
         ? "lab"
         : t === "setting"
           ? "setting"
-          : "backtest";  // 자산군 다섯 + 현금채권
+          : "backtest";  // 자산군 다섯 + 현금채권 + 자산스왑
 
 /** 섹션을 누르면 어느 탭으로 가나. Backtest 는 **마지막으로 보던 종목군**으로
  * 돌아간다 — 늘 아웃라이트로 되돌리면 스프레드를 보다 Main 을 한 번 들른
@@ -102,6 +102,10 @@ export const GROUP_TABS: GroupTab[] = [
 export const BACKTEST_TABS: { id: BacktestTab; label: string; glyph: string }[] = [
   ...GROUP_TABS,
   { id: "cashbond", label: "현금채권", glyph: "▤" },
+  // 자산스왑은 **자기 탭**이다 [OWNER, 2026-08-14 — "자산스왑은 분리해서
+  // 현금채권 밑에 탭을 하나 더"]. 현금채권 표 안의 칩으로 접어 두었더니
+  // 같은 표에 %와 bp 가 번갈아 서서, 어느 단위를 보고 있는지가 사라졌다.
+  { id: "assetswap", label: "자산스왑", glyph: "◨" },
 ];
 
 /** 처음 Backtest 를 눌렀을 때의 종목군. */

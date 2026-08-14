@@ -263,7 +263,7 @@ export const ALL_COLUMNS: VisibleColumns = {
  * a single source so the two can never drift apart. When 52주 is dropped
  * the flexible tail becomes an EMPTY filler track so rows still span the
  * card (hairlines/hover) and the header's hidden-column note has a slot. */
-export function gridTemplate(v: VisibleColumns): string {
+export function gridTemplate(v: VisibleColumns, labelW: string = LABEL_W): string {
   const deltas = v.bases.length ? ` repeat(${v.bases.length}, ${DELTA_W})` : "";
   // the 52주 cell's FLOOR has to cover whatever sub-tracks it holds — the
   // three numbers, the position track, and 세타 — or the sub-grid overflows
@@ -274,7 +274,19 @@ export function gridTemplate(v: VisibleColumns): string {
       : RANGE_W_SLIDER
     : RANGE_W;
   const tail = v.range52 ? `minmax(${floor}, 1fr)` : "minmax(0, 1fr)";
-  return `${LABEL_W} ${LEVEL_W}${deltas} ${tail}`;
+  return `${labelW} ${LEVEL_W}${deltas} ${tail}`;
 }
+
+/** 현금채권·자산스왑 표의 종목 열 폭 [2026-08-14].
+ *
+ * `WIDEST.label` 은 IRS 가 만들 수 있는 가장 긴 식별자(`1s1.5s10s`, 9글자)에서
+ * 나온 값이고, 그건 **라틴 글자 9개**다. 이 표의 이름은 한글이라 같은 글자
+ * 수로 훨씬 넓다 — "캐피탈채 AA- 10Y" 나 "국고채 3M 자산스왑" 이 그 트랙에서
+ * 두 줄로 접혔다(실측). `ch` 는 '0' 의 진행폭이라 한글 폭을 대변하지 못하므로
+ * 글자 수를 세는 대신 **잰 값**을 쓴다: 12px 한글 ~13px/자 × 13자 + 여백.
+ *
+ * IRS 표는 건드리지 않는다 — 그쪽은 자기 라벨에 맞는 폭을 이미 갖고 있고,
+ * 넓히면 52주 꼬리가 그만큼 좁아진다. */
+export const CASHBOND_LABEL_W = "200px";
 
 export const GRID_TEMPLATE = gridTemplate(ALL_COLUMNS);
