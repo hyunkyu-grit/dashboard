@@ -97,14 +97,211 @@ def catalog() -> dict[str, list[dict]]:
     for start, span in FORWARD_GRID:
         sid = f"{start}x{span}"
         out["forward"].append({"id": sid, "label": sid, "key": sid in key_forwards})
+    out.update(_bond_catalog())
     return out
 
 
 def kind_of(series_id: str) -> str:
+    if series_id.startswith(f"{_CB}:"):
+        return "cashbond"
+    if series_id.startswith(f"{_ASW}:"):
+        return "assetswap"
     if "x" in series_id:
         return "forward"
     n = series_id.count("-")
     return "outright" if n == 0 else ("spread" if n == 1 else "fly")
+
+
+# ── 현금채권 · 자산스왑 ──────────────────────────────────────────────────────
+#
+# [OWNER, 2026-08-14 — "시뮬레이션 포지션에 스왑 뿐만아니라 현금채권이랑
+# 자산스왑 추가해줘"]. 백테스트 쪽 Cash Bond 탭과 **같은 상품·같은 id 문법**
+# (`CB:KTB:3Y` · `ASW:KTB:3Y`)이다. 같은 문자열이 두 화면에서 같은 것을 뜻해야
+# 비교가 되고, 그건 이 모듈이 스왑 쪽에서 이미 지키고 있는 규칙이다.
+#
+# 시뮬레이션 엔진은 채권을 **이미 값매긴다** — `daily_valuation` 의
+# `bondType != "swap"` 갈래가 MTM(`pvbp × −Δbp`, 잔존으로 감쇠)과 캐리
+# (`평가액 × mtmYield` − 조달)를 둘 다 들고 있다. 새로 쓸 산술이 없다.
+#
+# 다만 **채권은 enrichment 를 그냥 통과한다**(그 모듈: "채권 포지션은 그대로
+# 통과"). 스왑은 pvbp·krdMap 을 엔진이 채워 주지만 채권은 아무도 안 채운다 —
+# 안 채우고 보내면 pvbp 0 이라 금리가 아무리 움직여도 손익이 0 이고, 그건
+# 화면에 조용한 0 으로 나온다. 그래서 여기서 채워 보낸다.
+
+_CB = "CB"
+_ASW = "ASW"
+
+#: 민평 종목군 → 시뮬레이션의 섹터 어휘(`sim/types/portfolio.ts` 의 열거형).
+#
+# 사상을 **명시적으로** 적는 이유가 있다. `daily_valuation.get_sector_curve_key`
+# 가 부분문자열로 충격 커브를 고르는데, 민평 이름을 그대로 넘기면 "산금채 AAA"
+# 와 "캐피탈채 AA-" 가 어느 갈래에도 안 걸려 조용히 **국채 커브**를 탄다.
+# 여덟 중 둘이 틀린 커브로 충격을 받고, 아무 데서도 안 터진다.
+_SIM_SECTOR: dict[str, str] = {
+    "KTB": "국고채",   # → 국채
+    "MSB": "통안채",   # → 국채
+    "KDB": "특은채",   # 산금채 = 특수은행채 → 특은채
+    "SPB": "공사채",   # → 특은채
+    "BD": "시은채",    # 은행채 = 시중은행채 → 은행채
+    "CB1": "회사채",   # → 회사채
+    "CARD": "여전채",  # → 카드채
+    "OFB": "여전채",   # 캐피탈 = 여신전문금융 → 카드채
+}
+
+
+def _bond_catalog() -> dict[str, list[dict]]:
+    """고를 수 있는 채권들. 민평이 **SQL 에만** 있으므로 닿지 않으면 빈 목록을
+    돌려준다 — 스왑 목록까지 같이 죽는 것보다 낫다(그때는 채권 종류만 비어
+    보이고 나머지 화면은 그대로 선다).
+
+    `key`(주요)는 국고채다. 여덟 종목군 × 만기 열넷이면 90줄이 넘어 스크롤로
+    고를 수가 없고, 그 문제의 답은 목록을 줄이는 게 아니라 순서를 주는
+    것이라는 판단이 이 파일 위쪽 `catalog` 주석에 이미 있다.
+    """
+    out: dict[str, list[dict]] = {"cashbond": [], "assetswap": []}
+    try:
+        from . import cashbond as cb
+        from . import creditmatrix as cm
+
+        m = cm.load()
+    except Exception:
+        return out
+    for bond_type in cm.BOND_TYPES:
+        for tenor in cm.TENOR_LABELS:
+            if not m.has(bond_type, tenor):
+                continue
+            key = bond_type == "KTB"
+            out["cashbond"].append({
+                "id": f"{_CB}:{bond_type}:{tenor}",
+                "label": cb.instrument_label(_CB, bond_type, tenor),
+                "key": key,
+            })
+            if tenor in cb.ASW_TENORS:
+                out["assetswap"].append({
+                    "id": f"{_ASW}:{bond_type}:{tenor}",
+                    "label": cb.instrument_label(_ASW, bond_type, tenor),
+                    "key": key,
+                })
+    return out
+
+
+def _bond_krd(
+    m, bond_type: str, tenor: str, i: int, coupon: float, n: int, notional: float
+) -> dict[str, float]:
+    """민평 노드를 1bp 올렸을 때의 가치 변화에 부호를 뒤집은 것(원/bp).
+
+    `cashbond._krd_bond` 와 같은 규칙이다. 단일수익률 할인이라 잔존만기를 감싸는
+    **두 노드에만** 실린다 — 그 표와 이 표가 같은 리스크를 말해야 한다.
+    """
+    from . import cashbond as cb
+    from . import creditmatrix as cm
+
+    out: dict[str, float] = {}
+    pts = cm.curve_points(m, bond_type, i)
+    if not pts:
+        return out
+    years = cm.TENOR_YEARS[tenor]
+    base_y = cm.interp(pts, years)
+    base = cb.price(base_y, coupon, n, 0.0)[0]
+    for label, node_y in cm.TENOR_YEARS.items():
+        bumped = [(y, r + (1e-4 if abs(y - node_y) < 1e-9 else 0.0)) for y, r in pts]
+        y_b = cm.interp(bumped, years)
+        if y_b == base_y:
+            continue  # 이 노드는 그 잔존만기를 감싸지 않는다
+        v = -(cb.price(y_b, coupon, n, 0.0)[0] - base) * notional
+        if v:
+            out[label] = v
+    return out
+
+
+def _expand_bond(
+    dataset: Dataset, series_id: str, direction: int, notional: float, base_date: dt.date
+) -> list[dict]:
+    """`CB:KTB:3Y` · `ASW:KTB:3Y` → 시뮬레이션이 받는 줄들.
+
+    현금채권은 한 줄, 자산스왑은 **두 줄**이다 — 채권 매수 + 같은 명목의 페이
+    고정(`cashbond._swap_leg` 의 par-par 규약 그대로). 두 줄로 보내는 것이
+    맞는 이유: 엔진이 채권과 스왑을 다른 갈래로 값매기므로 한 줄로 접으면
+    둘 중 하나의 산술을 잃는다.
+    """
+    from . import cashbond as cb
+    from . import creditmatrix as cm
+
+    parts = series_id.split(":")
+    if len(parts) != 3:
+        raise BacktestError(f"unknown instrument {series_id!r}")
+    kind, bond_type, tenor = parts
+    if bond_type not in cm.BOND_TYPES or tenor not in cm.TENOR_YEARS:
+        raise BacktestError(f"unknown instrument {series_id!r}")
+    if direction != 1:
+        # 백테스트 쪽과 같은 거절이다 [OWNER, 2026-08-14 — "국고채는 매도는
+        # 없는거고"]: 공매도는 채권을 빌리는 것이고 그 대차료를 이 화면은
+        # 모른다. 모르는 비용을 0 으로 두면 공매도가 늘 이기는 시뮬이 된다.
+        raise BacktestError("채권은 매수만 세울 수 있습니다.")
+
+    m = cm.load()
+    if not m.has(bond_type, tenor):
+        raise BacktestError(
+            f"{cm.BOND_TYPES.get(bond_type, bond_type)} 에는 {tenor} 민평이 없습니다."
+        )
+    i = cm.index_on_or_before(m.dates, base_date)
+    as_of = m.dates[i]
+    years = cm.TENOR_YEARS[tenor]
+    n = cb.periods_for(tenor)
+    y = cm.yield_at(m, bond_type, i, years)      # decimal
+    # 표면수익률 = 민평 [OWNER, 2026-08-14]. 그래서 진입일 가격이 정확히 par 다
+    # (`test_entry_price_is_exactly_par`), 곧 평가액 = 명목이다.
+    dirty = cb.price(y, y, n, 0.0)[0]
+    value = notional * dirty
+    # pvbp 는 **롱이 양수**다 — 엔진이 `pvbp × (−Δbp)` 로 MTM 을 만들므로
+    # (daily_valuation), 금리가 오르면 손실이 되려면 이 부호여야 한다.
+    pvbp = -(cb.price(y + 1e-4, y, n, 0.0)[0] - dirty) * notional
+    mod_dur = (pvbp * 1e4 / value) if value else 0.0
+
+    rows = [{
+        "id": f"{series_id}#0",
+        "name": cb.instrument_label(kind, bond_type, tenor),
+        "book": "직접입력",
+        "bondType": "bond",
+        "sector": _SIM_SECTOR.get(bond_type, "국고채"),
+        "maturityDate": _add_years(as_of, years).isoformat(),
+        "couponRate": y * 100.0,
+        "frequency": 4,                       # 3개월 이표채 가정 — 백테스트와 같다
+        "notional": notional,
+        "entryYield": y * 100.0,
+        "entryYieldPurchase": y * 100.0,
+        # 캐리가 읽는 칸이다(`calculate_daily_carry`: 평가액 × mtmYield/100).
+        # 여기가 비면 채권이 쿠폰을 한 푼도 못 받고 조달만 낸다.
+        "mtmYield": y * 100.0,
+        "evaluationAmount": value,
+        "duration": mod_dur,
+        "pvbp": pvbp,
+        "tenor": tenor,
+        "remainingDays": years * 365.0,
+        "durationWeight": 0.0,
+        "krdMap": _bond_krd(m, bond_type, tenor, i, y, n, notional),
+        "direction": 1,
+        "startDate": as_of.isoformat(),
+    }]
+
+    if kind == _ASW:
+        if tenor not in cb.ASW_TENORS:
+            raise BacktestError(
+                f"{tenor} 는 자산스왑을 세울 수 없습니다 — 채권과 IRS 양쪽에 "
+                f"있는 만기만 가능합니다 ({'·'.join(cb.ASW_TENORS)})."
+            )
+        j = _index_on_or_after(dataset.dates, base_date)
+        swap_as_of = dataset.dates[j]
+        legs = _build_legs(dataset, tenor, notional, j)
+        for k, leg in enumerate(legs, start=1):
+            rows.append(_leg_row(
+                series_id, k, swap_as_of, _add_years(swap_as_of, _years(leg.tenor)),
+                leg.entry_rate * 100.0,
+                # 채권 매수 = 페이 고정. `_leg_row` 의 부호는 +1 이 고정 수취다.
+                -1,
+                leg.notional, leg.tenor,
+            ))
+    return rows
 
 
 def _add_years(d: dt.date, years: float) -> dt.date:
@@ -128,6 +325,9 @@ def expand(
     swap_inputs가 채운다. 여기서 계산하면 진실이 둘이 된다.
     """
     kind = kind_of(series_id)
+    if kind in ("cashbond", "assetswap"):
+        return _expand_bond(dataset, series_id, direction, notional, base_date)
+
     i = _index_on_or_after(dataset.dates, base_date)
     as_of = dataset.dates[i]
 

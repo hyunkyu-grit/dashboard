@@ -28,12 +28,15 @@ import {
   directionOptions,
   effectiveRate,
   hasRateOverride,
+  isBondKind,
+  isBondLeg,
   KIND_LABEL,
   KIND_ORDER,
   kindOf,
   positionError,
   type ExpandedLeg,
   type InstrumentCatalog,
+  type InstrumentKind,
   type ManualPosition,
 } from "@/sim/lib/manual-position";
 import { Button, Field, NumberField, Section, Segmented, cn } from "@/sim/ui/primitives";
@@ -117,22 +120,42 @@ function LegList({
       {legs.map((l) => {
         const rate = effectiveRate(l, position);
         const off = rate !== l.couponRate;
+        const bond = isBondLeg(l);
         return (
           <div key={l.id} className="flex items-center gap-2 text-callout text-ink-2">
             {/* 다리의 부호는 상품의 방향과 다른 층위다 — 여기서는 스왑 그대로
-                고정 지급/수취로 적는다. 상품 방향은 위 세그먼트가 말한다. */}
+                고정 지급/수취로 적는다. 상품 방향은 위 세그먼트가 말한다.
+                채권 다리는 그 문법이 아니다: 살 수만 있고, 이름이 종목군을
+                이미 말하므로 테너 자리에 이름을 놓는다. */}
             <span className="w-14 shrink-0 tabular-nums text-ink-1">{l.tenor}</span>
-            <span className="w-12 shrink-0">{l.direction === 1 ? "수취" : "지급"}</span>
+            <span className="w-12 shrink-0">
+              {bond ? "매수" : l.direction === 1 ? "수취" : "지급"}
+            </span>
             <span className="w-20 shrink-0 text-right tabular-nums">{eok(l.notional)}</span>
-            {/* par 가 있던 자리가 그대로 입력칸이 된다 [트레이더 피드백 3].
-                새 칸을 만들지 않는 이유: 이 줄은 이미 "이 다리는 이 금리로
-                쳐진다"를 말하고 있었다. 고칠 수 있게 된 것뿐이다. */}
-            <RateInput
-              label={`${l.tenor} 고정금리`}
-              value={rate}
-              off={off}
-              onCommit={(n) => setRate(l.id, n)}
-            />
+            {bond ? (
+              /* 채권의 이 칸은 **민평**이고 읽기 전용이다. 입력칸으로 두면
+                 조용한 거짓말이 된다: 엔진의 채권 캐리는 `mtmYield` 를 읽고
+                 (`daily_valuation.calculate_daily_carry`) 가격·pvbp 는 이미
+                 서버에서 민평으로 매겨져 왔으므로, 여기서 `couponRate` 를
+                 고쳐도 아무 숫자도 안 움직인다. 스왑 다리의 par 덮어쓰기는
+                 그대로 살아 있다 — 그쪽은 엔진이 실제로 그 값을 쓴다. */
+              <span
+                className="h-6 w-24 shrink-0 content-center rounded-control-sm px-2 text-right tabular-nums text-ink-1"
+                title="민평 수익률 — 표면금리와 할인율이 같아 진입가가 par 예요"
+              >
+                {rate.toFixed(4)}
+              </span>
+            ) : (
+              /* par 가 있던 자리가 그대로 입력칸이 된다 [트레이더 피드백 3].
+                 새 칸을 만들지 않는 이유: 이 줄은 이미 "이 다리는 이 금리로
+                 쳐진다"를 말하고 있었다. 고칠 수 있게 된 것뿐이다. */
+              <RateInput
+                label={`${l.tenor} 고정금리`}
+                value={rate}
+                off={off}
+                onCommit={(n) => setRate(l.id, n)}
+              />
+            )}
             <span className="shrink-0">%</span>
             {off ? (
               // 되돌릴 곳. par 가 얼마였는지도 같이 말한다 — "얼마에서 옮겼나"를
@@ -180,6 +203,10 @@ function PositionRow({
   const kind = kindOf(position.seriesId);
   const error = positionError(position);
   const dirs = directionOptions(position.seriesId);
+  /** 고를 것이 하나도 없어서 못 옮긴 종류. 채권 목록은 민평(SQL)에서 오므로
+   * 백엔드가 그것을 못 읽으면 빈 채로 온다 — 그때 셀렉트는 옛 종류로 되돌아가고,
+   * 아무 말이 없으면 "왜 안 바뀌지" 만 남는다. 되돌아간 이유를 적는다. */
+  const [emptyKind, setEmptyKind] = useState<InstrumentKind | null>(null);
 
   return (
     <div className="flex flex-col gap-2 border-t border-edge py-3 first:border-t-0">
@@ -201,7 +228,21 @@ function PositionRow({
               const first = (list.find((o) => o.key) ?? list[0])?.id;
               // 상품이 바뀌면 다리가 달라지므로 금리 덮어쓰기를 비운다 —
               // 남겨 두면 3s10s 의 3Y 금리가 2s5s 의 2Y 다리에 조용히 붙는다.
-              if (first) onPatch({ seriesId: first, rateOverrides: undefined });
+              //
+              // 채권으로 옮길 때 방향도 되돌린다. 숏 아웃라이트를 들고 있다가
+              // 현금채권을 고르면 방향 칸이 사라지면서 −1 이 남는데, 백엔드는
+              // 그걸 거절하므로(`_expand_bond`) 고를 수 없는 값 때문에 줄이
+              // 죽는다 — 화면에는 안 보이는 이유로.
+              if (first) {
+                setEmptyKind(null);
+                onPatch({
+                  seriesId: first,
+                  rateOverrides: undefined,
+                  ...(isBondKind(k) ? { direction: 1 as const } : {}),
+                });
+              } else {
+                setEmptyKind(k);
+              }
             }}
             className="h-6 rounded-control-sm border border-field bg-tile px-2 text-body text-ink-1"
           >
@@ -249,19 +290,34 @@ function PositionRow({
           </select>
         </Field>
 
-        <Field label="방향">
-          {/* 라벨이 종류마다 다르다 — 아웃라이트는 페이/리시브, 스프레드는
-              스티프너/플래트너, 플라이는 벨리 매수/매도. 원화 데스크가 실제로
-              쓰는 말이고, 규칙은 lib/manual-position.directionLabel에 있다. */}
-          <Segmented
-            options={dirs}
-            value={position.direction === 1 ? "long" : "short"}
-            onChange={(v) => onPatch({ direction: v === "long" ? 1 : -1 })}
-            label="방향"
-          />
-        </Field>
+        {/* 채권에는 방향 칸이 없다 — 살 수만 있다 [OWNER, 2026-08-14].
+            비활성 세그먼트를 놓아 두는 대신 칸을 안 그린다: 못 고르는 컨트롤은
+            "왜 안 눌리지" 를 묻게 하고, 백테스트의 현금채권 창도 같은 자리를
+            비워 두었다. */}
+        {!isBondKind(kind) && (
+          <Field label="방향">
+            {/* 라벨이 종류마다 다르다 — 아웃라이트는 페이/리시브, 스프레드는
+                스티프너/플래트너, 플라이는 벨리 매수/매도. 원화 데스크가 실제로
+                쓰는 말이고, 규칙은 lib/manual-position.directionLabel에 있다. */}
+            <Segmented
+              options={dirs}
+              value={position.direction === 1 ? "long" : "short"}
+              onChange={(v) => onPatch({ direction: v === "long" ? 1 : -1 })}
+              label="방향"
+            />
+          </Field>
+        )}
 
-        <Field label="명목" hint={kind === "outright" ? undefined : "기준 다리"}>
+        <Field
+          label="명목"
+          hint={
+            kind === "outright" || kind === "cashbond"
+              ? undefined
+              : kind === "assetswap"
+                ? "채권·스왑 같은 명목"
+                : "기준 다리"
+          }
+        >
           <NumberField
             value={String(position.notionalEok)}
             onChange={(v) => onPatch({ notionalEok: Number(v) || 0 })}
@@ -275,6 +331,15 @@ function PositionRow({
           삭제
         </Button>
       </div>
+
+      {emptyKind && (
+        <p className="text-body text-up">
+          {KIND_LABEL[emptyKind]}에 고를 수 있는 상품이 없어요.
+          {isBondKind(emptyKind)
+            ? " 민평 수익률을 못 읽었어요 — 백엔드가 SQL에 닿는지 확인해 주세요."
+            : ""}
+        </p>
+      )}
 
       {error ? (
         <p className="text-body text-up">{error}</p>
@@ -312,11 +377,21 @@ export function PositionsPanel({
   const clear = useSimulationDataStore((s) => s.clearManualPositions);
   const cd = useCdRate(baseDate);
 
-  /** 실제로 평가되는 다리 수 — 줄 수가 아니다. 스프레드 하나가 두 다리다. */
-  const legCount = useMemo(
-    () => Object.values(legsByRow).reduce((n, r) => n + r.legs.length, 0),
-    [legsByRow],
-  );
+  /** 실제로 평가되는 다리 수 — 줄 수가 아니다. 스프레드 하나가 두 다리다.
+   *
+   * 스왑과 채권을 따로 센다: 자산스왑 한 줄이 채권 하나 + 스왑 하나이고,
+   * "스왑 2다리" 라고 적으면 채권 다리를 스왑이라고 부르게 된다. */
+  const [swapLegs, bondLegs] = useMemo(() => {
+    let s = 0;
+    let b = 0;
+    for (const r of Object.values(legsByRow)) {
+      for (const l of r.legs) {
+        if (isBondLeg(l)) b += 1;
+        else s += 1;
+      }
+    }
+    return [s, b] as const;
+  }, [legsByRow]);
 
   const canAdd = Boolean(baseDate) && !marketUnavailable;
 
@@ -355,8 +430,8 @@ export function PositionsPanel({
       {positions.length === 0 ? (
         <div className="flex flex-col items-start gap-3 py-4">
           <p className="text-body text-ink-2">
-            평가할 포지션이 없어요. 아웃라이트·스프레드·버터플라이·포워드를 넣으면 아래 금리 경로에서 어떻게
-            되는지 보여드릴게요.
+            평가할 포지션이 없어요. 아웃라이트·스프레드·버터플라이·포워드에 현금채권·자산스왑까지 넣으면 아래
+            금리 경로에서 어떻게 되는지 보여드릴게요.
           </p>
           <Button variant="primary" onClick={add} disabled={!canAdd}>
             포지션 추가
@@ -378,7 +453,13 @@ export function PositionsPanel({
           </div>
           <div className={cn("flex items-center justify-between gap-3 border-t border-edge py-3")}>
             <span className="text-body text-ink-2">
-              {`${positions.length}개 상품 · 스왑 ${legCount}다리`}
+              {[
+                `${positions.length}개 상품`,
+                swapLegs > 0 ? `스왑 ${swapLegs}다리` : null,
+                bondLegs > 0 ? `채권 ${bondLegs}종목` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </span>
             <Button variant="secondary" size="sm" onClick={add} disabled={!canAdd}>
               포지션 추가

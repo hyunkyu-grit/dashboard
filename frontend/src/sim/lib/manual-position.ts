@@ -27,17 +27,45 @@
  */
 
 /** 모니터의 그룹과 같은 이름. GROUP_LABEL(ui/rows.ts)의 부분집합이다 —
- * 변동성은 포지션이 아니라 관측이라 여기 없다. */
-export type InstrumentKind = "outright" | "spread" | "fly" | "forward";
+ * 변동성은 포지션이 아니라 관측이라 여기 없다.
+ *
+ * 현금채권·자산스왑이 뒤에 붙는다 [OWNER, 2026-08-14 — "시뮬레이션 포지션에
+ * 스왑 뿐만아니라 현금채권이랑 자산스왑 추가해줘"]. 백테스트의 그 두 탭과
+ * **같은 상품·같은 id 문법**(`CB:KTB:3Y`)이라, 같은 문자열이 세 화면에서
+ * 같은 것을 뜻한다. */
+export type InstrumentKind =
+  | "outright"
+  | "spread"
+  | "fly"
+  | "forward"
+  | "cashbond"
+  | "assetswap";
 
 export const KIND_LABEL: Record<InstrumentKind, string> = {
   outright: "아웃라이트",
   spread: "스프레드",
   fly: "버터플라이",
   forward: "포워드",
+  cashbond: "현금채권",
+  assetswap: "자산스왑",
 };
 
-export const KIND_ORDER: InstrumentKind[] = ["outright", "spread", "fly", "forward"];
+export const KIND_ORDER: InstrumentKind[] = [
+  "outright",
+  "spread",
+  "fly",
+  "forward",
+  "cashbond",
+  "assetswap",
+];
+
+/** 채권은 **살 수만** 있다 [OWNER, 2026-08-14 — "국고채는 매도는 없는거고"].
+ * 공매도는 채권을 빌리는 것이고 그 대차료를 이 화면은 모른다 — 모르는 비용을
+ * 0 으로 두면 공매도가 늘 이기는 시뮬이 된다. 백엔드도 같은 이유로 거절한다
+ * (`app/instruments._expand_bond`), 여기서는 방향 칸 자체를 안 그린다. */
+export function isBondKind(kind: InstrumentKind): boolean {
+  return kind === "cashbond" || kind === "assetswap";
+}
 
 /** GET /api/instruments의 한 항목. */
 export interface InstrumentOption {
@@ -91,7 +119,10 @@ export interface ManualPosition {
   rateOverrides?: Record<string, number>;
 }
 
-/** 백엔드가 돌려준 다리 하나 — 화면에는 읽기 전용으로만 보인다. */
+/** 백엔드가 돌려준 다리 하나 — 화면에는 읽기 전용으로만 보인다.
+ *
+ * 실제로 오는 것은 페이로드에 그대로 실리는 **포지션 한 줄 전체**이고
+ * (`app/instruments._leg_row`), 이 인터페이스는 화면이 읽는 부분집합이다. */
 export interface ExpandedLeg {
   id: string;
   tenor: string;
@@ -100,6 +131,16 @@ export interface ExpandedLeg {
   couponRate: number;
   startDate: string;
   maturityDate: string;
+  /** `"swap"` 또는 `"bond"`. 자산스왑 한 줄은 둘 다 갖는다 — 채권 매수 +
+   * 같은 명목의 페이 고정이라, 다리 목록에 두 줄이 서로 다른 문법으로 뜬다. */
+  bondType?: string;
+  /** 채권 다리의 이름(`국고채 3Y`). 스왑 다리는 테너로 충분하다. */
+  name?: string;
+}
+
+/** 이 다리가 채권인가 — 다리 목록이 "수취/지급" 대신 "매수" 를 적을지 정한다. */
+export function isBondLeg(leg: ExpandedLeg): boolean {
+  return leg.bondType === "bond";
 }
 
 export const DEFAULT_SERIES_ID = "3Y";
@@ -115,8 +156,12 @@ export function newManualPosition(seq: number): ManualPosition {
 }
 
 /** id만 보고 종류를 안다 — 백엔드의 kind_of와 같은 규칙이고, 목록을 다시
- * 훑지 않아도 되게 한다. `x`가 먼저인 이유는 포워드에 `-`가 없기 때문이다. */
+ * 훑지 않아도 되게 한다. 접두사가 **가장 먼저**인 이유: `ASW:KTB:1.5Y` 에는
+ * `x` 가 없지만 `CB:...` 도 `-` 가 없어 아웃라이트로 읽힌다. `x`가 그 다음인
+ * 이유는 포워드에 `-`가 없기 때문이다. */
 export function kindOf(seriesId: string): InstrumentKind {
+  if (seriesId.startsWith("CB:")) return "cashbond";
+  if (seriesId.startsWith("ASW:")) return "assetswap";
   if (seriesId.includes("x")) return "forward";
   const dashes = (seriesId.match(/-/g) ?? []).length;
   return dashes === 0 ? "outright" : dashes === 1 ? "spread" : "fly";
@@ -130,6 +175,8 @@ export function kindOf(seriesId: string): InstrumentKind {
  * 사는지 파는지다. */
 export function directionLabel(seriesId: string, direction: 1 | -1): string {
   const kind = kindOf(seriesId);
+  // 채권은 방향 칸이 안 그려진다(isBondKind). 그래도 라벨을 물으면 참을 답한다.
+  if (isBondKind(kind)) return "매수";
   if (kind === "outright" || kind === "forward") return direction === 1 ? "페이" : "리시브";
   if (kind === "spread") return direction === 1 ? "스티프너" : "플래트너";
   return direction === 1 ? "벨리 매도" : "벨리 매수";
