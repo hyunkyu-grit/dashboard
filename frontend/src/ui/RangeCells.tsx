@@ -124,10 +124,14 @@ function RangeTrack({ row }: { row: RangeRow }) {
   const pct = markerPct(row);
   if (pct == null) return <span className="pr-3" />;
   return (
+    /* `bw-track` / `bw-track-mark` 는 선택된 행에서 globals.css 가 잡는다 —
+       트랙은 색이 아니라 면이라 `color` 규칙이 닿지 않는다. 클래스가 없던
+       동안 그 규칙은 죽어 있었고, 액센트 채움 위에 잉크 트랙이 그대로 남았다
+       [2026-08-14]. */
     <span className="relative mr-3 block h-3 self-center overflow-visible">
-      <span className="absolute inset-x-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full bg-ink-3" />
+      <span className="bw-track absolute inset-x-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full bg-ink-3" />
       <span
-        className="absolute top-1/2 h-3 w-[2px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink"
+        className="bw-track-mark absolute top-1/2 h-3 w-[2px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink"
         style={{ left: `${pct}%` }}
       />
     </span>
