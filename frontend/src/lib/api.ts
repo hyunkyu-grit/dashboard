@@ -10,7 +10,11 @@
 
 import {
   backtestUrl,
+  cashbondBacktestUrl,
+  cashbondInstrumentsUrl,
+  cashbondSeriesUrl,
   dv01Url,
+  fundingSettingsUrl,
   forwardsUrl,
   healthUrl,
   IS_STATIC,
@@ -572,4 +576,160 @@ export async function fetchCandles(id: string, interval: Interval): Promise<Cand
   const r = await fetch(seriesUrl(id, interval));
   if (!r.ok) throw new Error(`candles ${id}: HTTP ${r.status}`);
   return r.json();
+}
+
+/* ── Cash Bond [OWNER, 2026-08-14] ─────────────────────────────────────────
+ *
+ * 민평(SQL `credit_matrix`)에서 par 로 발행한 3개월 이표채. 이 블록의 라우트는
+ * **전부 라이브**다 — 정적 쌍둥이가 없는 이유는 `staticPaths.liveUrl` 주석에
+ * 있다. §16 은 여기서도 그대로다: 수준·변화·백분위·손익 칸을 전부 서버가 내고
+ * 브라우저는 그리기만 한다.
+ */
+
+export type CashBondKind = "CB" | "ASW";
+
+export interface CashBondRow {
+  id: string;             // "CB:KTB:3Y" | "ASW:KTB:3Y"
+  kind: CashBondKind;
+  bondType: string;       // "KTB"
+  tenor: string;          // "3Y"
+  label: string;          // "국고채 3Y"
+  /** 현금채권은 수익률(%), 자산스왑은 스프레드(bp). */
+  unit: "pct" | "bp";
+  now: number;
+  changes: Record<BasisKey, number | null>;
+  pct: number | null;
+  rangeHigh: number | null;
+  rangeLow: number | null;
+  rangeAvg: number | null;
+  sortKey: number[];
+}
+
+export interface CashBondInstruments {
+  asof: string;
+  from: string;
+  types: { id: string; label: string }[];
+  rows: CashBondRow[];
+}
+
+/** 조달 기준의 출처 — 화면이 "이 숫자가 어디서 왔는가" 를 말할 수 있게. */
+export interface FundingProvenance {
+  basis: string;
+  basisLabel: string;
+  spreadBp: number;
+  label: string;
+  from: string;
+  to: string;
+  latest: number;
+}
+
+export interface FundingSettings extends FundingProvenance {
+  options: { id: string; label: string }[];
+  default: { basis: string; spreadBp: number };
+}
+
+export interface CashBondPosition {
+  id: string;
+  kind: CashBondKind;
+  bondType: string;
+  label: string;
+  tenor: string;
+  direction: number;
+  notional: number;
+  entry: string;
+  exit: string;
+  closed: boolean;
+  matured: boolean;
+  coupon: number;
+  entryYield: number;
+  exitYield: number;
+  /** 다섯 칸. 더하면 `pnl` 이다 (§backtest, 현금채권 판).
+   *   평가   민평 수익률이 움직인 몫
+   *   캐리   쿠폰 — 경과이자 증가분 + 이미 받은 이표
+   *   롤다운 커브가 멈춰도 잔존만기가 줄며 생기는 몫
+   *   조달   원금을 조달한 비용 (이미 음수다)
+   *   개시   자산스왑의 스왑 다리가 싣고 오는 거래일→발효일 한 밤. 현금채권
+   *          단독은 0 — 진입일에 발행돼 셀 밤이 없다. */
+  valuation: number;
+  carry: number;
+  rolldown: number;
+  funding: number;
+  startup: number;
+  pnl: number;
+  /** 자산스왑에만: 스왑 다리 손익과 진입 스프레드(bp). */
+  swapPnl: number | null;
+  swapEntryRate?: number;
+  aswSpread?: number;
+}
+
+export interface CashBondBacktest {
+  positions: CashBondPosition[];
+  from: string;
+  to: string;
+  complete: boolean;
+  /** `d` 는 **발행된 두 점 사이의** 변화이고, 그것이 하루인지는 `complete` 가
+   * 말한다 — IRS 백테스트의 `d`(늘 1영업일)와 다른 규약이니 "당일 변화" 로
+   * 읽지 말 것. 백엔드 `app/cashbond.py` 에 왜 그렇게 뒀는지가 있다. */
+  points: { t: string; pnl: number; d: number | null }[];
+  pnl: number;
+  maxProfit: number;
+  maxLoss: number;
+  funding: FundingProvenance;
+}
+
+async function liveJson<T>(url: string, what: string): Promise<T> {
+  const r = await fetch(url);
+  // 404 = 그 라우트가 없다 = 뒤에 백엔드가 없다 (backtest 와 같은 규약)
+  if (r.status === 404) throw new BacktestUnavailable();
+  if (!r.ok) {
+    const detail = await r.json().catch(() => null);
+    throw new Error(detail?.detail ?? `${what}: HTTP ${r.status}`);
+  }
+  return r.json();
+}
+
+export async function fetchCashBondInstruments(): Promise<CashBondInstruments> {
+  return liveJson(cashbondInstrumentsUrl(), "cashbond/instruments");
+}
+
+export async function fetchCashBondSeries(
+  id: string,
+): Promise<{ id: string; label: string; unit: "pct" | "bp"; points: { t: string; v: number }[] }> {
+  return liveJson(cashbondSeriesUrl(id), "cashbond/series");
+}
+
+export interface CashBondPositionInput {
+  id: string;
+  direction: number;
+  /** 억 단위 — 화면이 억으로 받는다 (IRS 백테스트와 같은 규약). */
+  eok: number;
+  entry: string;
+  exit: string;
+}
+
+export function encodeCashBondPositions(rows: CashBondPositionInput[]): string {
+  return rows
+    .map((r) =>
+      [r.id, r.direction, r.eok * 1e8, r.entry, r.exit]
+        .filter((v, i) => i < 4 || v !== "")
+        .join(","),
+    )
+    .join(";");
+}
+
+export async function fetchCashBondBacktest(
+  rows: CashBondPositionInput[],
+  funding: { basis: string; spreadBp: number },
+): Promise<CashBondBacktest> {
+  return liveJson(
+    cashbondBacktestUrl(encodeCashBondPositions(rows), funding.basis, funding.spreadBp),
+    "cashbond/backtest",
+  );
+}
+
+export async function fetchFundingSettings(funding: {
+  basis: string;
+  spreadBp: number;
+}): Promise<FundingSettings> {
+  return liveJson(fundingSettingsUrl(funding.basis, funding.spreadBp), "settings/funding");
 }

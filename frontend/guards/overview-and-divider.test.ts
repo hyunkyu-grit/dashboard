@@ -19,7 +19,7 @@ import {
   type Group,
   type Row,
 } from "../src/ui/rows";
-import { GROUP_TABS, SECTIONS, sectionOf, tabForSection } from "../src/ui/tabs";
+import { BACKTEST_TABS, GROUP_TABS, SECTIONS, sectionOf, tabForSection } from "../src/ui/tabs";
 
 const table = code("ui/InstrumentTable.tsx");
 const overview = code("ui/OverviewColumns.tsx");
@@ -122,6 +122,11 @@ describe("the 전체 overview", () => {
     expect(app).toMatch(/const fullWidth = matrixOpen \|\| tab === "all"/);
     expect(app).toMatch(/wide && !fullWidth \? \{ width: TABLE_W \}/);
     expect(app).toMatch(/\{wide && !fullWidth && \(/);
+    /* 현금채권·Setting 도 같은 깃발을 탄다 [2026-08-14]. 오른쪽 미리보기는
+     * 호버된 IRS 행을 그리는 판인데 두 화면에는 그런 행이 아예 없다 — 옆에
+     * 남겨 두면 직전 탭에서 보던 종목의 차트가 딴 화면 옆에 붙어 선다. */
+    expect(app).toMatch(/const ownView = tab === "cashbond" \|\| tab === "setting"/);
+    expect(app).toMatch(/\|\| ownView;/);
   });
 
   it("each column owns its own chart", () => {
@@ -297,19 +302,39 @@ describe("the tab set", () => {
     ]);
   });
 
-  it("탐색이 두 층이다 — 섹션 넷, 그 중 Backtest 아래에만 종목군", () => {
+  it("탐색이 두 층이다 — 섹션 다섯, 그 중 Backtest 아래에만 종목군", () => {
     /* [OWNER, 2026-08-07 · 2차] 툴바에 섹션을 올렸다가 되돌렸다. 둘 다
      * 사이드바에 있고, 위가 섹션 아래가 종목군이다 — HIG Sidebars 가 허용하는
-     * 두 단계 그대로. 탐색이 두 곳에 나뉘면 무엇이 무엇의 하위인지가 사라진다. */
+     * 두 단계 그대로. 탐색이 두 곳에 나뉘면 무엇이 무엇의 하위인지가 사라진다.
+     *
+     * 2026-08-14: Setting 이 다섯째로 들어왔다 [OWNER] — 데이터 화면이 아니라
+     * 다른 화면이 읽는 값(조달금리)을 정하는 자리다. Lab **앞**인 것이 중요하다:
+     * Lab 이 마지막이라는 규칙은 따로 핀이 있고(regret-list), 확신의 사다리는
+     * Setting 이 참여하지 않는다. */
     expect(SECTIONS.map((s) => s.id)).toEqual([
       "main",
       "backtest",
       "simulation",
+      "setting",
       "lab",
     ]);
     // 종목군은 섹션 이름을 쓰지 않는다 — 둘이 겹치면 한 목록에 같은 말이 둘이다
     const sectionIds = new Set<string>(SECTIONS.map((s) => s.id));
-    expect(GROUP_TABS.some((t) => sectionIds.has(t.id))).toBe(false);
+    expect(BACKTEST_TABS.some((t) => sectionIds.has(t.id))).toBe(false);
+  });
+
+  it("Backtest 하위는 자산군 다섯 + 현금채권 [OWNER, 2026-08-14]", () => {
+    /* 현금채권이 `Group` 이 아닌 것이 요점이다 — buildRows 가 읽는 값이 아니라
+     * 딴 표(민평 SQL)다. 여기서 그것을 못박아, 누가 Group 에 밀어 넣으면
+     * 타입이 아니라 이 핀이 먼저 말한다. */
+    expect(BACKTEST_TABS.map((t) => t.id)).toEqual([
+      ...GROUP_TABS.map((t) => t.id),
+      "cashbond",
+    ]);
+    expect(sectionOf("cashbond")).toBe("backtest");
+    expect(sectionOf("setting")).toBe("setting");
+    expect(tabForSection("setting", "spread")).toBe("setting");
+    expect(tabForSection("backtest", "cashbond")).toBe("cashbond");
   });
 
   it("섹션과 탭이 서로를 정확히 되돌린다", () => {

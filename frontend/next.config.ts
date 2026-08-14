@@ -100,6 +100,12 @@ const nextConfig: NextConfig = {
       // 잡으므로 정적 쌍둥이를 만들 수 없다 — 백테스트와 같은 이유로 LIVE다.
       { source: "/api/instruments", destination: `${origin}/api/instruments` },
       { source: "/api/instruments/:path*", destination: `${origin}/api/instruments/:path*` },
+      // Cash Bond [OWNER, 2026-08-14]. 전부 LIVE 다 — 민평이 SQL(`credit_matrix`)
+      // 에만 있어 정적 쌍둥이를 구울 수 없고, 백테스트는 읽는 사람이 고르는
+      // 입력에 답이 달려 있다. `/api/settings/funding` 은 Setting 탭이 고른
+      // 조달 기준이 유효한지·지금 몇 %인지 묻는 자리다.
+      { source: "/api/cashbond/:path*", destination: `${origin}/api/cashbond/:path*` },
+      { source: "/api/settings/:path*", destination: `${origin}/api/settings/:path*` },
       // `/api/credit-curve/*` is deliberately ABSENT. Its workbook (Credit
       // Matrix Data.xlsx) was deleted with the data consolidation, nothing in
       // the frontend calls it any more, and a rule pointing at an endpoint

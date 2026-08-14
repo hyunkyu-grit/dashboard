@@ -20,10 +20,19 @@
 
 import { GROUP_LABEL, type Group } from "./rows";
 
-/** 탭 = 행 필터 · 오버뷰 · 시뮬레이션 · 연구실. 내부 값은 그대로다. */
-export type TabId = Group | "all" | "sim" | "lab";
+/** 탭 = 행 필터 · 오버뷰 · 시뮬레이션 · 연구실 · 현금채권 · 설정.
+ * 자산군 다섯의 내부 값은 그대로다. */
+export type TabId = Group | "all" | "sim" | "lab" | "cashbond" | "setting";
 
-export type SectionId = "main" | "backtest" | "simulation" | "lab";
+export type SectionId = "main" | "backtest" | "simulation" | "lab" | "setting";
+
+/** Backtest 아래에 접히는 것들 — 자산군 다섯 + 현금채권.
+ *
+ * 현금채권이 `Group` 이 **아닌** 것이 요점이다 [OWNER, 2026-08-14]. `Group` 은
+ * IRS 행 빌더(`rows.ts:buildRows`)가 읽는 값이고, 현금채권은 그 표의 행이
+ * 아니라 딴 표다(민평 SQL, 자기 백테스트). 같은 열거로 묶으면 buildRows 가
+ * 절대 만들 수 없는 필터 값을 받게 된다. */
+export type BacktestTab = Group | "cashbond";
 
 /** 사이드바의 최상위. 라벨은 영문 그대로 — 오너가 그렇게 부른다.
  * 글리프는 sauron.html 이 같은 자리(전체·시뮬레이션·연구실)에 쓰던 문자다. */
@@ -31,6 +40,15 @@ export const SECTIONS: { id: SectionId; label: string; glyph: string }[] = [
   { id: "main", label: "Main", glyph: "◍" },
   { id: "backtest", label: "Backtest", glyph: "◫" },
   { id: "simulation", label: "Simulation", glyph: "◇" },
+  // Setting 은 데이터 화면이 아니라 **다른 화면들이 읽는 값을 정하는 자리**라
+  // 최상위다 [OWNER, 2026-08-14]. 지금은 조달금리 하나뿐이고, 그 값은 Cash
+  // Bond 백테스트가 읽는다.
+  //
+  // **Lab 앞이다.** 섹션 순서는 확신의 순서이고 Lab 은 그 가장자리라 반드시
+  // 마지막이어야 한다 [OWNER, 2026-08-04 — 실험은 가장자리에서 들어와 트레이더
+  // 피드백을 받으며 앞으로 졸업한다]. Setting 은 그 사다리에 참여하지 않는
+  // 유틸리티 화면이라 졸업할 것도 없고, 뒤에 두면 Lab 이 마지막이 아니게 된다.
+  { id: "setting", label: "Setting", glyph: "◎" },
   { id: "lab", label: "Lab", glyph: "◈" },
 ];
 
@@ -41,13 +59,23 @@ export const sectionOf = (t: TabId): SectionId =>
       ? "simulation"
       : t === "lab"
         ? "lab"
-        : "backtest";
+        : t === "setting"
+          ? "setting"
+          : "backtest";  // 자산군 다섯 + 현금채권
 
 /** 섹션을 누르면 어느 탭으로 가나. Backtest 는 **마지막으로 보던 종목군**으로
  * 돌아간다 — 늘 아웃라이트로 되돌리면 스프레드를 보다 Main 을 한 번 들른
  * 사람이 자리를 잃는다. */
-export const tabForSection = (s: SectionId, lastGroup: Group): TabId =>
-  s === "main" ? "all" : s === "simulation" ? "sim" : s === "lab" ? "lab" : lastGroup;
+export const tabForSection = (s: SectionId, lastGroup: BacktestTab): TabId =>
+  s === "main"
+    ? "all"
+    : s === "simulation"
+      ? "sim"
+      : s === "lab"
+        ? "lab"
+        : s === "setting"
+          ? "setting"
+          : lastGroup;
 
 export type GroupTab = {
   id: Group;
@@ -69,5 +97,12 @@ export const GROUP_TABS: GroupTab[] = [
   { id: "vol", label: GROUP_LABEL.vol, glyph: "〜" },
 ];
 
+/** 사이드바의 Backtest 하위 목록 = 자산군 다섯 + 현금채권 [OWNER, 2026-08-14].
+ * 현금채권이 맨 아래인 것은 스왑 다섯을 먼저 보는 화면이기 때문이다. */
+export const BACKTEST_TABS: { id: BacktestTab; label: string; glyph: string }[] = [
+  ...GROUP_TABS,
+  { id: "cashbond", label: "현금채권", glyph: "▤" },
+];
+
 /** 처음 Backtest 를 눌렀을 때의 종목군. */
-export const DEFAULT_GROUP: Group = "outright";
+export const DEFAULT_GROUP: BacktestTab = "outright";

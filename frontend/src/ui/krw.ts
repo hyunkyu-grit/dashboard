@@ -64,3 +64,42 @@ export function splitKrw(
   const uStart = manUnits(startup);
   return { uPnl, uVal, uRoll, uStart, uCarry: uPnl - uVal - uRoll - uStart };
 }
+
+/** 현금채권의 다섯 칸을 표시 정밀도에서 가산적으로 [OWNER, 2026-08-14].
+ *
+ * `splitKrw` 와 **같은 수법**이다: 합계와 평가·롤다운·조달·개시가 각각 한 번씩
+ * 반올림하고, 캐리가 그 잔차를 진다. 칸이 다섯이라 잔차에 실리는 반올림이 넷이
+ * 됐고, 그래서 캐리는 원 단위 값에서 최대 2만원까지 떨어질 수 있다 — 그래도
+ * **행은 반드시 가로로 더해진다**. 그 성질이 이 표의 존재 이유다(읽는 사람이
+ * 암산으로 표의 거짓말을 잡을 수 있어야 한다).
+ *
+ * 조달은 서버가 이미 음수로 준다(`app/cashbond.py`) — 여기서 부호를 다시 주면
+ * 두 번 뒤집힌다. */
+export function splitCashBondKrw(
+  pnl: number,
+  valuation: number,
+  rolldown: number,
+  funding: number,
+  startup: number,
+): {
+  uPnl: number;
+  uVal: number;
+  uRoll: number;
+  uFund: number;
+  uStart: number;
+  uCarry: number;
+} {
+  const uPnl = manUnits(pnl);
+  const uVal = manUnits(valuation);
+  const uRoll = manUnits(rolldown);
+  const uFund = manUnits(funding);
+  const uStart = manUnits(startup);
+  return {
+    uPnl,
+    uVal,
+    uRoll,
+    uFund,
+    uStart,
+    uCarry: uPnl - uVal - uRoll - uFund - uStart,
+  };
+}

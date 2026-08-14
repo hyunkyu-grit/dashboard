@@ -6,9 +6,10 @@
  *
  *   Main         기존 전체 — 3열 오버뷰
  *   Backtest  ▾  기존 자산군. 여기서 하는 일이 행 → 차트 → 백테스트다.
- *     아웃라이트 · 스프레드 · 버터플라이 · 포워드 · 변동성
+ *     아웃라이트 · 스프레드 · 버터플라이 · 포워드 · 변동성 · 현금채권
  *   Simulation   기존 시뮬레이션
  *   Lab          기존 연구실
+ *   Setting      다른 화면이 읽는 값을 정하는 자리 (조달금리)
  *
  * 구조는 `Codex\mockups` 가 이미 그려 둔 것을 조합했다 — sauron.html 의
  * `.sidebar`/`.sb-item`/`.gl` 에, defense.html 의 디스클로저 그룹
@@ -27,8 +28,7 @@
 
 import { Fragment } from "react";
 
-import type { Group } from "./rows";
-import { GROUP_TABS, SECTIONS, type SectionId } from "./tabs";
+import { BACKTEST_TABS, SECTIONS, type BacktestTab, type SectionId } from "./tabs";
 import { Z_SIDEBAR } from "./layers";
 
 /** 항목 하나. 최상위와 중첩이 같은 칸(32)·같은 활자를 쓰고 들여쓰기로만
@@ -105,9 +105,9 @@ export function Sidebar({
 }: {
   section: SectionId;
   /** 지금 켜져 있는 종목군. Backtest 섹션이 아니면 null. */
-  group: Group | null;
+  group: BacktestTab | null;
   onSection: (s: SectionId) => void;
-  onGroup: (g: Group) => void;
+  onGroup: (g: BacktestTab) => void;
   groupsOpen: boolean;
   onGroupsOpen: (v: boolean) => void;
 }) {
@@ -141,7 +141,7 @@ export function Sidebar({
                 <li>
                   {/* 중첩 목록. 킷의 L1+ 는 16 들여쓰기다. */}
                   <ul className="list-none pl-4">
-                    {GROUP_TABS.map((t) => (
+                    {BACKTEST_TABS.map((t) => (
                       <Item
                         key={t.id}
                         label={t.label}

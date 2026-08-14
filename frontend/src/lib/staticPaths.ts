@@ -84,5 +84,33 @@ export function backtestUrl(spec: string): string | null {
   return `/api/backtest?${q}`;
 }
 
+/** Cash Bond · Setting 은 **전부 LIVE** 다 [OWNER, 2026-08-14].
+ *
+ * `backtestUrl` 과 같은 이유와 같은 모양이다: 개발에서는 명시 오리진, 배포에서는
+ * 동일 오리진 경로(next.config.ts 의 rewrite 가 백엔드로 넘긴다). 여기에 정적
+ * 쌍둥이가 없는 이유는 백테스트보다 하나 더 있다 — 민평 자체가 SQL 에만 있어서
+ * 굽기 산출물에 들어가지 않는다. 굽는 것을 잊은 것이 아니라 구울 수 없다.
+ *
+ * rewrite 가 없으면 404 이고, 호출자는 그것을 "백엔드가 필요한 화면이에요" 로
+ * 바꾼다. 그게 정직한 답이다 — 그 라우트는 진짜로 없다. */
+function liveUrl(path: string, query?: string): string {
+  const q = query ? `?${query}` : "";
+  return IS_STATIC ? `${path}${q}` : `${API_BASE}${path}${q}`;
+}
+
+export const cashbondInstrumentsUrl = () => liveUrl("/api/cashbond/instruments");
+
+export const cashbondSeriesUrl = (id: string) =>
+  liveUrl(`/api/cashbond/series/${encodeURIComponent(id)}`);
+
+export const cashbondBacktestUrl = (spec: string, basis: string, spreadBp: number) =>
+  liveUrl(
+    "/api/cashbond/backtest",
+    `positions=${encodeURIComponent(spec)}&basis=${encodeURIComponent(basis)}&spreadBp=${spreadBp}`,
+  );
+
+export const fundingSettingsUrl = (basis: string, spreadBp: number) =>
+  liveUrl("/api/settings/funding", `basis=${encodeURIComponent(basis)}&spreadBp=${spreadBp}`);
+
 export const manifestUrl = () => "/api/manifest.json";
 export const healthUrl = () => `${API_BASE}/api/health`;

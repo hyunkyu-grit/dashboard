@@ -42,12 +42,15 @@ import {
 import { classify } from "./gloss";
 import { diagramSpec } from "./payReceiveModel";
 import { BacktestWindow, BOOKABLE_GROUPS } from "./BacktestWindow";
+import { CashBondView } from "./CashBondView";
+import { SettingView } from "./SettingView";
 import { InstrumentTable } from "./InstrumentTable";
 import { IntroCurtain } from "./IntroCurtain";
 import {
   DEFAULT_GROUP,
   sectionOf,
   tabForSection,
+  type BacktestTab,
   type SectionId,
   type TabId,
 } from "./tabs";
@@ -64,7 +67,7 @@ import { PreviewPane } from "./PreviewPane";
 import { Sidebar } from "./Sidebar";
 import { clearBtPatch, mergeQuery } from "./urlState";
 import { PAGE_R, PAGE_X, PAGE_X_PX } from "./pageGutter";
-import { buildRows, type Group, type Row } from "./rows";
+import { buildRows, type Row } from "./rows";
 import { useIsWide } from "./useIsWide";
 import { useMeasure } from "./useMeasure";
 
@@ -345,7 +348,14 @@ export function App() {
    * no rows. Left beside it, the pane would hold whatever row was hovered on
    * the tab before — a chart of an instrument the reader is no longer looking
    * at, next to a scenario that has nothing to do with it. */
-  const fullWidth = matrixOpen || tab === "all" || tab === "sim";
+  /* 자기 화면을 통째로 그리는 탭 [OWNER, 2026-08-14]. 표+미리보기 두 판이
+   * 아니라 딴 구조이고, 무엇보다 **IRS 요약(`summary`)에 매달리지 않는다** —
+   * 현금채권은 민평(SQL)에서 오고 Setting 은 아무 시장 데이터도 안 읽는다.
+   * 기존 로딩/오류 게이트 밑에 두면 IRS 백엔드가 죽었을 때 조달금리조차 못
+   * 고치게 된다. 폭도 같은 이유로 전체다 — 오른쪽 미리보기는 호버된 IRS 행을
+   * 그리는 판이고, 이 화면들에는 그런 행이 없다. */
+  const ownView = tab === "cashbond" || tab === "setting";
+  const fullWidth = matrixOpen || tab === "all" || tab === "sim" || ownView;
 
   // ~120ms hover delay so crossing the table does not strobe the preview (§2).
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -376,7 +386,7 @@ export function App() {
    * `lastGroup` 만 따로 든다. Backtest 를 다시 누를 때 늘 아웃라이트로
    * 되돌리면, 스프레드를 보다 Main 을 한 번 들른 사람이 자리를 잃는다. */
   const section = sectionOf(tab);
-  const [lastGroup, setLastGroup] = useState<Group>(DEFAULT_GROUP);
+  const [lastGroup, setLastGroup] = useState<BacktestTab>(DEFAULT_GROUP);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [groupsOpen, setGroupsOpen] = useState(true);
 
@@ -386,7 +396,7 @@ export function App() {
     [onTab, lastGroup],
   );
   const onGroup = useCallback(
-    (g: Group) => {
+    (g: BacktestTab) => {
       setLastGroup(g);
       onTab(g);
     },
@@ -592,7 +602,9 @@ export function App() {
         <Header
           events={summary?.events ?? []}
           onFocus={focusFromChangeLog}
-          showChartType={section === "main" || section === "backtest"}
+          showChartType={
+            section === "main" || (section === "backtest" && tab !== "cashbond")
+          }
           sidebarOpen={sidebarOpen}
           onSidebarOpen={setSidebarOpen}
         />
@@ -605,7 +617,7 @@ export function App() {
         {sidebarOpen && (
           <Sidebar
             section={section}
-            group={section === "backtest" ? (tab as Group) : null}
+            group={section === "backtest" ? (tab as BacktestTab) : null}
             onSection={onSection}
             onGroup={onGroup}
             groupsOpen={groupsOpen}
@@ -630,22 +642,24 @@ export function App() {
             sentence and the failure never arrived at all — the screen said
             "loading" indefinitely with the backend down. The retry does not
             wait for the fetch layer's retry budget: it is a button. */}
-        {!summary && isError && (
+        {tab === "setting" && <SettingView />}
+        {tab === "cashbond" && <CashBondView />}
+        {!ownView && !summary && isError && (
           <ErrorState
             what="커브를"
             onRetry={() => void refetchSummary()}
             retrying={summaryFetching}
           />
         )}
-        {!summary && !isError && <LoadingState />}
+        {!ownView && !summary && !isError && <LoadingState />}
         {/* an unknown `bt` seed: the parameter is cleared and said, rather
             than leaving a bogus URL rendering nothing (Pass B) */}
-        {missingTile && (
+        {!ownView && missingTile && (
           <p className={`pb-2 text-center text-[13px] opacity-55 ${PAGE_X}`}>
             {missingTile} 종목을 찾지 못해 닫았어요
           </p>
         )}
-        {summary && (
+        {!ownView && summary && (
           <div className="flex min-h-0 flex-1">
             {/* left pane: content-sized in two panes; full width in one column
                 OR while the forward matrix mode is open (§F). */}

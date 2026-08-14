@@ -70,6 +70,9 @@ from . import payloads
 from . import schedule_cache
 from .backtest import BacktestError, Position, book_recon, run_backtest
 from .cache import cached
+from . import cashbond
+from . import creditmatrix
+from . import funding
 from .curves import build_basis_curves
 from .dataset import load_dataset_merged
 from .derive import basis_dates, derived_ids
@@ -401,6 +404,120 @@ def backtest(positions: str = "") -> dict:
         result["recon"] = book_recon(_dataset, parsed)
         return result
     except BacktestError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+# ── Cash Bond [OWNER, 2026-08-14] ───────────────────────────────────────────
+# Backtest 섹션의 여섯 번째 종목군. IRS 쪽 라우트와 같은 성질이다: 표는
+# 서버가 다 계산해 내려보내고(§16), 백테스트는 **라이브 전용**이다 — 읽는
+# 사람이 고르는 입력에 답이 달려 있어 정적 쌍둥이를 만들 수 없다.
+#
+# 민평은 워크북이 아니라 SQL 이다(`app/creditmatrix.py` 의 주석이 근거를
+# 든다: 이 배포의 `data/` 에는 Credit Matrix 워크북이 없다).
+
+
+def _funding_spec(basis: str, spread_bp: float) -> funding.FundingSpec:
+    try:
+        return funding.FundingSpec(basis=basis, spread_bp=spread_bp).validated()
+    except funding.FundingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("/api/settings/funding")
+def funding_settings(
+    basis: str = funding.DEFAULT_BASIS,
+    spreadBp: float = funding.DEFAULT_SPREAD_BP,
+) -> dict:
+    """Setting 탭이 조달 기준을 고르고 그 결과를 미리 보는 자리.
+
+    화면이 값을 저장하는 곳은 아니다 — 스펙은 URL 로 다니고 백테스트 요청에
+    실려 온다. 이 라우트는 "그 스펙이 유효한가, 지금 몇 %인가" 만 답한다.
+    """
+    spec = _funding_spec(basis, spreadBp)
+    return {
+        "options": [
+            {"id": k, "label": v} for k, v in funding.BASIS_LABEL.items()
+        ],
+        "default": {"basis": funding.DEFAULT_BASIS, "spreadBp": funding.DEFAULT_SPREAD_BP},
+        **funding.provenance(spec),
+    }
+
+
+@router.get("/api/cashbond/instruments")
+def cashbond_instruments() -> dict:
+    try:
+        return cashbond.instruments(creditmatrix.load(), _dataset)
+    except (cashbond.CashBondError, creditmatrix.CreditMatrixError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("/api/cashbond/series/{series_id}")
+def cashbond_series(series_id: str) -> dict:
+    """한 종목의 전 기간 시계열 — 표를 눌렀을 때 뜨는 차트가 읽는다."""
+    try:
+        m = creditmatrix.load()
+        kind, bond_type, tenor = cashbond.parse_id(series_id)
+        values = cashbond.series_for(m, _dataset, series_id)
+    except (cashbond.CashBondError, creditmatrix.CreditMatrixError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {
+        "id": series_id,
+        "label": cashbond.instrument_label(kind, bond_type, tenor),
+        "unit": "pct" if kind == cashbond.KIND_CASH else "bp",
+        "points": [
+            {"t": d.isoformat(), "v": v}
+            for d, v in zip(m.dates, values)
+            if v is not None
+        ],
+    }
+
+
+@router.get("/api/cashbond/backtest")
+def cashbond_backtest(
+    positions: str = "",
+    basis: str = funding.DEFAULT_BASIS,
+    spreadBp: float = funding.DEFAULT_SPREAD_BP,
+) -> dict:
+    """현금채권 북을 매일 재평가한다.
+
+    `positions` 문법은 IRS 백테스트와 같다 — `;` 로 나열하고 하나는
+    `id,direction,notional,entry[,exit]`. id 는 `CB:KTB:3Y` 또는
+    `ASW:KTB:3Y` 다. 조달은 쿼리로 따라온다(Setting 탭이 채운다).
+    """
+    if not positions.strip():
+        raise HTTPException(status_code=422, detail="포지션이 하나는 있어야 합니다.")
+
+    spec = _funding_spec(basis, spreadBp)
+    parsed: list[cashbond.BondPosition] = []
+    for raw in positions.split(";"):
+        raw = raw.strip()
+        if not raw:
+            continue
+        parts = [x.strip() for x in raw.split(",")]
+        if len(parts) not in (4, 5):
+            raise HTTPException(
+                status_code=422,
+                detail=f"잘못된 포지션 {raw!r}: id,direction,notional,entry[,exit] 형식입니다.",
+            )
+        try:
+            kind, bond_type, tenor = cashbond.parse_id(parts[0])
+            parsed.append(
+                cashbond.BondPosition(
+                    kind=kind,
+                    bond_type=bond_type,
+                    tenor=tenor,
+                    direction=int(parts[1]),
+                    notional=float(parts[2]),
+                    entry=dt.date.fromisoformat(parts[3]),
+                    exit=dt.date.fromisoformat(parts[4]) if len(parts) == 5 and parts[4] else None,
+                )
+            )
+        except (ValueError, cashbond.CashBondError) as exc:
+            raise HTTPException(status_code=422, detail=f"잘못된 포지션 {raw!r}: {exc}")
+
+    try:
+        return cashbond.run_backtest(creditmatrix.load(), _dataset, parsed, spec)
+    except (cashbond.CashBondError, creditmatrix.CreditMatrixError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
 
