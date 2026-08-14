@@ -222,49 +222,6 @@ class _BondLeg:
     matured: bool
 
 
-def _net_funding(
-    spec: fd.FundingSpec,
-    entry_date: dt.date,
-    on: dt.date,
-    notional: float,
-    coupon: float,
-    n: int,
-    elapsed: float,
-) -> float:
-    """조달비용 — **줄어드는 잔액**에 붙는다 [2026-08-14].
-
-    처음에는 매수단가에 고정으로 붙였는데, 그러면 이표를 받아 손에 쥐고 있는
-    동안에도 그 돈까지 빌리고 있는 셈이 된다. 3Y 보유의 쿠폰 10.95억을 2.8%
-    로 굴렸다면 4,300만원 — 손익의 3.9% 였다(실측).
-
-    교과서의 자금조달 채권 수익률이 그 처리다: 매수가를 레포로 빌리고, 들어오는
-    현금(이표·만기 상환)이 그 차입을 갚아 나간다. 그래서 이 함수는 **재투자
-    수익률을 새로 정하지 않는다** — 갚는 것과 빌리는 것이 같은 금리이므로,
-    "조달금리로 재투자" 와 "잔액에서 차감" 이 같은 말이 된다. 새 규약을 하나
-    더 만들지 않고 결함이 사라지는 것이 이 방식을 고른 이유다.
-
-    단리다 — `funding.cost_between` 과 같은 규약이라 그 함수를 그대로 쓴다.
-
-    IRS 쪽은 못 고친다: 조달 자체가 없어서(Cash Bond 전용 [OWNER, 2026-08-14])
-    현금을 굴릴 금리가 없다. 그쪽 결제현금이 0% 로 앉아 있는 것은 남는다.
-    [미해결]
-    """
-    cost = fd.cost_between(spec, entry_date, on, notional)
-    c = coupon / FREQ * notional
-    for k in range(1, n + 1):
-        if k / FREQ > elapsed + _EPS:
-            break
-        # 이표 k 의 결제일 — 이상화된 스케줄이라 진입일 + k/4년이다
-        t_k = entry_date + dt.timedelta(days=round(k * 365.0 / FREQ))
-        cost -= fd.cost_between(spec, t_k, on, c)
-    # 만기 상환도 같은 현금이다 — 액면이 돌아온 뒤로는 빌린 것이 없다.
-    # 만기가 휴일이라 종료일이 며칠 뒤인 경우가 여기 걸린다(실측 2일, 156만원).
-    if n / FREQ <= elapsed + _EPS:
-        t_n = entry_date + dt.timedelta(days=round(n * 365.0 / FREQ))
-        cost -= fd.cost_between(spec, t_n, on, notional)
-    return cost
-
-
 def _bond_leg(m: CreditMatrix, pos: BondPosition) -> _BondLeg:
     entry_i, exit_i, matured = _span(m, pos)
     years = cm.TENOR_YEARS[pos.tenor]
@@ -330,13 +287,19 @@ def run_bond_leg(
             d_f, a_f, _cp_f, rd_f = price(y_frozen, leg.coupon, leg.n, elapsed)
             roll_cum += (d_f - a_f + rd_f) - prev_clean
 
-        # 조달은 매수 원금에 붙되 **들어온 현금만큼 줄어든다**(`_net_funding`).
+        # 조달은 **초기 투자금액**에 붙는다 [OWNER, 2026-08-14 — "조달은 초기
+        # 투자 금액 기준으로 붙여야 함"]. par 로 샀으므로 곧 액면이다.
+        #
+        # 잠깐 잔액 기준으로 바꿨다가 오너가 되돌렸다. 들어온 이표가 차입을
+        # 갚아 나가는 처리였고 크기도 쟀는데(3Y 만기 보유에서 +42,712,000,
+        # 손익의 3.9%), 데스크가 조달을 잡는 방식은 텀 레포로 매수금액을
+        # 통째로 조달하는 쪽이다 — 이표를 받아 그때그때 차입을 갚는 것은 별개의
+        # 자금관리이지 이 포지션의 비용이 아니다. 되돌릴 일이 생기면
+        # `git show 021f2894` 에 그 구현과 실측이 있다.
+        #
         # 매도는 위 주석대로 0.
         funding = (
-            _net_funding(
-                spec, entry_date, m.dates[i], pos.notional,
-                leg.coupon, leg.n, elapsed,
-            )
+            fd.cost_between(spec, entry_date, m.dates[i], pos.notional)
             if pos.direction > 0
             else 0.0
         )

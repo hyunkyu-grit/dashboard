@@ -598,9 +598,8 @@ export function CashBondWindow({
               <p className="mt-1.5 text-[13px] opacity-50">
                 평가손익 = 민평이 움직인 몫, 캐리손익 = 받은 이표와 쌓인 경과이자,
                 롤다운손익 = 커브가 멈춰도 잔존만기가 줄며 생기는 몫, 조달비용 =
-                남은 차입에 붙은 이자예요 — 이표와 만기 원금이 들어오면 그만큼
-                줄어요. 넷의 합이 손익이에요. 조달은 {run.data.funding.label} 이고
-                Setting 에서 바꿔요.
+                초기 투자금액을 빌린 값이에요. 넷의 합이 손익이에요. 조달은{" "}
+                {run.data.funding.label} 이고 Setting 에서 바꿔요.
               </p>
             </div>
           )}
