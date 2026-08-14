@@ -73,7 +73,7 @@ export const THETA_LABEL = "세타/DV01백만";
  * keeps the column readable on every tab; "+1 방향" would have been correct
  * and unreadable. */
 export const THETA_TITLE =
-  "커브가 그대로일 때 3개월 뒤 손익이에요 (캐리 + 롤다운). " +
+  "커브가 그대로일 때 하루 손익이에요 (캐리 + 롤다운). " +
   "아웃라이트는 페이, 스프레드는 스티프너, 플라이는 벨리 페이 기준이라 " +
   "마이너스면 그 방향을 잡았을 때 시간이 돈을 가져가요. " +
   "DV01 백만원당이라 종목끼리 바로 비교돼요 — 스프레드·플라이는 다리 하나의 DV01이에요.";

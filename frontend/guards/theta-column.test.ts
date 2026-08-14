@@ -77,7 +77,12 @@ describe("the header carries the normaliser, not just the noun", () => {
     expect(THETA_LABEL).toContain("DV01");
     // and the facts that did not fit ride in the tooltip instead of being
     // dropped: the horizon, and what the sign means
-    expect(THETA_TITLE).toContain("3개월");
+    // 하루치다 [OWNER, 2026-08-14 — "세타 전부 다 하루치로"]. 계산 창은 여전히
+    // 분기이고 표기만 일 단위인데(근거는 backend/app/theta.py 의 HORIZON_Y
+    // 주석: 하루 간격으로 파 금리를 두 번 구성하면 롤이 15배까지 튄다),
+    // 읽는 사람에게는 "하루" 가 맞는 말이다 — 캐리는 시간에 선형이고 롤은
+    // 분기 평균이다.
+    expect(THETA_TITLE).toContain("하루");
     expect(THETA_TITLE).toContain("캐리");
   });
 

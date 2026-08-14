@@ -83,8 +83,10 @@ export function CashBondView({
   const [paneRef, paneW, paneH] = useMeasure<HTMLDivElement>();
 
   const { data, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["cashbond", "instruments", basis, spreadBp],
-    queryFn: () => fetchCashBondInstruments({ basis, spreadBp }),
+    // 조달은 키에 없다 — 세타가 그것을 안 뺀다 [OWNER, 2026-08-14]. Setting 을
+    // 바꿔도 이 표는 그대로이고, 바뀌는 것은 백테스트의 조달 칸뿐이다.
+    queryKey: ["cashbond", "instruments"],
+    queryFn: fetchCashBondInstruments,
     retry: 1,
   });
 
@@ -186,9 +188,8 @@ export function CashBondView({
         </div>
 
         <p className="shrink-0 py-2 text-[13px] opacity-45">
-          세타는 {data.thetaBasis.horizonMonths}개월 · 매수 기준 · 조달{" "}
-          {data.thetaBasis.funding.label} 를 뺀 순캐리예요. 행을 누르면 백테스트
-          창이 열려요.
+          세타는 커브가 그대로일 때의 하루 손익이에요 — 쿠폰캐리 + 롤다운, 매수
+          기준, DV01 백만원당. 조달은 빼지 않아요. 행을 누르면 백테스트 창이 열려요.
         </p>
       </div>
 

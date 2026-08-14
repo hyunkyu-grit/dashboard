@@ -59,10 +59,11 @@ class TestParIdentity:
     @pytest.mark.parametrize("y", [0.001, 0.0378, 0.05, 0.15])
     def test_entry_price_is_exactly_par(self, tenor, y):
         n = cb.periods_for(tenor)
-        dirty, accrued, paid = cb.price(y, y, n, 0.0)
+        dirty, accrued, coupons, redeemed = cb.price(y, y, n, 0.0)
         assert abs(dirty - 1.0) < 1e-12, (tenor, y, dirty)
         assert accrued == 0.0
-        assert paid == 0.0
+        assert coupons == 0.0
+        assert redeemed == 0.0
 
     def test_a_coupon_above_the_yield_prices_above_par(self):
         n = cb.periods_for("10Y")
@@ -80,6 +81,8 @@ class TestParIdentity:
         # 당일: 경과이자는 0 으로 떨어지고 그 금액이 받은 이표로 넘어간다
         assert on_the_day[1] == 0.0
         assert on_the_day[2] == pytest.approx(c)
+        # 만기가 아니므로 상환액면은 양쪽 다 0
+        assert just_before[3] == 0.0 and on_the_day[3] == 0.0
         # dirty + 받은 이표는 그 경계에서 이어진다 (톱니가 없다)
         assert just_before[0] + just_before[2] == pytest.approx(
             on_the_day[0] + on_the_day[2], abs=1e-6
@@ -393,3 +396,120 @@ class TestRoutes:
         assert {o["id"] for o in body["options"]} == {"base", "call"}
         bad = client.get("/api/settings/funding", params={"basis": "무엇"})
         assert bad.status_code == 422
+
+
+class TestThetaConventions:
+    """세타의 두 규약 [OWNER, 2026-08-14] — 조용히 드리프트할 수 있는 것들.
+
+    ① **하루치**다. 계산 창은 분기이고 표기만 일 단위인데(근거는
+       `app/theta.py:HORIZON_Y`), 그 나누기가 빠지거나 두 번 되면 열이 91배
+       틀리고 아무 테스트도 안 걸린다 — 부호도 순위도 그대로이기 때문이다.
+    ② **조달을 빼지 않는다**. 시장 관행(carry = y − 레포)과 다른 선택이라,
+       누가 "관행대로" 되돌려 놓으면 여기가 먼저 말한다.
+    """
+
+    def _curve(self):
+        # 평평한 3% 커브 — 롤다운이 0 이라 캐리만 남는다
+        return synth(days=400, curve=lambda i: _flat_curve(3.0))
+
+    def test_carry_is_one_days_coupon_on_the_notional(self):
+        m = self._curve()
+        th = cb.theta_for_bond(m, "KTB", "5Y", len(m.dates) - 1)
+        assert th is not None
+        # 100억 × 3% ÷ 365. 이표기간 안의 복리/단리 규약 차이만큼만 어긋난다.
+        assert th["carry"] == pytest.approx(1e10 * 0.03 / 365, rel=2e-3)
+
+    def test_funding_is_not_subtracted(self):
+        """조달이 다시 들어오면 캐리가 (3% − 2.85%) 쪽으로 확 줄어든다."""
+        m = self._curve()
+        th = cb.theta_for_bond(m, "KTB", "5Y", len(m.dates) - 1)
+        gross = 1e10 * 0.03 / 365
+        net = 1e10 * (0.03 - 0.0285) / 365  # 기준금리 2.75 + 10bp 를 뺐다면
+        assert abs(th["carry"] - gross) < abs(th["carry"] - net)
+        # 함수가 조달 스펙을 아예 안 받는다 — 받으면 언젠가 쓰인다
+        import inspect
+
+        assert "spec" not in inspect.signature(cb.theta_for_bond).parameters
+
+    def test_a_flat_curve_has_no_rolldown(self):
+        m = self._curve()
+        th = cb.theta_for_bond(m, "KTB", "5Y", len(m.dates) - 1)
+        # 액면의 0.01bp 예산 — clean 가격의 이표기간 톱니(위 참조)만 남는다
+        assert abs(th["roll"]) / 1e10 * 1e4 <= 0.01, th["roll"]
+
+    def test_an_upward_curve_rolls_the_buyer_into_profit(self):
+        m = synth(days=400, curve=lambda i: {
+            t: 2.0 + 0.1 * cm.TENOR_YEARS[t] for t in cm.TENOR_LABELS
+        })
+        th = cb.theta_for_bond(m, "KTB", "5Y", len(m.dates) - 1)
+        assert th["roll"] > 0
+        assert th["perDv01"] > 0  # 캐리도 롤도 매수에 유리한 커브다
+
+    def test_a_tenor_that_would_mature_inside_the_window_has_none(self):
+        """호라이즌을 지나고도 한 분기는 남아야 롤다운이 뜻이 있다 — 커브
+        가장자리는 보간이 지배한다(IRS 쪽 문턱과 같은 규칙)."""
+        m = self._curve()
+        assert cb.theta_for_bond(m, "KTB", "3M", len(m.dates) - 1) is None
+        assert cb.theta_for_bond(m, "KTB", "6M", len(m.dates) - 1) is not None
+
+
+class TestHeldToMaturity:
+    """만기까지 들고 있으면 무슨 일이 일어나야 하는가 [2026-08-14].
+
+    오너가 "만기까지 보유한 채권 백테스트 손익이 이상하다" 로 잡아낸 결함의
+    회귀 핀이다. 두 가지가 틀려 있었고 둘 다 총액과 분해에서 다르게 드러났다:
+
+    ① `price` 의 결제현금에 **액면 상환이 빠져** 있었다. `dirty` 는 안 온
+       현금흐름의 현재가치라 만기에 0 이 되는데, 그때 나간 액면 1 이 현금에
+       안 잡히면 `dirty + 현금` 이 1.04 에서 0.04 로 떨어진다 — 만기 보유가
+       **원금 전액 손실**로 찍혔다. FTSE Russell 의 지수 계산 규칙이 total
+       return 의 cash 항을 "coupons **and any principal repayments**" 로
+       정의하는 그대로다.
+
+    ② 고치고 나니 이번엔 그 액면이 **캐리**로 들어갔다(만기 보유 3Y 캐리
+       110억). 상환된 액면은 소득이 아니라 자본 회수라 가격 쪽이다.
+
+    그래서 이 클래스가 못박는 것은 **총액과 분해 둘 다**이다.
+    """
+
+    def _ran(self, tenor: str, coupon_pct: float = 3.0):
+        m = synth(days=1600, curve=lambda i: _flat_curve(coupon_pct))
+        pos = cb.BondPosition("CB", "KTB", tenor, 1, N, m.dates[0])
+        return m, cb.run_backtest(m, None, [pos], SPEC0)["positions"][0]
+
+    def test_the_position_actually_reaches_maturity(self):
+        _m, p = self._ran("3Y")
+        assert p["matured"] is True
+
+    def test_dirty_plus_settled_is_continuous_across_maturity(self):
+        """만기 직전과 직후에 절벽이 없어야 한다 — 그 절벽이 결함의 얼굴이었다."""
+        n = cb.periods_for("1Y")
+        before = cb.price(0.04, 0.04, n, 1.0 - 1e-6)
+        after = cb.price(0.04, 0.04, n, 1.0)
+        worth = lambda t: t[0] + t[2] + t[3]  # dirty + 이표 + 상환액면  # noqa: E731
+        assert worth(after) == pytest.approx(worth(before), abs=1e-6)
+        assert worth(after) == pytest.approx(1.04)
+
+    def test_price_and_rolldown_cancel_at_maturity(self):
+        """par 로 사서 par 를 돌려받았으니 **가격으로 번 돈은 0** 이다.
+        평가와 롤다운은 각자 0 이 아니어도 되지만 합은 0 이어야 한다."""
+        _m, p = self._ran("3Y")
+        assert abs(p["valuation"] + p["rolldown"]) <= 2, (p["valuation"], p["rolldown"])
+
+    def test_the_pnl_is_coupons_minus_funding(self):
+        m, p = self._ran("3Y", coupon_pct=3.0)
+        days = (
+            dt.date.fromisoformat(p["exit"]) - dt.date.fromisoformat(p["entry"])
+        ).days
+        coupons = N * 0.03 * days / 365
+        assert p["carry"] == pytest.approx(coupons, rel=2e-3)
+        assert p["pnl"] == pytest.approx(coupons + p["funding"], rel=2e-3)
+
+    def test_accrual_stops_at_maturity(self):
+        """만기 뒤에도 경과이자가 자라면 프로즌 테일이 조용히 부풀어 오른다."""
+        n = cb.periods_for("1Y")
+        for e in (1.0, 1.5, 3.0):
+            _d, accrued, coupons, redeemed = cb.price(0.04, 0.04, n, e)
+            assert accrued == 0.0
+            assert coupons == pytest.approx(0.04)
+            assert redeemed == 1.0

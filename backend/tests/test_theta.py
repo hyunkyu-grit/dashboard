@@ -55,9 +55,15 @@ def cd(dataset):
 
 def test_basis_states_what_the_column_means(table):
     _, meta = table
-    # 화면이 "3개월 · 페이 기준"이라고 적을 수 있어야 한다. 이 셋이 없으면
+    # 화면이 "하루 · 페이 기준"이라고 적을 수 있어야 한다. 이 셋이 없으면
     # 열은 출처 없는 숫자가 된다.
-    assert meta["horizonMonths"] == 3
+    #
+    # 하루치다 [OWNER, 2026-08-14 — "세타 전부 다 하루치로"]. **계산 창은
+    # 여전히 분기**이고 표기만 일 단위인데, 그 이유가 `theta.HORIZON_Y` 의
+    # 주석에 실측으로 있다: 하루 간격으로 파 금리를 두 번 구성하면 스케줄
+    # 이산화와 노드 보간이 진짜 롤보다 15배 큰 점프를 만든다. 캐리는 시간에
+    # 선형이라 나누기가 정확하고, 롤은 "앞으로 한 분기의 하루 평균" 이다.
+    assert meta["horizonDays"] == 1
     assert meta["side"] == "pay"
     assert meta["notional"] == 10_000_000_000
     assert meta["cd"] is not None and 0 < meta["cd"] < 20
@@ -268,3 +274,23 @@ def test_the_payload_carries_it(dataset):
     derived = {d["id"]: d for d in body["derived"]}
     assert derived["2Y-10Y"]["theta"]["perDv01"] != 0
     assert derived["2Y-5Y-10Y"]["theta"]["perDv01"] != 0
+
+
+def test_the_column_is_a_days_worth(table, dataset):
+    """하루치다 [OWNER, 2026-08-14 — "세타 전부 다 하루치로"].
+
+    계산 창은 분기이고 표기만 일 단위인데(`theta.HORIZON_Y` 의 실측 주석), 그
+    나누기가 빠지거나 두 번 되면 열이 91배 틀리고도 **부호와 순위가 그대로**라
+    다른 테스트는 아무것도 못 잡는다. 그래서 손으로 셀 수 있는 값 하나를 박는다:
+    페이의 하루 캐리는 (CD − 파금리) × 노셔널 ÷ 365 다.
+    """
+    rows, meta = table
+    rates = dict(par_rates_at(dataset, dataset.asof))
+    cd = meta["cd"] / 100.0
+    for tenor in ("1Y", "3Y", "10Y"):
+        block = rows.get(tenor)
+        if block is None:
+            continue
+        k = rates[TENOR_T[tenor]]
+        expected = (cd - k) * NOTIONAL / 365.0
+        assert block["carry"] == pytest.approx(expected, rel=5e-3), tenor

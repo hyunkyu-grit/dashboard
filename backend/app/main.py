@@ -445,23 +445,19 @@ def funding_settings(
 
 
 @router.get("/api/cashbond/instruments")
-def cashbond_instruments(
-    basis: str = funding.DEFAULT_BASIS,
-    spreadBp: float = funding.DEFAULT_SPREAD_BP,
-) -> dict:
+def cashbond_instruments() -> dict:
     """표의 행 전부, 세타까지 계산해서.
 
-    조달을 쿼리로 받는 이유는 **세타가 순캐리**이기 때문이다 [OWNER,
-    2026-08-14] — Setting 을 바꾸면 이 표의 세타 열이 같이 움직여야 한다.
-    다른 열(수준·변화·백분위·52주)은 조달과 무관하므로 값이 바뀌지 않는다.
+    조달을 안 받는다 [OWNER, 2026-08-14 — "채권에서는 조달 차감하지 않는 걸로"].
+    세타가 쿠폰캐리 + 롤다운이라 Setting 과 무관해졌고, 안 쓰는 인자를 남겨 두면
+    다음 사람이 그것이 쓰인다고 믿는다. 조달은 백테스트 쪽 라우트가 여전히 받는다.
     """
-    spec = _funding_spec(basis, spreadBp)
     try:
         # IRS 세타는 자산스왑 행이 자기 스왑 다리 몫으로 쓴다. 커브 하나로
         # 닫힌 식이라 매 요청 다시 계산해도 싸고(측정 33ms), 데이터가 갱신되면
         # 자동으로 따라온다 — 여기 캐시를 두면 그 갱신을 놓친다.
         irs_theta, _basis = theta_table(_dataset)
-        return cashbond.instruments(creditmatrix.load(), _dataset, spec, irs_theta)
+        return cashbond.instruments(creditmatrix.load(), _dataset, irs_theta)
     except (cashbond.CashBondError, creditmatrix.CreditMatrixError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 

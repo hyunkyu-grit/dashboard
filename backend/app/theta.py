@@ -72,8 +72,30 @@ from .dv01 import pv01
 from .engine_port import bootstrap_zero_curve
 from .forwards import forward_par_rate
 
-# 호라이즌 3개월 — 시장 표준(Clarus 는 bp/월 로도 적지만 카드 단위는 분기다).
+# 세타는 **하루치로 적는다** [OWNER, 2026-08-14 — "세타 전부 다 하루치로"].
+# 다만 **계산은 분기에서 하고 일수로 나눈다.** 두 값이 다른 이유가 이 상수 쌍의
+# 전부이므로 근거를 적어 둔다.
+#
+# 시장 관행이 호라이즌을 고정하지 않는 것은 맞다 — Deriscope 의 정리도 "The
+# horizon can be any point in time T in the future" 이고 Clarus 도 분기·월·일을
+# 두루 쓴다. 문제는 이 커브에서 **한 걸음을 하루로 잡으면 롤다운이 잡음이 된다**
+# 는 것이다. 파 금리를 T 와 T−1일에서 따로 구성하면 스왑 스케줄의 이산화와 노드
+# 사이 보간이 진짜 롤보다 큰 점프를 만든다 (2026-08-14 실측, asof 08-13):
+#
+#     T      1일 Δpar     분기 Δpar 를 하루로 환산      배수
+#     1Y    −1.0550bp            −0.170bp            6.2x
+#     3Y    −0.3509bp            −0.023bp           15.5x
+#     10Y   −0.0952bp            −0.005bp           18.9x
+#
+# 분기는 그 잡음이 묻힐 만큼 길고, 캐리는 시간에 선형이라 나누기가 정확하다.
+# 롤다운은 "앞으로 한 분기의 하루 평균" 이 되는데, 데스크가 bp/일 을 말할 때
+# 뜻하는 것도 그것이다(연간 또는 분기 수치를 나눈 값).
+#
+# 진짜 하루 롤이 필요해지면 커브에서 dPar/dT 를 해석적으로 뽑아야 한다 —
+# 스왑을 두 번 짓는 방식으로는 못 얻는다. [미해결]
 HORIZON_Y = 0.25
+#: 하루치로 나누는 제수. 달력일이다 — 캐리는 달력이 흐르면 붙는다.
+HORIZON_DAYS = HORIZON_Y * 365.0
 
 # 툴팁의 현금 금액이 서는 노셔널. 원화 IRS 의 거래 단위가 100억이다 [OWNER].
 # `perDv01` 은 이 값에 무관하다 — 위 주석 참조.
@@ -169,7 +191,14 @@ def _leg_cache(zc: np.ndarray, cd_decimal: float):
 
 def _block(carry: float, roll: float, dv01: float, a_h_ref: float) -> dict:
     """현금 캐리·롤다운(원)을 화면이 읽는 블록으로. `dv01` 은 기준 다리의
-    DV01(원/bp), `a_h_ref` 는 그 다리의 호라이즌 연금."""
+    DV01(원/bp), `a_h_ref` 는 그 다리의 호라이즌 연금.
+
+    들어오는 것은 **분기치**이고 나가는 것은 **하루치**다 — 위 상수 주석의
+    근거대로 계산 창과 표기 단위를 분리한다. 나누는 자리가 여기 하나뿐이라
+    아웃라이트·스프레드·플라이가 저절로 같은 단위로 나온다.
+    """
+    carry /= HORIZON_DAYS
+    roll /= HORIZON_DAYS
     cash = carry + roll
     denom = a_h_ref * NOTIONAL * BP
     return {
@@ -252,7 +281,10 @@ def theta_table(dataset: Dataset) -> tuple[dict[str, dict], dict]:
     rates = dict(par_rates_at(dataset, dataset.asof))
     cd = rates.get(TENOR_T[CD_TENOR])
     meta = {
-        "horizonMonths": round(HORIZON_Y * 12),
+        # 하루치다 [OWNER, 2026-08-14]. 계산 창은 분기이고 표기만 일 단위라는
+        # 사실은 `_block` 과 `HORIZON_Y` 의 주석에 있다 — 화면은 "하루" 만
+        # 말하면 되고, 그것이 거짓이 아니다(캐리는 선형, 롤은 분기 평균).
+        "horizonDays": 1,
         "notional": NOTIONAL,
         "side": "pay",
         "cd": round(cd * 100, 4) if cd is not None else None,
@@ -271,8 +303,12 @@ def theta_table(dataset: Dataset) -> tuple[dict[str, dict], dict]:
         t = TENOR_T.get(tenor)
         if t is None or t not in rates or tenor not in THETA_TENORS:
             return None
+        # 호라이즌을 지나고도 **한 분기는 남아야** 세타가 뜻이 있다. 호라이즌이
+        # 하루로 짧아졌다고 이 문턱까지 하루로 내리면, 잔존 이틀짜리 스왑에
+        # 롤다운을 붙이게 된다 — 그 구간의 파 금리는 커브의 가장자리라
+        # 보간·외삽이 지배한다. 문턱은 상품의 성질이지 호라이즌의 함수가 아니다.
         if t - HORIZON_Y < 0.25 - 1e-9:
-            return None  # 호라이즌을 지나면 남는 스왑이 없다
+            return None
         return t
 
     out: dict[str, dict] = {}

@@ -116,7 +116,9 @@ export interface Theta {
 /** What the 세타 column means, stated once for the table rather than repeated
  * down it. `cd` null ⇒ no row carries a theta (carry cannot be invented). */
 export interface ThetaBasis {
-  horizonMonths: number;
+  /** 하루 [OWNER, 2026-08-14]. 계산 창은 분기이고 표기만 일 단위다 —
+   * 백엔드 `app/theta.py:HORIZON_Y` 에 그래야 하는 실측 근거가 있다. */
+  horizonDays: number;
   notional: number;
   side: "pay";
   cd: number | null;
@@ -609,12 +611,12 @@ export interface CashBondRow {
   rangeLow: number | null;
   rangeAvg: number | null;
   sortKey: number[];
-  /** 세타 — 3개월 캐리+롤다운, DV01 백만원당 [OWNER, 2026-08-14].
+  /** 세타 — **하루** 캐리+롤다운, DV01 백만원당 [OWNER, 2026-08-14].
    *
-   * IRS 표의 같은 열과 **정의가 하나 다르다**: 캐리가 순캐리(쿠폰 − 조달)다.
-   * 현금채권은 원금을 조달해서 사므로 그 이자를 빼야 실제로 버는 돈이고,
-   * 그래서 Setting 의 조달을 바꾸면 이 열이 같이 움직인다. 부호는 **매수**
-   * 기준(스왑 표는 페이 기준) — 이 표의 행은 살 수만 있다.
+   * IRS 표의 같은 열과 정의를 맞췄다: **조달을 빼지 않는다** [OWNER — "채권에서는
+   * 조달 차감하지 않는 걸로"]. 시장 관행(carry = y − 레포)과는 다르다는 사실이
+   * 백엔드 `app/cashbond.py` 의 세타 주석에 외부 출처와 함께 적혀 있다.
+   * 부호는 **매수** 기준(스왑 표는 페이 기준) — 이 표의 행은 살 수만 있다.
    * 자산스왑 행은 두 다리의 합이고, 분모는 채권 다리의 DV01 이다. */
   theta: Theta | null;
 }
@@ -624,12 +626,12 @@ export interface CashBondInstruments {
   from: string;
   types: { id: string; label: string }[];
   rows: CashBondRow[];
-  /** 세타 열이 무엇을 뜻하는지 — 표 아래에 한 번 적는다. */
+  /** 세타 열이 무엇을 뜻하는지 — 표 아래에 한 번 적는다. 조달은 여기 없다:
+   * 세타가 그것을 안 뺀다(Setting 의 값은 백테스트의 조달 칸이 쓴다). */
   thetaBasis: {
-    horizonMonths: number;
+    horizonDays: number;
     notional: number;
     side: "buy";
-    funding: FundingProvenance;
   };
 }
 
@@ -709,12 +711,8 @@ async function liveJson<T>(url: string, what: string): Promise<T> {
   return r.json();
 }
 
-export async function fetchCashBondInstruments(funding: {
-  basis: string;
-  spreadBp: number;
-}): Promise<CashBondInstruments> {
-  // 조달이 쿼리로 가는 이유는 세타가 순캐리이기 때문이다 — 나머지 열은 안 바뀐다
-  return liveJson(cashbondInstrumentsUrl(funding.basis, funding.spreadBp), "cashbond/instruments");
+export async function fetchCashBondInstruments(): Promise<CashBondInstruments> {
+  return liveJson(cashbondInstrumentsUrl(), "cashbond/instruments");
 }
 
 /** 한 종목의 전 기간 시계열. IRS 쪽 `fetchSeries` 와 **같은 몸통**이라

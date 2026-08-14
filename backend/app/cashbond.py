@@ -108,8 +108,10 @@ def periods_for(tenor: str) -> int:
     return max(1, round(years * FREQ))
 
 
-def price(y: float, coupon: float, n: int, elapsed: float) -> tuple[float, float, float]:
-    """(dirty, 경과이자, 이미 받은 이표) — **액면 1 기준**.
+def price(
+    y: float, coupon: float, n: int, elapsed: float
+) -> tuple[float, float, float, float]:
+    """(dirty, 경과이자, 결제된 이표, **상환된 액면**) — 액면 1 기준.
 
     `y`·`coupon` 은 소수(0.0378), `elapsed` 는 진입일로부터 흐른 년수(ACT/365).
     현금흐름 k 는 진입일로부터 k/4년에 있고, 마지막에 액면 1 이 함께 온다.
@@ -117,6 +119,28 @@ def price(y: float, coupon: float, n: int, elapsed: float) -> tuple[float, float
 
     `elapsed=0` · `coupon=y` 면 dirty 는 정확히 1.0 이다(연금 항등식). 이표일을
     막 지난 순간의 경과이자는 0 이고, 지급 직전에는 한 기 전액에 수렴한다.
+
+    ## 셋째 값은 이표만이 아니라 **원금 상환까지** 포함한다
+
+    2026-08-14 에 이것이 빠져 있어서 **만기까지 들고 있으면 원금만큼 손실**로
+    찍혔다. `dirty` 는 아직 안 온 현금흐름의 현재가치이므로 만기에 0 이 되는데,
+    그때 나간 액면 1 이 결제현금에 안 잡히면 `dirty + 현금` 이 1.04 에서 0.04 로
+    떨어진다(1Y·쿠폰 4% 실측). 손익 = Δdirty + 결제현금 이라는 이 화면의 항등식
+    자체는 옳고, **결제현금의 정의가 좁았다**.
+
+    교과서도 지수 계산 규칙도 같은 말을 한다 — FTSE Russell 의 Guide to
+    Calculation 은 total return 의 cash 항을 "the sum of any coupons **and any
+    principal repayments** … including cumulative cash from principal
+    redemption" 로 정의한다. 스왑 쪽에는 이 결함이 없다: 바닐라 IRS 는 원금
+    교환이 없어 잃을 원금이 애초에 없다(2026-08-14 실측으로 확인).
+
+    ## 이표와 액면을 **따로** 돌려주는 이유
+
+    총액에는 둘이 같이 들어가지만 **분해에서는 서로 다른 칸**이다. 이표는
+    소득(캐리)이고 상환된 액면은 자본 회수 — par 로 사서 par 를 돌려받은 것이라
+    가격 쪽에 붙어야 한다. 한 값으로 합쳐 돌려주었더니 만기 보유 3Y 의 캐리가
+    110억, 롤다운이 −102억으로 찍혔다(실측). 총액은 맞고 칸만 틀린, 이 리포가
+    오늘 오전에도 한 번 겪은 결함이다.
     """
     q = 1.0 + y / FREQ
     c = coupon / FREQ
@@ -129,10 +153,11 @@ def price(y: float, coupon: float, n: int, elapsed: float) -> tuple[float, float
             continue
         cf = c + (1.0 if k == n else 0.0)
         dirty += cf * q ** (-FREQ * tau)
+    matured = paid_count >= n
     # 현재 이표기간에서 흐른 비율. paid_count 가 직전 이표이므로 [0,1) 이다.
-    frac = elapsed * FREQ - paid_count
-    accrued = c * max(0.0, frac)
-    return dirty, accrued, c * paid_count
+    # 만기 뒤에는 붙을 이표가 없다 — 이 가드가 없으면 `frac` 이 무한정 자란다.
+    frac = 0.0 if matured else elapsed * FREQ - paid_count
+    return dirty, c * max(0.0, frac), c * paid_count, 1.0 if matured else 0.0
 
 
 # ── 백테스트 ────────────────────────────────────────────────────────────────
@@ -227,7 +252,7 @@ def run_bond_leg(
     entry_date = m.dates[entry_i]
 
     # 진입일: 쿠폰 = 그날 수익률이므로 dirty 는 정확히 1.0, 경과이자 0.
-    dirty0, accrued0, _paid0 = price(leg.coupon, leg.coupon, leg.n, 0.0)
+    dirty0, accrued0, _cp0, _rd0 = price(leg.coupon, leg.coupon, leg.n, 0.0)
     clean0 = dirty0 - accrued0
 
     live = sorted(
@@ -245,8 +270,11 @@ def run_bond_leg(
         elapsed = (m.dates[i] - entry_date).days / 365.0
         remaining = max(0.0, leg.years - elapsed)
         y = cm.yield_at(m, pos.bond_type, i, remaining) if remaining > 0 else leg.coupon
-        dirty, accrued, paid = price(y, leg.coupon, leg.n, elapsed)
-        clean = dirty - accrued
+        dirty, accrued, coupons, redeemed = price(y, leg.coupon, leg.n, elapsed)
+        # **상환된 액면은 가격 쪽이다** — par 로 사서 par 를 돌려받은 것이라
+        # 소득이 아니라 자본 회수다. 여기 안 넣고 캐리에 두면 만기에 캐리가
+        # 액면만큼 부풀고 롤다운이 그만큼 음수가 된다(price 독스트링의 실측).
+        clean = dirty - accrued + redeemed
 
         if i > prev_i:
             # 롤다운 = **전일 커브**로 오늘의 (짧아진) 채권을 다시 값 매긴 것.
@@ -256,8 +284,8 @@ def run_bond_leg(
                 if remaining > 0
                 else leg.coupon
             )
-            d_f, a_f, _p_f = price(y_frozen, leg.coupon, leg.n, elapsed)
-            roll_cum += (d_f - a_f) - prev_clean
+            d_f, a_f, _cp_f, rd_f = price(y_frozen, leg.coupon, leg.n, elapsed)
+            roll_cum += (d_f - a_f + rd_f) - prev_clean
 
         # 조달은 매수 원금(= 액면 × par)에 붙는다. 매도는 위 주석대로 0.
         funding = (
@@ -267,7 +295,7 @@ def run_bond_leg(
         )
 
         val_total = (clean - clean0) * N
-        carry = (accrued - accrued0 + paid) * N
+        carry = (accrued - accrued0 + coupons) * N
         own[i] = last = val_total + carry - funding
         last_val = val_total - roll_cum * N
         last_roll = roll_cum * N
@@ -558,7 +586,6 @@ def parse_id(series_id: str) -> tuple[str, str, str]:
 def instruments(
     m: CreditMatrix,
     dataset,
-    spec: fd.FundingSpec | None = None,
     irs_theta: dict[str, dict] | None = None,
 ) -> dict:
     """Cash Bond 표의 행 전부 — 현금채권과 자산스왑.
@@ -572,7 +599,6 @@ def instruments(
     """
     from .derive import annual_stats
 
-    spec = (spec or fd.FundingSpec()).validated()
     bases = _basis_indices(m)
     last = len(m.dates) - 1
     rows: list[dict] = []
@@ -612,7 +638,7 @@ def instruments(
                     "rangeAvg": stats["avg"],
                     # 정렬 키도 서버가 정한다(§6/§16): 종목군 사다리 → 만기.
                     "sortKey": [cm.TYPE_ORDER.index(bond_type), cm.TENOR_YEARS[tenor]],
-                    "theta": _row_theta(m, dataset, bond_type, tenor, kind, last, spec, irs_theta),
+                    "theta": _row_theta(m, bond_type, tenor, kind, last, irs_theta),
                 })
     return {
         "asof": m.asof.isoformat(),
@@ -621,23 +647,23 @@ def instruments(
         "rows": rows,
         # 세타가 무엇을 뜻하는지는 표 아래에 한 번 적는다 — 행마다 되풀이할
         # 문장이 아니다. `app/theta.py` 의 `meta` 와 같은 자리·같은 이유.
+        #
+        # 조달은 여기 없다 [OWNER, 2026-08-14] — 세타가 그것을 안 뺀다. Setting
+        # 의 조달값은 백테스트의 조달 칸이 여전히 쓴다.
         "thetaBasis": {
-            "horizonMonths": round(HORIZON_Y * 12),
+            "horizonDays": 1,
             "notional": NOTIONAL,
             "side": "buy",
-            "funding": fd.provenance(spec),
         },
     }
 
 
 def _row_theta(
     m: CreditMatrix,
-    dataset,
     bond_type: str,
     tenor: str,
     kind: str,
     i: int,
-    spec: fd.FundingSpec,
     irs_theta: dict[str, dict] | None,
 ) -> dict | None:
     """행 하나의 세타. 현금채권은 그대로, 자산스왑은 **두 다리의 합**이다.
@@ -647,7 +673,7 @@ def _row_theta(
     플라이에서 기준 다리의 DV01 을 쓰는 것과 같은 이유이고 같은 처리다
     (`theta.theta_for_package` 의 근거 참조).
     """
-    bond = theta_for_bond(m, bond_type, tenor, i, spec)
+    bond = theta_for_bond(m, bond_type, tenor, i)
     if bond is None:
         return None
     if kind == KIND_CASH:
@@ -672,11 +698,19 @@ def _row_theta(
 # 표에 상시로 뜨는 열이다 — IRS 쪽 `app/theta.py` 와 **같은 자리·같은 질문**.
 # 그쪽 모듈 주석이 근거를 다 들어 뒀으므로 여기서는 다른 점만 적는다.
 #
-# 다른 점 하나: **캐리가 순캐리다** [OWNER, 2026-08-14 — "조달 포함"].
-# 스왑은 담보 밖에서 돈을 빌리지 않지만 현금채권은 원금을 조달해서 산다. 쿠폰만
-# 세면 3.8% 짜리 채권이 늘 좋아 보이는데, 2.85% 로 조달하면 실제로 남는 것은
-# 그 차이다. 대가는 알고 받는다: **IRS 세타와 정의가 달라지고**, Setting 에서
-# 조달을 바꾸면 이 열이 같이 움직인다.
+# 다른 점 하나: **캐리에서 조달을 빼지 않는다** [OWNER, 2026-08-14 — "채권에서는
+# 조달 차감하지 않는 걸로 하기"]. IRS 세타와 정의를 맞추기 위한 결정이다.
+#
+# **이것은 시장 관행과 다르다**, 그래서 여기 적어 둔다. 외부 확인(2026-08-14):
+# 채권 캐리의 표준 정의는 `carry = y − r_f` — 수익률에서 조달(레포)을 뺀 값이고,
+# yieldcurve.pro 는 "You collect coupon, you pay financing, and the difference is
+# yours" 로, AnalystPrep 은 "income a bond earns above its funding cost" 로 적는다.
+# 조달을 빼지 않으면 이 열은 **총 쿠폰**이 되어 수익률 높은 종목이 늘 이긴다 —
+# 캐피탈채가 국고채보다 늘 위에 서는 것이 그 뜻이다.
+#
+# 되돌리려면 아래 `funding` 한 줄을 다시 빼면 된다. 조달값 자체는 Setting 이
+# 여전히 들고 있고 백테스트의 조달 칸이 쓴다 — 사라진 것이 아니라 세타에서만
+# 빠졌다.
 #
 # 다른 점 둘: **부호가 매수 기준**이다. IRS 표의 행은 방향이 없어서 페이로
 # 고정했지만, 현금채권은 살 수만 있으므로(매도 거절) 살 때의 숫자가 곧 그 행의
@@ -684,7 +718,7 @@ def _row_theta(
 
 #: `app/theta.py` 와 **같은** 호라이즌·노셔널·bp. 세 값이 갈리면 두 표의 세타를
 #: 나란히 놓고 읽을 수 없다 — 그래서 재정의하지 않고 가져온다.
-from .theta import BP, HORIZON_Y, NOTIONAL  # noqa: E402
+from .theta import BP, HORIZON_DAYS, HORIZON_Y, NOTIONAL  # noqa: E402
 
 
 def dv01_at(y: float, coupon: float, n: int, elapsed: float) -> float:
@@ -697,7 +731,10 @@ def dv01_at(y: float, coupon: float, n: int, elapsed: float) -> float:
     half = BP / 2
     up = price(y + half, coupon, n, elapsed)
     dn = price(y - half, coupon, n, elapsed)
-    return (dn[0] - dn[1]) - (up[0] - up[1])
+    # clean = dirty − 경과이자 + 상환액면. 상환분은 수익률에 안 흔들리므로
+    # 차분에서 지워지지만, 같은 식으로 적어 두어야 정의가 하나로 남는다.
+    clean = lambda t: t[0] - t[1] + t[3]  # noqa: E731
+    return clean(dn) - clean(up)
 
 
 def theta_for_bond(
@@ -705,16 +742,19 @@ def theta_for_bond(
     bond_type: str,
     tenor: str,
     i: int,
-    spec: fd.FundingSpec,
 ) -> dict | None:
     """한 현금채권의 세타 블록. 값을 낼 수 없으면 None (표가 em dash 를 그린다).
 
-    호라이즌은 3개월이고 커브는 **동결**이다 — 오늘 커브 하나로 닫힌 식이라
-    백테스트를 돌리지 않아도 나온다. 그것이 이 열의 존재 이유다.
+    호라이즌은 **하루**이고 커브는 **동결**이다 — 오늘 커브 하나로 닫힌 식이라
+    백테스트를 돌리지 않아도 나온다. 그것이 이 열의 존재 이유다. 기간은 IRS 쪽과
+    같은 상수를 쓴다(`theta.HORIZON_Y`) — 두 표의 세타를 나란히 놓고 읽으려면
+    그 값이 하나여야 한다.
     """
     years = cm.TENOR_YEARS[tenor]
-    if years <= HORIZON_Y:
-        # 3개월 뒤엔 이미 만기다. 롤다운을 정의할 자리가 없다.
+    # 호라이즌을 지나고도 한 분기는 남아야 롤다운이 뜻이 있다 — IRS 쪽
+    # `theta.theta_table` 의 같은 문턱과 같은 이유(민평 커브의 가장자리는
+    # 보간이 지배한다).
+    if years - HORIZON_Y < 0.25 - 1e-9:
         return None
     try:
         y0 = cm.yield_at(m, bond_type, i, years)
@@ -726,16 +766,20 @@ def theta_for_bond(
     coupon = y0  # 진입일 par — 표면금리가 곧 그날 민평이다
 
     # 호라이즌의 마킹: 잔존이 짧아진 채권을 **오늘 커브의** 그 지점으로 값 매김
-    d_h, a_h, paid_h = price(y_roll, coupon, n, HORIZON_Y)
-    clean_h = d_h - a_h
+    d_h, a_h, cp_h, rd_h = price(y_roll, coupon, n, HORIZON_Y)
+    clean_h = d_h - a_h + rd_h
 
     roll = (clean_h - 1.0) * NOTIONAL          # par 로 샀으므로 기준이 1.0
-    coupon_carry = (a_h + paid_h) * NOTIONAL   # 3개월치 쿠폰(경과 + 받은 것)
-    funding = fd.rate_on(spec, m.dates[i]) * HORIZON_Y * NOTIONAL
-    carry = coupon_carry - funding
+    # 조달은 빼지 않는다 — 모듈 주석의 [OWNER] 와 그 아래 외부 확인 참조.
+    carry = (a_h + cp_h) * NOTIONAL            # 분기치 쿠폰(경과 + 받은 것)
 
     dv01 = dv01_at(y0, coupon, n, 0.0) * NOTIONAL
     dv01_h = dv01_at(y_roll, coupon, n, HORIZON_Y) * NOTIONAL
+
+    # 분기에서 재고 하루로 나눈다 — IRS 쪽 `theta._block` 과 같은 자리·같은 이유
+    # (하루 간격 두 지점으로 롤을 재면 커브 보간 잡음이 롤보다 커진다).
+    carry /= HORIZON_DAYS
+    roll /= HORIZON_DAYS
     cash = carry + roll
     return {
         "perDv01": round(cash / (dv01 / 1_000_000)) if dv01 else 0,
