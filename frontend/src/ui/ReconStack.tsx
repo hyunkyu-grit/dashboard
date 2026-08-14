@@ -69,8 +69,35 @@ export interface ReconStackDay {
    * 빼 두고, 화면은 그것을 평가에 접는다 [OWNER, 2026-08-14]. 어댑터가 합친
    * 값을 `valuation` 으로 넘긴다. */
   rolldown: number | null;
+  /** 조달 — 현금채권 대사에만 있다. 없는 화면(IRS·시뮬)에서는 열 자체가 안
+   * 선다(`summaryCols`). */
+  funding?: number | null;
   actual: number | null;
 }
+
+/** 오른쪽 요약 열 — 합계(추정) **다음**에 오는 것들이고, 마지막이 늘 그날
+ * 손익이다. 화면마다 다른 것은 이 목록뿐이라 여기서 갈린다:
+ *
+ *   IRS · 시뮬   평가 · 캐리 · 롤다운 · 그날 손익
+ *   현금채권      + 조달 [OWNER, 2026-08-14]
+ *
+ * 열 개수가 바뀌면 표 폭 계수와 sticky right 계단이 **같이** 움직여야 한다 —
+ * 셋이 어긋나면 고정 열 사이로 밑이 샌다(2026-08-14 에 한 번 겪었다). 그래서
+ * 셋 다 이 배열 하나에서 계산한다. */
+export type SummaryKey = "valuation" | "carry" | "rolldown" | "funding" | "actual";
+export const DEFAULT_SUMMARY: { label: string; key: SummaryKey }[] = [
+  { label: "평가", key: "valuation" },
+  { label: "캐리", key: "carry" },
+  { label: "롤다운", key: "rolldown" },
+  { label: "그날 손익", key: "actual" },
+];
+export const CASHBOND_SUMMARY: { label: string; key: SummaryKey }[] = [
+  { label: "평가", key: "valuation" },
+  { label: "캐리", key: "carry" },
+  { label: "롤다운", key: "rolldown" },
+  { label: "조달", key: "funding" },
+  { label: "그날 손익", key: "actual" },
+];
 
 /** 원 단위 그대로, 부호 포함 — ResultsTables.MoneyWon 과 같은 규칙(만/억
  * 접기 금지: 24,141이 "2만"이면 시스템의 24,141과 맞는지 말할 수 없다). */
@@ -126,6 +153,7 @@ export function ReconStack({
   tenors,
   note,
   defaultOrder = "asc",
+  summaryCols = DEFAULT_SUMMARY,
   heightClass = "max-h-[60vh]",
 }: {
   /** ASCENDING chronological order, always — the display order is this
@@ -146,8 +174,13 @@ export function ReconStack({
    * 미래 경로라 시간순(asc — D+0 이 위, 2026-08-10 룰링). 토글은 그 기본을
    * 읽는 사람이 뒤집을 수 있게 할 뿐이다. */
   defaultOrder?: "asc" | "desc";
+  /** 오른쪽 요약 열. 기본은 넷, 현금채권은 조달이 끼어 다섯이다. */
+  summaryCols?: { label: string; key: SummaryKey }[];
 }) {
   const [order, setOrder] = useState<"asc" | "desc">(defaultOrder);
+  /** 꼬리 열 수 = 합계(추정) 하나 + 요약 열들. 폭·colgroup·sticky 계단이
+   * 전부 이 수를 본다 — 셋이 갈리면 고정 열 사이로 밑이 샌다. */
+  const tailN = summaryCols.length + 1;
   if (days.length === 0) {
     return (
       <p className="py-6 text-center text-[14px] text-ink-2">
@@ -194,7 +227,7 @@ export function ReconStack({
         <table
           className="table-fixed text-[14px] tabular-nums"
           style={{
-            width: `calc(7ch + 5ch + ${tenors.length} * (${tenorW}) + 5 * 11ch)`,
+            width: `calc(7ch + 5ch + ${tenors.length} * (${tenorW}) + ${tailN} * 11ch)`,
           }}
         >
           <colgroup>
@@ -204,14 +237,11 @@ export function ReconStack({
               <col key={t} style={{ width: tenorW }} />
             ))}
             {/* 꼬리 열 11ch — 한글 헤더("합계(추정)")가 접히지 않는 폭.
-                다섯이다. 여기 개수를 바꾸면 위 `width` 의 계수와 아래 sticky
-                right 오프셋 계단을 같이 옮겨야 한다: 셋이 어긋나면 고정 열
-                사이로 밑이 샌다(2026-08-14 에 여섯으로 늘렸다 되돌리며 실측). */}
-            <col style={{ width: "11ch" }} />
-            <col style={{ width: "11ch" }} />
-            <col style={{ width: "11ch" }} />
-            <col style={{ width: "11ch" }} />
-            <col style={{ width: "11ch" }} />
+                개수는 `summaryCols` 하나에서 나온다(그 배열의 주석 참조) —
+                폭 계수·colgroup·sticky 계단이 같은 수를 봐야 밑이 안 샌다. */}
+            {Array.from({ length: tailN }, (_, k) => (
+              <col key={`tail${k}`} style={{ width: "11ch" }} />
+            ))}
           </colgroup>
           <thead>
             <tr>
@@ -236,12 +266,26 @@ export function ReconStack({
                   {t}
                 </Th>
               ))}
-              {/* 오른쪽 범례 다섯 — 뒤에서부터 11ch 트랙씩 쌓인다. */}
-              <Th right pin style={{ right: "calc(44ch * 14 / 13)" }}>합계</Th>
-              <Th right pin style={{ right: "calc(33ch * 14 / 13)" }}>평가</Th>
-              <Th right pin style={{ right: "calc(22ch * 14 / 13)" }}>캐리</Th>
-              <Th right pin style={{ right: "calc(11ch * 14 / 13)" }}>롤다운</Th>
-              <Th right pin style={{ right: 0 }}>그날 손익</Th>
+              {/* 오른쪽 범례 — 뒤에서부터 11ch 트랙씩 쌓인다. 13px 헤더의 ch 는
+                  14px 트랙의 ch 와 다르므로 좌표를 환산해 넘긴다(Th 주석). */}
+              <Th right pin style={{ right: `calc(${11 * summaryCols.length}ch * 14 / 13)` }}>
+                합계
+              </Th>
+              {summaryCols.map((c, k) => (
+                <Th
+                  key={c.key}
+                  right
+                  pin
+                  style={{
+                    right:
+                      k === summaryCols.length - 1
+                        ? 0
+                        : `calc(${11 * (summaryCols.length - 1 - k)}ch * 14 / 13)`,
+                  }}
+                >
+                  {c.label}
+                </Th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -299,7 +343,10 @@ export function ReconStack({
                         폰트의 '0' 진행폭이고 미디엄의 0 이 살짝 넓어 44ch 가
                         13px 어긋난다(실측) — 굵기는 안쪽 span 이 진다.
                         불투명 bg 는 §G. */}
-                    <td className="sticky bg-popover py-1 pl-2 text-right" style={{ right: "44ch" }}>
+                    <td
+                      className="sticky bg-popover py-1 pl-2 text-right"
+                      style={{ right: `${11 * summaryCols.length}ch` }}
+                    >
                       <span className="font-medium">
                         {total === null ? (
                           <span className="text-ink-3">—</span>
@@ -310,40 +357,34 @@ export function ReconStack({
                         )}
                       </span>
                     </td>
-                    {mi === 0 && (
-                      <>
-                        <td
-                          className="sticky bg-popover py-1 pl-2 text-right align-top"
-                          style={{ right: "33ch" }}
-                          rowSpan={3}
-                        >
-                          <Won v={d.valuation} />
-                        </td>
-                        <td
-                          className="sticky bg-popover py-1 pl-2 text-right align-top"
-                          style={{ right: "22ch" }}
-                          rowSpan={3}
-                        >
-                          <Won v={d.carry} />
-                        </td>
-                        <td
-                          className="sticky bg-popover py-1 pl-2 text-right align-top"
-                          style={{ right: "11ch" }}
-                          rowSpan={3}
-                        >
-                          <Won v={d.rolldown} />
-                        </td>
-                        <td
-                          className="sticky bg-popover py-1 pl-2 text-right align-top"
-                          style={{ right: 0 }}
-                          rowSpan={3}
-                        >
-                          <span className="font-medium">
-                            <Won v={d.actual} />
-                          </span>
-                        </td>
-                      </>
-                    )}
+                    {mi === 0 &&
+                      summaryCols.map((c, k) => {
+                        const isLast = k === summaryCols.length - 1;
+                        return (
+                          <td
+                            key={c.key}
+                            /* 본문 셀은 표 폰트(14px 레귤러)라 `ch` 가 트랙과
+                               같은 자로 풀린다 — 헤더만 환산한다. ⚠ 오프셋을
+                               진 셀에 font-medium 을 얹지 말 것: 굵기는 안쪽
+                               span 이 진다(윗 주석의 실측). */
+                            className="sticky bg-popover py-1 pl-2 text-right align-top"
+                            style={{
+                              right: isLast
+                                ? 0
+                                : `${11 * (summaryCols.length - 1 - k)}ch`,
+                            }}
+                            rowSpan={3}
+                          >
+                            {isLast ? (
+                              <span className="font-medium">
+                                <Won v={d[c.key]} />
+                              </span>
+                            ) : (
+                              <Won v={d[c.key]} />
+                            )}
+                          </td>
+                        );
+                      })}
                   </tr>
                 );
               }),

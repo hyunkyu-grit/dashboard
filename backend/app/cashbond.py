@@ -806,3 +806,340 @@ def theta_for_bond(
         # 상쇄되나. IRS 표의 같은 열과 같은 문장이다.
         "beBp": round((cash / dv01_h) if dv01_h else 0.0, 2),
     }
+
+
+# ── 일별 대사 ───────────────────────────────────────────────────────────────
+#
+# IRS 쪽 `backtest.book_recon` 과 **같은 규약·같은 화면**(ui/ReconStack)이다
+# [OWNER, 2026-08-14 — "현금채권/자산스왑 백테스트에서도 대사 가능하게"].
+# 그쪽 주석이 근거를 다 들고 있으므로 여기서는 다른 점만 적는다.
+#
+# ## 어느 커브를 흔드나
+#
+#   현금채권   그 종목군의 **민평 격자**. 행이 호가하는 값이 민평 수익률이다.
+#   자산스왑   같은 격자를 흔들되 읽기는 **스프레드**다 — IRS 는 안 움직이고
+#              민평만 1bp 움직이는 것이 곧 스프레드 1bp 이므로.
+#
+# 자산스왑에서 이것이 성립하는 이유를 적어 둔다. par-par 라 두 다리의 DV01 이
+# 거의 같으므로 패키지 손익 ≈ −D×Δ민평 + D×ΔIRS = −D×Δ스프레드 다.
+#
+# **자산스왑의 추정 열은 현금채권만큼 안 맞는다. 그것이 정상이다.** Δ민평 =
+# Δ스프레드 + ΔIRS 로 풀면
+#
+#   패키지 = −D_b×Δ스프레드 + (D_s − D_b)×ΔIRS
+#            └─ 추정 열이 세는 것 ─┘   └─ 잔차로 떨어지는 것 ─┘
+#
+# 이라, 잔차는 두 다리의 듀레이션 차 × **IRS 무브**다. 추정 열이 "IRS 는
+# 안 움직였다면" 을 세기 때문이고, 실제 하루는 둘 다 움직인다. 실측
+# (2026-08-14, 3Y 100억, 진입 2025-08-13, 잔차/평가 중앙값):
+#
+#   현금채권    0.04%   ← 추정이 움직임을 거의 다 설명한다
+#   자산스왑   43.7%    ← 절반 이상이 IRS 무브다
+#
+# 이 숫자를 줄이려면 IRS 격자도 함께 흔들어 **두 축**(Δ스프레드·ΔIRS)으로
+# 세는 표가 되어야 한다. 지금 표는 한 축이다 — 자산스왑 행이 호가하는 값이
+# 스프레드 하나이기 때문이고, 그래서 이 잔차는 결함이 아니라 규약의 값이다.
+# 43.7% 를 "고치려고" 자산스왑 KRD 에 스왑 다리를 더하지 말 것: 그러면 KRD 가
+# 스프레드 민감도이기를 그만두고 dbp 열과 짝이 안 맞는다.
+#
+# ## KRD 는 T+1 평가 기준
+#
+# IRS 쪽과 같다. 오늘 아침에 들고 있던 리스크를 내일 마킹으로 재는 것이 인포맥스
+# 대사와 맞는다는 실측(2026-08-11)이 그쪽에 있고, 두 표가 같은 자를 써야 한다.
+
+#: 대사 행을 서빙하는 창 — IRS 쪽과 같은 수(약 1년).
+RECON_MAX_DAYS = 250
+
+
+def _krd_bond(
+    m: CreditMatrix,
+    pos: BondPosition,
+    leg: "_BondLeg",
+    i: int,
+    elapsed: float,
+    labels: list[str],
+) -> dict[str, float]:
+    """민평 노드를 1bp 올렸을 때의 **가치 변화에 부호를 뒤집은 것**(원/bp).
+
+    단일수익률 할인이라 노드 하나를 흔들면 잔존만기를 감싸는 **두 노드에만**
+    가중치가 실린다(선형보간). 그래서 KRD 가 저절로 성긴 행이 되고, IRS 쪽
+    범프 표와 같은 모양으로 읽힌다.
+    """
+    out = {lb: 0.0 for lb in labels}
+    remaining = leg.years - elapsed
+    if remaining <= 0:
+        return out  # 만기 뒤에는 흔들릴 것이 없다
+    pts = cm.curve_points(m, pos.bond_type, i)
+    if not pts:
+        return out
+    scale = pos.notional * pos.direction
+    base_y = cm.interp(pts, remaining)
+    base = price(base_y, leg.coupon, leg.n, elapsed)[0]
+    for lb in labels:
+        yrs = cm.TENOR_YEARS[lb]
+        bumped = [(y, r + (BP if abs(y - yrs) < 1e-9 else 0.0)) for y, r in pts]
+        y_b = cm.interp(bumped, remaining)
+        if y_b == base_y:
+            continue  # 이 노드는 그 잔존만기를 감싸지 않는다
+        out[lb] = -(price(y_b, leg.coupon, leg.n, elapsed)[0] - base) * scale
+    return out
+
+
+def book_recon(
+    m: CreditMatrix,
+    dataset,
+    positions: list[BondPosition],
+    spec: fd.FundingSpec,
+) -> dict:
+    """일별 대사 블록. `backtest.book_recon` 과 같은 응답 모양이다.
+
+    조달이 한 칸 더 있다 — 그날 밤의 조달비용이고, 세 성분과 같은 밤을 가리킨다
+    (전부 포워드). 그래야 `평가 + 캐리 + 롤다운 + 조달 = 그날 손익` 이 닫힌다.
+    """
+    if not positions:
+        raise CashBondError("포지션이 하나는 있어야 합니다.")
+    spec = spec.validated()
+    if any(p.kind == KIND_ASW for p in positions) and dataset is None:
+        raise CashBondError("자산스왑 행에는 IRS 데이터셋이 필요합니다.")
+
+    legs = [_bond_leg(m, p) for p in positions]
+    first = min(l.entry_i for l in legs)
+    last = max(l.exit_i for l in legs)
+
+    # 열은 이 북이 실제로 만질 수 있는 만기까지만 — 마지막 노드는 가장 긴
+    # 잔존을 덮는 첫 노드다(IRS 쪽 `bump` 집합과 같은 규칙).
+    types = {p.bond_type for p in positions}
+    labels = [lb for lb in cm.TENOR_LABELS if any(m.has(t, lb) for t in types)]
+    longest = max(l.years for l in legs)
+    keep: list[str] = []
+    for lb in labels:
+        keep.append(lb)
+        if cm.TENOR_YEARS[lb] >= longest:
+            break
+    labels = keep
+
+    # 자산스왑 북이면 Δ 는 스프레드(이미 bp), 현금채권이면 민평(% → ×100)
+    asw = all(p.kind == KIND_ASW for p in positions)
+    node_series: dict[str, list[float | None]] = {}
+    for lb in labels:
+        for t in types:
+            if not m.has(t, lb):
+                continue
+            node_series[lb] = (
+                asw_series(m, dataset, t, lb)
+                if asw and lb in ASW_TENORS
+                else m.series(t, lb)
+            )
+            break
+    delta_scale = 1.0 if asw else 100.0
+
+    start = max(first, last - RECON_MAX_DAYS + 1)
+
+    # ── 스왑 다리 ───────────────────────────────────────────────────────────
+    #
+    # 자산스왑 행은 **두 다리**다. 채권만 세면 표가 채권 백테스트를 자산스왑
+    # 이라고 부르는 셈이 된다 (2026-08-14 실측: 3Y 자산스왑 대사 합 −2.52억,
+    # 같은 창의 백테스트 손익 +0.37억 — 2.89억이 스왑 다리였다).
+    #
+    # 스왑을 **여기서** 값매긴다. IRS 쪽 `backtest.book_recon` 을 따로 불러
+    # 날짜로 합치는 길도 있었는데, 두 달력이 양쪽으로 어긋나서 그 길은 손익을
+    # 흘린다 (실측: IRS 에만 있는 날 9일 — 12/25·1/1·3/2·5/1·5/5·5/25·6/3·
+    # 7/17·12/31, 민평에만 있는 날 3일). 한 달력 위에서 세면 그 문제가 없다:
+    # 민평이 안 뜬 날의 스왑 손익은 다음 민평 행의 마크 차이에 그대로 들어
+    # 있고, 그게 실제로 그 행이 대사해야 하는 값이다.
+    swap_cache: dict[int, object] = {}
+    imap = _irs_index_map(m, dataset) if any(p.kind == KIND_ASW for p in positions) else {}
+
+    def _swap_statics(pos: BondPosition, leg: _BondLeg) -> dict | None:
+        """진입일에 struck 된 스왑 다리. 채권 매수 = 같은 명목 페이 고정
+        (`_swap_leg` 의 par-par 주석 참조)."""
+        if pos.kind != KIND_ASW:
+            return None
+        from .backtest import _build_legs, _leg_swap
+
+        if pos.tenor not in ASW_TENORS:
+            raise CashBondError(
+                f"{pos.tenor} 는 자산스왑을 세울 수 없습니다 — 채권과 IRS 양쪽에 "
+                f"있는 만기만 가능합니다 ({'·'.join(ASW_TENORS)})."
+            )
+        if leg.entry_i not in imap:
+            raise CashBondError("민평 진입일이 IRS 달력에 없습니다 — 데이터를 확인하세요.")
+        entry_date = m.dates[leg.entry_i]
+        slegs = _build_legs(dataset, pos.tenor, pos.notional, imap[leg.entry_i])
+        for sl in slegs:
+            sl.sign *= pos.direction
+        return {
+            "legs": slegs,
+            "swaps": [_leg_swap(sl, entry_date) for sl in slegs],
+            "entry_date": entry_date,
+        }
+
+    def _swap_mark(sw: dict, i: int, curve_i: int) -> tuple[float, float, float]:
+        """(clean, 경과이자, 결제현금) — 스왑 다리. 채권 `mark` 와 같은 규약이고
+        `curve_i` 의 뜻도 같다(동결 재평가)."""
+        from .backtest import _cd_fixings, _curve_at, _settled_to
+        from .valuation_port import CurveBundle, value_booked_trade
+
+        on = m.dates[i]
+        j_curve, j_fix = imap.get(curve_i), imap.get(i)
+        if j_curve is None or j_fix is None:
+            # 민평 달력은 IRS 달력의 부분집합이다 — `_irs_index_map` 의 실측.
+            # 그게 깨졌다면 데이터가 변한 것이고, 그때 마크를 지어내면 대사표가
+            # 조용히 틀린다. 세우는 편이 낫다(그 함수의 정책과 같다).
+            raise CashBondError("민평 날짜가 IRS 달력에 없습니다 — 데이터를 확인하세요.")
+        fx = _cd_fixings(dataset, j_fix)
+        curve = CurveBundle(on, _curve_at(dataset, j_curve, swap_cache), [])
+        clean = accrued = 0.0
+        for swap in sw["swaps"]:
+            res = value_booked_trade(swap, curve, fx)
+            clean += res.clean_npv
+            accrued += res.accrued_interest
+        cash = _settled_to(sw["legs"], sw["entry_date"], on, fx)
+        return clean, accrued, cash
+
+    info = [
+        {"prev": None, "prev_fwd": None, "leg": l, "pos": p, "swap": _swap_statics(p, l)}
+        for p, l in zip(positions, legs)
+    ]
+
+    def mark(d: dict, i: int, curve_i: int | None = None) -> tuple[float, float, float]:
+        """(clean, 경과이자, 결제현금) — 그 자리의 마킹. 셋의 합이 마크다.
+        자산스왑이면 **두 다리를 합친** 값이다.
+
+        `curve_i` 는 **어느 날의 커브로** 값을 매길지다. 기본은 그날 자신이고,
+        포워드 세타를 잴 때는 **오늘 커브로 내일 값을 매긴다**(동결 재평가) —
+        커브가 안 움직였다면 얼마였겠나가 곧 캐리+롤다운이기 때문이다. 이걸
+        빼먹으면 그날의 커브 무브까지 롤다운에 들어가고, 평가가 통째로 0 이
+        된다(2026-08-14 에 실제로 그랬다: 평가 열 전체가 0).
+        """
+        leg, pos = d["leg"], d["pos"]
+        elapsed = (m.dates[i] - m.dates[leg.entry_i]).days / 365.0
+        remaining = max(0.0, leg.years - elapsed)
+        src = i if curve_i is None else curve_i
+        y = cm.yield_at(m, pos.bond_type, src, remaining) if remaining > 0 else leg.coupon
+        dirty, accrued, coupons, redeemed = price(y, leg.coupon, leg.n, elapsed)
+        scale = pos.notional * pos.direction
+        clean, acc, cash = (
+            (dirty - accrued + redeemed) * scale,
+            accrued * scale,
+            coupons * scale,
+        )
+        if d["swap"] is not None:
+            s_clean, s_acc, s_cash = _swap_mark(d["swap"], i, src)
+            clean, acc, cash = clean + s_clean, acc + s_acc, cash + s_cash
+        return clean, acc, cash
+
+    rows: list[dict] = []
+    prev_krd = {lb: 0.0 for lb in labels}
+    nxt = m.dates[last]
+    for i in range(max(start - 1, first), last + 1):
+        on = m.dates[i]
+        nxt = m.dates[min(i + 1, len(m.dates) - 1)]
+        krd = {lb: 0.0 for lb in labels}
+        day_val = day_carry = day_roll = day_fund = 0.0
+
+        for d in info:
+            leg, pos = d["leg"], d["pos"]
+            if i < leg.entry_i or i > leg.exit_i:
+                continue
+            clean, accrued, cash = mark(d, i)
+            m_now = clean + accrued + cash
+
+            if i > leg.entry_i:
+                if d["prev_fwd"] is not None:
+                    pc, pr, _pf = d["prev_fwd"]
+                    day_val += (m_now - d["prev"]) - (pc + pr)
+                else:
+                    # 잘린 창의 첫 행: 전일 커브로 동결 재평가해 시드
+                    el = (on - m.dates[leg.entry_i]).days / 365.0
+                    rem = max(0.0, leg.years - el)
+                    if rem > 0:
+                        y_f = cm.yield_at(m, pos.bond_type, i - 1, rem)
+                        df, af, _c, rd = price(y_f, leg.coupon, leg.n, el)
+                        day_val += clean - (df - af + rd) * pos.notional * pos.direction
+
+            # 포워드 세타는 **다음 마킹이 있을 때만** 손익이다. 마지막 데이터
+            # 날의 밤은 실현될 자리가 없으므로 칸에 넣지 않는다 — 넣으면 일별
+            # 합이 백테스트 총액을 딱 그 한 밤만큼 넘는다. IRS 표가 그렇게
+            # 하고 있고(실측 2026-08-14: 열린 북 합−총액 = −314,139원 =
+            # 마지막 행 캐리+롤 −314,142원, 청산 북 −699,630원 = −699,630원),
+            # 대사표가 총액과 안 맞으면 대사표가 아니다.
+            alive_fwd = i < leg.exit_i
+            # 리스크는 다르다. 청산하지 않은 북은 내일 아침에도 그대로 들고
+            # 있다 — 데이터가 끊겼다는 사실이 포지션을 없애지는 않는다. 그래서
+            # 종가 KRD 는 재서 이월 앵커에 싣는다. 만기가 와서 끝난 북은
+            # 진짜로 비므로 `matured` 는 뺀다.
+            open_end = (
+                i == leg.exit_i and leg.exit_i == len(m.dates) - 1 and not leg.matured
+            )
+            if alive_fwd:
+                # **오늘 커브로** 내일을 매긴다 — 동결 재평가 (mark 의 주석)
+                f_clean, f_accrued, f_cash = mark(d, i + 1, curve_i=i)
+                carry_f = (f_accrued - accrued) + (f_cash - cash)
+                roll_f = f_clean - clean
+                # 조달도 포워드다 — 네 성분이 같은 밤을 가리켜야 행이 닫힌다
+                fund_f = (
+                    fd.cost_between(spec, on, nxt, pos.notional)
+                    if pos.direction > 0
+                    else 0.0
+                )
+                day_carry += carry_f
+                day_roll += roll_f
+                day_fund += fund_f
+                d["prev_fwd"] = (carry_f, roll_f, fund_f)
+            else:
+                d["prev_fwd"] = (0.0, 0.0, 0.0)
+            if alive_fwd or open_end:
+                # 마지막 날에는 `nxt` 가 오늘이라 이것이 그대로 종가 KRD 다
+                # (자리도 같이 물려야 한다 — 안 그러면 열린 북에서 색인 초과).
+                j = min(i + 1, len(m.dates) - 1)
+                el_next = (nxt - m.dates[leg.entry_i]).days / 365.0
+                for lb, v in _krd_bond(m, pos, leg, j, el_next, labels).items():
+                    krd[lb] += v
+            d["prev"] = m_now
+
+        if i >= start:
+            dbp: dict[str, float | None] = {}
+            est: dict[str, float] = {}
+            for lb in labels:
+                node = node_series.get(lb)
+                cur = node[i] if node else None
+                prv = node[i - 1] if node and i > 0 else None
+                delta = None if cur is None or prv is None else (cur - prv) * delta_scale
+                dbp[lb] = None if delta is None else round(delta, 2)
+                est[lb] = 0.0 if delta is None else -prev_krd[lb] * delta
+            total_est = round(sum(est.values()))
+            rows.append({
+                "t": on.isoformat(),
+                "krd": {lb: round(prev_krd[lb]) for lb in labels},
+                "dbp": dbp,
+                "est": {lb: round(est[lb]) for lb in labels},
+                "estTotal": total_est,
+                "actual": round(day_val + day_carry + day_roll - day_fund),
+                "valuation": round(day_val),
+                "rolldown": round(day_roll),
+                "carry": round(day_carry),
+                # 화면이 빼는 값이라 부호를 여기서 준다 (백테스트 조달 칸과 같은 규약)
+                "funding": round(-day_fund),
+                "residual": round(day_val) - total_est,
+            })
+        prev_krd = krd
+
+    # 이월 앵커 — 종가 KRD 만 싣고 손익 필드는 전부 None (IRS 쪽 공란 정책)
+    if rows:
+        rows.append({
+            "t": nxt.isoformat(),
+            "krd": {lb: round(prev_krd[lb]) for lb in labels},
+            "dbp": {},
+            "est": {},
+            "estTotal": None,
+            "actual": None,
+            "valuation": None,
+            "rolldown": None,
+            "carry": None,
+            "funding": None,
+            "residual": None,
+            "carryover": True,
+        })
+
+    return {"tenors": labels, "rows": rows, "truncated": start > first}

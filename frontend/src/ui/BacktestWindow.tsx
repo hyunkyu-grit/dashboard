@@ -893,9 +893,17 @@ function PositionRow({
       </Field>
       <Field label="진입 레벨">
         {/* a readout, not an input — same vertical rhythm as its neighbours
-            so the sentence still reads left to right */}
+            so the sentence still reads left to right.
+
+            그 리듬을 **높이로** 잡는다 [OWNER, 2026-08-14 — "진입레벨 상하
+            얼라인이 현금채권이랑 자산스왑에서는 높이가 딱 맞는데, 스왑
+            백테스트에서는 안 맞더라"]. 이 칸만 여백으로 높이를 만들고 있어서
+            15px 글줄 + py-2 = 34px, 옆의 컨트롤은 킷 3 Rg 의 24px 였다 —
+            한 줄이 `items-end` 라 10px 차이가 그대로 바닥 어긋남으로 났다.
+            현금채권 창은 처음부터 `h-6` 이라 맞았다. 글자도 14 Medium 으로
+            내린다: 그것이 INPUT/POPUP 이 쓰는 이 줄의 문법이다. */}
         <span
-          className="px-1 py-2 text-[15px] tabular-nums"
+          className="flex h-6 items-center text-[14px] font-medium tabular-nums"
           title={struck ? `${struck.t} 종가 기준` : undefined}
         >
           {/* AnimatedNumber (§14): the level swaps as the date is typed, and a

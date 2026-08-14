@@ -29,8 +29,6 @@ import {
 } from "./columns";
 import { RangeCells, RangeHeader } from "./RangeCells";
 
-const BASES: BasisKey[] = ["d1", "mtd", "ytd"];
-
 function dirClass(v: number | null): string {
   if (v === null || v === 0) return "text-ink-3";
   return v > 0 ? "text-up" : "text-down";

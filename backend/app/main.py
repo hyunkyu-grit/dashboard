@@ -81,7 +81,6 @@ from .dv01 import build_dv01_table
 from .events import detect_event_clusters
 from .forwards import forwards_payload
 from .policy import load_base_rate, policy_step
-from .regret import regret_payload
 from .staleness import dataset_freshness
 from .volatility import volatility_payload
 
@@ -103,7 +102,7 @@ async def lifespan(app: FastAPI):
     # for byte-identity evidence against the frozen engine.
     #
     # This is the SIMULATION's cache and is unrelated to app/cache.py, which
-    # persists this module's own forwards/regret payloads to disk. Two caches,
+    # persists this module's own forwards payload to disk. Two caches,
     # two lifetimes, no shared state — the name is the only thing they share.
     if os.environ.get(curve_cache.ENV_FLAG, "1") == "0":
         logging.getLogger("irs_pricer").warning(
@@ -277,10 +276,10 @@ _dv01_table = build_dv01_table(_curves["now"], derived_ids)
 # 순수 SQL 이면 워터마크 그대로, 엑셀이 섞이면 병합분 지문이 붙는다.
 _data_hash = _dataset.data_key
 _forwards = cached("forwards", _data_hash, lambda: forwards_payload(_dataset, _curves))
-# 라고 할 때 살걸: a 20-day event replay plus ~2 valuations per line — a
-# couple of seconds over a file that changes once a day, so it caches the
-# same way forwards does.
-_regret = cached("regret", _data_hash, lambda: regret_payload(_dataset))
+# 라고 할 때 살걸(`_regret`)이 여기 있었다 — Lab 탭이 비면서 내려갔다 [OWNER,
+# 2026-08-14]. 20일 이벤트 리플레이 + 줄마다 ~2회 평가라 굽는 값이 실했는데,
+# 그걸 읽는 화면이 없어졌다. 디스크에 남은 v7 `regret` 캐시 파일은 이제 아무도
+# 열지 않는다 — 모양이 바뀐 게 아니라 사라진 것이라 SCHEMA_VERSION 은 그대로다.
 # Two things that used to sit here are gone, both from this region of the
 # popup: the curve heatmap (its 어제-column question was answered faster by
 # the table, and daily resolution over ten years was noise) and carry & roll
@@ -325,7 +324,7 @@ def health() -> dict:
 
 @router.get("/api/wall/summary")
 def wall_summary() -> dict:
-    return payloads.wall_summary(_dataset, _bases, _events, _policy, _regret)
+    return payloads.wall_summary(_dataset, _bases, _events, _policy)
 
 
 @router.get("/api/series/{series_id}")
@@ -536,7 +535,12 @@ def cashbond_backtest(
             raise HTTPException(status_code=422, detail=f"잘못된 포지션 {raw!r}: {exc}")
 
     try:
-        return cashbond.run_backtest(creditmatrix.load(), _dataset, parsed, spec)
+        m = creditmatrix.load()
+        result = cashbond.run_backtest(m, _dataset, parsed, spec)
+        # 일별 대사는 별도 패스다 — KRD 범프가 본체보다 비싸서 IRS 쪽도 함수를
+        # 둘로 나눴다(`backtest.book_recon` 의 근거). 응답은 한 덩어리에 얹는다.
+        result["recon"] = cashbond.book_recon(m, _dataset, parsed, spec)
+        return result
     except (cashbond.CashBondError, creditmatrix.CreditMatrixError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 

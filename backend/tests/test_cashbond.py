@@ -553,3 +553,210 @@ class TestFundingOnTheInitialInvestment:
         _m, p = self._run("3Y", 4.0)
         parts = p["valuation"] + p["carry"] + p["rolldown"] + p["funding"] + p["startup"]
         assert abs(parts - p["pnl"]) <= 2
+
+class TestBookRecon:
+    """일별 대사 [OWNER, 2026-08-14 — "현금채권/자산스왑 백테스트에서도 대사
+    가능하게"]. IRS 쪽 `backtest.book_recon` 과 같은 규약이고, 조달 칸이 하나
+    더 있다.
+
+    여기서 못박는 것 넷 — 전부 조용히 깨질 수 있는 것들이다:
+
+    ① 행 항등식. 네 성분이 그날 손익으로 닫혀야 한다.
+    ② KRD 가 **성기다**. 단일수익률 할인이라 잔존만기를 감싸는 두 노드에만
+       가중치가 실린다. 전 노드에 퍼지면 보간이 아니라 딴 것을 재고 있다.
+    ③ 일별 합 = 백테스트 총액.
+    ④ 포워드 세타는 **동결 커브**로 잰다. 처음 넣었을 때 내일 커브로 재는
+       바람에 평가 열이 통째로 0 이 됐다 — 커브 무브까지 롤다운이 먹었고,
+       행 항등식은 그래도 닫혀서 ①만으로는 안 잡혔다.
+    """
+
+    SPEC = fd.FundingSpec("base", 10.0)
+
+    def _flat(self):
+        return synth(days=400, curve=lambda i: _flat_curve(3.0))
+
+    def _sloped(self):
+        return synth(days=400, curve=lambda i: {
+            t: 2.0 + 0.1 * cm.TENOR_YEARS[t] + 0.004 * i for t in cm.TENOR_LABELS
+        })
+
+    def _recon(self, m, tenor="3Y", start=10):
+        pos = cb.BondPosition("CB", "KTB", tenor, 1, N, m.dates[start])
+        return pos, cb.book_recon(m, None, [pos], self.SPEC)
+
+    def test_every_row_is_an_identity(self):
+        _pos, rc = self._recon(self._sloped())
+        rows = [r for r in rc["rows"] if r["actual"] is not None]
+        assert rows
+        for r in rows:
+            parts = r["valuation"] + r["carry"] + r["rolldown"] + r["funding"]
+            assert abs(r["actual"] - parts) <= 2, r["t"]
+            assert r["residual"] == r["valuation"] - r["estTotal"]
+
+    def test_krd_lands_only_on_the_bracketing_nodes(self):
+        _pos, rc = self._recon(self._sloped(), tenor="3Y")
+        rows = [r for r in rc["rows"] if r["actual"] is not None]
+        # 진입 직후: 잔존 ~3Y 라 2.5Y·3Y 두 노드에만 실려야 한다
+        loaded = [lb for lb, v in rows[1]["krd"].items() if v]
+        assert set(loaded) <= {"2.5Y", "3Y"}, loaded
+        assert loaded, "KRD 가 전부 0 이면 범프가 안 걸린 것이다"
+
+    def test_the_daily_rows_sum_to_the_backtest_total(self):
+        """대사표가 총액과 안 맞으면 대사표가 아니다.
+
+        이 핀이 잡는 것: 마지막 행이 **다음 마킹이 없는 밤**의 세타를 손익
+        칸에 넣는 것. 넣으면 합이 딱 그 한 밤만큼 총액을 넘고, 행 항등식은
+        그래도 닫혀서 ①로는 안 잡힌다 (IRS 표가 지금 그렇다 — 실측
+        2026-08-14: 합−총액 −314,139원 = 마지막 행 캐리+롤 −314,142원).
+        """
+        m = synth(days=200, curve=lambda i: {
+            t: 2.0 + 0.1 * cm.TENOR_YEARS[t] + 0.004 * i for t in cm.TENOR_LABELS
+        })
+        pos, rc = self._recon(m)
+        assert rc["truncated"] is False, "창이 잘리면 합이 총액과 다른 게 정상이다"
+        bt = cb.run_backtest(m, None, [pos], self.SPEC)["positions"][0]
+        total = sum(r["actual"] for r in rc["rows"] if r["actual"] is not None)
+        assert abs(total - bt["pnl"]) <= len(rc["rows"])
+
+    def test_a_truncated_window_says_so(self):
+        """250행 창보다 긴 북은 잘린다. 잘렸다고 말해야 화면이 '이게 전부'라고
+        읽지 않는다 — 그때는 합이 총액과 달라도 맞는 것이다."""
+        _pos, rc = self._recon(self._sloped())  # 400일
+        assert rc["truncated"] is True
+        assert len(rc["rows"]) <= cb.RECON_MAX_DAYS + 1  # +1 = 이월 앵커
+
+    def test_a_frozen_curve_puts_nothing_in_valuation(self):
+        """커브가 안 움직이면 평가는 0 이고 전부 캐리·롤다운이다. 이 핀이
+        ④를 잡는다 — 동결 재평가를 빼먹으면 반대로 평가가 전부 0 이 되는데,
+        그건 **움직이는** 커브에서만 보인다. 그래서 둘 다 잰다."""
+        _pos, rc = self._recon(self._flat())
+        rows = [r for r in rc["rows"] if r["actual"] is not None]
+        for r in rows[1:-1]:
+            assert abs(r["valuation"]) / N * 1e4 <= 0.01, (r["t"], r["valuation"])
+            assert r["carry"] != 0
+
+    def test_a_moving_curve_puts_something_in_valuation(self):
+        _pos, rc = self._recon(self._sloped())
+        rows = [r for r in rc["rows"] if r["actual"] is not None]
+        moved = [r for r in rows[1:-1] if abs(r["valuation"]) > 1000]
+        assert len(moved) > len(rows) // 2, "평가 열이 거의 비었다 — 동결 재평가를 의심할 것"
+
+    def test_the_carryover_anchor_carries_risk_but_no_pnl(self):
+        """열린 북은 내일 아침에도 리스크가 있다. 데이터가 끊긴 것이 포지션을
+        없애지는 않으므로 앵커의 KRD 는 0 이 아니어야 한다 — 0 이면 화면이
+        '북이 비었다'고 거짓말한다."""
+        _pos, rc = self._recon(self._sloped())
+        anchor = rc["rows"][-1]
+        assert anchor.get("carryover") is True
+        assert sum(1 for r in rc["rows"] if r.get("carryover")) == 1
+        for key in ("estTotal", "actual", "valuation", "rolldown", "carry", "funding"):
+            assert anchor[key] is None, key
+        assert any(v != 0 for v in anchor["krd"].values())
+
+    def test_a_matured_book_carries_nothing_over(self):
+        """반대쪽. 만기가 와서 끝난 북은 진짜로 비었다 — 이월 리스크 0."""
+        m = self._sloped()
+        pos = cb.BondPosition("CB", "KTB", "3M", 1, N, m.dates[10])
+        rc = cb.book_recon(m, None, [pos], self.SPEC)
+        assert all(v == 0 for v in rc["rows"][-1]["krd"].values())
+
+    def test_an_asset_swap_book_needs_the_irs_dataset(self):
+        """자산스왑 행은 스프레드 격자를 흔든다 — 그 행이 호가하는 값이
+        스프레드이고, par-par 라 패키지 손익 ≈ −D×Δ스프레드 이기 때문이다.
+        그래서 IRS 쪽이 없으면 세울 수가 없고, 조용히 민평으로 떨어지는 대신
+        말을 해야 한다."""
+        m = self._sloped()
+        pos = cb.BondPosition("ASW", "KTB", "3Y", 1, N, m.dates[10])
+        with pytest.raises(cb.CashBondError):
+            cb.book_recon(m, None, [pos], self.SPEC)
+
+
+@pytestmark_live
+class TestReconTiesOutOnLiveData:
+    """대사표가 백테스트 총액과 맞는가 — **실데이터로**.
+
+    합성 커브로는 자산스왑을 못 세운다(IRS 데이터셋이 필요하다). 그런데 이
+    레인의 가장 큰 결함이 바로 거기 있었다: 자산스왑 대사가 **채권 다리만**
+    세고 있었고, 행 항등식은 그래도 닫혀서 조용했다 (2026-08-14 실측 —
+    3Y 자산스왑 대사 합 −2.52억 vs 백테스트 손익 +0.37억, 2.89억이 스왑
+    다리). 총액 대조만이 그것을 잡는다.
+    """
+
+    SPEC = fd.FundingSpec("base", 10.0)
+
+    @pytest.fixture(scope="class")
+    def live(self):
+        from app.dataset import load_dataset_merged
+
+        return cm.load(), load_dataset_merged()
+
+    @pytest.mark.parametrize(
+        "kind,tenor", [("CB", "3Y"), ("CB", "10Y"), ("ASW", "3Y"), ("ASW", "10Y")]
+    )
+    def test_the_daily_rows_sum_to_the_backtest_total(self, live, kind, tenor):
+        m, ds = live
+        pos = cb.BondPosition(kind, "KTB", tenor, 1, N, dt.date(2025, 8, 13))
+        bt = cb.run_backtest(m, ds, [pos], self.SPEC)["positions"][0]
+        rc = cb.book_recon(m, ds, [pos], self.SPEC)
+        rows = [r for r in rc["rows"] if r["actual"] is not None]
+        assert rc["truncated"] is False
+        total = sum(r["actual"] for r in rows)
+        # 행마다 원 단위로 반올림하므로 행 수만큼의 오차는 정상이다
+        assert abs(total - round(bt["pnl"])) <= len(rows)
+        for r in rows:
+            parts = r["valuation"] + r["carry"] + r["rolldown"] + r["funding"]
+            assert abs(r["actual"] - parts) <= 2, r["t"]
+
+    def test_the_cash_bond_estimate_explains_the_move(self, live):
+        """현금채권은 한 축짜리 표다 — KRD × Δ민평 이 평가를 거의 다 설명해야
+        한다. 실측 잔차/평가 중앙값 0.04% (2026-08-14)."""
+        import statistics as st
+
+        m, ds = live
+        rc = cb.book_recon(
+            m, ds,
+            [cb.BondPosition("CB", "KTB", "3Y", 1, N, dt.date(2025, 8, 13))],
+            self.SPEC,
+        )
+        rows = [r for r in rc["rows"] if r["actual"] is not None][1:]
+        ratio = st.median([abs(r["residual"]) for r in rows]) / st.median(
+            [abs(r["valuation"]) for r in rows]
+        )
+        assert ratio < 0.05, ratio
+
+    def test_the_asset_swap_estimate_leaves_the_irs_move_behind(self, live):
+        """자산스왑은 **일부러** 덜 맞는다 — 모듈 주석의 분해 참조:
+        잔차 = (D_스왑 − D_채권) × ΔIRS 이고, 추정 열은 "IRS 가 안 움직였다면"
+        을 센다. 실측 잔차/평가 중앙값 43.7%.
+
+        이 핀은 두 방향을 다 막는다. 0 에 가까워지면 누가 KRD 에 스왑 다리를
+        더해 스프레드 민감도이기를 그만둔 것이고, 1 을 넘으면 추정이 설명하는
+        것보다 어긋나게 하는 쪽이 커진 것이다."""
+        import statistics as st
+
+        m, ds = live
+        rc = cb.book_recon(
+            m, ds,
+            [cb.BondPosition("ASW", "KTB", "3Y", 1, N, dt.date(2025, 8, 13))],
+            self.SPEC,
+        )
+        rows = [r for r in rc["rows"] if r["actual"] is not None][1:]
+        ratio = st.median([abs(r["residual"]) for r in rows]) / st.median(
+            [abs(r["valuation"]) for r in rows]
+        )
+        assert 0.1 < ratio < 1.0, ratio
+
+    def test_the_asset_swap_recon_is_not_just_the_bond(self, live):
+        """스왑 다리를 빼먹으면 자산스왑 대사가 현금채권 대사와 **같아진다**.
+        그게 이 결함의 지문이었다."""
+        m, ds = live
+        entry = dt.date(2025, 8, 13)
+        cash = cb.book_recon(
+            m, ds, [cb.BondPosition("CB", "KTB", "3Y", 1, N, entry)], self.SPEC
+        )
+        asw = cb.book_recon(
+            m, ds, [cb.BondPosition("ASW", "KTB", "3Y", 1, N, entry)], self.SPEC
+        )
+        a = sum(r["actual"] for r in cash["rows"] if r["actual"] is not None)
+        b = sum(r["actual"] for r in asw["rows"] if r["actual"] is not None)
+        assert a != b, "자산스왑 대사가 채권 다리만 세고 있다"

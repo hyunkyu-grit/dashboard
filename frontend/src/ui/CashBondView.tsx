@@ -68,10 +68,13 @@ export function CashBondView({
   kind: CashBondKind;
   policy?: PolicyStep;
 }) {
+  /* 조달 설정을 **읽지는 않고** 채워만 둔다. 쓰는 곳은 백테스트 창이고
+   * (`CashBondWindow` 가 자기 스토어에서 직접 집는다), 이 화면의 표와 세타는
+   * 조달을 안 뺀다 [OWNER, 2026-08-14]. 그래도 여기서 hydrate 하는 것은 창이
+   * 열리는 순간 이미 값이 서 있어야 "기준금리 +10bp (Setting)" 자막이 한 프레임
+   * 비었다가 채워지지 않기 때문이다. */
   const hydrate = useFundingStore((s) => s.hydrate);
   useEffect(() => hydrate(), [hydrate]);
-  const basis = useFundingStore((s) => s.basis);
-  const spreadBp = useFundingStore((s) => s.spreadBp);
 
   const [bondType, setBondType] = useState<string | null>(null);
   const [hovered, setHovered] = useState<CashBondRow | null>(null);

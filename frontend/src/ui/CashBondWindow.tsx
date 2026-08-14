@@ -38,6 +38,7 @@ import {
   type CashBondPositionInput,
   type CashBondRow,
   type CashBondSeries,
+  type BacktestRecon,
   type HistoryPoint,
   type PolicyStep,
 } from "@/lib/api";
@@ -50,6 +51,12 @@ import { SIM_WINDOW_W } from "./floatingWindow";
 import { Field, INPUT, POPUP } from "./formKit";
 import { fmtKrw, fmtKrwFromMan, splitCashBondKrw } from "./krw";
 import { Z_WINDOW } from "./layers";
+import {
+  CASHBOND_SUMMARY,
+  ReconStack,
+  type ReconStackDay,
+} from "./ReconStack";
+import { WindowDrawer } from "./WindowDrawer";
 import { ARRIVE, ENTER, instant, STAGGER_STEP } from "./motion";
 import { type ChartMark, PreviewChart } from "./PreviewChart";
 import { useFloatingWindow } from "./useFloatingWindow";
@@ -57,6 +64,36 @@ import { WindowControls } from "./WindowControls";
 
 /** 백엔드 `app/cashbond.py:MAX_POSITIONS` 와 같은 수. */
 const MAX_POSITIONS = 12;
+
+/** 일별 대사 — IRS 창과 **같은 컴포넌트**(ui/ReconStack), 조달 열이 하나 더
+ * 있다 [OWNER, 2026-08-14]. 열 목록은 그쪽이 내보내는 `CASHBOND_SUMMARY` 다. */
+function CashBondReconStack({ recon }: { recon: BacktestRecon }) {
+  const days: ReconStackDay[] = recon.rows.map((r) => ({
+    date: r.t,
+    title: r.carryover ? `${r.t} · 다음 영업일로 들고 가는 이월 리스크` : r.t,
+    krd: r.krd,
+    dbp: r.dbp,
+    est: r.est,
+    estTotal: r.estTotal,
+    valuation: r.valuation,
+    carry: r.carry,
+    rolldown: r.rolldown,
+    funding: r.funding ?? null,
+    actual: r.actual,
+  }));
+  return (
+    <ReconStack
+      days={days}
+      tenors={recon.tenors}
+      defaultOrder="desc"
+      heightClass="max-h-[30vh]"
+      summaryCols={CASHBOND_SUMMARY}
+      note={
+        recon.truncated ? "창이 길어 마지막 250 영업일만 보여요." : undefined
+      }
+    />
+  );
+}
 
 const CHART_W = SIM_WINDOW_W - 48;
 const EOK = 1e8;
@@ -118,31 +155,50 @@ function PositionRow({
   });
   const entryPoint = pointOnOrAfter(series.data?.points ?? [], value.entry);
 
-  /* 종목군으로 묶은 드롭다운 — 여덟 종목군 × 만기 열셋이 한 줄로 늘어서면
-   * 고를 수 없다. IRS 창이 자산군으로 묶은 것과 같은 이유·같은 optgroup. */
-  const grouped = types
-    .map((t) => ({
-      group: t.label,
-      items: rows.filter((r) => r.bondType === t.id),
-    }))
-    .filter((g) => g.items.length > 0);
+  /* **종목과 테너를 따로 고른다** [OWNER, 2026-08-14 — "스왑 백테스트에는
+   * 종목이랑 방향으로 되어있는데, Cash Bond에서는 종목, 테너로"]. 여덟
+   * 종목군 × 만기 열셋을 한 팝업에 optgroup 으로 넣어 두었더니 고르는 데
+   * 두 번 스크롤이 들었다 — 축이 둘인 것을 칸 하나에 접은 탓이다. 스왑 창의
+   * 둘째 칸이 방향인 자리에 테너가 온다: 채권은 살 수만 있어 방향 칸이 비고
+   * (모듈 주석의 [OWNER] 참조), 대신 고를 것이 만기다. */
+  const bondTypes = types.filter((t) => rows.some((r) => r.bondType === t.id));
+  const tenors = rows.filter((r) => r.bondType === (row?.bondType ?? ""));
+
+  /** 종목군을 바꿀 때 만기를 되도록 지킨다. 못 지키면 **가장 긴 것**으로
+   * 떨어진다 — 통안채는 3년까지고 자산스왑은 양쪽에 있는 만기에만 서므로,
+   * 없는 조합을 고르면 칸이 비는 대신 그 종목군이 실제로 갖는 끝으로 간다. */
+  const switchType = (bondType: string) => {
+    const same = rows.filter((r) => r.bondType === bondType);
+    const keep = same.find((r) => r.tenor === row?.tenor);
+    const next = keep ?? same[same.length - 1];
+    if (next) set({ id: next.id });
+  };
 
   return (
     <div className="flex flex-wrap items-end gap-x-4 gap-y-2 border-b border-edge py-3">
       <Field label="종목">
         <select
+          value={row?.bondType ?? ""}
+          onChange={(e) => switchType(e.target.value)}
+          className={`${POPUP} max-w-[11rem]`}
+        >
+          {bondTypes.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="테너">
+        <select
           value={value.id}
           onChange={(e) => set({ id: e.target.value })}
-          className={`${POPUP} max-w-[15rem]`}
+          className={`${POPUP} max-w-[8rem]`}
         >
-          {grouped.map((g) => (
-            <optgroup key={g.group} label={g.group}>
-              {g.items.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.label}
-                </option>
-              ))}
-            </optgroup>
+          {tenors.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.tenor}
+            </option>
           ))}
         </select>
       </Field>
@@ -605,6 +661,23 @@ export function CashBondWindow({
           )}
         </ErrorBoundary>
       </div>
+
+      {/* 일별 대사 — IRS 창과 같은 자리(창 바닥 서랍)·같은 문법. 결과가 있을
+          때만 선다: 대사는 그 실행의 하루하루라 실행 전에는 보여줄 것이 없다. */}
+      {run.data && (
+        <WindowDrawer
+          tabs={[
+            {
+              id: "recon",
+              label: "일별 대사",
+              content: run.data.recon ? (
+                <CashBondReconStack recon={run.data.recon} />
+              ) : null,
+              unavailable: "이 실행에는 일별 대사가 없어요 — 다시 실행하면 나와요",
+            },
+          ]}
+        />
+      )}
     </motion.div>
   );
 }

@@ -142,24 +142,6 @@ export interface EventCluster {
   count: number;
 }
 
-/** 라고 할 때 살걸 — one past change-log line, priced in hindsight: the
- * event's own direction followed the NEXT business day with 100억, valued to
- * the as-of date by the backtest engine (backend/app/regret.py — every
- * convention is stated there). */
-export interface RegretEntry {
-  date: string; // the day the log line fired (its close is the signal)
-  id: string;
-  label: string;
-  kind: "outright" | "spread" | "fly";
-  unit: "%" | "bp";
-  deltaBp: number;
-  reasons: ("transition" | "move")[];
-  direction: 1 | -1; // sign of deltaBp — the follow trade
-  entry: string; // the next business day, when the follow trade strikes
-  matured: boolean;
-  pnl: number; // KRW, signed; served rounded, never differenced here (§16)
-}
-
 /** The BOK base rate as a STEP, drawn on every %-unit AND bp-unit chart —
  * CD and the base rate are always drawn together [OWNER, 2026-07-31], and the
  * 3M node IS CD91. On a bp chart (spread, butterfly) the pair keeps its OWN
@@ -198,7 +180,6 @@ export interface WallSummary {
   outrights: SeriesSummary[];
   derived: SeriesSummary[];
   events: EventCluster[];
-  regret: RegretEntry[];
   policy: PolicyStep;
   thetaBasis: ThetaBasis;
 }
@@ -448,6 +429,9 @@ export interface BacktestReconRow {
   rolldown: number | null;
   carry: number | null;
   startup: number | null;
+  /** 조달 — 현금채권 대사에만 있다 [OWNER, 2026-08-14]. IRS 에는 조달 개념이
+   * 없어 필드 자체가 안 온다. */
+  funding?: number | null;
   residual: number | null;
   carryover?: boolean;
 }
@@ -698,6 +682,10 @@ export interface CashBondBacktest {
   maxProfit: number;
   maxLoss: number;
   funding: FundingProvenance;
+  /** 일별 대사 [OWNER, 2026-08-14 — "현금채권/자산스왑 백테스트에서도 대사
+   * 가능하게"]. IRS 쪽과 같은 모양이고 조달 열이 하나 더 있다. 흔드는 커브는
+   * 현금채권이면 민평, 자산스왑이면 그 스프레드다(backend/app/cashbond.py). */
+  recon?: BacktestRecon;
 }
 
 async function liveJson<T>(url: string, what: string): Promise<T> {
