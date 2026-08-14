@@ -285,7 +285,7 @@ describe("the tab set", () => {
   it("butterfly is its own tab, between 스프레드 and 포워드", () => {
     expect(GROUP_LABEL.fly).toBe("버터플라이");
     /* 연구실 rides at the FAR RIGHT [OWNER, 2026-08-04] — the incubation
-     * surface; its last position is pinned by guards/regret-list.
+     * surface; its last position is pinned by guards/lab-tab.
      * 시뮬레이션 sits just inside it (2026-08-07): finished work, so it goes
      * to the LEFT of the incubation surface, and the two must not swap.
      *
@@ -309,7 +309,7 @@ describe("the tab set", () => {
      *
      * 2026-08-14: Setting 이 다섯째로 들어왔다 [OWNER] — 데이터 화면이 아니라
      * 다른 화면이 읽는 값(조달금리)을 정하는 자리다. Lab **앞**인 것이 중요하다:
-     * Lab 이 마지막이라는 규칙은 따로 핀이 있고(regret-list), 확신의 사다리는
+     * Lab 이 마지막이라는 규칙은 따로 핀이 있고(lab-tab), 확신의 사다리는
      * Setting 이 참여하지 않는다. */
     expect(SECTIONS.map((s) => s.id)).toEqual([
       "main",

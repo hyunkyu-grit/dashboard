@@ -41,7 +41,7 @@ def _iso_bases(bases: dict[str, dt.date | None]) -> dict[str, str | None]:
 
 
 def wall_summary(dataset: Dataset, bases: dict, events: list,
-                 policy: dict, regret: list) -> dict:
+                 policy: dict) -> dict:
     outrights = [
         summarize(dataset, t, outright_label(t), "outright", bases)
         for t in dataset.tenor_order
@@ -81,8 +81,9 @@ def wall_summary(dataset: Dataset, bases: dict, events: list,
         "policy": policy,
         # Change-log EVENTS (D-1 fixed, collapsed) — DESIGN §12 rule (c).
         "events": events,
-        # 라고 할 때 살걸 — past log lines priced in hindsight (regret.py).
-        "regret": regret,
+        # `regret`(라고 할 때 살걸)이 여기 있었다 — Lab 탭이 비면서 함께
+        # 내려갔다 [OWNER, 2026-08-14]. 이미 구워져 트리에 남아 있는
+        # summary.json 에는 다음 굽기 전까지 그 키가 남지만, 읽는 쪽이 없다.
     }
 
 

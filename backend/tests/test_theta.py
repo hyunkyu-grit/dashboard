@@ -266,7 +266,7 @@ def test_the_payload_carries_it(dataset):
     from app.derive import basis_dates
     from app.payloads import wall_summary
 
-    body = wall_summary(dataset, basis_dates(dataset), [], {}, [])
+    body = wall_summary(dataset, basis_dates(dataset), [], {})
     assert body["thetaBasis"]["side"] == "pay"
     by_id = {o["id"]: o for o in body["outrights"]}
     assert by_id["5Y"]["theta"]["perDv01"] != 0

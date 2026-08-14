@@ -319,7 +319,7 @@ def _finalize(
     # is always the last completed close (asof = the previous business day,
     # d1 = the one before it). A future-dated row falls under the same cut.
     # The cut is HERE, at the single choke point every consumer reads
-    # through, so summary/curve/backtest/forwards/regret all shift together.
+    # through, so summary/curve/backtest/forwards all shift together.
     cut = bisect_left(dates, today)
     if cut < len(dates):
         dropped = [d.isoformat() for d in dates[cut:]]

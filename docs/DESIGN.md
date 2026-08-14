@@ -2189,73 +2189,41 @@ leftward into the main tabs, and one that does not is dropped without ever
 having touched the product proper. The shell is shared (same tab strip, same
 scroll container); the row machinery — sort, screeners, dividers — hides,
 because a lab surface is not a row list. The right pane keeps the idle
-curve. Last-place position is pinned by `guards/regret-list.test.ts`; the
+curve. Last-place position is pinned by `guards/lab-tab.test.ts`; the
 tab-set order by `guards/overview-and-divider.test.ts`.
 
-### 라고 할 때 살걸 — the log, priced in hindsight [OWNER, 2026-08-04]
+**비어 있다** [OWNER, 2026-08-14]. 첫 세입자가 내려간 뒤 다음 세입자는 아직
+정해지지 않았다. 탭은 남는다 — 세입자가 없다고 자리까지 없애면 다음 실험이
+들어올 문이 사라지고, "확신의 순서" 라는 규칙도 같이 사라진다. 빈 화면은
+`ui/LabEmpty.tsx` 이고 **서버를 부르지 않는다**: 읽는 화면이 없는 페이로드를
+계속 굽는 것이 이 리포의 되풀이되는 결함(조용한 낡음)의 가장 싼 입구다.
 
-**"그때 변화 떴을 때 따라갔으면 지금 얼마."** The 연구실 tab's first
-resident (it shipped for a few hours as a change-log popover section and was
-moved the same day ["변화 칸이 아니라, 그냥 하나 따로 빼보기"] — the log
-records what moved; this list is a statistical experiment and lives where
-experiments live). Each 주요-instrument log line of the last 20 business
-days, priced as if the reader had followed it — the event's own direction,
-the next business day's close, a flat 100억 — and valued to the as-of date
-by the backtest engine itself. The signed answer stays signed: a negative
-line ("안 따라가길 잘했다") is the same information as a positive one, and a
-list that dropped them would be a highlight reel.
+### 라고 할 때 살걸 — 내려감 [OWNER, 2026-08-14]
 
-Every convention is a stated choice (`backend/app/regret.py` docstring is
-the reference):
+연구실의 첫 세입자였다. **"그때 변화 떴을 때 따라갔으면 지금 얼마"** — 지난
+20영업일의 주요 종목 변화 각각을, 그 방향대로 다음 영업일 종가에 100억
+따라갔다면 지금 얼마인지를 백테스트 엔진의 전체 재평가로 매겨 세운 목록이었다.
+2026-08-14 에 화면과 서빙 경로가 함께 내려갔다: 실험은 가장자리에서 들어와
+피드백으로 졸업하거나 내려가고, 이것은 졸업하지 않았다.
 
-- **The replay is the daily rule, not a second rule.** What the list claims
-  the log said on day j is the daily detection re-run on the history
-  truncated at j — same percentile windows, same signal. Pinned by
-  `test_regret.py::test_replay_matches_the_daily_rule…` against a truncated
-  dataset.
-- **주요 instruments only** ["대표적인 아웃라이트, 스프레드, 버터플라이만"]:
-  the universe is `derive.is_key` — the same membership that draws each
-  tab's 주요/전체 divider, so this list and the table cannot disagree about
-  what 대표 means. Filtered BEFORE the collapse, so a cluster a non-주요
-  series would have led falls to its strongest 주요 member instead of
-  vanishing (the collapse can therefore split differently from the full
-  daily log's — that is the restriction working, not a drift).
-- **Leading series per cluster only** — the line the reader actually saw;
-  pricing the related members would multiply each cluster into
-  near-duplicate positions.
-- **Entry is the NEXT business row after the event date.** The event is
-  computed from that day's close; entering on the same close would trade on
-  a print the reader had not seen. (The backtest's own "entry is the date
-  you clicked" still holds there — a click points at a day, a log line IS
-  that day's close.)
-- **Direction follows the move** (sign of `deltaBp`): the joke is 따라갈걸,
-  not 받아칠걸. Δ=0 lines (pure window-shift transitions) have no direction
-  and are skipped; so are yesterday's lines (entry would be today, held zero
-  days) and anything led by 1D (matures the next day — 0원 noise; excluded
-  BEFORE the collapse so its cluster falls to the next member).
-- **The P&L is the backtest's answer to the won** — `_run_one`, full
-  revaluation, DV01-neutral legs, maturity cap, carry; never a second
-  pricing path (pinned by `test_regret.py::test_pnl_is_the_backtest_answer…`).
-- **One vocabulary.** The line prints the direction through
-  `BacktestWindow.directionLabel` and the money through its `fmtKrw`,
-  imported — `guards/regret-list.test.ts` checks the render byte-for-byte
-  against both and bans a local re-implementation (§16 also holds: the
-  browser formats, never computes).
-- **Precomputed and baked** (§16, §21): the list depends on no reader input,
-  so it rides in the wall summary and the static tree carries it. Cached by
-  data hash next to forwards; SCHEMA_VERSION v6 was the 주요 restriction
-  (same xlsx bytes, different cached content — the v5 trap class). The line
-  click is the change log's click — focus the instrument.
+무엇이 사라졌는지 남긴다 — 되살릴 때 규약을 다시 지어내지 않기 위해서다.
+`backend/app/regret.py`(모든 규약이 도크스트링에 있었다), 그 이벤트 소스였던
+`events.replay_leading_events` + `REPLAY_LOOKBACK`, 요약 페이로드의 `regret`
+키, `ui/RegretLab.tsx`, `tests/test_regret.py`,
+`guards/regret-list.test.ts`(이 파일의 나머지 절반 — Lab 이 마지막이라는
+핀 — 은 `guards/lab-tab.test.ts` 로 옮겼다). 되살릴 일이 있으면
+`git log -- backend/app/regret.py` 가 전부를 갖고 있다.
 
-Files: `backend/app/regret.py`, `events.replay_leading_events`,
-`ui/RegretLab.tsx` (연구실 body + RegretLine), the `lab` branch in
-`ui/InstrumentTable.tsx`, `tests/test_regret.py`,
-`guards/regret-list.test.ts`.
+지웠어도 남는 판정이 둘 있다. **리플레이는 새 규칙이 아니라 일별 규칙을 날짜
+j 에서 자른 히스토리에 다시 돌린 것**이어야 한다는 것(그 반대는 "그날 로그가
+그렇게 말했다" 를 거짓으로 만든다), 그리고 **진입은 이벤트 다음 영업일**
+이라는 것(같은 종가에 들어가면 독자가 못 본 프린트로 거래한 셈이 된다).
+다음 세입자가 과거를 되짚는 종류라면 같은 두 판정을 지난다.
 
-[TBD — owner]: the 20-day lookback and the flat 100억 are first guesses; a
-"이 살걸을 백테스트로 열기" affordance (seeding `bti`/`btf` from the line)
-is a natural extension but adds a second backtest entrance beside the
-owner's chart-click rule, so it waits for the owner.
+SCHEMA_VERSION 은 그대로 7 이다: 캐시된 페이로드의 **모양이 바뀐 게 아니라
+항목 하나가 사라진 것**이라, 남은 v7 `regret` 캐시 파일은 아무도 열지 않는다.
+이미 구워진 `summary.json` 은 다음 굽기까지 그 키를 갖고 있고, 읽는 쪽이
+없으므로 무해하다.
 
 ## 13. Explicitly out of scope for v2
 
@@ -2586,12 +2554,63 @@ Two things the owner chose, and one that follows from them:
   cannot ask the backend for them. A video was rejected for three reasons:
   stock footage says nothing about this market, a 3–10MB download makes the
   start genuinely slower, and it would need a light and a dark cut.
-- **So the drawing uses the product's own grammar.** The fan is ramped by §9
-  time-basis opacity (older curve → fainter and thinner), the focused curve
+- **So the drawing uses the product's own grammar.** The surface is ramped by
+  §9 time-basis opacity (older slice → fainter and thinner), the focused curve
   carries §5's marker dots on the thirteen quoted tenors, and the four tenor
   labels follow `timeAxis.ts`'s "3–4 orientation marks, not an axis" rule. No
-  ink in the fan exceeds the ramp's `mtd` stop — the background never reaches
-  table weight.
+  ink in it exceeds the ramp's `mtd` stop — the background never reaches table
+  weight.
+
+#### 능선과 착지 [OWNER, 2026-08-14 — "능선 + 착지"]
+
+The first build laid the nine curves flat on one axis, a fan ramped only by
+opacity. Two things replaced it, and the reasoning is worth keeping because
+both were arrived at by looking at the screen, not by argument.
+
+**The picture is a SURFACE.** X = tenor, Y = time (depth), Z = rate — the
+arrangement NYT Upshot's *A 3-D View of a Chart That Predicts The Economic
+Future* (2015) made standard for this instrument. It is drawn by the 1970s
+**floating horizon** method: far slices first, each nearer slice filling below
+itself in page colour so it erases what is behind. **Occlusion IS the depth
+cue, so the whole thing works in grayscale** (§5) with no WebGL and no 3-D
+library — a parallel projection is just a per-slice origin shift.
+
+**Three findings, in the order they were made:**
+
+1. **A big depth ladder inverts the level axis.** At `RIDGE_RISE` 0.66 the 2016
+   curve (1.2%) drew ABOVE the 2026 curve (4.1%). Read as a flat stack that is
+   simply false, and it kills what this drawing exists to show.
+2. **Killing the ladder kills the third dimension.** Dropping it to 0.16 put
+   the levels back in order and the owner's verdict on that build was
+   "입체라는 느낌이 전혀 안 들긴 해". Adding the grid's other direction (ribs
+   along time) made it worse — with slices positioned by level the ribs zig-zag,
+   so the mesh read as a tangle rather than a skin.
+3. **The real defect was density, not geometry.** Nine lines read as nine
+   lines however they are placed. `RIDGE_SLICES` (49) interpolates between the
+   nine measured anchors the way every surface plot interpolates between grid
+   points; with the ladder restored to 0.58 and the slices dense, occlusion
+   finally produces terrain. **The nine anchors stay darker than the fill
+   slices** so which lines are measured days is legible in the picture, and a
+   `fill()` remap makes the surface use the whole box instead of the middle
+   30–67% band the raw ladder+level sum happened to occupy.
+
+**The curtain hands off instead of fading.** The surface collapses, and the
+front slice — today's curve — flies to where the app is about to draw a curve
+and lands there. This is the shared-element pattern, and here it is not a
+metaphor: the curve the curtain drew and the curve the app draws are the same
+curve. Targets are marked `data-intro-land`, **preferred in order**: the right
+pane's idle curve (`"curve"`), then the overview's 주요 아웃라이트 list
+(`"outrights"`). The second one is load-bearing — the app opens on `tab="all"`,
+where the right pane does not render at all, so a build that knew only about
+the pane never landed on the startup path and always fell back to a silent fade.
+
+**None of this touches "the curtain always leaves."** Landing is decoration on
+the exit, never a condition of it: the backdrop, lockup and caption still leave
+on §14's EXIT and the app is fully visible behind them, only a single line is
+still travelling, `pointer-events-none` is already set, and the `setTimeout`
+that unmounts is outside every branch — it only picks `LAND_MS` or `FADE_MS`.
+A missing target is a NORMAL outcome (error screen, narrow window, preview
+open), not an exception.
 
 **THE LOAD-BEARING RULE: THE CURTAIN ALWAYS LEAVES.** It is the only layer
 above `Z_MODAL` and the reader cannot dismiss it, so a curtain that stays is an
@@ -2613,8 +2632,8 @@ app that is locked. Three separate mechanisms, because one was not enough:
 success does, because §17's rule that a failure must be VISIBLE outranks the
 intro. `guards/intro-curtain.test.ts` pins all of it.
 
-Length is `INTRO_MIN_MS` (1s), and it is one constant: the fan takes 976ms to
-open, so anything shorter cuts the drawing off mid-stroke, and the guard holds
+Length is `INTRO_MIN_MS` (1s), and it is one constant: the surface takes 976ms
+to build, so anything shorter cuts the drawing off mid-stroke, and the guard holds
 `INTRO_MIN_MS ≥ BLOOM_END_MS` and `≤ 2s`. Reduced motion draws the completed
 picture once, with no loop and no hold — the preference asks for no animation,
 not for a blank screen.

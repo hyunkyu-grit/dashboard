@@ -82,6 +82,7 @@ from .events import detect_event_clusters
 from .forwards import forwards_payload
 from .policy import load_base_rate, policy_step
 from .staleness import dataset_freshness
+from .surface import surface_payload
 from .volatility import volatility_payload
 
 # `DATA_PATH`(data/irsdata.xlsx)는 없어졌다 [OWNER, 2026-08-07] — IRS 종가는
@@ -276,6 +277,10 @@ _dv01_table = build_dv01_table(_curves["now"], derived_ids)
 # 순수 SQL 이면 워터마크 그대로, 엑셀이 섞이면 병합분 지문이 붙는다.
 _data_hash = _dataset.data_key
 _forwards = cached("forwards", _data_hash, lambda: forwards_payload(_dataset, _curves))
+# 커브 표면(Lab). 주별로 솎은 격자 하나라 굽는 값이 싸지만, 캐시에 태우는
+# 것은 값 때문이 아니라 **굽기와 서버가 같은 페이로드를 내도록** 하기
+# 위해서다 — forwards 와 같은 자리, 같은 키.
+_surface = cached("surface", _data_hash, lambda: surface_payload(_dataset))
 # 라고 할 때 살걸(`_regret`)이 여기 있었다 — Lab 탭이 비면서 내려갔다 [OWNER,
 # 2026-08-14]. 20일 이벤트 리플레이 + 줄마다 ~2회 평가라 굽는 값이 실했는데,
 # 그걸 읽는 화면이 없어졌다. 디스크에 남은 v7 `regret` 캐시 파일은 이제 아무도
@@ -340,6 +345,12 @@ def series_detail(series_id: str, res: str = "full", interval: str | None = None
 @router.get("/api/forwards")
 def forwards() -> dict:
     return _forwards
+
+
+@router.get("/api/surface")
+def surface() -> dict:
+    # 커브 표면 — 테너 × 날짜 × 금리 (Lab). 리더 입력 없음 → 통째로 굽힌다.
+    return _surface
 
 
 @router.get("/api/dv01/{series_id}")

@@ -100,6 +100,9 @@ const requestable = new Set<string>([
   "api/wall/summary.json",
   "api/forwards.json",
   "api/volatility.json",
+  // 커브 표면 (Lab, 2026-08-14). forwards 와 같은 성질의 고정 페이로드다 —
+  // 리더 입력에 의존하지 않으므로 통째로 굽힌다.
+  "api/surface.json",
   "api/manifest.json",
 ]);
 for (const r of rows) {
@@ -187,6 +190,7 @@ describe("the static build covers every id the app can request", () => {
       "api/wall/summary.json",
       "api/forwards.json",
       "api/volatility.json",
+      "api/surface.json",
       "api/manifest.json",
     ]) {
       expect(emitted.has(p)).toBe(true);
@@ -229,7 +233,7 @@ describe("the id → path rule matches the backend's", () => {
     // the reverse direction: no orphaned files bloating the deployment
     const wanted = new Set<string>([
       "api/wall/summary.json", "api/forwards.json",
-      "api/volatility.json", "api/manifest.json",
+      "api/volatility.json", "api/surface.json", "api/manifest.json",
     ]);
     for (const r of rows) {
       if (!r.seriesId) continue;

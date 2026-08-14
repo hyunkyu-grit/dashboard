@@ -21,6 +21,7 @@ import {
   manifestUrl,
   seriesUrl,
   summaryUrl,
+  surfaceUrl,
   volatilityUrl,
 } from "./staticPaths";
 import {
@@ -311,6 +312,34 @@ export interface VolatilityPayload {
 export async function fetchVolatility(): Promise<VolatilityPayload> {
   const res = await fetch(volatilityUrl());
   if (!res.ok) throw new Error(`volatility: HTTP ${res.status}`);
+  return res.json();
+}
+
+/** 커브 표면 — 테너 × 날짜 × 금리 (Lab, 2026-08-14). `z` 는 테너 × 날짜이고
+ * `dates` 는 주별로 솎여 있다(backend/app/surface.py — 왜 주별인지도 거기).
+ * 마지막 열은 항상 as-of 다.
+ *
+ * `inversionBp` 는 2s10s 를 bp 로 서빙한 것이다. 화면은 **부호만** 읽는다 —
+ * 브라우저에서 10Y − 2Y 를 빼면 표의 스프레드 행과 표시 정밀도에서 어긋난다
+ * (§16). */
+export interface SurfacePayload {
+  asof: string;
+  unit: Unit;
+  /** 능선 사이의 영업일 수. 화면이 "주별" 이라고 적을 때 읽는 값이다. */
+  stride: number;
+  tenors: string[];
+  dates: string[];
+  z: (number | null)[][];
+  inversionPair: string;
+  inversionBp: (number | null)[];
+  /** 페이로드에 없는 노드. 표면에서는 격자가 한 칸 좁아진 것으로만 보여서
+   * 눈으로는 절대 안 잡히므로 이름으로 받는다. */
+  missingNodes: string[];
+}
+
+export async function fetchSurface(): Promise<SurfacePayload> {
+  const res = await fetch(surfaceUrl());
+  if (!res.ok) throw new Error(`surface: HTTP ${res.status}`);
   return res.json();
 }
 

@@ -583,7 +583,7 @@ export function App() {
         버티면 안정화 세션이 고친 "실패가 대기처럼 보인다" 가 더 나쁜 형태로
         돌아온다. 커튼 뒤에서는 ErrorState 가 이미 그려져 있고, 커튼은 그것을
         보여 주려고 걷힌다. */}
-    <IntroCurtain ready={!!summary || isError} />
+    <IntroCurtain ready={!!summary || isError} failed={isError} />
     {/* Full-bleed (§H, Session 16): the surface fills the window edge to edge —
         no outer card, no radius, no page-coloured gutter. The window edge is the
         boundary; structure comes from the header hairline, the pane divider, and
@@ -690,8 +690,6 @@ export function App() {
                   matrixOpen={matrixOpen}
                   onToggleMatrix={() => setMatrixOpenRaw((v) => !v)}
                   policy={summary.policy}
-                  regret={summary.regret ?? []}
-                  onLabFocus={focusFromChangeLog}
                 />
               </ErrorBoundary>
             </div>
@@ -723,6 +721,12 @@ export function App() {
                 >
                   <div
                     ref={paneRef}
+                    /* 인트로 커튼의 착지 지점 [OWNER, 2026-08-14]. 커튼이 걷힐
+                       때 능선의 맨 앞 커브가 여기로 날아와 앉는다 — 커튼이
+                       그리던 것과 이 자리가 그릴 것이 같은 커브라서다. 커튼은
+                       이 속성을 **찾으면** 날고 못 찾으면 그냥 페이드하므로,
+                       이 줄이 사라져도 시작은 깨지지 않는다. */
+                    data-intro-land="curve"
                     className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3"
                   >
                     <ErrorBoundary region="pane" fallback="이 화면을 그리지 못했어요">

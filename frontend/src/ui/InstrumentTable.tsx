@@ -16,7 +16,6 @@ import type {
   CurveBanner,
   ForwardsPayload,
   PolicyStep,
-  RegretEntry,
 } from "@/lib/api";
 import { dirClass, fmtDelta, levelHeadText, levelHeadTitle } from "@/lib/format";
 import { ForwardMatrix, KeyForwardBlock } from "@/wall/ForwardMatrix";
@@ -42,8 +41,8 @@ import {
 import { OverviewColumns } from "./OverviewColumns";
 import { PAGE_X } from "./pageGutter";
 import { RangeCells, RangeHeader } from "./RangeCells";
-import { RegretLab } from "./RegretLab";
 import { TintLegend } from "./TintLegend";
+import { YieldSurface } from "./YieldSurface";
 import {
   BASIS_ORDER,
   GROUP_LABEL,
@@ -285,8 +284,6 @@ export function InstrumentTable({
   matrixOpen,
   onToggleMatrix,
   policy,
-  regret,
-  onLabFocus,
 }: {
   rows: Row[];
   /** The dataset's as-of date — the level column's HEADER (pass M). Comes from
@@ -297,10 +294,6 @@ export function InstrumentTable({
   /** 어느 탭이 켜져 있나. 고르는 것은 셸의 사이드바이고 표는 결과만 받는다
    * — 탭이 표 안의 컨트롤이던 시절의 `onFilter` 는 없어졌다 [2026-08-07]. */
   filter: TabId;
-  /** 연구실 residents (§lab). 라고 할 때 살걸 rows + the focus routing the
-   * change log uses (switch tab, pin, scroll). */
-  regret?: RegretEntry[];
-  onLabFocus?: (id: string) => void;
   activeId: string | null;
   pinnedId: string | null;
   onHover: (row: Row | null) => void;
@@ -646,7 +639,7 @@ export function InstrumentTable({
         {isSim ? (
           <SimulationFlow />
         ) : isLab ? (
-          <RegretLab regret={regret ?? []} onFocus={onLabFocus ?? (() => {})} />
+          <YieldSurface policy={policy} />
         ) : isOverview ? (
           <OverviewColumns rows={rows} asOf={asOf} policy={policy} />
         ) : isForward && matrixOpen && forwards ? (

@@ -38,6 +38,7 @@ const STATIC_TWINS = [
   "/api/forwards",
   "/api/dv01/",
   "/api/volatility",
+  "/api/surface",
 ];
 
 /** Every `/api/...` literal the client modules build a request from. */

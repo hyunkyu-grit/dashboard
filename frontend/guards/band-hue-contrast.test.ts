@@ -46,8 +46,10 @@ import {
  *   tile     : the app root (App.tsx) — every table row at rest, the header
  *              band, the bottom strip, both preview panes
  *   page     : the active/hover row (InstrumentTable, OverviewColumns) AND
- *              the hover fill of three chrome buttons that carry a Δ figure —
- *              BottomStrip Anchor, ChangeLog EventLine, RegretLab RegretLine
+ *              the hover fill of the chrome buttons that carry a Δ figure —
+ *              BottomStrip Anchor, ChangeLog EventLine (RegretLab RegretLine
+ *              was a third until Lab was emptied, 2026-08-14 — the surface
+ *              enumeration is unchanged, one consumer fewer)
  *   popover  : the backtest window and both bottom sheets
  *
  * --bw-page therefore stays on the TEXT floor. A 2026-08-05 proposal to

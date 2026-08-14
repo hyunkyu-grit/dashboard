@@ -58,6 +58,8 @@ export const forwardsUrl = () =>
   IS_STATIC ? "/api/forwards.json" : `${API_BASE}/api/forwards`;
 export const volatilityUrl = () =>
   IS_STATIC ? "/api/volatility.json" : `${API_BASE}/api/volatility`;
+export const surfaceUrl = () =>
+  IS_STATIC ? "/api/surface.json" : `${API_BASE}/api/surface`;
 
 /** The manifest replaces `/api/health` when static: freshness is a "now"
  * question and the client owns the clock (§21). Against a live backend the
