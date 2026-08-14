@@ -14,9 +14,16 @@ split 평가/캐리/롤다운.
 What is pinned here:
   1. IDENTITY  — every row: actual == 평가 + 롤다운 + 캐리 (±2원 rounding),
      residual == 평가 − 추정합(선형화 잔차 — 세타는 추정의 설명 대상이 아니다).
-  2. AGGREGATION — Σ평가 == record 평가; Σ캐리/Σ롤다운은 record 스칼라보다
-     정확히 마지막 행의 포워드 세타(아직 열린 포지션의 "오늘 밤" 몫)만큼
-     앞선다. 청산된 포지션이라면 그 몫이 0이라 정확히 일치한다.
+  2. AGGREGATION — 일별 행의 합이 record 스칼라와 **맞는다**(평가·캐리·
+     롤다운·개시 각각, ±행 수의 반올림). 대사표가 총액과 안 맞으면 대사표가
+     아니다 [OWNER, 2026-08-14 — 현금채권 규약에 맞춤].
+
+     종전에는 Σ캐리/Σ롤다운이 마지막 행의 포워드 세타만큼 앞섰다. 마지막
+     행이 **다음 마킹이 없는 밤**의 세타를 손익 칸에 넣고 있었기 때문이다
+     (실측 2026-08-14, 3Y 아웃라이트 100억: 열린 북 합−총액 −314,139원 =
+     마지막 행 캐리+롤 −314,142원, 청산 북 −699,630원 = −699,630원 — 정확히
+     한 밤). 지금은 그 밤을 **들고 가기만** 한다: 손익 칸에는 안 넣고 종가
+     KRD 만 재서 이월 앵커에 싣는다.
   3. FRIDAY BOOKING — 주말을 건너는 행(다음 마크까지 3일)이 하루짜리 행의
      ~3배 캐리를 싣는다: "금요일에 튄다"는 요구사항 그 자체.
   4. LINEARIZATION — the estimate explains the 평가 (curve-move) bucket, not
@@ -86,14 +93,14 @@ def test_daily_rows_sum_to_the_record_scalars(one_y):
     rec = book["positions"][0]
     rows = pnl_rows(rc)
     tol = len(rows)  # ±1원 per row of rounding
-    last = rows[-1]  # 아직 열린 포지션: 마지막 행은 "오늘 밤" 포워드 세타
-    assert abs(sum(r["valuation"] for r in rows) - rec["valuation"]) <= tol
-    assert abs(
-        sum(r["rolldown"] for r in rows) - last["rolldown"] - rec["rolldown"]
-    ) <= tol
-    assert abs(
-        sum(r["carry"] for r in rows) - last["carry"] - rec["carry"]
-    ) <= tol
+    for key in ("valuation", "rolldown", "carry"):
+        assert abs(sum(r[key] for r in rows) - rec[key]) <= tol, key
+    # 그리고 총액도 — 네 칸의 합이 곧 그날 손익이므로 이것이 대사의 결론이다
+    assert abs(sum(r["actual"] for r in rows) - round(rec["pnl"])) <= tol
+    # 마지막 행은 **다음 마킹이 없는 밤**을 손익 칸에 넣지 않는다. 이 셋이
+    # 0 이 아니면 위의 합이 딱 그만큼 총액을 넘는다(모듈 주석 2의 실측).
+    last = rows[-1]
+    assert last["carry"] == 0 and last["rolldown"] == 0 and last["startup"] == 0
     # 개시는 진입일 행에만 선다 — 그 밤이 한 번뿐이므로 [OWNER, 2026-08-14]
     assert abs(sum(r["startup"] for r in rows) - rec["startup"]) <= tol
     # 진입일 행이 있다: 평가 0(그날 par 로 struck), 세타는 booking 된다.
@@ -170,6 +177,22 @@ def test_carryover_anchor_carries_tomorrows_risk(one_y):
     for key in ("estTotal", "actual", "valuation", "rolldown", "carry", "startup", "residual"):
         assert anchor[key] is None, key
     assert anchor["dbp"] == {} and anchor["est"] == {}
+
+
+def test_a_liquidated_book_carries_nothing_over(ds):
+    """반대쪽 [OWNER, 2026-08-14]. 열린 북은 내일 아침에도 들고 있지만,
+    **청산한** 북은 진짜로 비었다 — 이월 앵커 KRD 가 0 이어야 한다.
+
+    종전에는 마지막 행이 무조건 살아 있는 것으로 처리돼(`i == last and
+    exit_i == last`) 청산한 북도 리스크를 이고 있었다. 그 밤의 세타까지
+    손익 칸에 들어가 합이 총액을 −699,630원 넘겼다(같은 날 실측)."""
+    entry, exit_ = dt.date(2025, 8, 4), dt.date(2026, 6, 19)
+    pos = [Position("3Y", +1, N, entry, exit_)]
+    book, rc = run_backtest(ds, pos), book_recon(ds, pos)
+    rows = pnl_rows(rc)
+    assert abs(sum(r["actual"] for r in rows) - round(book["positions"][0]["pnl"])) <= len(rows)
+    assert rows[-1]["carry"] == 0 and rows[-1]["rolldown"] == 0
+    assert all(v == 0 for v in rc["rows"][-1]["krd"].values())
 
 
 def test_tenors_beyond_the_books_horizon_carry_no_krd(one_y):

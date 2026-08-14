@@ -722,7 +722,7 @@ def _book_recon(
 
     # per-position statics: legs at entry, span, longest maturity, bump set
     pos_info = []
-    for pos, (entry_i, exit_i, _m) in zip(positions, spans):
+    for pos, (entry_i, exit_i, matured) in zip(positions, spans):
         legs = _build_legs(dataset, pos.series_id, pos.notional, entry_i)
         for leg in legs:
             leg.sign *= pos.direction
@@ -741,6 +741,12 @@ def _book_recon(
             "entry_i": entry_i, "exit_i": exit_i, "entry_date": entry_date,
             "legs": legs, "swaps": [_leg_swap(leg, entry_date) for leg in legs],
             "bump": bump,
+            # 마지막 행에서 이 포지션을 **들고 가는가**. 청산도 만기도 아니고
+            # 데이터가 끊겼을 뿐이면 내일 아침에도 그대로 들고 있다. 청산한
+            # 북은 반대로 이월 리스크가 0 이어야 한다 [OWNER, 2026-08-14].
+            "open_end": (
+                not matured and pos.exit is None and exit_i == len(dates) - 1
+            ),
             "prev": None,       # (clean + accrued + cash) — 어제의 실측 마크
             "prev_fwd": None,   # (carry_fwd, roll_fwd) — 어제 행이 booking 한 오늘치 세타
         })
@@ -801,12 +807,29 @@ def _book_recon(
 
             # 포워드 세타 (i → nxt), 오늘 커브 동결·오늘 알려진 픽싱으로.
             # 청산/만기 행에서는 없다 — 그 마크에서 얼어붙는 포지션이다.
-            alive_fwd = i < info["exit_i"] or (i == last and info["exit_i"] == last)
+            #
+            # 두 물음이 다르다 [OWNER, 2026-08-14 — 현금채권 규약에 맞춤]:
+            #
+            #   `books_pnl`  그 밤이 **실현되는가**. 창 안에 다음 마킹이 있을
+            #                때만이다. 마지막 행의 밤은 데이터 뒤라 실현될
+            #                자리가 없다.
+            #   `alive_fwd`  그 밤을 **들고 가는가**. 청산도 만기도 아니고
+            #                데이터가 끊겼을 뿐이면 들고 간다 — 그때만 종가
+            #                KRD 를 재서 이월 앵커에 싣는다.
+            #
+            # 종전에는 하나였고, 마지막 행의 세타가 손익 칸에 들어가 일별 합이
+            # 딱 그 한 밤만큼 백테스트 총액을 넘었다 (실측 2026-08-14, 3Y
+            # 아웃라이트 100억: 열린 북 합−총액 −314,139원 = 마지막 행 캐리+롤
+            # −314,142원, 청산 북 −699,630원 = −699,630원). 대사표가 총액과
+            # 안 맞으면 대사표가 아니다.
+            books_pnl = i < info["exit_i"]
+            alive_fwd = books_pnl or (i == last and info["open_end"])
             if alive_fwd:
                 f_clean, f_accrued = dirty_on(info, nxt, zc_base, fx)
                 f_cash = _settled_to(info["legs"], info["entry_date"], nxt, fx)
                 carry_f = (f_accrued - accrued) + (f_cash - cash)
                 roll_f = f_clean - clean
+            if books_pnl:
                 if i == info["entry_i"]:
                     # 거래일→발효일 한 밤 = 개시 [OWNER, 2026-08-14]. 이 밤은
                     # 스왑이 발효 전이라 `carry_f` 가 구조적으로 0 이고, 종전에는
