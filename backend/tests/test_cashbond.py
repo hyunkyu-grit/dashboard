@@ -513,3 +513,73 @@ class TestHeldToMaturity:
             assert accrued == 0.0
             assert coupons == pytest.approx(0.04)
             assert redeemed == 1.0
+
+
+class TestFundingOnTheDecliningBalance:
+    """조달은 **줄어드는 잔액**에 붙는다 [2026-08-14].
+
+    매수단가에 고정으로 붙이면, 이표를 받아 손에 쥐고 있는 동안에도 그 돈까지
+    빌리고 있는 셈이 된다. 교과서의 자금조달 채권 수익률은 들어오는 현금이
+    차입을 갚아 나가는 쪽이고, 그 처리가 **재투자 금리를 새로 정하지 않아도**
+    되는 이유이기도 하다 — 갚는 금리와 빌리는 금리가 같으므로 "조달금리로
+    재투자" 와 같은 말이 된다.
+    """
+
+    SPEC = fd.FundingSpec("base", 10.0)
+
+    def _run(self, tenor: str, coupon_pct: float):
+        m = synth(days=1600, curve=lambda i: _flat_curve(coupon_pct))
+        pos = cb.BondPosition("CB", "KTB", tenor, 1, N, m.dates[0])
+        p = cb.run_backtest(m, None, [pos], self.SPEC)["positions"][0]
+        return m, p
+
+    def test_coupons_reduce_the_financed_balance(self):
+        """쿠폰이 큰 채권일수록 조달이 더 줄어야 한다 — 갚을 현금이 더 오니까."""
+        _m, low = self._run("3Y", 1.0)
+        _m, high = self._run("3Y", 8.0)
+        # 둘 다 같은 기간·같은 명목. 조달은 음수라 '덜 든 쪽'이 더 큰 값이다.
+        assert high["funding"] > low["funding"]
+
+    def test_it_is_strictly_cheaper_than_funding_the_purchase_price(self):
+        m, p = self._run("3Y", 4.0)
+        flat = -fd.cost_between(
+            self.SPEC,
+            dt.date.fromisoformat(p["entry"]),
+            dt.date.fromisoformat(p["exit"]),
+            N,
+        )
+        assert p["funding"] > flat, (p["funding"], flat)
+        # 차액은 이표를 조달금리로 굴린 것과 같은 크기여야 한다
+        c = N * 0.04 / 4
+        entry = dt.date.fromisoformat(p["entry"])
+        on = dt.date.fromisoformat(p["exit"])
+        expect = sum(
+            fd.cost_between(self.SPEC, entry + dt.timedelta(days=round(k * 365 / 4)), on, c)
+            for k in range(1, 13)
+            if entry + dt.timedelta(days=round(k * 365 / 4)) < on
+        )
+        assert p["funding"] - flat == pytest.approx(expect, rel=1e-6)
+
+    def test_redemption_stops_the_funding(self):
+        """만기가 휴일이라 종료일이 며칠 뒤여도, 액면이 돌아온 뒤로는 안 빌린다.
+
+        사흘을 더 가도 조달은 **늘지 않는다**. 오히려 미세하게 줄어드는데,
+        손에 쥔 이표가 그 사흘 동안도 차입을 갚고 있기 때문이다 — 그 방향이
+        맞다는 것까지 못박는다."""
+        m = synth(days=1600, curve=lambda i: _flat_curve(3.0))
+        entry = m.dates[0]
+        n = cb.periods_for("1Y")
+        mat = entry + dt.timedelta(days=round(n * 365 / 4))
+        later = mat + dt.timedelta(days=3)
+        at_mat = cb._net_funding(self.SPEC, entry, mat, N, 0.03, n, 1.0)
+        after = cb._net_funding(self.SPEC, entry, later, N, 0.03, n, 1.01)
+        # 액면에 사흘치가 더 붙었다면 이만큼 늘었을 것이다 — 그 일이 없어야 한다
+        would_be = fd.cost_between(self.SPEC, mat, later, N)
+        assert would_be > 0
+        assert after <= at_mat + 1.0, (at_mat, after)
+        assert at_mat - after < would_be, "이표 잔액 몫보다 크게 줄면 그건 딴 결함이다"
+
+    def test_the_five_buckets_still_close(self):
+        _m, p = self._run("3Y", 4.0)
+        parts = p["valuation"] + p["carry"] + p["rolldown"] + p["funding"] + p["startup"]
+        assert abs(parts - p["pnl"]) <= 2
