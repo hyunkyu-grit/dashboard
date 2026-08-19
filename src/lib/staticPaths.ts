@@ -1,9 +1,12 @@
 /* Where the data lives — the frontend half of the id→path rule.
  *
  * Static conversion, Pass C. `backend/app/static_paths.py` is the other half
- * and the two MUST agree; `guards/static-paths.test.ts` enumerates every id the
- * app can request and checks a byte-identical file was actually emitted, so a
- * divergence fails at gate time rather than as a production 404.
+ * and the two MUST agree.
+ *
+ * (v1 의 문장은 `guards/static-paths.test.ts` 가 그 일치를 고정한다고 적어
+ *  두었는데, **이 리포에는 그 파일이 없다** — 2026-08-20 확인. v2 는 트리를
+ *  구운 적이 없어 검사할 대상 자체가 없다. 굽기를 되살리는 날 함께 옮겨 올
+ *  것이고, 그때까지 이 두 파일의 일치는 사람이 지킨다.)
  *
  * Two shapes, because a static host cannot select a file by query string:
  *
@@ -83,14 +86,15 @@ export function backtestUrl(spec: string): string | null {
   const q = `positions=${encodeURIComponent(spec)}`;
   // Development against a live backend: the explicit origin.
   if (!IS_STATIC) return `${API_BASE}/api/backtest?${q}`;
-  /* Deployed: a SAME-ORIGIN path, proxied to the backend by the Next rewrite
-   * in next.config.ts when BACKEND_ORIGIN is set there. Same-origin on purpose
-   * — an absolute origin in the bundle is what
-   * `guards/production-env.test.ts` forbids, and it would need CORS too.
+  /* 정적 모드(= `NEXT_PUBLIC_API_BASE` 를 빈 문자열로 명시): 같은 출처 경로.
    *
-   * With no rewrite configured this 404s, which `fetchBacktest` turns into the
-   * "백엔드가 필요한 화면이에요" panel. That is the honest answer: the route
-   * genuinely is not there. */
+   * v1 의 문장은 next.config.ts 의 rewrite 가 이걸 백엔드로 넘긴다고 적어
+   * 두었는데, **이 리포에는 rewrite 가 없다** — 2026-08-20 확인. 그래서 이
+   * 경로는 404 가 되고, `fetchBacktest` 가 그것을 "백엔드가 필요한 화면이에요"
+   * 패널로 바꾼다. 그게 정직한 답이다: 그 라우트는 정말 없다.
+   *
+   * 이 리포의 배포는 rewrite 가 아니라 **다른 출처**로 간다(Vercel 프런트 +
+   * Funnel 백엔드). 그 길에서는 `IS_STATIC` 이 거짓이라 위쪽 가지를 탄다. */
   return `/api/backtest?${q}`;
 }
 
