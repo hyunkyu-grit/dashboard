@@ -112,7 +112,12 @@ describe('설정', () => {
     const present = readdirSync(ROOT).filter((f) => f.startsWith('.env'));
     /* `.env.local` 은 `next build` 도 읽는다 — 개발용 오버라이드가 거기 있으면
      * 프로덕션 번들이 그걸 물고 나간다. 개발 전용 값의 자리는
-     * `.env.development.local` 이고, 그건 `next build` 가 안 읽는다. */
+     * `.env.development.local` 이고, 그건 `next build` 가 안 읽는다.
+     *
+     * 실측 2026-08-20: **`vercel link` 와 `vercel env pull` 이 이 파일을
+     * 만든다**(`VERCEL_OIDC_TOKEN` 한 줄). 이 리포는 OIDC 를 쓰지 않으므로
+     * 지우면 되고, 이 검사가 그때 잡았다. 다시 만들어지면 다시 지운다 —
+     * 자동 생성물이라고 통과시키면 그 파일에 다른 것이 들어오는 날 못 잡는다. */
     expect(present.filter((f) => f !== '.env.example' && f !== '.env.development.local')).toEqual(
       [],
     );

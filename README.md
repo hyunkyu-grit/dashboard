@@ -63,6 +63,10 @@ pnpm dev        # :3200
 다른 주소를 쓰려면 `.env.development.local` 에 적는다 — **`.env.local` 에 적지
 말 것.** `next build` 도 그 파일을 읽어서, 개발용 주소가 프로덕션 번들에 실린다.
 
+> `vercel link` / `vercel env pull` 이 `.env.local` 을 만든다(OIDC 토큰 한 줄).
+> 이 리포는 그 토큰을 쓰지 않으므로 지운다. `guards/production-env.test.ts` 가
+> 남아 있으면 실패시킨다.
+
 ## 게이트
 
 세 개를 각각 따로 돌린다. 파이프로 잇지 않는다 — 파이프는 앞 명령의 종료코드를
