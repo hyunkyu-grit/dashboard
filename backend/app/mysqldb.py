@@ -18,12 +18,23 @@ database at miraebond2.kro.kr:4004". 이 파일은 그 첫 조각이고, **읽�
 재사용하고 `pool_pre_ping` 이 끊긴 연결을 조용히 되살린다 — 이 DB 는 사무실
 네트워크 너머에 있어서 유휴 연결이 죽는다.
 
-## 접속 정보를 코드에 두는 것에 대해
+## 접속 정보
 
-[OWNER, 2026-08-07 — "코드에 상수로 하드코딩해도 됨"]. read-only 계정이고 이
-리포는 리모트가 하나(비공개)라 그 판단을 따른다. 다만 **환경변수가 있으면
-그쪽이 이긴다** — 배포에서 계정을 바꿀 때 코드를 고치지 않아도 되는 값싼
-탈출구이고, 하드코딩을 없애는 것이 아니라 덮을 수 있게 두는 것뿐이다.
+**환경변수에만 있다. 기본값은 없다.**
+
+2026-08-07 에는 하드코딩이 승인돼 있었다 [OWNER — "코드에 상수로 하드코딩해도
+됨"]. 그때는 리모트가 하나(비공개)였고 배포가 없었다. 2026-08-20 의 배포 준비
+지시가 그 판단을 갈음한다 [OWNER — "mysqldb.py 의 os.getenv 기본값(평문
+비밀번호) 제거 → 미설정이면 죽게"]. 리포는 이제 GitHub(rateslab)에 있고,
+백엔드는 Funnel 로 공개된다.
+
+미설정이면 `engine()` 이 `MissingCredentials` 로 죽는다. **import 때가 아니라
+첫 연결 때**인 이유는 두 가지다: 엑셀만 만지는 경로(정적 굽기, 대부분의 테스트)
+가 DB 없이도 돌아야 하고, 클린 호스트에서 `requirements.txt` 만 깔고 import 가
+통하는지 보는 검증(BACKEND.md)이 자격증명 없이도 성립해야 한다. 대신 죽을 때는
+어느 변수가 비었는지 이름으로 말한다 — 조용히 옛 상수로 붙는 일은 없다.
+
+히스토리에 남아 있는 예전 값은 이 패스의 범위 밖이다.
 """
 
 from __future__ import annotations
@@ -37,12 +48,35 @@ from sqlalchemy.engine import Engine, Row
 
 log = logging.getLogger("app.mysqldb")
 
-# [OWNER, 2026-08-07] read-only 계정. 환경변수가 있으면 그쪽이 이긴다.
-HOST = os.getenv("BW_MYSQL_HOST", "miraebond2.kro.kr")
-PORT = int(os.getenv("BW_MYSQL_PORT", "4004"))
-USER = os.getenv("BW_MYSQL_USER", "bondman")
-PASSWORD = os.getenv("BW_MYSQL_PASSWORD", "dws4004!")
-DATABASE = os.getenv("BW_MYSQL_DB", "sim_portfolio")
+class MissingCredentials(RuntimeError):
+    """접속 정보가 환경에 없다. 기본값으로 때우지 않는다."""
+
+
+#: 이름만 여기 있고 값은 없다. `_settings()` 가 부를 때마다 환경을 읽는다 —
+#: 모듈 로드 시각에 굳혀 두면 테스트가 `monkeypatch.setenv` 로 못 바꾼다.
+ENV_VARS = ("BW_MYSQL_HOST", "BW_MYSQL_PORT", "BW_MYSQL_USER", "BW_MYSQL_PASSWORD", "BW_MYSQL_DB")
+
+
+def _settings() -> tuple[str, int, str, str, str]:
+    """다섯 값. 하나라도 비어 있으면 **이름을 대며** 죽는다."""
+    values = {name: (os.getenv(name) or "").strip() for name in ENV_VARS}
+    missing = [name for name, value in values.items() if not value]
+    if missing:
+        raise MissingCredentials(
+            "MySQL 접속 정보가 없습니다: " + ", ".join(missing) + ". "
+            "백엔드를 띄우는 셸에서 설정하세요(.env.example 에 이름이 있습니다). "
+            "예전에 코드에 있던 기본값은 2026-08-20 배포 준비에서 지웠습니다."
+        )
+    port_raw = values["BW_MYSQL_PORT"]
+    if not port_raw.isdigit():
+        raise MissingCredentials(f"BW_MYSQL_PORT 가 숫자가 아닙니다: {port_raw!r}")
+    return (
+        values["BW_MYSQL_HOST"],
+        int(port_raw),
+        values["BW_MYSQL_USER"],
+        values["BW_MYSQL_PASSWORD"],
+        values["BW_MYSQL_DB"],
+    )
 
 #: IRS 종가 테이블. 같은 스키마에 이름이 뒤집힌 `irs_mkt_close` 도 있는데 그건
 #: 이 테이블이 아니다 — 오너가 지목한 것은 `mkt_irs_close` 다.
@@ -55,8 +89,9 @@ def engine() -> Engine:
     """풀을 든 엔진 하나. 첫 호출에서 만들고 그다음부터 재사용한다."""
     global _engine
     if _engine is None:
+        host, port, user, password, database = _settings()
         url = (
-            f"mysql+pymysql://{USER}:{PASSWORD}@{HOST}:{PORT}/{DATABASE}"
+            f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
             "?charset=utf8mb4"
         )
         _engine = create_engine(
@@ -70,7 +105,7 @@ def engine() -> Engine:
             # 열어 두면 MariaDB 쪽에 유휴 트랜잭션이 남는다.
             connect_args={"autocommit": True},
         )
-        log.info("mysql engine: %s@%s:%s/%s", USER, HOST, PORT, DATABASE)
+        log.info("mysql engine: %s@%s:%s/%s", user, host, port, database)
     return _engine
 
 

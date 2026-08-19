@@ -4,12 +4,16 @@ Static conversion, Pass B. The FastAPI app stays as the reference
 implementation for local development, so there are now two ways to get a
 payload. This is what stops them drifting.
 
-**This test cannot gate.** It needs a backend on :8200, and the working
-agreement runs the suite with the dev server stopped — so it SKIPS when the
-backend is unreachable, and the skip reason says how to run it rather than
-leaving a later session to rediscover why it never fires:
+**This test cannot gate.** It needs a live backend, and the working agreement
+runs the suite with the dev server stopped — so it SKIPS when there is none.
 
-    cd backend && python -m uvicorn app.main:app --port 8200
+Which backend it talks to is NOT hardcoded any more (2026-08-20, 배포 준비).
+`_live_backend.claim()` decides, and it refuses a port it cannot prove is ours:
+after deployment :8200 is a Funnel-exposed live service, and "the port is open"
+would otherwise read as "my backend is up". v1 ran a suite against the live
+site exactly that way.
+
+    powershell -File backend/serve.ps1 -Local        # 쪽지를 남긴다
     python -m pytest tests/test_static_agreement.py -q
 
 A skipped test proves nothing, which is why the drift it guards against is
@@ -27,6 +31,8 @@ from pathlib import Path
 
 import pytest
 
+import _live_backend
+
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "backend" / "scripts"))
 
@@ -38,7 +44,9 @@ from app.static_paths import (  # noqa: E402
     series_path,
 )
 
-BASE = "http://127.0.0.1:8200"
+# 포트는 여기 없다 — `_live_backend` 가 `SAURON_TEST_BASE` 로 정한다.
+_VERDICT = _live_backend.claim()
+BASE = _VERDICT.base
 # V2-LOCAL: v2 의 Next 앱이 리포 루트라 구운 트리는 `public/` 이다.
 # (v1 은 `frontend/public`. 포트도 v1 것 :8100 → v2 :8200 으로 바꿨다 —
 #  안 바꾸면 v2 의 정적 트리를 **v1 백엔드**와 대조하게 된다.)
@@ -56,16 +64,6 @@ PUBLIC = REPO / "public"
 SAMPLE_SERIES = ["10Y", "1.5Y", "1Y-10Y", "2Y-5Y-10Y", "2Yx1Y", "3Mx3M", "6Mx3M", "vol:10Y"]
 
 
-def _backend_up() -> bool:
-    try:
-        import urllib.request
-
-        with urllib.request.urlopen(f"{BASE}/api/health", timeout= 2) as r:
-            return r.status == 200
-    except Exception:
-        return False
-
-
 def _tree_baked() -> bool:
     """Is there a static tree to compare at all? (V2-LOCAL)
 
@@ -77,14 +75,17 @@ def _tree_baked() -> bool:
     return (PUBLIC / "api" / "manifest.json").exists()
 
 
+# 포트가 열려 있다는 사실만으로 진행하지 않는다. 이 줄은 skip 이 아니라
+# **수집 단계의 거부**다 — 남의 백엔드(배포 뒤에는 곧 라이브 서비스)에 대고
+# 아래 라운드트립을 돌리는 것은 조용한 사고이고, 조용한 사고를 skip 으로 적어
+# 두면 아무도 안 읽는다. pytest 는 이 모듈을 ERROR 로 보고하고 종료코드가 선다.
+if _VERDICT.fail:
+    raise RuntimeError(_VERDICT.reason)
+
 pytestmark = [
     pytest.mark.skipif(
-        not _backend_up(),
-        reason=(
-            "no backend on :8200 — this test compares the committed static files "
-            "against the live API and cannot gate. Start it with "
-            "`python -m uvicorn app.main:app --port 8200` and re-run."
-        ),
+        not _VERDICT.run,
+        reason=_VERDICT.reason,
     ),
     pytest.mark.skipif(
         not _tree_baked(),

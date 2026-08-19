@@ -128,8 +128,30 @@ looks wrong, report it — do not fix it here.
 ## Running it
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File backend\serve.ps1   # :8200
+powershell -ExecutionPolicy Bypass -File backend\serve.ps1          # 공개 서비스용
+powershell -ExecutionPolicy Bypass -File backend\serve.ps1 -Local   # 개발·테스트용
 ```
+
+`-Local` 은 2026-08-20 배포 준비에서 생겼다. 배포되면 :8200 이 Tailscale Funnel
+로 공개되고, 그때부터 "포트가 열려 있다" 는 사실은 **내가 띄운 개발 백엔드**일
+수도 **사람들이 쓰고 있는 라이브 서비스**일 수도 있다. v1 은 그 구별을 못 해서
+라이브에 대고 테스트를 돌렸다.
+
+`-Local` 로 뜬 프로세스만 `backend/.cache/dev-backend.json` 에 자기 PID 를
+남기고(`app/dev_marker.py`), 백엔드 테스트는 그 쪽지의 PID 가 실제로 그 포트를
+듣고 있을 때만 진행한다(`tests/_live_backend.py`). 아니면 **skip 이 아니라
+수집 단계 에러**로 거절한다. 테스트가 말을 걸 주소는 `SAURON_TEST_BASE` 로
+바꾼다 — 하드코딩된 포트는 더 이상 없다.
+
+### 환경변수
+
+| 이름 | 읽는 곳 | 없으면 |
+|---|---|---|
+| `BW_MYSQL_HOST/PORT/USER/PASSWORD/DB` | `app/mysqldb.py` | SQL 을 읽는 순간 `MissingCredentials` 로 죽는다. 기본값 없음 (2026-08-20) |
+| `SAURON_ALLOWED_ORIGINS` | `app/cors.py` | 로컬 개발 오리진만 허용 |
+| `SAURON_ALLOWED_ORIGIN_REGEX` | `app/cors.py` | `rateslab` 프로젝트의 vercel.app 프리뷰 패턴 |
+| `SAURON_DEV_LOCAL` | `app/dev_marker.py` | 쪽지를 안 남긴다(=공개 서비스로 취급) |
+| `SAURON_TEST_BASE` | `tests/_live_backend.py` | `http://127.0.0.1:8200` |
 
 Never run braveworld's `gate.ps1` while v2 is working: its mode 1 demands `:8100`
 be free, and its known orphan-uvicorn defect can leave a stray process holding a

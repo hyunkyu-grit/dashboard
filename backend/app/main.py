@@ -71,6 +71,8 @@ from . import rv as rv_mod
 from . import schedule_cache
 from .backtest import BacktestError, Position, book_recon, run_backtest
 from .cache import cached
+from .cors import allowed_origin_regex, allowed_origins
+from . import dev_marker
 from . import cashbond
 from . import creditmatrix
 from . import funding
@@ -134,7 +136,14 @@ async def lifespan(app: FastAPI):
     # different function objects. `BW_DF_CACHE=0` disables it.
     df_cache.install()
     logging.getLogger("irs_pricer").info("simulation data dir: %s", DATA_DIR)
-    yield
+    # 개발용으로 띄웠다는 쪽지(app/dev_marker.py). `SAURON_DEV_LOCAL=1` 없이는
+    # 아무것도 안 쓴다 — Funnel 로 공개된 라이브 인스턴스는 쪽지를 안 남기고,
+    # 그래서 백엔드 테스트가 그것을 자기 것으로 착각하지 못한다.
+    dev_marker.write(dev_marker.listening_port())
+    try:
+        yield
+    finally:
+        dev_marker.clear()
 
 
 app = FastAPI(title="braveworld", version="0.1.0", lifespan=lifespan)
@@ -221,12 +230,13 @@ app.add_middleware(
     #
     # (v1's note) braveworld runs on :3100/:8100 — :3000/:8000 belong to the
     # frozen krw-fi-pms deployment and must stay untouched.
-    allow_origins=[
-        "http://localhost:3200",
-        "http://127.0.0.1:3200",
-        "http://localhost:3100",
-        "http://127.0.0.1:3100",
-    ],
+    #
+    # 2026-08-20 (배포 준비): 목록이 `app/cors.py` 로 나갔다. 배포되면 프런트가
+    # Vercel 에 있어 출처가 달라지고, 프리뷰 주소는 커밋마다 바뀌어 목록에 적을
+    # 수가 없다. 값은 환경변수로 들어오고 규칙은 tests/test_cors_origins.py 가
+    # 고정한다. 전면 허용(`*`)은 하지 않는다 — 이 API 는 인증이 없다.
+    allow_origins=allowed_origins(),
+    allow_origin_regex=allowed_origin_regex(),
     # POST joins GET for the simulation's three POST routes (/api/simulate,
     # /api/credit-curve/series, /api/market-data/live). GET-only would have
     # failed them at the preflight, before any handler ran.
