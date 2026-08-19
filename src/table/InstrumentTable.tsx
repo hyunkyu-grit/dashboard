@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { HStack } from '@coinbase/cds-web/layout';
+import { HStack, VStack } from '@coinbase/cds-web/layout';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@coinbase/cds-web/tables';
 import { useSortableCell } from '@coinbase/cds-web/tables/hooks/useSortableCell';
-import { TextCaption, TextLabel2 } from '@coinbase/cds-web/typography';
+import { TextCaption, TextLabel1, TextLabel2, TextLegal } from '@coinbase/cds-web/typography';
 import {
   getCoreRowModel,
   useReactTable,
@@ -16,11 +16,18 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 
 import type { BasisKey } from '@/lib/api';
 import { fmtDelta } from '@/lib/format';
+import { fmtKrw } from '@/lib/krw';
 
-import { levelText } from './cells';
+import { levelText, rangeText, subText } from './cells';
 import { colSpecs, colStyle } from './colgroup';
-import { ALL_COLUMNS, visibleColumns, type VisibleColumns } from './columns';
+import {
+  ALL_COLUMNS,
+  rangeTemplate,
+  visibleColumns,
+  type VisibleColumns,
+} from './columns';
 import type { Row } from './rows';
+import { hasTheta, THETA_LABEL, THETA_TITLE, thetaTitle } from './theta';
 import { HEADER_H, OVERSCAN, ROW_H } from './rowHeight';
 import { byAbsChange, byTenor, unmappedRows } from './sortKey';
 import { directionClass, directionGlyph, tintStyle, unsignedDelta } from './tint';
@@ -28,11 +35,52 @@ import { ROW_ATTR, ROW_SELECTOR, useFlipReorder } from './useFlipReorder';
 
 const BASIS_LABEL: Record<BasisKey, string> = { d1: '1D', mtd: 'MTD', ytd: 'YTD' };
 
+/**
+ * 52주 레인지 안에서 오늘이 어디인지 — 낮은 쪽에서 높은 쪽으로 그은 선 위의 표식.
+ *
+ * v1 의 `RangeTrack` 과 같은 규칙이다. **옆의 세 숫자가 읽는 것과 같은 필드를**
+ * 읽으므로 표식과 숫자가 서로 다른 말을 할 수 없다. 백분위가 없는 행은 트랙을
+ * 그리지 않는다 — 0% 로 그리면 "바닥에 있다"는 없는 사실을 말하게 된다.
+ */
+function RangeTrack({ pct }: { pct: number | null }) {
+  if (pct == null) {
+    return (
+      <TextLabel2 as="span" color="fgMuted" noWrap>
+        —
+      </TextLabel2>
+    );
+  }
+  const clamped = Math.max(0, Math.min(100, pct));
+  return (
+    <span className="sr-track" title={`52주 레인지의 ${Math.round(pct)}% 지점`}>
+      <span className="sr-track-mark" style={{ left: `${clamped}%` }} />
+    </span>
+  );
+}
+
 /** The sticky header's surface. MUST be fully opaque — guarded. */
 export const STICKY_SURFACE = 'bg' as const;
 
-/** The selector for the element the probe must be measured INSIDE. */
-export const CH_PROBE_HOST = 'tbody tr[data-sr-row] td span';
+/**
+ * The selector for the element the probe must be measured INSIDE.
+ *
+ * `.sr-num` — a NUMERIC cell, specifically, and not merely the first cell in the
+ * row. Every width this probe feeds is a width for digits (`level`, `delta`, and
+ * the 52주 sub-columns all count glyphs of `−100.5`-shaped strings), so the
+ * advance has to be the one the digits draw with.
+ *
+ * The selector used to be `td span`, which is the LABEL cell — fine only while
+ * every cell in the row rendered through the same `TextLabel2`. It stopped being
+ * fine when the label cell gained its own register (name at label1/600, subtitle
+ * at legal): `ch` is the advance of "0" in the element's own font, and WEIGHT
+ * MOVES IT in a variable face. v1 has already shipped that exact defect once —
+ * a `font-medium` header cell resolving `44ch` differently from its `font-normal`
+ * body cells and misaligning the column by a few px.
+ *
+ * So the label cell is now free to be styled without touching a single column
+ * width, because it is no longer what anything is measured against.
+ */
+export const CH_PROBE_HOST = 'tbody tr[data-sr-row] td.sr-num span';
 
 /**
  * Measure the '0' advance IN THE CONTEXT THAT RENDERS THE TEXT.
@@ -69,11 +117,36 @@ function useChPx(ref: React.RefObject<HTMLElement | null>, ready: boolean): numb
   return ch;
 }
 
+/**
+ * The width the LADDER spends — the SCROLL CONTAINER's, which is neither the
+ * host div's nor the table's. Both of those are wrong, and each was measured
+ * wrong on 2026-08-14:
+ *
+ *   host div  926   the ladder's original subject. 17px too generous — scroll
+ *                   container borders plus the vertical scrollbar — so it kept
+ *                   adding a column against width the columns could never have.
+ *                   Invisible until 세타 filled the tail exactly and the table
+ *                   grew a horizontal scrollbar.
+ *   <table>   909   correct at full width and WRONG as soon as the window
+ *                   narrows: a `table-layout: fixed` table with `width: 100%`
+ *                   does not shrink below the sum of its `<col>` widths. It
+ *                   overflows instead. So the observed width froze at the last
+ *                   state that fit, the ladder stopped dropping columns, and at
+ *                   a 1280px page the table overflowed by 40px, at 1100 by 220.
+ *                   A width that depends on the columns cannot be the width the
+ *                   columns are chosen from — that is a feedback loop.
+ *   scroller  909   the element that actually BOUNDS the table. Its content box
+ *                   excludes its own borders and the vertical scrollbar, and it
+ *                   tracks the container at every width. ← this one.
+ *
+ * Falls back to the host for the frame before CDS has rendered the table.
+ */
 function useContainerWidth(ref: React.RefObject<HTMLElement | null>): number {
   const [w, setW] = useState(0);
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+    const host = ref.current;
+    if (!host) return;
+    const el = host.querySelector('table')?.parentElement ?? host;
     const ro = new ResizeObserver(([entry]) => setW(entry.contentRect.width));
     ro.observe(el);
     return () => ro.disconnect();
@@ -106,19 +179,41 @@ function useScrollElement(hostRef: React.RefObject<HTMLElement | null>, ready: b
 export function InstrumentTable({
   rows,
   onSelect,
+  onHover,
   selectedId,
   height = 560,
   compact = false,
   levelHeader,
+  levelHeaderTitle,
   divider = true,
+  quietLadderNote = false,
 }: {
   rows: Row[];
   onSelect: (row: Row) => void;
+  /**
+   * The row under the pointer (or under keyboard focus), or `undefined` when the
+   * table is left. Fires ONLY WHEN THE ROW CHANGES: `mouseover` bubbles from
+   * every descendant a pointer crosses, so an un-deduped stream would re-fire
+   * several times inside one row — and anything downstream that delays on it
+   * (the pane's 120ms) would have its timer restarted by each of them and never
+   * reach the end of the wait.
+   *
+   * The DELAY is not here. This reports what the pointer is on; how long the
+   * pointer has to stay there before the screen answers is the READER's
+   * question, and it is answered where the answer is shown (`app/page.tsx`).
+   */
+  onHover?: (row: Row | undefined) => void;
   selectedId?: string;
   /** The 현재 column's header is the DATA DATE, not the word 현재 — the number under
    * it is a close, and a column that says "현재" over yesterday's close is the
-   * silent-staleness defect wearing a label. */
+   * silent-staleness defect wearing a label. Since 2026-08-14 it is MONTH-DAY
+   * only (`lib/format.ts::levelHeadText`), so the full date rides in the
+   * tooltip below. */
   levelHeader?: string;
+  /** The same date in full, for the header's tooltip — the year the column no
+   * longer prints has to be reachable from the column itself, not only from the
+   * freshness chip at the other end of the page. */
+  levelHeaderTitle?: string;
   /** 주요 / 전체 divider. Only meaningful in tenor order: once rows are sorted by
    * |change| the two sets interleave and a divider would be drawing a line through
    * the middle of the answer. */
@@ -126,6 +221,12 @@ export function InstrumentTable({
   /** PIXELS, and it must be a number — see the comment on the `height` prop below. */
   height?: number;
   compact?: boolean;
+  /** 「N개 열이 폭에 맞춰 숨었어요」 를 끈다. Main 오버뷰가 쓴다 [OWNER 승인
+   * 2026-08-18 점검] — 같은 문장이 세 열에 세 번 서면 정보가 아니라 소음이다.
+   * 좁은 열이 열을 떨구는 건 오버뷰의 **설계**이지 이상 상태가 아니고, 어떤
+   * 열이 사는지는 표 자신이 이미 보여 준다. 정렬 키 경고는 끄지 않는다 —
+   * 그건 데이터 결함 신고라 어디서든 서야 한다. */
+  quietLadderNote?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const width = useContainerWidth(hostRef);
@@ -208,6 +309,26 @@ export function InstrumentTable({
   });
 
   const items = virtualizer.getVirtualItems();
+
+  /* 점프가 절반만 이동하던 결함(전체 앱 크리틱 2026-08-19): 기준점 띠의
+   * 앵커는 탭과 행을 정하지만 표는 꿈쩍하지 않았다 — 가상화라 그 행이 DOM 에
+   * 없을 수도 있으니 scrollIntoView 로는 못 간다. 스크롤러의 주인인 여기가
+   * 인덱스로 간다. align 'auto' 는 이미 보이는 행이면 움직이지 않는다 —
+   * 표 안에서 직접 클릭해 고른 행에서 화면이 튀지 않는 이유. */
+  const selectedIndex = useMemo(
+    () =>
+      selectedId
+        ? display.findIndex((it) => it.kind === 'row' && it.row.id === selectedId)
+        : -1,
+    [display, selectedId],
+  );
+  const selectedPresent = selectedIndex >= 0;
+  useEffect(() => {
+    if (selectedPresent) virtualizer.scrollToIndex(selectedIndex, { align: 'auto' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 인덱스 자체는 deps 에
+    // 없다: 정렬·필터로 자리만 바뀔 때마다 재스크롤하면 화면이 끌려다닌다.
+    // 선택이 바뀌거나(탭 점프 직후) 그 행이 표에 나타나는 순간에만 간다.
+  }, [selectedId, selectedPresent]);
   // Only once a cell is actually on the page can the probe measure the face the cells
   // draw with. Before that `chPx` is 0 and the colgroup declares nothing.
   const chPx = useChPx(hostRef, items.length > 0);
@@ -215,9 +336,18 @@ export function InstrumentTable({
   /* The ladder, once the probe has a real advance. Until then ALL_COLUMNS: the header
    * draws every column and the colgroup declares nothing, which is a truthful
    * "not measured yet" rather than a guess. */
+  /* Two questions, asked separately and in this order: does the 세타 column FIT
+   * (the ladder, from width) and does it APPLY (does any row here carry one).
+   * Keeping them apart is what stops a tab with no swaps — 포워드, 변동성,
+   * 민평 — from spending a column on a full page of em dashes, while still
+   * reporting an honest 숨김 count for the columns width actually took away. */
+  const anyTheta = useMemo(() => hasTheta(rows), [rows]);
   const cols = useMemo<VisibleColumns>(
-    () => (width > 0 && chPx > 0 ? visibleColumns(width, chPx, sortCol) : ALL_COLUMNS),
-    [width, chPx, sortCol],
+    () =>
+      width > 0 && chPx > 0
+        ? visibleColumns(width, chPx, sortCol, anyTheta)
+        : { ...ALL_COLUMNS, theta: anyTheta },
+    [width, chPx, sortCol, anyTheta],
   );
   const totalSize = virtualizer.getTotalSize();
   const padTop = items.length > 0 ? items[0].start : 0;
@@ -254,6 +384,31 @@ export function InstrumentTable({
     [rowFromEvent, onSelect],
   );
 
+  /* ── hover / focus, deduped by row identity ─────────────────────────────── */
+  const hoveredId = useRef<string | undefined>(undefined);
+  const emitHover = useCallback(
+    (row: Row | undefined) => {
+      if (row?.id === hoveredId.current) return; // the dedupe the delay depends on
+      hoveredId.current = row?.id;
+      onHover?.(row);
+    },
+    [onHover],
+  );
+
+  const handleMouseOver = useCallback(
+    (e: React.MouseEvent) => emitHover(rowFromEvent(e.target)),
+    [emitHover, rowFromEvent],
+  );
+
+  /* `mouseleave` rather than `mouseout`: mouseout fires on every internal
+   * boundary the pointer crosses, so clearing on it would blank the pane
+   * between two cells of the SAME row. React's onMouseLeave is the
+   * relatedTarget-checked version and fires once, when the table is actually
+   * left. Divider rows and the spacer rows have no row id, so crossing one
+   * reports `undefined` through mouseover and the pane falls back to the pinned
+   * row — which is correct: nothing is under the pointer. */
+  const handleMouseLeave = useCallback(() => emitHover(undefined), [emitHover]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -276,11 +431,30 @@ export function InstrumentTable({
    * to the end of the document.
    */
   const focusedId = useRef<string | null>(null);
-  const onFocusCapture = useCallback((e: React.FocusEvent) => {
-    const tr = (e.target as HTMLElement).closest?.(ROW_SELECTOR);
-    const id = tr?.getAttribute(ROW_ATTR);
-    if (id) focusedId.current = id;
-  }, []);
+  const onFocusCapture = useCallback(
+    (e: React.FocusEvent) => {
+      const tr = (e.target as HTMLElement).closest?.(ROW_SELECTOR);
+      const id = tr?.getAttribute(ROW_ATTR);
+      if (id) focusedId.current = id;
+      /* FOCUS IS HOVER (v1's rule, kept): a keyboard reader arrowing down the
+       * table gets the same preview a pointer would, and Enter pins it the way
+       * a click does. Without this the pane is reachable by mouse only. */
+      emitHover(rowFromEvent(e.target));
+    },
+    [emitHover, rowFromEvent],
+  );
+
+  /* Only when focus LEAVES the table. Moving between two rows fires blur then
+   * focus, and clearing on that blur would push the pane back to the pinned row
+   * for one tick on every arrow press. */
+  const onBlurCapture = useCallback(
+    (e: React.FocusEvent) => {
+      const next = e.relatedTarget as Node | null;
+      if (next && hostRef.current?.contains(next)) return;
+      emitHover(undefined);
+    },
+    [emitHover],
+  );
 
   useEffect(() => {
     const want = focusedId.current;
@@ -300,13 +474,24 @@ export function InstrumentTable({
   // colgroup declares nothing and the browser lays the table out on content.
   const specs = chPx > 0 ? colSpecs(cols, chPx) : [];
 
+  /* Spacer and divider rows must span the columns THAT EXIST, and the ladder
+   * drops columns: at a narrow width the row is 종목 + 현재 + one change + the
+   * tail, which is 4. The literal 6 this replaced was the full-ladder count, so
+   * every spacer over-spanned by two whenever anything had dropped. Derived from
+   * the same ladder the header and body cells are rendered from, so the three
+   * cannot disagree. */
+  const colCount = 2 + cols.bases.length + 1;
+
   return (
     <div
       ref={hostRef}
       tabIndex={-1}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
+      onMouseOver={handleMouseOver}
+      onMouseLeave={handleMouseLeave}
       onFocusCapture={onFocusCapture}
+      onBlurCapture={onBlurCapture}
       style={{ width: '100%' }}
     >
       <Table
@@ -338,21 +523,65 @@ export function InstrumentTable({
         <TableHeader sticky>
           <TableRow backgroundColor={STICKY_SURFACE} style={{ height: HEADER_H }}>
             <TableCell as="th" scope="col">
-              <TextCaption as="span">종목</TextCaption>
+              <TextCaption as="span" color="fgMuted">종목</TextCaption>
             </TableCell>
-            <TableCell as="th" scope="col" justifyContent="flex-end">
-              <TextCaption as="span">{levelHeader ?? '현재'}</TextCaption>
+            <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
+              <TextCaption as="span" color="fgMuted" title={levelHeaderTitle}>
+                {levelHeader ?? '현재'}
+              </TextCaption>
             </TableCell>
             {cols.bases.map((b) => {
               const { end, ...cell } = sortable(b);
               return (
-                <TableCell key={b} as="th" scope="col" justifyContent="flex-end" {...cell} end={end}>
-                  <TextCaption as="span">{BASIS_LABEL[b]}</TextCaption>
+                <TableCell
+                  key={b}
+                  as="th"
+                  scope="col"
+                  className="sr-num"
+                  justifyContent="flex-end"
+                  {...cell}
+                  end={end}
+                  /* CDS 의 정렬 글리프는 아이콘 폰트의 사용자 영역(PUA) 문자라,
+                     접근 이름이 "1D󰟃󰞷" 로 읽히고 있었다(전체 앱 크리틱 실측).
+                     이름은 사람 말로 따로 준다 — 글리프는 장식으로 남는다. */
+                  aria-label={`${BASIS_LABEL[b]} 변화 — 눌러서 정렬`}
+                >
+                  <TextCaption as="span" color="fgMuted">{BASIS_LABEL[b]}</TextCaption>
                 </TableCell>
               );
             })}
-            <TableCell as="th" scope="col" justifyContent="flex-end">
-              <TextCaption as="span">{cols.range52 ? '52주' : ''}</TextCaption>
+            {/* 52주 is FOUR sub-columns, not one number. v1 prints 고점/저점/평균
+                as ink statistics plus a low→high track with a marker; v2's
+                `columns.ts` has always sized the cell for them (`RANGE_SUBS`,
+                `slider`) and only the render was missing. */}
+            <TableCell as="th" scope="col" className="sr-num">
+              {cols.range52 ? (
+                <span
+                  className="sr-range"
+                  style={{ gridTemplateColumns: rangeTemplate(cols.slider, cols.theta, chPx) }}
+                >
+                  <TextCaption as="span" color="fgMuted">52주 고점</TextCaption>
+                  <TextCaption as="span" color="fgMuted">저점</TextCaption>
+                  <TextCaption as="span" color="fgMuted">평균</TextCaption>
+                  {cols.slider ? (
+                    <TextCaption as="span" color="fgMuted">위치</TextCaption>
+                  ) : null}
+                  {/* 세타 — the label carries the normaliser because the number
+                      is unreadable without it; horizon and side ride in the
+                      title, which is the only place they fit. */}
+                  {cols.theta ? (
+                    <TextCaption as="span" color="fgMuted" title={THETA_TITLE}>
+                      {THETA_LABEL}
+                    </TextCaption>
+                  ) : null}
+                  <span />
+                </span>
+              ) : (
+                /* CDS GAP — `TableCell` types its children as non-nullable, so
+                   the usual `cond ? … : null` does not type-check. An empty span
+                   is the filler the dropped column leaves behind anyway. */
+                <span />
+              )}
             </TableCell>
           </TableRow>
         </TableHeader>
@@ -360,7 +589,7 @@ export function InstrumentTable({
         <TableBody>
           {padTop > 0 ? (
             <tr data-sr-spacer="top" aria-hidden>
-              <td colSpan={6} style={{ height: padTop, padding: 0, border: 0 }} />
+              <td colSpan={colCount} style={{ height: padTop, padding: 0, border: 0 }} />
             </tr>
           ) : null}
 
@@ -370,7 +599,7 @@ export function InstrumentTable({
             if (item.kind === 'divider') {
               return (
                 <tr key="sr-divider" data-sr-divider style={{ height: ROW_H }}>
-                  <td colSpan={6} style={{ padding: '0 8px', border: 0 }}>
+                  <td colSpan={colCount} style={{ padding: '0 8px', border: 0 }}>
                     <TextCaption as="span" color="fgMuted">
                       {item.label}
                     </TextCaption>
@@ -384,21 +613,36 @@ export function InstrumentTable({
                 key={row.id}
                 {...{ [ROW_ATTR]: row.id }}
                 tabIndex={0}
-                aria-selected={row.id === selectedId}
+                /* `aria-current`, not `aria-selected`: on a plain `role=table`
+                   row aria-selected is invalid and assistive tech ignores it
+                   (전체 앱 크리틱 실측 2026-08-19). aria-current is valid on
+                   any element, and this row IS the current instrument — the
+                   URL's `r`. The pinned-row fill in type.css keys off it. */
+                aria-current={row.id === selectedId ? 'true' : undefined}
                 style={{ height: ROW_H }}
               >
+                {/* The name and where it normally sits. Two registers, never
+                    three: the name carries the row's only non-numeric emphasis
+                    and the second line separates by size and colour rather than
+                    by a third weight. The name is also this row's anchor — see
+                    the recorded rejection of the tenor chip in `cells.ts`. */}
                 <TableCell>
-                  <TextLabel2 as="span" noWrap>
-                    {row.label}
-                  </TextLabel2>
+                  <VStack as="span" className="sr-name-stack">
+                    <TextLabel1 as="span" noWrap>
+                      {row.label}
+                    </TextLabel1>
+                    <TextLegal as="span" color="fgMuted" noWrap>
+                      {subText(row)}
+                    </TextLegal>
+                  </VStack>
                 </TableCell>
-                <TableCell justifyContent="flex-end">
+                <TableCell className="sr-num" justifyContent="flex-end">
                   <TextLabel2 as="span" tabularNumbers noWrap>
                     {levelText(row)}
                   </TextLabel2>
                 </TableCell>
                 {cols.bases.map((b) => (
-                  <TableCell key={b} justifyContent="flex-end" style={tintStyle(row.changes[b])}>
+                  <TableCell key={b} className="sr-num" justifyContent="flex-end" style={tintStyle(row.changes[b])}>
                     <TextLabel2
                       as="span"
                       tabularNumbers
@@ -411,10 +655,44 @@ export function InstrumentTable({
                     </TextLabel2>
                   </TableCell>
                 ))}
-                <TableCell justifyContent="flex-end">
-                  <TextLabel2 as="span" tabularNumbers noWrap>
-                    {cols.range52 && row.pct != null ? `${Math.round(row.pct)}%` : ''}
-                  </TextLabel2>
+                <TableCell className="sr-num">
+                  {cols.range52 ? (
+                    <span
+                      className="sr-range"
+                      style={{ gridTemplateColumns: rangeTemplate(cols.slider, cols.theta, chPx) }}
+                    >
+                      <TextLabel2 as="span" tabularNumbers noWrap>
+                        {rangeText(row.rangeHigh, row.unit)}
+                      </TextLabel2>
+                      <TextLabel2 as="span" tabularNumbers noWrap>
+                        {rangeText(row.rangeLow, row.unit)}
+                      </TextLabel2>
+                      <TextLabel2 as="span" tabularNumbers noWrap>
+                        {rangeText(row.rangeAvg, row.unit)}
+                      </TextLabel2>
+                      {cols.slider ? <RangeTrack pct={row.pct} /> : null}
+                      {/* 세타 — INK, although it IS a signed money value and hue
+                          is reserved for exactly those. This row already spends
+                          that hue on RATE direction (어제/MTD/YTD), and two
+                          meanings of one colour in one row is worse than none;
+                          the sign glyph `fmtKrw` prints carries the direction on
+                          its own. An em dash where there is no value: an empty
+                          cell would read as a loading state. */}
+                      {cols.theta ? (
+                        <TextLabel2
+                          as="span"
+                          tabularNumbers
+                          noWrap
+                          title={row.theta ? thetaTitle(row.theta) : undefined}
+                        >
+                          {row.theta ? fmtKrw(row.theta.perDv01) : '—'}
+                        </TextLabel2>
+                      ) : null}
+                      <span />
+                    </span>
+                  ) : (
+                    <span />
+                  )}
                 </TableCell>
               </TableRow>
             );
@@ -422,7 +700,7 @@ export function InstrumentTable({
 
           {padBottom > 0 ? (
             <tr data-sr-spacer="bottom" aria-hidden>
-              <td colSpan={6} style={{ height: padBottom, padding: 0, border: 0 }} />
+              <td colSpan={colCount} style={{ height: padBottom, padding: 0, border: 0 }} />
             </tr>
           ) : null}
         </TableBody>
@@ -430,7 +708,7 @@ export function InstrumentTable({
 
       <HStack justifyContent="space-between" paddingY={0.5}>
         <TextCaption as="span" color="fgMuted">
-          {cols.hidden > 0 ? `${cols.hidden}개 열이 폭에 맞춰 숨었어요` : ''}
+          {!quietLadderNote && cols.hidden > 0 ? `${cols.hidden}개 열이 폭에 맞춰 숨었어요` : ''}
         </TextCaption>
         {unmapped.length > 0 ? (
           <TextCaption as="span" className="sr-up">

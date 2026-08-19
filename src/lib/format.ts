@@ -21,6 +21,23 @@ export function fmtBp(v: number | null | undefined): string {
   return v < 0 ? `${MINUS}${s}` : `+${s}`;
 }
 
+/**
+ * The unit as it is WRITTEN BESIDE A NUMBER in running text — a row's subtitle,
+ * a tooltip, a sentence. NOT for column headers: a column names its unit once at
+ * the top, and repeating it in every cell pushes the digits apart, which is the
+ * one thing a column of comparable numbers must not do.
+ *
+ * `가격` and `ratio` return the empty string, and neither is an oversight.
+ * A futures price point is a price — nobody writes "104.230가격" — and a ratio is
+ * dimensionless, so any suffix here would be a unit this product invented rather
+ * than one its readers use.
+ */
+export function unitSuffix(unit: Unit): string {
+  if (unit === "%") return "%";
+  if (unit === "bp") return "bp";
+  return "";
+}
+
 /** Level, unit-aware: % → 4dp, bp → 1dp, ratio → 2dp. Null → em dash. */
 export function fmtLevel(v: number | null | undefined, unit: Unit): string {
   if (v == null) return EMDASH;
@@ -81,12 +98,33 @@ export function fmtDelta(v: number | null | undefined, unit: Unit): string {
  * the header then says the same day as the freshness chip beside it.
  */
 
-/** The dataset's as-of date as the level header (ISO, `2026-07-24`). Falls back
- * to the quantity's name if a payload arrives without one — a header that names
- * nothing is worse than the old word. Width comes from `WIDEST.levelHead`
- * (ui/columns.ts); keep the two in step. */
+/**
+ * The dataset's as-of date as the level header — **month and day, no year**
+ * [OWNER 2026-08-14: "앞에 연도는 없애줘도 될 듯"].
+ *
+ * MEASURED, and the reason the owner saw it wrap: a CDS `TableCell` spends 16px
+ * on each side, so the 104px 현재 column offers 72px of text width, and
+ * `2026-08-13` at 13px/600 renders 78.2px. It broke to two lines and made the
+ * header row taller than every other column's.
+ *
+ *     2026-08-13   78.2 px   ← wraps in 72
+ *          08-13   ~40  px   ← one line, with room
+ *
+ * The year is not lost: `levelHeadTitle` keeps the full date in the cell's
+ * tooltip, and the freshness chip in the top bar states it in full beside the
+ * feed's name. A column header names the day; the page states the date.
+ *
+ * Falls back to the quantity's name if a payload arrives without one — a header
+ * that names nothing is worse than the old word. Width comes from
+ * `WIDEST.levelHead` (table/columns.ts); keep the two in step.
+ */
 export function levelHeadText(asof: string | null | undefined): string {
-  return asof && asof.length > 0 ? asof : "현재";
+  if (!asof || asof.length === 0) return "현재";
+  // ISO `YYYY-MM-DD` → `MM-DD`. Anything else is passed through untouched
+  // rather than sliced blindly: a payload with a different shape should look
+  // wrong, not be silently trimmed to five characters of something else.
+  const m = /^\d{4}-(\d{2}-\d{2})$/.exec(asof);
+  return m ? m[1] : asof;
 }
 
 /** The header's tooltip: what the column's numbers are. */

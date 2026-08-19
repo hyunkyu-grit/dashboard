@@ -64,6 +64,11 @@ export const forwardsUrl = () =>
   IS_STATIC ? "/api/forwards.json" : `${API_BASE}/api/forwards`;
 export const volatilityUrl = () =>
   IS_STATIC ? "/api/volatility.json" : `${API_BASE}/api/volatility`;
+/** 3D 커브 표면(Lab, 3풀). universe 처럼 **라이브 전용**이다 — v2 는 배포가
+ * 없는 스파이크고, 크레딧 절반이 SQL 라이브 테이블이라 굽기 짝을 만들 때
+ * universe 와 같이 만든다. 정적 모드 경로는 그날을 위해 모양만 잡아 둔다. */
+export const surfaceUrl = () =>
+  IS_STATIC ? "/api/surface3d.json" : `${API_BASE}/api/surface3d`;
 
 /** The manifest replaces `/api/health` when static: freshness is a "now"
  * question and the client owns the clock (§21). Against a live backend the
@@ -89,6 +94,29 @@ export function backtestUrl(spec: string): string | null {
    * genuinely is not there. */
   return `/api/backtest?${q}`;
 }
+
+/* ── Cash Bond [OWNER, 2026-08-14] — 전부 라이브 ─────────────────────────────
+ * 민평이 SQL 에만 있어 정적 쌍둥이를 구울 수 없다(backtest 와 같은 성질).
+ * 정적 모드에서는 same-origin 경로가 되고, 프록시가 없으면 404 → liveJson 이
+ * "백엔드가 필요한 화면이에요" 로 바꾼다. */
+function liveUrl(path: string, query?: string): string {
+  const q = query ? `?${query}` : "";
+  return IS_STATIC ? `${path}${q}` : `${API_BASE}${path}${q}`;
+}
+
+export const cashbondInstrumentsUrl = () => liveUrl("/api/cashbond/instruments");
+
+export const cashbondSeriesUrl = (id: string) =>
+  liveUrl(`/api/cashbond/series/${encodeURIComponent(id)}`);
+
+export const cashbondBacktestUrl = (spec: string, basis: string, spreadBp: number) =>
+  liveUrl(
+    "/api/cashbond/backtest",
+    `positions=${encodeURIComponent(spec)}&basis=${encodeURIComponent(basis)}&spreadBp=${spreadBp}`,
+  );
+
+export const fundingSettingsUrl = (basis: string, spreadBp: number) =>
+  liveUrl("/api/settings/funding", `basis=${encodeURIComponent(basis)}&spreadBp=${spreadBp}`);
 
 export const manifestUrl = () => "/api/manifest.json";
 export const healthUrl = () => `${API_BASE}/api/health`;

@@ -14,6 +14,7 @@ import type {
   BasisKey,
   ForwardsPayload,
   SeriesSummary,
+  Theta,
   Unit,
   VolatilityPayload,
   WallSummary,
@@ -29,6 +30,16 @@ import type {
  * swap monitor (국고 현물, 크레딧 스프레드, 본드스왑스프레드, 국채선물). Rows of every
  * group go through this same builder shape, so the comparator, the ladder and the tint
  * ramp need no second vocabulary. */
+/* V2, 2026-08-18: `cashbond`/`asw` joined for the Cash Bond lane — Backtest
+ * 메가 패널의 다섯 번째 카테고리 아래 **별개 표 탭 둘**. 현금채권은 민평
+ * 수익률(%), 자산스왑은 민평 − IRS 스프레드(bp).
+ *
+ * v1 은 이 둘을 `Group` 밖에 두었다(v1 tabs.ts:29 — "Group 은 IRS 행 빌더가
+ * 읽는 값"이라서). v2 에서 그 전제는 이미 사실이 아니다: 위 V2-LOCAL 이 적듯
+ * 국고·크레딧·선물을 같은 열거에 들였고, 그 행들도 `buildRows` 가 아니라 자기
+ * 어댑터(`universeRows.toRows`)가 만든다. v1 규칙이 지키던 것 — 두 항목이
+ * 별개 탭이고, 현금채권 행이 IRS 빌더에 절대 들어가지 않는 것 — 은 그대로다:
+ * 행은 `cashbondRows.toRows` 만 만든다. */
 export type Group =
   | "outright"
   | "spread"
@@ -38,7 +49,9 @@ export type Group =
   | "govt"
   | "credit"
   | "bss"
-  | "futures";
+  | "futures"
+  | "cashbond"
+  | "asw";
 
 export const BASIS_ORDER: BasisKey[] = ["d1", "mtd", "ytd"];
 
@@ -52,6 +65,8 @@ export const GROUP_LABEL: Record<Group, string> = {
   credit: "크레딧",
   bss: "본드스왑",
   futures: "국채선물",
+  cashbond: "현금채권",
+  asw: "자산스왑",
 };
 
 /** The three groups the 전체 overview columns show, left to right (§전체).
@@ -82,12 +97,31 @@ export interface Row {
   keyForward?: boolean;
   /** forward start point label, for the secondary start filter (§3). */
   startLabel?: string;
-  /** true for live-quoted (non-interpolated) outright nodes (§6). */
+  /** THREE states, and the third is not "unknown" — it is "the question does
+   * not apply to this instrument" (§6):
+   *
+   *   true       고시 만기 — the tenor is a live-quoted curve node
+   *   false      보간 만기 — the tenor is interpolated between two of them
+   *   undefined  개념 없음 — a spread/fly/vol row, or a class whose feed has no
+   *              such distinction (see `universeRows.toRows`)
+   *
+   * The backend decides it and the browser reads the verdict (§16). For
+   * outrights that is `derive.py:355` (`series_id in QUOTED_NODES if kind ==
+   * "outright" else None`), so `false` genuinely means interpolated and only a
+   * NON-outright arrives as null. For forwards it is `forwards.py:70`
+   * (`is_live_point`): a forward is 고시 iff BOTH its start and its end sit on
+   * quoted nodes, which is a wider set than the six 주요 forwards and is
+   * therefore a fact the divider does not already tell you. */
   quoted?: boolean;
   /** 주요 membership — decides which side of the tab's divider this row sits
    * on (§3). Server-decided for every group, including forwards (whose flag
    * arrives as `keyForward`); the browser holds no copy of the owner's list. */
   key: boolean;
+  /** 3개월 캐리 + 롤다운, 커브를 동결하고 (`backend/app/theta.py`). 스왑 다리가
+   * 될 수 있는 아웃라이트 테너와 그것으로 짜인 스프레드·플라이만 값을 진다 —
+   * 1D/3M, 포워드, 변동성, 민평·선물 행에는 없고 열은 거기서 em dash 를 그린다.
+   * 어떤 산술도 여기서 하지 않는다(§16): `perDv01` 도 `beBp` 도 백엔드 값이다. */
+  theta?: Theta | null;
 }
 
 /** Provenance of every Row field (§16). `dto` = read straight from the API;
@@ -113,6 +147,7 @@ export const ROW_FIELD_SOURCE: Record<keyof Row, "dto" | "format"> = {
   startLabel: "format",
   quoted: "dto",
   key: "dto",
+  theta: "dto",
 };
 
 /** lexicographic compare of numeric sort keys (§6). */
@@ -209,8 +244,15 @@ function fromSummary(s: SeriesSummary, group: Group, label: string): Row {
     rangeAvg: s.range1y.avg,
     sortKey: s.sortKey,
     movePct: s.movePct,
-    quoted: s.quoted ?? undefined,
+    /* null → undefined, and `false` is CARRIED. The API's three values map onto
+     * the row's three (see the field's doc): only a non-outright arrives null,
+     * so collapsing it to undefined loses nothing, while `false` is the
+     * 보간 만기 verdict and must survive. `?? undefined` did the right thing
+     * here all along; it is written out because a previous pass read it as
+     * collapsing `false` too and dropped the 보간 mark on that belief. */
+    quoted: s.quoted === null ? undefined : s.quoted,
     key: s.key,
+    theta: s.theta ?? null,
   };
 }
 
@@ -262,6 +304,11 @@ export function buildRows(
           rangeAvg: cell.range1y.avg,
           sortKey: cell.sortKey,
           movePct: null, // forwards have no cheap daily-move history
+          /* 고시/보간 for a forward is `live` — both legs on quoted nodes
+           * (`forwards.py:70`). Independent of `keyForward`: the six 주요
+           * forwards are an owner's list, `live` is a property of the grid
+           * point, and plenty of live points are not 주요. */
+          quoted: cell.live,
           keyForward: cell.keyForward,
           key: cell.keyForward,
           startLabel: sp.label,

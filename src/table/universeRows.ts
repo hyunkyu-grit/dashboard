@@ -76,7 +76,15 @@ export function toRows(p: UniversePayload): Row[] {
     rangeAvg: u.range1y.avg,
     sortKey: u.sortKey,
     movePct: u.movePct,
-    quoted: u.quoted,
+    /* NOT `u.quoted`. `backend/app/universe.py:144` writes `"quoted": True` as a
+     * literal on every universe row — it is there because the row has to be
+     * SeriesSummary-shaped, not because anything measured these marks. These
+     * are 민평 평가금리 and futures settlements; a 민평 curve is not a 호가, and
+     * every tenor on it is produced the same way, so there is no 고시/보간 split
+     * to report. Passing the literal through would print "· 호가" on all four
+     * classes and state something nobody checked. undefined = 개념 없음, which
+     * is the honest third state (see `Row.quoted`). */
+    quoted: undefined,
     key: u.key,
   })) as Row[];
 }

@@ -2,6 +2,8 @@
 
 import { useCallback, useLayoutEffect, useRef, type RefObject } from 'react';
 
+import { EASE_OUT, instant, MOTION } from '@/theme/motion';
+
 /** The attribute every body row carries. One constant so the delegated
  * listeners, the FLIP query and the guards cannot drift apart. */
 export const ROW_ATTR = 'data-sr-row';
@@ -40,8 +42,11 @@ export type FlipHandle = {
   snapshot: () => void;
 };
 
-const DURATION_MS = 220;
-const EASE = 'cubic-bezier(0.32, 0.72, 0, 1)';
+/* 시간과 곡선은 이 파일 것이 아니다 — 예전엔 여기 `220ms` 와 곡선 문자열이 직접
+ * 적혀 있었고, 그래서 제품의 시간이 다섯 군데에 흩어져 있었다(`theme/motion.css`).
+ * `instant()` 를 한 번 더 지나는 이유: 아래는 `transition` 을 **인라인 문자열로**
+ * 만드는 자리라 감속 블랭킷과 별개로 값 자체가 0 이 돼야 한다. */
+const EASE = EASE_OUT;
 
 function rowsIn(container: HTMLElement | null): HTMLTableRowElement[] {
   if (!container) return [];
@@ -91,7 +96,7 @@ export function useFlipReorder(
     // the rows travel as one movement rather than a ripple.
     const raf = requestAnimationFrame(() => {
       for (const { el } of moved) {
-        el.style.transition = `transform ${DURATION_MS}ms ${EASE}`;
+        el.style.transition = `transform ${instant(MOTION.base)}ms ${EASE}`;
         el.style.transform = '';
       }
     });

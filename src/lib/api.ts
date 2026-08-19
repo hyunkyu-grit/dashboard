@@ -10,13 +10,18 @@
 
 import {
   backtestUrl,
+  cashbondBacktestUrl,
+  cashbondInstrumentsUrl,
+  cashbondSeriesUrl,
   dv01Url,
   forwardsUrl,
+  fundingSettingsUrl,
   healthUrl,
   IS_STATIC,
   manifestUrl,
   seriesUrl,
   summaryUrl,
+  surfaceUrl,
   volatilityUrl,
 } from "./staticPaths";
 import {
@@ -83,6 +88,44 @@ export interface SeriesSummary {
    * live in `derive.py`; the browser reads the verdict and never re-derives
    * it, so there is exactly one place to change which rows sit on top. */
   key: boolean;
+  /** 세타 [OWNER, 2026-08-13] — outright swap tenors, spreads and flies.
+   * Absent (or null) on 1D/3M, forwards and volatility; the column draws an
+   * em dash there. Every convention behind these numbers is stated in
+   * `backend/app/theta.py` — do not re-derive any of them here (§16). */
+  theta?: Theta | null;
+}
+
+/** Carry + rolldown over a frozen curve, in won, for the instrument's own +1
+ * direction (페이 / 스티프너 / 벨리 페이). The column reads `perDv01`; the
+ * rest is the cell's tooltip.
+ *
+ * `cash`/`carry`/`roll`/`dv01` stand on `thetaBasis.notional` (100억) — for a
+ * package that is the REFERENCE leg's notional (the long leg, or the belly),
+ * with the others weighted DV01-neutral against it. `perDv01` does not depend
+ * on the notional at all. */
+export interface Theta {
+  perDv01: number; // 원, per 1,000,000원 of DV01 — what the column prints
+  cash: number; // 원, at the basis notional
+  carry: number; // 원, the coupon-differential accrual
+  roll: number; // 원, the frozen-curve mark change
+  /** 원/bp. An outright's own DV01; for a spread or fly the REFERENCE LEG's,
+   * because the package is DV01-neutral and its net is zero — see
+   * `backend/app/theta.py::theta_for_package`. */
+  dv01: number;
+  /** bp the row's own QUOTED VALUE must move to cancel the theta: the rate for
+   * an outright, the spread for a package. Signed in the quote's direction. */
+  beBp: number;
+}
+
+/** What the 세타 column means, stated once for the table rather than repeated
+ * down it. `cd` null ⇒ no row carries a theta (carry cannot be invented). */
+export interface ThetaBasis {
+  /** 하루 [OWNER, 2026-08-14 — "세타 전부 다 하루치로"]. 계산 창은 분기이고
+   * 표기만 일 단위다 — 백엔드 `app/theta.py:HORIZON_Y` 에 실측 근거가 있다. */
+  horizonDays: number;
+  notional: number;
+  side: 'pay';
+  cd: number | null;
 }
 
 export interface ChangeEvent {
@@ -141,6 +184,10 @@ export interface PolicyStep {
   through: string;
   steps: { date: string; rate: number }[];
   latest: number | null;
+  /** 앞으로 남은 금통위 날짜 [V2-LOCAL, 2026-08-14]. 시뮬레이션의 기준금리
+   * 이벤트가 날짜 칸을 이걸로 채운다 — 브라우저가 회의 일정을 들고 있지 않다.
+   * 옵셔널인 이유는 이 필드 이전에 구워진 정적 트리도 읽히기 때문이다. */
+  upcoming?: string[];
   warnings: string[];
 }
 
@@ -158,6 +205,10 @@ export interface WallSummary {
   curveBanner: CurveBanner;
   outrights: SeriesSummary[];
   derived: SeriesSummary[];
+  /** 세타 열의 기준 — 표 전체에 한 번. `cd` 가 null 이면 어떤 행도 세타를
+   * 지지 않는다(캐리를 지어낼 수 없다). 옵셔널인 이유는 이 필드 이전에 구워진
+   * 정적 트리도 읽히기 때문이다. */
+  thetaBasis?: ThetaBasis;
   events: EventCluster[];
   regret: RegretEntry[];
   policy: PolicyStep;
@@ -293,6 +344,45 @@ export async function fetchVolatility(): Promise<VolatilityPayload> {
   return res.json();
 }
 
+/** 3D 커브 표면 — 국고·크레딧·스왑 3풀 (Lab, `app/surface3d.py`). 전작
+ * `SurfacePayload`(단일 IRS, `app/surface.py`)는 화면 교체 [OWNER 2026-08-18]와
+ * 함께 은퇴했다 — 백엔드 `/api/surface` 라우트는 v1 과의 대사를 위해 남아 있다. */
+export interface SurfacePool {
+  label: string;
+  /** "%"(아웃라이트) 또는 "bp"(스프레드 풀 — BSS·신용). 축·리드아웃이 읽는다. */
+  unit: Unit;
+  asof: string;
+  /** 실측 노드만 — 라벨과 실제 연수. x 축은 연수다(등간격이 아니다). */
+  tenors: { t: string; years: number }[];
+  dates: string[];
+  /** [테너][날짜]. 구멍은 null — 0 으로 메우면 절벽이 시장으로 읽힌다. */
+  z: (number | null)[][];
+  inversionPair: string;
+  inversionBp: (number | null)[];
+  /** 전부 결측이라 빠진 노드 — 격자가 조용히 좁아지는 것은 눈으로 안 잡힌다. */
+  missingNodes: string[];
+  start: string;
+}
+
+export interface Surface3DPayload {
+  unit: Unit;
+  /** 능선 사이의 영업일 수. 화면이 "주별" 이라고 적을 때 읽는 값이다. */
+  stride: number;
+  creditTypes: { id: string; label: string }[];
+  creditDefault: string;
+  /** CD91 일별 — hover 리드아웃의 "CD 얼마". 프론트는 짚은 날짜 이하의 마지막
+   * 값을 고를 뿐 계산하지 않는다(§16). 기준금리는 PolicyStep 이 진다. */
+  cd: { dates: string[]; values: (number | null)[] } | null;
+  /** "govt" | "swap" | "credit:<타입>" → 풀. 풀마다 자기 달력이다 [OWNER]. */
+  pools: Record<string, SurfacePool>;
+}
+
+export async function fetchSurface3D(): Promise<Surface3DPayload> {
+  const res = await fetch(surfaceUrl());
+  if (!res.ok) throw new Error(`surface3d: HTTP ${res.status}`);
+  return res.json();
+}
+
 /* Carry & roll lived here and is gone (see DESIGN): the headline repeated the
  * breakeven's figure, and the components did not sum to the total at the
  * displayed precision. If it returns it is a sortable table COLUMN, not a
@@ -371,6 +461,12 @@ export interface BacktestPosition {
   valuation: number;
   rolldown?: number;
   carry: number;
+  /** 개시 — 거래일→발효일 한 밤 [OWNER, 2026-08-14]. 스팟 시작 스왑은 그 밤에
+   * 경과이자가 없어 캐리가 구조적으로 0 이고, 그 밤의 세타 전부가 롤다운으로
+   * 떨어지던 것을 네 번째 칸으로 뺐다(backend/app/backtest.py 의 개시 주석).
+   * 화면에서는 평가에 접는다(`splitKrw`) — 총손익 대비 0.005% 라 자기 열을
+   * 갖지 않는다 [OWNER, 2026-08-14]. 옛 세션에서 복원한 결과에만 없다. */
+  startup?: number;
   /** settled cash alone, the part of `carry` that has actually been paid */
   cash: number;
 }
@@ -394,6 +490,12 @@ export interface BacktestReconRow {
   valuation: number | null;
   rolldown: number | null;
   carry: number | null;
+  /** 개시 — 그 포지션의 진입일 행에만 0 이 아니다 [OWNER, 2026-08-14].
+   * 화면에서는 평가에 접는다(BacktestWindow 의 backtestDays). */
+  startup?: number | null;
+  /** 조달 — 현금채권 대사에만 있다 [OWNER, 2026-08-14]. IRS 에는 조달 개념이
+   * 없어 필드 자체가 안 온다. */
+  funding?: number | null;
   residual: number | null;
   carryover?: boolean;
 }
@@ -465,7 +567,9 @@ export async function fetchBacktest(
     const detail = await r.json().catch(() => null);
     throw new Error(detail?.detail ?? `backtest: HTTP ${r.status}`);
   }
-  return r.json();
+  return r.json().catch(() => {
+    throw new Error(TRUNCATED_RESPONSE_MSG);
+  });
 }
 
 /** One point of a history line. `d` = true daily change in bp (from the
@@ -529,4 +633,204 @@ export async function fetchCandles(id: string, interval: Interval): Promise<Cand
   const r = await fetch(seriesUrl(id, interval));
   if (!r.ok) throw new Error(`candles ${id}: HTTP ${r.status}`);
   return r.json();
+}
+
+/* ── Cash Bond [OWNER, 2026-08-14] ─────────────────────────────────────────
+ *
+ * 민평(SQL `credit_matrix`)에서 par 로 발행한 3개월 이표채. 이 블록의 라우트는
+ * **전부 라이브**다 — 정적 쌍둥이가 없는 이유는 `staticPaths.liveUrl` 주석에
+ * 있다. §16 은 여기서도 그대로다: 수준·변화·백분위·손익 칸을 전부 서버가 내고
+ * 브라우저는 그리기만 한다.
+ */
+
+export type CashBondKind = "CB" | "ASW";
+
+export interface CashBondRow {
+  id: string;             // "CB:KTB:3Y" | "ASW:KTB:3Y"
+  kind: CashBondKind;
+  bondType: string;       // "KTB"
+  tenor: string;          // "3Y"
+  label: string;          // "국고채 3Y"
+  /** 현금채권은 수익률(%), 자산스왑은 스프레드(bp). IRS 행과 같은 어휘라
+   * 같은 포매터를 탄다. */
+  unit: Unit;
+  now: number;
+  changes: Record<BasisKey, number | null>;
+  pct: number | null;
+  rangeHigh: number | null;
+  rangeLow: number | null;
+  rangeAvg: number | null;
+  sortKey: number[];
+  /** 세타 — **하루** 캐리+롤다운, DV01 백만원당 [OWNER, 2026-08-14].
+   *
+   * IRS 표의 같은 열과 정의를 맞췄다: **조달을 빼지 않는다** [OWNER — "채권에서는
+   * 조달 차감하지 않는 걸로"]. 시장 관행(carry = y − 레포)과는 다르다는 사실이
+   * 백엔드 `app/cashbond.py` 의 세타 주석에 외부 출처와 함께 적혀 있다.
+   * 부호는 **매수** 기준(스왑 표는 페이 기준) — 이 표의 행은 살 수만 있다.
+   * 자산스왑 행은 두 다리의 합이고, 분모는 채권 다리의 DV01 이다. */
+  theta: Theta | null;
+}
+
+export interface CashBondInstruments {
+  asof: string;
+  from: string;
+  types: { id: string; label: string }[];
+  rows: CashBondRow[];
+  /** 세타 열이 무엇을 뜻하는지 — 표 아래에 한 번 적는다. 조달은 여기 없다:
+   * 세타가 그것을 안 뺀다(Setting 의 값은 백테스트의 조달 칸이 쓴다). */
+  thetaBasis: {
+    horizonDays: number;
+    notional: number;
+    side: "buy";
+  };
+}
+
+/** 조달 기준의 출처 — 화면이 "이 숫자가 어디서 왔는가" 를 말할 수 있게. */
+export interface FundingProvenance {
+  basis: string;
+  basisLabel: string;
+  spreadBp: number;
+  label: string;
+  from: string;
+  to: string;
+  latest: number;
+}
+
+export interface FundingSettings extends FundingProvenance {
+  options: { id: string; label: string }[];
+  default: { basis: string; spreadBp: number };
+}
+
+export interface CashBondPosition {
+  id: string;
+  kind: CashBondKind;
+  bondType: string;
+  label: string;
+  tenor: string;
+  direction: number;
+  notional: number;
+  entry: string;
+  exit: string;
+  closed: boolean;
+  matured: boolean;
+  coupon: number;
+  entryYield: number;
+  exitYield: number;
+  /** 다섯 칸. 더하면 `pnl` 이다 (§backtest, 현금채권 판).
+   *   평가   민평 수익률이 움직인 몫
+   *   캐리   쿠폰 — 경과이자 증가분 + 이미 받은 이표
+   *   롤다운 커브가 멈춰도 잔존만기가 줄며 생기는 몫
+   *   조달   원금을 조달한 비용 (이미 음수다)
+   *   개시   자산스왑의 스왑 다리가 싣고 오는 거래일→발효일 한 밤. 현금채권
+   *          단독은 0 — 진입일에 발행돼 셀 밤이 없다. */
+  valuation: number;
+  carry: number;
+  rolldown: number;
+  funding: number;
+  startup: number;
+  pnl: number;
+  /** 자산스왑에만: 스왑 다리 손익과 진입 스프레드(bp). */
+  swapPnl: number | null;
+  swapEntryRate?: number;
+  aswSpread?: number;
+}
+
+export interface CashBondBacktest {
+  positions: CashBondPosition[];
+  from: string;
+  to: string;
+  complete: boolean;
+  /** 북 총계와 그 날의 **1영업일** 변화(`d`, 첫 점은 null). 점이 며칠씩
+   * 떨어져 그려져도 `d` 는 늘 하루다 — 서버가 발행점마다 전영업일을 따로
+   * 평가한다(IRS 백테스트와 같은 규약). 브라우저에서 차분하지 않는다(§16). */
+  points: { t: string; pnl: number; d: number | null }[];
+  pnl: number;
+  maxProfit: number;
+  maxLoss: number;
+  funding: FundingProvenance;
+  /** 일별 대사 [OWNER, 2026-08-14 — "현금채권/자산스왑 백테스트에서도 대사
+   * 가능하게"]. IRS 쪽과 같은 모양이고 조달 열이 하나 더 있다. 흔드는 커브는
+   * 현금채권이면 민평, 자산스왑이면 그 스프레드다(backend/app/cashbond.py). */
+  recon?: BacktestRecon;
+}
+
+/** 실행 응답은 스트리밍이라(엔진이 도는 동안 공백을 흘린다) 엔진이 도중에 죽으면
+ * 상태는 200 인 채 본문만 잘린다 — 그 실패의 유일한 증상이 JSON 파싱 실패고,
+ * 파서의 문장("Unexpected end of JSON input")은 읽는 사람의 말이 아니다. */
+export const TRUNCATED_RESPONSE_MSG = "서버가 응답을 끝내지 못했어요, 다시 실행해 보세요";
+
+/** 실행 버튼의 catch 가 화면에 올릴 문장. fetch 거절(TypeError)의 브라우저
+ * 문장("Failed to fetch")만 바꾸면 나머지는 이미 사람 말이다 — 422 detail,
+ * Unavailable 패널, 그리고 위의 TRUNCATED_RESPONSE_MSG. */
+export function runErrorMessage(e: unknown): string {
+  if (e instanceof TypeError) return "서버에 닿지 못했어요, 백엔드가 살아 있는지 봐 주세요";
+  return e instanceof Error ? e.message : String(e);
+}
+
+async function liveJson<T>(url: string, what: string): Promise<T> {
+  const r = await fetch(url);
+  // 404 = 그 라우트가 없다 = 뒤에 백엔드가 없다 (backtest 와 같은 규약)
+  if (r.status === 404) throw new BacktestUnavailable();
+  if (!r.ok) {
+    const detail = await r.json().catch(() => null);
+    throw new Error(detail?.detail ?? `${what}: HTTP ${r.status}`);
+  }
+  return r.json().catch(() => {
+    throw new Error(TRUNCATED_RESPONSE_MSG);
+  });
+}
+
+export async function fetchCashBondInstruments(): Promise<CashBondInstruments> {
+  return liveJson(cashbondInstrumentsUrl(), "cashbond/instruments");
+}
+
+/** 한 종목의 전 기간 시계열. IRS 쪽 `fetchSeries` 와 **같은 몸통**이라
+ * 미리보기 pane 이 그대로 먹는다 — 점마다 전일 대비(`d`, 늘 bp)와 52주
+ * min/max/avg 가 붙어 있다(백엔드 `derive.series_history`). */
+export interface CashBondSeries {
+  id: string;
+  label: string;
+  unit: Unit;
+  points: HistoryPoint[];
+  stats: SeriesStats | null;
+}
+
+export async function fetchCashBondSeries(id: string): Promise<CashBondSeries> {
+  return liveJson(cashbondSeriesUrl(id), "cashbond/series");
+}
+
+export interface CashBondPositionInput {
+  id: string;
+  direction: number;
+  /** 억 단위 — 화면이 억으로 받는다 (IRS 백테스트와 같은 규약). */
+  eok: number;
+  entry: string;
+  exit: string;
+}
+
+export function encodeCashBondPositions(rows: CashBondPositionInput[]): string {
+  return rows
+    .map((r) =>
+      [r.id, r.direction, r.eok * 1e8, r.entry, r.exit]
+        .filter((v, i) => i < 4 || v !== "")
+        .join(","),
+    )
+    .join(";");
+}
+
+export async function fetchCashBondBacktest(
+  rows: CashBondPositionInput[],
+  funding: { basis: string; spreadBp: number },
+): Promise<CashBondBacktest> {
+  return liveJson(
+    cashbondBacktestUrl(encodeCashBondPositions(rows), funding.basis, funding.spreadBp),
+    "cashbond/backtest",
+  );
+}
+
+export async function fetchFundingSettings(funding: {
+  basis: string;
+  spreadBp: number;
+}): Promise<FundingSettings> {
+  return liveJson(fundingSettingsUrl(funding.basis, funding.spreadBp), "settings/funding");
 }

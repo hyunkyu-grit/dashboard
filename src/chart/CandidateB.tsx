@@ -39,7 +39,16 @@ export function CandidateB({ bars, height = 420 }: { bars: Bar[]; height?: numbe
 
       const chart = lw.createChart(el, {
         height,
-        layout: { background: { color: 'transparent' }, textColor: muted },
+        layout: {
+          background: { color: 'transparent' },
+          textColor: muted,
+          /* The TradingView attribution mark is drawn INSIDE the canvas, so no CSS can
+           * remove it — it is a layout option. Verified present in the installed
+           * lightweight-charts@4.2.3 typings (`LayoutOptions.attributionLogo`) rather
+           * than assumed; this repo has been bitten four times by APIs that were not
+           * what they looked like. */
+          attributionLogo: false,
+        },
         grid: { horzLines: { visible: false }, vertLines: { visible: false } },
         rightPriceScale: {
           borderVisible: false,

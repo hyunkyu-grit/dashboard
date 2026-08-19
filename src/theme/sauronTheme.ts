@@ -10,11 +10,40 @@ import type { ThemeConfig } from '@coinbase/cds-web/core/theme';
  * width computed from format maxima that holds for only half the strings in the
  * column.
  *
- * `local()` resolution only — see `theme/type.css` for why no file is
- * self-hosted and why that is recorded as a gap rather than a decision.
+ * Self-hosted from `public/fonts/`, with `local()` deliberately absent — see
+ * `theme/type.css` for the measurement that forced it (this desk has no
+ * Pretendard installed, so the former `local()`-only source had been silently
+ * falling back to Malgun).
  */
+/* `Pretendard SR` FIRST, and it is the only entry here that resolves to
+ * anything on this desk.
+ *
+ * ── MEASURED BUG, 2026-08-13 ────────────────────────────────────────────────
+ * This stack used to begin `'Pretendard Variable', Pretendard, …` and the face
+ * never loaded, so the product rendered in Malgun — the exact defect the
+ * self-hosting change was made to fix. The `@font-face` in `theme/type.css`
+ * declares the family as **`Pretendard SR`** (a name chosen so a differently
+ * versioned locally-installed Pretendard cannot be picked up by accident), and
+ * that name appeared only in that file's `--sr-font-sans`. CDS components read
+ * `--fontFamily-*`, which comes from THIS object, so the CSS variable was never
+ * consulted and the two stacks silently disagreed.
+ *
+ * Measured in the running app: the computed stack rendered at a 125.75px
+ * advance for a fixed probe string — Malgun's — against 124.95 for
+ * `Pretendard SR` and a 120.00 no-such-face baseline. `Pretendard Variable` is
+ * not installed here and nothing declares it, so it was dead weight at the head
+ * of the stack.
+ *
+ * The consequence was not only the face. Malgun ships three weights, so the
+ * 500/600 pair below collapsed to Regular/Bold and the type had no middle
+ * register — which is the same silent failure, one layer down.
+ *
+ * The remaining entries are the ordered fallback for the ~3s `font-display:
+ * block` timeout only; `Pretendard Variable`/`Pretendard` stay so a machine
+ * that DOES have the face installed still lands on the right family before
+ * dropping to a system Hangul face. */
 const SR_FONT_STACK =
-  "'Pretendard Variable', Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif";
+  "'Pretendard SR', 'Pretendard Variable', Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif";
 
 /**
  * v2's theme, derived from CDS `defaultTheme`.
@@ -51,6 +80,37 @@ export const sauronTheme: ThemeConfig = {
   fontFamily: Object.fromEntries(
     Object.keys(defaultTheme.fontFamily).map((k) => [k, SR_FONT_STACK]),
   ) as ThemeConfig['fontFamily'],
+
+  /* Coinbase's weights, which is to say CDS's, unchanged — except `legal`.
+   * [OWNER 2026-08-13: 방향색은 토스, 나머지는 Coinbase]
+   *
+   * ── Why almost nothing is overridden ────────────────────────────────────────
+   * CDS IS Coinbase's design system, so its 14-token scale already IS the thing
+   * being copied. Measured on coinbase.com the same day: body 16/400, emphasis
+   * 16/600, section heading 20/600, hero number 40/400 — which are exactly CDS's
+   * `body`, `headline`, `title3` and `display3`. Overriding them to imitate
+   * Coinbase would mean editing Coinbase's own values to look more like
+   * Coinbase. So `body` and `label2` were reverted to 400.
+   *
+   * ── The one exception: `legal` (13px) stays 500 ─────────────────────────────
+   * Hangul at 12–13px renders with visibly broken strokes at 400 — the counters
+   * inside ㅇ/ㅎ and the joins in ㄹ/ㅂ fill in at that size, which Latin at the
+   * same size does not do.
+   *
+   * Coinbase never has to solve this because **Coinbase never sets body text at
+   * 13px**: its smallest body register is 14/400 (measured — the second line of
+   * the asset-table name cell). This product runs one step denser (60px rows
+   * against Coinbase's 76px, [OWNER]), so its second line lands at 13px, and at
+   * 13px the Latin-tuned 400 does not survive the writing system.
+   *
+   * So this is not a disagreement with Coinbase's scale. It is the correction
+   * that Coinbase's scale would need if it were asked to render Hangul at a size
+   * it never uses. If ROW_H ever grows enough for a 14px second line, delete
+   * this and the override goes away with it. */
+  fontWeight: {
+    ...defaultTheme.fontWeight,
+    legal: '500',
+  },
 };
 
 /**

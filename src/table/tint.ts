@@ -45,6 +45,40 @@ export function tintStyle(v: number | null | undefined): React.CSSProperties | u
   };
 }
 
+/* ── 매트릭스의 틴트는 **다른 눈금**이다 (v1 §J, 그대로) ─────────────────────
+ *
+ * 위의 `tintAlpha` 는 변화 열의 것이고 bp 로 눈금을 잰다. 매트릭스는 그럴 수가
+ * 없다: 168칸이 한 화면에 있고, 그날의 최대값으로 정규화하면 큰 날에는 거의 모든
+ * 칸이 칠해진다(v1 실측 96~99%). 그래서 매트릭스는 **자기 과거 대비 백분위**로
+ * 잰다 — 이 칸의 오늘 움직임이 이 칸의 역사에서 얼마나 드문 일인가. 백분위는
+ * 서버가 낸다(`movePct`, §16).
+ *
+ * 그리고 강도의 상한이 다르다. 변화 열의 숫자는 **색 있는 글자**라 뒤에 채움을
+ * 깔면 그 글자의 대비를 갉아먹는다(그래서 위쪽 램프는 0.20 에서 멈춘다).
+ * 매트릭스의 숫자는 **잉크**라 깊이를 견딘다 — 0.45 까지 간다.
+ */
+
+/** pct70 에서의 최소 틴트. 이 아래는 아예 안 칠한다. */
+export const MATRIX_FLOOR = 0.06;
+/** pct97 에서의 최대 틴트. 잉크 위라 여기까지 갈 수 있다. */
+export const MATRIX_FULL = 0.45;
+export const MATRIX_PCT_LO = 70;
+export const MATRIX_PCT_HI = 97;
+
+/** 매트릭스 칸의 등급 틴트. `pct` 는 서버가 낸 자기 과거 백분위. */
+export function matrixTint(
+  pct: number | null | undefined,
+  up: boolean,
+): React.CSSProperties | undefined {
+  if (pct == null || pct < MATRIX_PCT_LO) return undefined;
+  const f = Math.min(1, (pct - MATRIX_PCT_LO) / (MATRIX_PCT_HI - MATRIX_PCT_LO));
+  const alpha = MATRIX_FLOOR + (MATRIX_FULL - MATRIX_FLOOR) * f;
+  const hue = up ? 'var(--sr-up)' : 'var(--sr-down)';
+  return {
+    backgroundColor: `color-mix(in srgb, ${hue} ${(alpha * 100).toFixed(1)}%, transparent)`,
+  };
+}
+
 /**
  * D4.1 — the sign as a GLYPH, not only as a hue.
  *

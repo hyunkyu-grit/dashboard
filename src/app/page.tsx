@@ -1,40 +1,76 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { Chip } from '@coinbase/cds-web/chips';
 import { HStack, VStack } from '@coinbase/cds-web/layout';
-import { TextCaption, TextTitle3 } from '@coinbase/cds-web/typography';
+import { TextBody, TextCaption, TextTitle3 } from '@coinbase/cds-web/typography';
 
 import {
+  fetchCashBondInstruments,
   fetchForwards,
   fetchHealth,
   fetchVolatility,
   fetchWallSummary,
+  type CashBondInstruments,
   type ForwardsPayload,
   type Health,
   type VolatilityPayload,
   type WallSummary,
 } from '@/lib/api';
+import { levelHeadText, levelHeadTitle } from '@/lib/format';
+import { idleCurve } from '@/chart/curve';
+import { resolveStart, rowsFor, startPoints } from '@/table/forwardStarts';
 import { InstrumentTable } from '@/table/InstrumentTable';
 import { buildRows, GROUP_LABEL, type Group, type Row } from '@/table/rows';
-import { SCREENERS } from '@/table/screener';
-import { fetchUniverse, toRows, type UniversePayload } from '@/table/universeRows';
+import { filterByType, toCashBondRows } from '@/table/cashbondRows';
+import { fetchUniverse, type UniversePayload } from '@/table/universeRows';
+import { BottomStrip, useStripCollapsed } from '@/ui/BottomStrip';
+import { ChangeLog } from '@/ui/ChangeLog';
+import { CurveBanner } from '@/ui/CurveBanner';
 import { ErrorState, FreshnessChip, LoadingState } from '@/ui/DataState';
+import { ErrorBoundary } from '@/ui/ErrorBoundary';
+import { ForwardMatrix, KeyForwardBlock } from '@/ui/ForwardMatrix';
+import {
+  DEFAULT_GROUP,
+  NOT_BUILT,
+  SECTIONS,
+  sectionOf,
+  type TabId,
+} from '@/ui/nav';
+import { OverviewColumns } from '@/ui/OverviewColumns';
 import { PreviewPane } from '@/ui/PreviewPane';
+import { useFillHeight } from '@/ui/useFillHeight';
+import { BacktestWindow, encodeBook, seedBook } from '@/backtest/BacktestWindow';
+import type { BookRow } from '@/backtest/book';
+import { isBookable, newRow } from '@/backtest/book';
+import { CashBondWindow, seedCashBondBook } from '@/cashbond/CashBondWindow';
+import { encodeCashBondBook, newCashBondRow, type CashBondBookRow } from '@/cashbond/book';
+import { SettingView } from '@/ui/SettingView';
+import { BondTypeFilter } from '@/ui/BondTypeFilter';
+import { SimulationPage, type CaseRuns } from '@/sim/SimulationPage';
+import { RvPage } from '@/rv/RvPage';
+import { FloatingWindow } from '@/ui/window/FloatingWindow';
+import { StartFilter } from '@/ui/StartFilter';
+import { TopNav } from '@/ui/TopNav';
 import { useUrlState } from '@/ui/useUrlState';
+import { Surface3D } from '@/ui/Surface3D';
 
-/** Swap groups first (v1's), then the live classes P0a found beside them. */
+/** Swap groups first (v1's), then the Cash Bond pair (2026-08-18).
+ *
+ * 국고·본드스왑·크레딧·국채선물은 여기서 내려갔다 [OWNER 2026-08-19 — "가상
+ * 데이터가 들어갔던 본드스왑, 국고, 국채선물, 크레딧 지워주고"]. 이 배열이 곧
+ * URL 게이트라(`tab` 판정), 빠진 그룹은 딥링크로도 열리지 않고 DEFAULT_GROUP
+ * 으로 떨어진다. 유니버스 백엔드·행 어댑터는 남아 있다 — 되살리려면 여기(와
+ * `nav.ts` 의 BACKTEST_CATEGORIES)에 도로 넣고 rows 메모에 `toRows` 를 다시
+ * 잇는다. */
 const GROUPS: Group[] = [
   'outright',
   'spread',
   'fly',
   'forward',
   'vol',
-  'govt',
-  'bss',
-  'credit',
-  'futures',
+  'cashbond',
+  'asw',
 ];
 
 /** Which feed each group's freshness comes from. The two close on the same day today,
@@ -43,7 +79,16 @@ const GROUPS: Group[] = [
 const SOURCE_OF: Record<Group, 'irs' | 'universe'> = {
   outright: 'irs', spread: 'irs', fly: 'irs', forward: 'irs', vol: 'irs',
   govt: 'universe', bss: 'universe', credit: 'universe', futures: 'universe',
+  /* 현금채권 = credit_matrix, 자산스왑 = credit_matrix × mkt_irs_close —
+   * 유니버스의 govt/bss 항목이 각각 정확히 그 피드다 (`FRESH_KEY`). */
+  cashbond: 'universe', asw: 'universe',
 };
+
+/** 신선도 항목 키가 그룹 이름과 다른 곳. 현금채권도 자산스왑도 **민평 달력**
+ * 위에 선다(`asw_series` 는 민평 날짜에 IRS 를 맞춘다 — backend/app/cashbond.py)
+ * — bss(교집합의 max, IRS 가 하루 앞설 수 있다)를 가리키면 헤더 날짜와 표의
+ * 마지막 관측이 어긋난다(실측 2026-08-18: 헤더 08-17, 값 08-14). */
+const FRESH_KEY: Partial<Record<Group, string>> = { cashbond: 'govt', asw: 'govt' };
 
 const SOURCE_LABEL = { irs: 'IRS 종가', universe: '민평·선물 종가' } as const;
 
@@ -52,6 +97,7 @@ type Loaded = {
   forwards: ForwardsPayload;
   vol: VolatilityPayload;
   universe: UniversePayload;
+  cashbond: CashBondInstruments;
   health: Health;
 };
 
@@ -65,19 +111,41 @@ export default function Home() {
    * Neither goes through the router (see useUrlState for the production defect that
    * ruling came out of). */
   const [groupParam, setGroupParam] = useUrlState('g', 'outright');
-  const [screener, setScreener] = useUrlState('s');
   const [selectedId, setSelectedId] = useUrlState('r', undefined, 'push');
-  const group = (GROUPS.includes(groupParam as Group) ? groupParam : 'outright') as Group;
-  const setGroup = setGroupParam;
+
+  /* ONE value in the URL, and the section is derived from it (`ui/nav.ts`).
+   * Splitting section and tab into two states makes combinations representable
+   * that the screen does not have — "Backtest with no asset class" — which is
+   * v1's ruling, carried. */
+  const NON_GROUP: TabId[] = ['all', 'sim', 'strategy', 'setting', 'lab'];
+  const tab = (
+    GROUPS.includes(groupParam as Group) || NON_GROUP.includes(groupParam as TabId)
+      ? groupParam
+      : DEFAULT_GROUP
+  ) as TabId;
+
+  const section = sectionOf(tab);
+  const isGroupTab = GROUPS.includes(tab as Group);
+
+  /* Backtest returns to the LAST asset class looked at, not always 아웃라이트 —
+   * otherwise someone reading spreads who steps into Main once loses their place. */
+  const lastGroupRef = useRef<Group>(DEFAULT_GROUP);
+  if (isGroupTab) lastGroupRef.current = tab as Group;
+  const group = (isGroupTab ? tab : lastGroupRef.current) as Group;
+
+  const sectionTitle = isGroupTab
+    ? GROUP_LABEL[group]
+    : (SECTIONS.find((s) => s.id === section)?.label ?? 'Main');
 
   const load = useCallback(async () => {
     setError(undefined);
     setRetrying(true);
     try {
-      const [summary, forwards, vol, universe, health] = await Promise.all([
-        fetchWallSummary(), fetchForwards(), fetchVolatility(), fetchUniverse(), fetchHealth(),
+      const [summary, forwards, vol, universe, cashbond, health] = await Promise.all([
+        fetchWallSummary(), fetchForwards(), fetchVolatility(), fetchUniverse(),
+        fetchCashBondInstruments(), fetchHealth(),
       ]);
-      setData({ summary, forwards, vol, universe, health });
+      setData({ summary, forwards, vol, universe, cashbond, health });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -91,129 +159,628 @@ export default function Home() {
 
   const rows = useMemo(() => {
     if (!data) return [];
+    /* `toRows(data.universe)` 는 여기서 빠졌다(2026-08-19 그룹 축소) — 탭이
+     * 없는 행을 rows 에 남기면 커맨드 바 검색이 열 수 없는 화면으로 점프한다.
+     * 유니버스 페이로드 자체는 계속 받는다: 신선도 칩(SOURCE_OF)과 현금채권
+     * 헤더 날짜(FRESH_KEY)가 그 소스 항목을 읽는다. */
     return [
       ...buildRows(data.summary, data.forwards, data.vol),
-      ...toRows(data.universe),
+      ...toCashBondRows(data.cashbond),
     ];
   }, [data]);
 
-  const inGroup = useMemo(() => rows.filter((r) => r.group === group), [rows, group]);
+  /* The screener row is gone [OWNER 2026-08-13 — "필터 항목은 없애주고"], so the
+   * rows shown are simply the group's — plus the forward tab's ONE remaining
+   * narrowing, the start point (§3). It survives the chip cull because it is not
+   * a preset over the same list: 21 starts × 7 tenors is 140 rows, and reading
+   * "3M 시작" is reading a different curve section, not a filtered view of one.
+   * `SCREENERS` still exists in `table/screener.ts` with its predicates intact;
+   * nothing reads it now. */
+  const [startParam, setStartParam] = useUrlState('fs');
+  const starts = useMemo(() => startPoints(rows), [rows]);
+  const start = resolveStart(startParam, starts, group);
+  /* 현금채권·자산스왑 탭의 하나 남은 좁히기 — 종목군 (`BondTypeFilter`).
+     포워드 시작점과 같은 규칙으로 URL 에 산다. */
+  const [bondTypeParam, setBondTypeParam] = useUrlState('ct');
+  const isCashBondTab = group === 'cashbond' || group === 'asw';
+  const bondType =
+    isCashBondTab && data?.cashbond.types.some((t) => t.id === bondTypeParam)
+      ? (bondTypeParam as string)
+      : null;
+  const shown = useMemo(() => {
+    const base = rowsFor(rows, group, start);
+    if (!isCashBondTab || !data) return base;
+    return filterByType(base, data.cashbond.rows, bondType);
+  }, [rows, group, start, isCashBondTab, data, bondType]);
 
-  const active = SCREENERS.find((s) => s.id === screener);
-  const shown = useMemo(
-    () => (active ? inGroup.filter((r) => active.test(r)) : inGroup),
-    [inGroup, active],
+  /* ── hover preview ────────────────────────────────────────────────────────
+   * The pane answers the row under the pointer, and falls back to the pinned
+   * row when there is none. Hover is NOT in the URL: a pointer crossing the
+   * table is not a destination, and writing it would put a history entry (or a
+   * replace) behind every row it passes.
+   *
+   * 120ms [v1 §2]: crossing twelve rows to reach the thirteenth would otherwise
+   * fire twelve series fetches and strobe the chart. The delay is on ARRIVAL
+   * only — leaving clears at once, because a pane still showing a row the
+   * pointer has left is the stale-state defect, and no reader is waiting on it.
+   */
+  const HOVER_MS = 120;
+
+/** 커브 배너 한 줄이 표 위에서 먹는 높이. 아웃라이트 탭에서만 선다. */
+const BANNER_H = 34;
+
+/* 미리보기 카드의 차트 높이는 **여기서 안 정한다.**
+ *
+ * 예전엔 `PREVIEW_CHROME_H = 176` 을 빼서 줬고, 그 숫자가 89px 모자랐다 —
+ * 실측 2026-08-14: 히어로 128 + 범례 22 + 통계 115 = **265**. 그만큼 차트가 커져서
+ * 통계 3열(「이 구간」·「변화」·「52주」)이 카드 밖으로 88px 밀려났고, `.sr-card` 가
+ * `overflow: hidden` 이라 통째로 잘렸다. 화면에서는 그 정보가 **그냥 없었다.**
+ *
+ * 상수를 89 올리는 것이 답이 아니다. 그 셋은 고정 높이가 아니다 — 범례는 기준선이
+ * 있을 때만 서고(bp·ratio 차트엔 없다), 통계 3열은 폭에 따라 접힌다. 어떤 상수를
+ * 넣어도 어떤 화면에서는 틀린다. 그래서 `PreviewPane` 이 **남는 높이를 스스로 재게**
+ * 했다(`fill`). 표 쪽이 `useFillHeight` 로 이미 쓰는 방법과 같다. */
+  const [hoveredId, setHoveredId] = useState<string>();
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const onHover = useCallback((row?: Row) => {
+    clearTimeout(hoverTimer.current);
+    if (row) hoverTimer.current = setTimeout(() => setHoveredId(row.id), HOVER_MS);
+    else setHoveredId(undefined);
+  }, []);
+  useEffect(() => () => clearTimeout(hoverTimer.current), []);
+
+  /* Resolved against the CURRENT tab's rows, not held as an object: a row from
+   * the tab you just left resolves to nothing here and the pane falls back to
+   * the pin, rather than showing an instrument that is no longer on screen. */
+  const pinnedRow = shown.find((r) => r.id === selectedId);
+  const previewRow = shown.find((r) => r.id === hoveredId) ?? pinnedRow;
+
+  /* 아이들 커브는 **탭과 무관하게 하나** — IRS 파 커브다 [v1 OWNER, pass M].
+     그래서 `shown` 이 아니라 요약에서 바로 만든다. */
+  const idle = useMemo(() => idleCurve(data?.summary), [data?.summary]);
+
+  /* 확대 창 — 레인 3(떠 있는 창)의 첫 세입자. URL 에 산다(`?w=`): 자리를 잡아
+     둔 창은 링크로 넘길 만한 상태이고, 뒤로가기로 닫히는 것도 자연스럽다.
+     `replace` 인 이유는 `useUrlState` 의 규칙 그대로 — 창을 여닫는 것은
+     목적지가 아니다. 행이 사라지면(탭 이동) 창도 닫힌다. */
+  const [enlargedId, setEnlarged] = useUrlState('w');
+  const enlargedRow = enlargedId ? shown.find((r) => r.id === enlargedId) : undefined;
+
+  /* ── 백테스트 창 (레인 4) ──────────────────────────────────────────────
+     열려 있음 = URL 에 `bt` 가 있음이다. v1 의 규칙 그대로 — 인스턴스가 하나뿐
+     이라는 사실이 상태 하나로 표현되고, 그래서 두 개가 될 수가 없다. 북 자체가
+     그 파라미터에 실리므로 **링크가 곧 북**이다: 붙여넣으면 같은 질문이 뜬다.
+     쓰기는 replace(창을 여닫는 건 목적지가 아니다). */
+  const [btParam, setBtParam] = useUrlState('bt');
+  const [book, setBookState] = useState<BookRow[]>([]);
+  const btOpen = btParam != null;
+
+  /* 북은 URL 과 화면 상태를 함께 움직인다 — 한쪽만 바뀌면 링크가 거짓말을 한다. */
+  const setBook = useCallback(
+    (next: BookRow[]) => {
+      setBookState(next);
+      setBtParam(encodeBook(next) || ' ');
+    },
+    [setBtParam],
   );
 
+  const openBacktest = useCallback(() => {
+    const seedId = previewRow && isBookable(previewRow)
+      ? previewRow.id
+      : (shown.find(isBookable)?.id ?? '10Y');
+    const seeded = seedBook(btParam, seedId, data?.summary.asof ?? '');
+    setBook(seeded);
+  }, [btParam, previewRow, shown, data?.summary.asof, setBook]);
+
+  /* ── 현금채권 백테스트 창 ──────────────────────────────────────────────
+     IRS 의 `bt` 와 같은 규칙, 키는 `cb` — 링크가 곧 북이다. 별개 파라미터인
+     이유는 별개 창이라서다: 두 백테스트는 엔진도 문법(id 에 `:`)도 다르고,
+     한 키에 섞으면 링크를 연 쪽이 어느 창인지 문자열을 파싱해야 안다. */
+  const [cbParam, setCbParam] = useUrlState('cb');
+  const [cbBook, setCbBookState] = useState<CashBondBookRow[]>([]);
+  const cbOpen = cbParam != null;
+
+  const setCbBook = useCallback(
+    (next: CashBondBookRow[]) => {
+      setCbBookState(next);
+      setCbParam(encodeCashBondBook(next) || ' ');
+    },
+    [setCbParam],
+  );
+
+  const openCashBondBacktest = useCallback(() => {
+    if (!data) return;
+    const seedId =
+      previewRow && (previewRow.group === 'cashbond' || previewRow.group === 'asw')
+        ? previewRow.id
+        : (shown[0]?.id ?? data.cashbond.rows[0]?.id ?? '');
+    setCbBook(seedCashBondBook(cbParam, seedId, data.cashbond.asof, data.cashbond.from));
+  }, [data, previewRow, shown, cbParam, setCbBook]);
+
+  useEffect(() => {
+    if (!cbOpen || cbBook.length > 0 || !data) return;
+    setCbBookState(
+      seedCashBondBook(cbParam, data.cashbond.rows[0]?.id ?? '', data.cashbond.asof, data.cashbond.from),
+    );
+  }, [cbOpen, cbParam, cbBook.length, data]);
+
+  /* 창의 유니버스는 **북의 첫 줄이 정한다** — 탭이 아니라. 창을 띄워 둔 채
+     다른 탭으로 가도 종목·테너 목록이 갈리면 안 된다. */
+  const cbKind = cbBook[0]?.id.startsWith('ASW:') ? 'ASW' : 'CB';
+
+  /* **차트를 눌러서 들어간다** [v1 계약 복원, OWNER 2026-08-18 — "원래 백테스트는
+     그래프를 눌러서 들어갔었는데"]. v1 은 pane 의 차트 블록 전체가 role="button"
+     이었고, 클릭하면 그 행 + **커서가 짚고 있던 날짜**(`btf`)로 백테스트가 열렸다
+     (`v1 ui/PreviewPane.tsx:199` `onOpen(row, hoveredDate)`).
+
+     버튼 진입과 다른 점 하나: **기억된 북을 되살리지 않고 새로 심는다.** 특정
+     차트의 특정 날짜를 눌렀다는 것은 명시적인 질문이라, 지난번 북이 대신 뜨면
+     날짜 힌트가 영영 안 먹는 것처럼 보인다(v1 도 클릭마다 새 bt 키를 민팅했다).
+     담을 수 없는 행(포워드·변동성 등)이면 버튼과 같은 폴백으로 간다. */
+  const openBacktestAt = useCallback(
+    (row: Row, from?: string) => {
+      /* 현금채권·자산스왑 행은 자기 창으로 간다 — IRS 엔진은 `:` 가 든 id 를
+         전부 거절한다(서버가 거부하는 것을 화면이 제안하지 않는다). */
+      if (row.group === 'cashbond' || row.group === 'asw') {
+        if (!data) return;
+        const seeded = newCashBondRow(row.id, data.cashbond.asof, data.cashbond.from);
+        if (from) seeded.entry = from;
+        setCbBook([seeded]);
+        return;
+      }
+      if (!isBookable(row)) {
+        openBacktest();
+        return;
+      }
+      setBook([newRow(row.id, from ?? data?.summary.asof ?? '')]);
+    },
+    [openBacktest, setBook, setCbBook, data],
+  );
+
+  /* 링크로 들어온 경우: URL 에 북이 있으면 그걸로 화면을 세운다(한 번만). */
+  useEffect(() => {
+    if (!btOpen || book.length > 0 || !data) return;
+    setBookState(seedBook(btParam, shown.find(isBookable)?.id ?? '10Y', data.summary.asof));
+  }, [btOpen, btParam, book.length, data, shown]);
+
+
+  /* 시뮬레이션 **결과 창** — 설정은 페이지에 있고 결과만 뜬다(v1 형태).
+     URL 에 존재만 싣는다(`?sim=1`): 입력이 페이지에 있어서 값을 실을 자리가 아니다. */
+  const [simParam, setSim] = useUrlState('sim');
+  const simOpen = simParam != null;
+
+  /* 표로 보기 — 포워드 격자. 다른 창들과 같은 규칙으로 URL 에 존재만 싣는다. */
+  const [matrixParam, setMatrix] = useUrlState('fm');
+  const matrixOpen = matrixParam != null;
+  const [simRuns, setSimRuns] = useState<CaseRuns>();
+
+  /* 표와 미리보기는 **창의 남는 높이를 전부** 쓴다 [OWNER 2026-08-14].
+   *
+   * 상수 560 이었고, 2560×1140 화면에서 아래 428px 이 빈 채 표가 1,022px 짜리
+   * 내용을 8행만 보여주며 자체 스크롤했다. 화면은 남는데 내용이 갇힌 상태다.
+   * 둘 다 픽셀 숫자를 요구하므로(가상화 스크롤러 · CDS 차트) 재서 내려준다. */
+  const [tableCardRef, tableH] = useFillHeight(560);
+
+  /** 한 종목으로 **이동**한다 — 탭과 행이 함께 정해진다. 커맨드 바와 하단 띠가
+   * 둘 다 이걸 부른다: 탭을 안 옮기면 고른 행이 이 탭에 없어서 아무 일도 안
+   * 일어난 것처럼 보이고, 두 곳이 각자 구현하면 언젠가 한쪽만 그렇게 된다. */
+  const jumpTo = useCallback(
+    (r: Row) => {
+      setGroupParam(r.group);
+      setSelectedId(r.id);
+    },
+    [setGroupParam, setSelectedId],
+  );
+
+  /* 하단 기준점 띠. 접힘은 새로고침을 넘어 기억된다(`ui/BottomStrip.tsx`).
+     띠가 기둥의 마지막 아이템이라 접히면 그 높이가 그대로 내용으로 간다 —
+     `useFillHeight` 가 재는 값이 저절로 따라오므로 맞출 숫자가 없다. */
+  const [stripCollapsed, setStripCollapsed] = useStripCollapsed();
+
   const src = SOURCE_OF[group];
+  const freshKey = FRESH_KEY[group] ?? group;
   const fresh =
     src === 'irs'
       ? { asof: data?.health.asof, level: data?.health.freshness?.level }
       : {
-          asof: data?.universe.sources[group]?.asof ?? data?.universe.asof,
-          level: data?.universe.sources[group]?.level,
+          asof: data?.universe.sources[freshKey]?.asof ?? data?.universe.asof,
+          level: data?.universe.sources[freshKey]?.level,
         };
 
   return (
-    <VStack background="bg" minHeight="100vh" gap={1.5} padding={3}>
-      <HStack alignItems="baseline" gap={2}>
-        <TextTitle3 as="h1">KRW Rates Monitor</TextTitle3>
-        <FreshnessChip
-          asof={fresh.asof}
-          level={fresh.level as 'current' | 'behind' | 'stale' | undefined}
-          source={SOURCE_LABEL[src]}
-        />
-      </HStack>
+    /* The ground. `className` rather than CDS's `background` prop because the
+       page tone flips between schemes in a way no single CDS token expresses —
+       see the surface note in `theme/direction.css`. */
+    /* 페이지가 **뷰포트에 묶인다** — `minHeight` 가 아니라 `height` 다.
+     *
+     * 실측 2026-08-14: `minHeight` 로는 flex 가 나눌 **정해진** 높이가 없어서,
+     * 재서 내려준 높이가 내용을 키우고 그 내용이 다시 더 큰 측정값을 만드는
+     * 되먹임이 생겼다(오버뷰 카드가 1,214 화면에서 2,106px 까지 자랐다).
+     * `height` 면 flex 가 **남는** 높이를 나누므로 그 고리가 끊긴다.
+     *
+     * 잘리지 않나: 안쪽이 각자 스크롤한다(표 스크롤러 · 설정 열 · 서랍). v1 도
+     * "페이지가 스크롤하지 않으므로" 를 전제로 실행 버튼을 바닥에 고정한다. */
+    <VStack className="sr-page" height="100vh" overflow="hidden" gap={0}>
+      <TopNav
+        tab={tab}
+        lastGroup={group}
+        onNavigate={(t) => {
+          setGroupParam(t);
+          setSelectedId(undefined);
+          // a pending hover from the tab being left must not land on the new one
+          clearTimeout(hoverTimer.current);
+          setHoveredId(undefined);
+        }}
+        right={
+          <>
+            {/* 변화 기록은 **늘 있다** — 비어 있음 자체가 정보다("조용한 하루").
+                변화가 없는 날 버튼이 사라지면 "조용하다" 와 "이 기능이 없다" 가
+                구분되지 않는다. */}
+            {data ? (
+              <ChangeLog
+                events={data.summary.events}
+                onFocus={(id) => {
+                  const r = rows.find((x) => x.id === id);
+                  if (r) jumpTo(r);
+                }}
+              />
+            ) : null}
+            {/* 선/주봉/월봉 토글이 여기 살았다가 오너 지시로 제거됐다
+                [OWNER 2026-08-18 — "주봉 월봉 없애도 될 거 같고"]. */}
+            <FreshnessChip
+              asof={fresh.asof}
+              level={fresh.level as 'current' | 'behind' | 'stale' | undefined}
+              source={SOURCE_LABEL[src]}
+            />
+          </>
+        }
+      />
 
-      {/* Asset class. Fixed set, one row, no column picker and nothing user-addable
-          (v1 §4 low user freedom, carried). */}
-      <HStack gap={1}>
-        {GROUPS.map((g) => (
-          <Chip
-            key={g}
-            size="s"
-            inverted={g === group}
-            className="sr-pill"
-            data-active={g === group}
-            onClick={() => {
-              setGroup(g);
-              setScreener(undefined);
-              setSelectedId(undefined);
-            }}
-          >
-            {GROUP_LABEL[g]}
-          </Chip>
-        ))}
-      </HStack>
-
-      {/* Screener. The predicates are v1's, unchanged — they read the percentile and
-          the move percentile the backend already computed. Pressing the active chip
-          clears it; there is no "all" chip, because "no filter" is the default state
-          and does not need a control of its own. */}
-      <VStack gap={0.5}>
-        <HStack gap={1}>
-          {SCREENERS.map((s) => (
-            <Chip
-              key={s.id}
-              size="s"
-              inverted={s.id === screener}
-              className="sr-pill"
-              data-active={s.id === screener}
-              onClick={() => setScreener(screener === s.id ? undefined : s.id)}
-            >
-              {s.label}
-            </Chip>
-          ))}
+      {/* 내용이 내비 아래 **남는 높이를 전부** 받는다. `minHeight={0}` 이 없으면
+          flex 아이템의 기본 최소 높이가 자기 내용이라 줄지 않고, 그러면 안쪽 카드가
+          창을 넘어 자란다(창 기구에서 겪은 것과 같은 규칙). */}
+      <VStack gap={2} padding={3} width="100%" flexGrow={1} minHeight={0}>
+        {/* 제목 줄이 포워드 탭에서만 컨트롤을 하나 더 진다. 표 위 별도의 필터
+            줄을 만들지 않는 건 오너 지시(칩 줄 제거)의 연장이다 — 컨트롤 한
+            개는 제목과 같은 줄에 산다. */}
+        <HStack alignItems="center" justifyContent="space-between" gap={2} width="100%">
+          <TextTitle3 as="h1">{sectionTitle}</TextTitle3>
+          <HStack gap={1} alignItems="center">
+            {group === 'forward' && isGroupTab ? (
+              <>
+                <StartFilter starts={starts} value={start} onChange={setStartParam} />
+                {/* 같은 데이터, 다른 질문. 목록은 "이 포워드가 얼마인가" 이고
+                    표는 "**어디가 움직였나**" 다 — 140행을 스크롤해서는 색의
+                    모양을 볼 수 없다. 떠 있는 창인 이유는 목록을 밀어내지 않고
+                    나란히 두기 위해서다. */}
+                {/* 제목 줄 우측 창 트리거 — 아래 "백테스트" 와 같은 32px pill
+                    문법(주석 참조). */}
+                <button type="button" className="sr-rv-pillbtn" onClick={() => setMatrix('1')}>
+                  표로 보기
+                </button>
+              </>
+            ) : null}
+            {/* 현금채권·자산스왑 탭의 하나 남은 좁히기 — 종목군. 포워드
+                시작점과 같은 자리·같은 규칙(제목 줄의 Select 하나). */}
+            {isCashBondTab && data ? (
+              <BondTypeFilter
+                types={data.cashbond.types.filter((t) =>
+                  data.cashbond.rows.some(
+                    (r) => r.kind === (group === 'asw' ? 'ASW' : 'CB') && r.bondType === t.id,
+                  ),
+                )}
+                value={bondType ?? undefined}
+                onChange={setBondTypeParam}
+              />
+            ) : null}
+            {/* 백테스트는 **작업대**라 탭 옆에 산다 — 지금 보고 있는 종목이 곧
+                첫 줄이 된다. 담을 수 없는 종목(포워드·변동성·민평·선물)을 보고
+                있으면 이 탭의 첫 담을 수 있는 종목으로 씨앗을 잡는다.
+                현금채권 탭은 자기 창을 연다 — 엔진이 다르다. */}
+            {isGroupTab && data ? (
+              /* 카드-머리 우측의 창 트리거는 앱 전체가 한 문법이다 — RV 의
+                 "설정"·"커브 레인"과 같은 32px pill(.sr-rv-pillbtn, Main 기간
+                 셀렉터 실측에서 온 14/600/32). CDS Button size s 는 36 이라 이
+                 자리만 4px 튀어 있었다(전체 앱 크리틱 실측 2026-08-19). */
+              <button
+                type="button"
+                className="sr-rv-pillbtn"
+                onClick={isCashBondTab ? openCashBondBacktest : openBacktest}
+              >
+                백테스트
+              </button>
+            ) : null}
+          </HStack>
         </HStack>
-        {active ? (
-          <TextCaption as="span" color="fgMuted">
-            {active.description}
-          </TextCaption>
-        ) : null}
+
+        {/* A section with no screen yet says WHY, and says what is already in place.
+            "아직 없음" with no reason reads as a bug; naming the part that IS done
+            (the simulation's four routers are on this server) makes it a plan. */}
+        {section === 'main' && !isGroupTab ? (
+          /* Main 은 **세 열 오버뷰**다 [OWNER 2026-08-14] — 그 전까지는 아웃라이트
+             표를 그대로 보여줘서 Backtest 와 같은 화면이 둘이었다. 규칙과 근거는
+             `ui/OverviewColumns.tsx`. */
+          data ? (
+            <VStack ref={tableCardRef} width="100%" flexGrow={1} minHeight={0}>
+              {/* 영역마다 경계 하나 — 오버뷰가 죽어도 내비와 신선도 칩은 남는다. */}
+              <ErrorBoundary region="오버뷰" fallback="오버뷰를 그리지 못했어요.">
+                <OverviewColumns
+                  rows={rows}
+                  policy={data.summary.policy}
+                  levelHeader={levelHeadText(fresh.asof)}
+                  levelHeaderTitle={levelHeadTitle(fresh.asof)}
+                  height={tableH}
+                />
+              </ErrorBoundary>
+            </VStack>
+          ) : null
+        ) : section === 'simulation' && !isGroupTab ? (
+          /* 시뮬레이션은 **전체 화면**이다 — 설정 열 + 커브 미리보기(v1 형태).
+             결과만 떠 있는 창으로 뜬다. */
+          data ? (
+            <ErrorBoundary region="시뮬레이션" fallback="시뮬레이션 화면을 그리지 못했어요.">
+              <SimulationPage
+                summary={data.summary}
+                open={simOpen}
+                onOpen={() => setSim('1')}
+                onClose={() => setSim(undefined)}
+                runs={simRuns}
+                setRuns={setSimRuns}
+              />
+            </ErrorBoundary>
+          ) : null
+        ) : section === 'setting' && !isGroupTab ? (
+          /* Setting — 다른 화면이 읽는 값을 정하는 자리 [OWNER, 2026-08-14].
+             데이터가 없어도 선다: 저장은 브라우저 몫이고 서버는 출처만 답한다. */
+          <ErrorBoundary region="설정" fallback="설정 화면을 그리지 못했어요.">
+            <SettingView />
+          </ErrorBoundary>
+        ) : section === 'strategy' && !isGroupTab ? (
+          /* Strategy = RV Analysis [OWNER — "RV = v2 Strategy 섹션"]. 라이브
+             전용이라(민평이 SQL 에만) 데이터 로드와 무관하게 자기 fetch 로 선다. */
+          <ErrorBoundary region="RV 분석" fallback="RV 분석 화면을 그리지 못했어요.">
+            <RvPage />
+          </ErrorBoundary>
+        ) : section === 'lab' && !isGroupTab ? (
+          /* Lab 의 세입자 = **커브 표면** [v1 2026-08-14]. v1 의 첫 세입자
+             (라고 할 때 살걸)는 거기서 내려갔으므로 옮겨오지 않는다 — 백엔드의
+             `/api/regret` 은 v2 에도 있지만 그 화면은 v1 에서 지워진 화면이다. */
+          <ErrorBoundary region="연구실" fallback="커브 표면을 그리지 못했어요.">
+            <Surface3D policy={data?.summary.policy} />
+          </ErrorBoundary>
+        ) : !isGroupTab && NOT_BUILT[section] ? (
+          <VStack gap={0.5} paddingY={2} maxWidth={620}>
+            <TextBody as="p" color="fgMuted">
+              {NOT_BUILT[section]}
+            </TextBody>
+          </VStack>
+        ) : error ? (
+          <ErrorState what="시장 데이터" detail={error} onRetry={() => void load()} retrying={retrying} />
+        ) : !data ? (
+          <LoadingState what="시장 데이터" />
+        ) : (
+          <>
+            {shown.length === 0 ? (
+              <VStack gap={0.5} paddingY={2}>
+                <TextCaption as="span" color="fgMuted">
+                  {GROUP_LABEL[group]}에 아직 데이터가 없어요.
+                </TextCaption>
+              </VStack>
+            ) : (
+              /* Two cards on the ground. The table's signed numbers therefore sit
+                 on `--sr-card`, which is the only surface measured to hold them
+                 at 4.5:1 in both schemes. */
+              <HStack
+                gap={2}
+                alignItems="stretch"
+                width="100%"
+                flexGrow={1}
+                minHeight={0}
+              >
+                {/* 980, and like 860 before it this is arithmetic, not taste.
+                    The ladder's rung list now ends in 세타, and MEASURED in the
+                    running app (ch 8.6, Pretendard SR 14px) the full set needs
+
+                      label 157 + 현재 104 + 변화 3개 209        =  470  (columns)
+                      + 52주 227 + 위치 76 + 세타 125 + 셀 인셋 16 =  444  (one cell)
+                                                                 =  914  of TABLE
+
+                    and the table runs ~17px narrower than this card (scroll
+                    container borders + the vertical scrollbar). 940 left it
+                    4px short — which does not clip a number, it silently turns
+                    the last column off, exactly as the 760 cap did to 위치.
+                    Below this width the ladder drops from the tail (세타 → 위치
+                    → 52주), visibly and by rule.
+
+                    ── 그리고 `maxWidth` 만으로는 안 됐다 (실측 2026-08-14) ──
+                    두 카드가 `width: 100%` 로 나란히 서 있으면 flex 가 남는
+                    폭을 **반씩** 나눈다: 1920 화면에서 표 카드는 캡과 무관하게
+                    928px 였고(=(1920−48−16)/2), 그래서 860→940 캡 인상은 아무
+                    것도 바꾸지 못했다. 폭은 캡이 아니라 **basis** 로 준다 —
+                    표는 사다리가 필요한 만큼 가져가고, 미리보기가 남는 걸 전부
+                    받는다(v1 의 "표는 열에 맞춰, 미리보기가 나머지" 규칙). */}
+                <VStack
+                  ref={tableCardRef}
+                  className="sr-card"
+                  flexBasis={980}
+                  flexGrow={0}
+                  flexShrink={1}
+                  maxWidth={980}
+                  minHeight={0}
+                >
+                  {/* 커브 전체가 한쪽 끝에 몰렸을 때만 나타나는 한 줄 (§I).
+                      아웃라이트 탭에서만 — 판정 입력이 아웃라이트 커브뿐이라,
+                      국고·크레딧 표 위에 띄우면 그 표에 대한 말로 읽힌다.
+                      카드 안에 두는 것도 규칙이다: 방향색은 카드 위에서만
+                      4.5:1 을 넘는다 (DESIGN §3.2). */}
+                  {group === 'outright' ? <CurveBanner banner={data.summary.curveBanner} /> : null}
+                  {/* 표와 미리보기는 **각자** 경계를 진다. 한 경계로 묶으면 미리보기
+                      한 줄의 결함이 표까지 지우고, 그러면 화면이 무엇이 고장났는지
+                      말하지 못한다. */}
+                  <ErrorBoundary region="표" fallback="표를 그리지 못했어요.">
+                  <InstrumentTable
+                    rows={shown}
+                    onSelect={(r: Row) => setSelectedId(r.id)}
+                    onHover={onHover}
+                    selectedId={selectedId}
+                    /* 월-일만. 연도는 이 헤더가 아니라 툴팁과 상단 신선도 칩이
+                       진다 [OWNER 2026-08-14] — 셀 좌우 16px 씩을 CDS 가 먹어서
+                       `2026-08-13` 이 72px 안에서 두 줄로 접히고 있었다. */
+                    levelHeader={levelHeadText(fresh.asof)}
+                    levelHeaderTitle={levelHeadTitle(fresh.asof)}
+                    /* 카드가 준 높이에서 배너 한 줄을 뺀다 — 배너는 아웃라이트
+                       탭에서만 서고, 안 빼면 그 탭에서만 표가 카드를 넘는다. */
+                    height={tableH - (group === 'outright' ? BANNER_H : 0)}
+                  />
+                  </ErrorBoundary>
+                </VStack>
+                {/* 남는 폭 전부. `minWidth` 는 바닥이고, 그 바닥에 닿으면 이제
+                    표 쪽이 줄면서 사다리가 꼬리부터 열을 떨군다. */}
+                <VStack
+                  className="sr-card"
+                  flexGrow={1}
+                  flexBasis={380}
+                  minWidth={380}
+                  minHeight={0}
+                >
+                  {/* 기준금리 스텝은 표 전체에 하나다 — 행이 아니라 화면의
+                      성질이라 pane 이 스스로 가져오지 않고 여기서 내려준다. */}
+                  <ErrorBoundary region="미리보기" fallback="이 종목의 차트를 그리지 못했어요.">
+                    <PreviewPane
+                      row={previewRow}
+                      policy={data.summary.policy}
+                      curve={idle ?? undefined}
+                      onEnlarge={previewRow ? () => setEnlarged(previewRow.id) : undefined}
+                      /* 차트 클릭 = 백테스트 [v1 계약]. **이 pane 에만** 단다 —
+                         전체탭 오버뷰 차트는 v1 에서도 안 열렸고, 확대 창 안에서
+                         열면 창 위에 창이 선다. */
+                      onOpenBacktest={openBacktestAt}
+                      /* 히어로·범례·통계가 자기 높이를 먼저 가져가고, 차트가 남는
+                         것을 전부 쓴다. 위 주석 참조 — 상수로 빼면 통계가 잘린다. */
+                      fill
+                    />
+                  </ErrorBoundary>
+                </VStack>
+              </HStack>
+            )}
+
+            {/* `universe.absent` 각주(종목별 크레딧·5년 선물)는 은퇴했다
+                [OWNER 2026-08-19] — 둘 다 그날 내려간 자산군에 대한 말이라,
+                화면에 없는 것의 부재 사유를 바닥에 남기면 그게 소음이다. */}
+          </>
+        )}
       </VStack>
 
-      {error ? (
-        <ErrorState what="시장 데이터" detail={error} onRetry={() => void load()} retrying={retrying} />
-      ) : !data ? (
-        <LoadingState what="시장 데이터" />
-      ) : (
-        <>
-          {shown.length === 0 ? (
-            <VStack gap={0.5} paddingY={2}>
-              <TextCaption as="span" color="fgMuted">
-                {active
-                  ? `${GROUP_LABEL[group]} 중에 «${active.label}»에 걸리는 종목이 오늘은 없어요.`
-                  : `${GROUP_LABEL[group]}에 아직 데이터가 없어요.`}
-              </TextCaption>
-            </VStack>
-          ) : (
-            <HStack gap={2} alignItems="flex-start" width="100%">
-              <VStack width="100%" maxWidth={760}>
-                <InstrumentTable
-                  rows={shown}
-                  onSelect={(r: Row) => setSelectedId(r.id)}
-                  selectedId={selectedId}
-                  levelHeader={fresh.asof}
-                  divider={!active}
-                />
-              </VStack>
-              <VStack width="100%" minWidth={380}>
-                <PreviewPane row={shown.find((r) => r.id === selectedId)} />
-              </VStack>
-            </HStack>
-          )}
+      {/* 커맨드 바는 은퇴했다 [OWNER 2026-08-19 — "커맨드바도 없애"]. 종목
+          이동은 기준점 띠의 앵커가 진다(같은 jumpTo). */}
 
-          {/* An asset class with no live source says why. Structure without data is a
-              fact about the feed; structure that stays silent reads as a bug. */}
-          <VStack gap={0.5} paddingY={1}>
-            {data.universe.absent.map((a) => (
-              <TextCaption key={a.id} as="span" color="fgMuted">
-                {a.label} — {a.reason}
-              </TextCaption>
-            ))}
-          </VStack>
-        </>
-      )}
+      {/* 기준점 띠는 **모든 탭**에 선다 — 어느 화면에 있든 10Y 가 어디인지가
+          같은 자리에 있어야 한다는 것이 이 띠의 존재 이유다. 그래서 `shown` 이
+          아니라 `rows` 를 받는다(포워드 탭에 10Y 아웃라이트 행은 없다).
+          경계는 compact — 34px 안에 문단이 들어갈 자리가 없다. */}
+      <ErrorBoundary region="기준점 띠" fallback="기준점을 그리지 못했어요." compact>
+        <BottomStrip
+          rows={rows}
+          collapsed={stripCollapsed}
+          onCollapsed={setStripCollapsed}
+          onPin={jumpTo}
+        />
+      </ErrorBoundary>
+
+      {/* 창은 페이지 흐름 밖에 산다(fixed). 열림은 상태 하나이고 그 상태가 곧
+          DOM 이다 — 닫힘을 애니메이션에 맡기지 않는다(이 리포의 "안 닫히는 창"
+          두 번의 교훈). */}
+      {/* 창은 자기 경계를 진다 — 창 안이 죽어도 뒤의 표는 살아 있고, 닫기는
+          `FloatingWindow` 의 헤더가 아니라 **URL** 이 쥐고 있어서 여전히 닫힌다. */}
+      {btOpen && data ? (
+        <ErrorBoundary region="백테스트 창" fallback="백테스트 결과를 그리지 못했어요.">
+        <BacktestWindow
+          rows={rows}
+          asOf={data.summary.asof}
+          policy={data.summary.policy}
+          book={book}
+          setBook={setBook}
+          onClose={() => {
+            setBtParam(undefined);
+            setBookState([]);
+          }}
+        />
+        </ErrorBoundary>
+      ) : null}
+
+      {/* 현금채권 백테스트 창 — IRS 창과 같은 규칙(URL 이 열림을 쥔다), 다른
+          엔진. 유니버스는 북의 첫 줄이 정한 kind 다 (`cbKind` 의 주석). */}
+      {cbOpen && data ? (
+        <ErrorBoundary region="현금채권 백테스트 창" fallback="현금채권 백테스트를 그리지 못했어요.">
+          <CashBondWindow
+            rows={data.cashbond.rows.filter((r) => r.kind === cbKind)}
+            types={data.cashbond.types}
+            asOf={data.cashbond.asof}
+            policy={data.summary.policy}
+            minDate={data.cashbond.from}
+            book={cbBook}
+            setBook={setCbBook}
+            onClose={() => {
+              setCbParam(undefined);
+              setCbBookState([]);
+            }}
+          />
+        </ErrorBoundary>
+      ) : null}
+
+      {/* 표로 보기 — 격자 + 주요 포워드 + 틴트 범례. 창 폭은 21×8 격자가
+          가로 스크롤 없이 서는 데 필요한 만큼이고, 넘치면 격자 자신이 스크롤한다
+          (`.sr-matrix-wrap`). */}
+      {matrixOpen && data ? (
+        <ErrorBoundary region="표로 보기" fallback="포워드 표를 그리지 못했어요.">
+          <FloatingWindow
+            windowKey="matrix"
+            title="포워드 표"
+            width={1080}
+            onClose={() => setMatrix(undefined)}
+            drawer={[
+              {
+                id: 'key',
+                label: '주요 포워드',
+                content: <KeyForwardBlock payload={data.forwards} />,
+              },
+            ]}
+          >
+            <ForwardMatrix payload={data.forwards} />
+          </FloatingWindow>
+        </ErrorBoundary>
+      ) : null}
+
+      {enlargedRow && data ? (
+        <ErrorBoundary region="확대 창" fallback="확대한 차트를 그리지 못했어요.">
+        <FloatingWindow
+          windowKey="chart"
+          title={enlargedRow.label}
+          onClose={() => setEnlarged(undefined)}
+          drawer={[
+            {
+              id: 'stats',
+              label: '통계',
+              content: (
+                <PreviewPane
+                  row={enlargedRow}
+                  policy={data.summary.policy}
+                  height={0}
+                  statsOnly
+                />
+              ),
+            },
+          ]}
+        >
+          <PreviewPane
+            row={enlargedRow}
+            policy={data.summary.policy}
+            height={460}
+            chartOnly
+          />
+        </FloatingWindow>
+        </ErrorBoundary>
+      ) : null}
     </VStack>
   );
 }
