@@ -91,7 +91,8 @@ describe('column ladder', () => {
 
   it('counts every dropped column', () => {
     const v = visibleColumns(w.label + w.level, CH, null);
-    expect(v.hidden).toBe(BASIS_LADDER.length + 2);
+    // three change columns + 52주 + 위치 + 세타
+    expect(v.hidden).toBe(BASIS_LADDER.length + 3);
   });
 });
 

@@ -38,22 +38,49 @@ describe('the ch probe measures where the text renders', () => {
     expect(CH_PROBE_HOST).not.toMatch(/^div/);
   });
 
+  it('the probe measures a NUMERIC cell, because every width it feeds is for digits', () => {
+    // The second regression, named. `td span` matched the LABEL cell, which was
+    // harmless only while every cell shared one text component. Once the label
+    // cell took its own register (name at label1/600 over a legal-sized
+    // subtitle) that cell's '0' advance stopped being the digits' advance —
+    // weight moves `ch` in a variable face — and every numeric column would have
+    // been sized from the wrong number with nothing on screen saying so.
+    expect(CH_PROBE_HOST).toMatch(/td\.sr-num/);
+  });
+
   it('rows carry the attribute the probe selector depends on', () => {
     expect(SRC).toMatch(/\{\.\.\.\{ \[ROW_ATTR\]: row\.id \}\}/);
   });
 
-  it('cell values render inside a span, which is what the probe appends to', () => {
+  it('numeric values render inside a span, which is what the probe appends to', () => {
     // `TextLabel2 as="span"` is what puts a <span> under the <td>. If a later pass
     // renders values as bare text or through a different element, the selector stops
     // matching and widths quietly fall back to an unmeasured context.
+    //
+    // Three, not four: the label cell no longer renders through TextLabel2, which
+    // is the whole point of the assertion above. The three that remain are the
+    // ones the probe can actually land in — 현재, the change columns, and 52주 —
+    // and they are exactly the cells whose widths are counted in glyphs.
     const cellSpans = SRC.match(/<TextLabel2\s+as="span"/g) ?? [];
-    expect(cellSpans.length).toBeGreaterThanOrEqual(4);
+    expect(cellSpans.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('every cell the probe can select is a numeric cell with the same text register', () => {
+    // The selector is `td.sr-num span`, and `querySelector` returns the FIRST
+    // match in document order. That is only well-defined if every `.sr-num` cell
+    // renders the same way — otherwise which cell gets measured depends on which
+    // columns the ladder happens to be showing.
+    const numericCells = SRC.match(/className="sr-num"[\s\S]{0,400}?<TextLabel2\s+as="span"/g) ?? [];
+    expect(numericCells.length).toBeGreaterThanOrEqual(3);
   });
 
   it('the probe is used to derive widths, and widths are not derived without it', () => {
     expect(SRC).toMatch(/useChPx\(hostRef,/);
     // colPx must never run on a zero advance — that would collapse every fixed width.
     expect(SRC).toMatch(/chPx > 0 \? colSpecs\(cols, chPx\) : \[\]/);
-    expect(SRC).toMatch(/width > 0 && chPx > 0 \? visibleColumns/);
+    // whitespace-tolerant: the guard is about the CONDITION, not about the
+    // ternary fitting on one line (it stopped fitting when `visibleColumns`
+    // gained its fourth argument)
+    expect(SRC).toMatch(/width > 0 && chPx > 0\s*\?\s*visibleColumns/);
   });
 });
