@@ -305,10 +305,13 @@ export function CashBondWindow({
                     (`cashbond/book.ts` 의 [OWNER]). */}
                 <Box width={88}>
                   <Field label="규모 (억)">
-                    {/* fontSize legal(13) — 컨트롤 값 13px 통일(popup.ts 의 근거). */}
+                    {/* fontSize legal(13) — 컨트롤 값 13px 통일(popup.ts 의 근거).
+                        height 32 — 이 행의 등고(근거는 IRS 창의 같은 칸 주석).
+                        `size="s"` 만으로는 38 이라 이 칸만 6px 높았다(실측). */}
                     <TextInput
                       size="s"
                       fontSize="legal"
+                      height={32}
                       accessibilityLabel="규모(억)"
                       value={String(r.eok)}
                       onChange={(e) => patch(r.key, { eok: Number(e.target.value) || 0 })}

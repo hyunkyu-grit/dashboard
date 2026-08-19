@@ -239,10 +239,15 @@ function NumField({
 
   return (
     <Box width={width}>
-      {/* fontSize legal(13) — 컨트롤 값 13px 규칙(popup.ts 의 근거). */}
+      {/* fontSize legal(13) — 컨트롤 값 13px 규칙(popup.ts 의 근거).
+          height 32 — `NumField` 는 Select 와 나란히 서는 자리(포지션 줄·목표
+          금리)에 쓰이고, `size="s"` 만으로는 38 이라 그 행에서 이 칸만 6px 높고
+          중심선이 3px 어긋났다(실측). 폰트를 되돌리면 13px 규칙이 깨지므로
+          상자를 직접 적는다. */}
       <TextInput
         size="s"
         fontSize="legal"
+        height={32}
         accessibilityLabel={label}
         value={text}
         onChange={(e) => {

@@ -754,12 +754,26 @@ thead th {
   margin-inline-start: auto;
 }
 
+/* 창 머리의 닫기, 그리고 북 행의 줄삭제가 같은 클래스를 쓴다.
+ *
+ * 높이 32 는 **행에서 필요한 값**이다. 전에는 높이 선언이 없어 내재값 28
+ * (16px lh1 + 6/6)로 섰고, 북 행은 `alignItems="flex-end"` 라 바닥이 정렬되므로
+ * 28짜리 상자의 중심이 컨트롤 중심선보다 2px 내려앉았다(실측 잉크 중심 174.5
+ * vs 173). 32 로 적으면 바닥 정렬에서 중심이 정확히 만난다.
+ *
+ * 좌우 패딩 8 은 그대로 둔다 — 머리에서 이 8 이 컨테이너의 오른쪽 인셋 8 과
+ * 합쳐져 **잉크가 가장자리에서 16** 에 서고, 그게 제목 잉크의 좌측 16 과 이루는
+ * 대칭이다(실측). 컨테이너를 16/16 으로 "고치면" 이 대칭이 깨진다.
+ *
+ * 44px 머리에서 32 는 여전히 세로 중앙에 선다(전 28 도 그랬다). */
 .sr-window-close {
   appearance: none;
   background: none;
   border: 0;
   cursor: pointer;
-  padding: 6px 8px;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 8px;
   border-radius: 8px;
   color: var(--color-fgMuted);
   font: inherit;

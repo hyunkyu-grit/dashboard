@@ -375,10 +375,19 @@ export function BacktestWindow({
               </Box>
               <Box width={88}>
                 <Field label="규모 (억)">
-                  {/* fontSize legal(13) — 컨트롤 값 13px 통일(popup.ts 의 근거). */}
+                  {/* fontSize legal(13) — 컨트롤 값 13px 통일(popup.ts 의 근거).
+                      height 32 — 이 행의 등고. 13px 패스가 `Select` 는
+                      `font="legal"` 로 상자까지 39→32 로 줄였지만 `TextInput` 은
+                      `fontSize` 라 글자만 줄고 상자는 CDS `size="s"` 기본값(38)에
+                      남았다. 2026-08-14 에 "둘 다 39px" 로 검증됐던 등고가 그때
+                      비대칭으로 깨진 것이고(HANDOFF.md 8.21), 그 결과 이 칸만
+                      6px 높고 라벨이 6px 위에 앉았다(실측). 폰트로 되돌리면
+                      13px 규칙이 깨지므로 상자를 직접 적는다 — `height` 는
+                      TextInput 이 InputStack 에서 받는 CDS prop 이다. */}
                   <TextInput
                     size="s"
                     fontSize="legal"
+                    height={32}
                     accessibilityLabel="규모(억)"
                     value={String(r.eok)}
                     onChange={(e) => patch(r.key, { eok: Number(e.target.value) || 0 })}
@@ -419,14 +428,23 @@ export function BacktestWindow({
                   보여준다 — 규칙이 하나여야 두 개의 진입 레벨이 안 생긴다. */}
               <Box width={96}>
                 <Field label="진입 레벨">
-                  <TextLabel2 as="span" tabularNumbers noWrap>
-                    {(() => {
-                      const p = pointOnOrAfter(points[r.id], r.entry);
-                      if (!p) return '—';
-                      const unit = r.id.includes('-') ? 'bp' : '%';
-                      return `${fmtLevel(p.v, unit)}${unitSuffix(unit)}`;
-                    })()}
-                  </TextLabel2>
+                  {/* 컨트롤이 아닌 값도 컨트롤과 같은 32px 상자에 담는다.
+                      이 행은 `alignItems="flex-end"` 라 바닥(189)이 정렬되는데,
+                      그 규칙에서는 **블록 높이가 곧 라벨 높이**다: 값이 맨살
+                      글자(20px)면 블록이 38 이 되어 라벨만 형제보다 12px 아래로
+                      내려앉았다(실측 라벨 bottom 167 vs 155). 상자를 주면 블록이
+                      형제와 같은 50 이 되고, 글자는 상자 중앙에 서서 컨트롤
+                      중심선(173)과 만난다. */}
+                  <HStack height={32} alignItems="center">
+                    <TextLabel2 as="span" tabularNumbers noWrap>
+                      {(() => {
+                        const p = pointOnOrAfter(points[r.id], r.entry);
+                        if (!p) return '—';
+                        const unit = r.id.includes('-') ? 'bp' : '%';
+                        return `${fmtLevel(p.v, unit)}${unitSuffix(unit)}`;
+                      })()}
+                    </TextLabel2>
+                  </HStack>
                 </Field>
               </Box>
               <button
