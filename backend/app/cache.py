@@ -48,7 +48,16 @@ DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache"
 # (the intraday row a Tuesday load drops is included by a Wednesday load).
 # The bump clears v6 caches; the `asof` component below is what keeps the
 # key honest ACROSS days from here on.
-SCHEMA_VERSION = 7
+# v8 (2026-08-14, v2-local): 세타가 페이로드에 들어왔다 — 행마다 `theta`,
+# 요약에 `thetaBasis`. 같은 xlsx/같은 SQL 행이 **다른 내용**을 만든다는 뜻이라
+# 키가 바뀌어야 한다. 안 바꾸면 v7 캐시가 세타 없는 요약을 계속 내주고, 화면은
+# 전 종목 em dash 를 그리면서 아무 에러도 내지 않는다 — 이 리포가 반복해서
+# 밟는 조용한 스테일 결함 그대로다.
+# v9 (2026-08-14, v2-local): `policy` 에 `upcoming`(앞으로 남은 금통위 날짜)이
+# 붙었다 — 시뮬레이션의 기준금리 이벤트가 읽는다. 같은 xlsx 가 **다른 모양**의
+# 요약을 만든다는 뜻이고, 안 바꾸면 v8 캐시가 그 필드 없는 요약을 계속 내준다.
+# 화면은 날짜 후보가 하나도 없는 빈 목록을 그리면서 아무 에러도 안 낸다.
+SCHEMA_VERSION = 9
 
 
 def data_hash(path: Path, asof: "object | None" = None) -> str:

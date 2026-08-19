@@ -154,4 +154,5 @@ def dv01_path(series_id: str) -> str:
 SUMMARY_PATH = "api/wall/summary.json"
 FORWARDS_PATH = "api/forwards.json"
 VOLATILITY_PATH = "api/volatility.json"
+SURFACE_PATH = "api/surface.json"
 MANIFEST_PATH = "api/manifest.json"

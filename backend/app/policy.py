@@ -66,9 +66,12 @@ MPC_DATES = [
     dt.date(2026, 11, 26),
 ]
 
+# V2-LOCAL: v1 은 `frontend/src/data/`, v2 는 프론트가 리포 루트라 `src/data/`.
+# 이 파일은 v2 에 아직 없고(그래서 아래 함수는 None 을 돌려준다) 그건 정상이다 —
+# 테스트 보조이지 런타임이 아니다. 다만 경로는 v2 의 실제 자리를 가리켜야, 파일이
+# 생긴 날 조용히 안 읽히는 일이 없다.
 CALENDAR_JSON = (
-    Path(__file__).resolve().parents[2]
-    / "frontend" / "src" / "data" / "calendar.json"
+    Path(__file__).resolve().parents[2] / "src" / "data" / "calendar.json"
 )
 
 
@@ -196,5 +199,16 @@ def policy_step(base: BaseRate, asof: dt.date) -> dict:
             if d <= through
         ],
         "latest": base.at(through),
+        # V2-LOCAL, 2026-08-14 — 앞으로 남은 금통위 날짜. 시뮬레이션의 기준금리
+        # 이벤트가 이걸 읽어 날짜 칸을 채운다.
+        #
+        # 프론트에 두 번째 목록을 두지 않는 이유는 이 모듈이 이미 겪은 것이다:
+        # `MPC_DATES` 자체가 `calendar.json` 의 사본이고, 그 중복이 조용히 썩지
+        # 않도록 테스트가 둘을 대조한다. 세 번째 사본을 브라우저에 두면 그
+        # 대조에서 빠진 사본이 하나 생긴다.
+        #
+        # `asof` 이후만 보낸다 — 지난 회의는 이미 `steps` 에 결과로 들어 있고,
+        # 시뮬레이션이 놓을 수 있는 것은 아직 안 온 회의뿐이다.
+        "upcoming": [d.isoformat() for d in MPC_DATES if d > asof],
         "warnings": warnings,
     }

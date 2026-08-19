@@ -147,9 +147,16 @@ def _row(
     }
 
 
-def _fetch_curves(conn) -> tuple[list[dt.date], dict[str, dict[str, list[float | None]]]]:
-    """credit_matrix, pivoted to {bond_type: {tenor_label: [values by date]}}."""
-    cols = ", ".join(f"`{c}`" for c, _, _ in TENORS)
+def _fetch_curves(
+    conn, tenors: list[tuple[str, str, float]] = TENORS
+) -> tuple[list[dt.date], dict[str, dict[str, list[float | None]]]]:
+    """credit_matrix, pivoted to {bond_type: {tenor_label: [values by date]}}.
+
+    `tenors` 기본값은 표의 유니버스(TENORS)다. 3D 표면만 더 넓은 컬럼 집합
+    (3M·20Y·30Y 포함)을 자기 리스트로 넘긴다 [OWNER 2026-08-19 — "3M부터 30까지
+    데이터 있으면 추가"] — 표의 행 집합은 오너가 따로 정한 것이라 안 넓힌다.
+    """
+    cols = ", ".join(f"`{c}`" for c, _, _ in tenors)
     rows = conn.execute(text(
         f"SELECT bas_dt, bond_type, {cols} FROM sim_portfolio.credit_matrix ORDER BY bas_dt"
     )).fetchall()
@@ -165,8 +172,8 @@ def _fetch_curves(conn) -> tuple[list[dt.date], dict[str, dict[str, list[float |
     out: dict[str, dict[str, list[float | None]]] = {}
     for r in rows:
         bt = r[1]
-        by_tenor = out.setdefault(bt, {lbl: [None] * len(dates) for _, lbl, _ in TENORS})
-        for j, (_, lbl, _) in enumerate(TENORS):
+        by_tenor = out.setdefault(bt, {lbl: [None] * len(dates) for _, lbl, _ in tenors})
+        for j, (_, lbl, _) in enumerate(tenors):
             v = r[2 + j]
             # 0.0 in this feed means "no such point on this curve" (MSB past 3Y), not a
             # zero rate. Treating it as a level would draw a curve that collapses.

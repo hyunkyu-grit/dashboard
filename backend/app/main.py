@@ -64,18 +64,28 @@ from irs_pricer.core.errors import CurveBootstrapError
 from irs_pricer.engine import curve_cache
 
 from . import instruments as instruments_mod
+from . import calendar_cache
+from . import df_cache
 from . import payloads
+from . import rv as rv_mod
+from . import schedule_cache
 from .backtest import BacktestError, Position, book_recon, run_backtest
 from .cache import cached
+from . import cashbond
+from . import creditmatrix
+from . import funding
 from .curves import build_basis_curves
 from .dataset import load_dataset_merged
-from .derive import basis_dates, derived_ids
+from .derive import basis_dates, derived_ids, ohlc_buckets, series_history
+from .theta import theta_table
 from .dv01 import build_dv01_table
 from .events import detect_event_clusters
 from .forwards import forwards_payload
 from .policy import load_base_rate, policy_step
 from .regret import regret_payload
 from .staleness import dataset_freshness
+from .surface import surface_payload
+from .surface3d import build_surface3d, surface3d_watermark
 from .universe import build_universe, universe_series
 from .volatility import volatility_payload
 
@@ -106,6 +116,23 @@ async def lifespan(app: FastAPI):
         curve_cache.uninstall()
     else:
         curve_cache.install()
+    # The BACKTEST's equivalent, and a separate cache with a separate switch —
+    # `BW_SCHEDULE_CACHE=0` (see app/schedule_cache.py). It memoises the ISDA
+    # schedule build, which the reference book was doing 39,804 times to produce
+    # 6 distinct schedules. Installed here rather than at import so the default
+    # for tests and scripts stays the unmemoized engine, exactly as
+    # curve_cache's does; `install()` reads the flag itself.
+    schedule_cache.install()
+    # MEMO-1C: the residual the schedule memo could not reach — `select_fixing`
+    # walking back to F(R). 515,473 calls over 40 distinct inputs on the
+    # reference book (app/calendar_cache.py). `BW_CALENDAR_CACHE=0` disables it.
+    calendar_cache.install()
+    # MEMO-2: the scalar discount-factor lookup, memoized PER CURVE. It was
+    # 74% of simulation cost and ~4/5 of that is numpy dispatch, not
+    # arithmetic; the same (curve, t) pair is asked 20-98x per run.
+    # Installs on BOTH copies of the port (backtest + simulation) — they are
+    # different function objects. `BW_DF_CACHE=0` disables it.
+    df_cache.install()
     logging.getLogger("irs_pricer").info("simulation data dir: %s", DATA_DIR)
     yield
 
@@ -186,7 +213,7 @@ app.add_middleware(_UnhandledErrorMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
-    # V2-LOCAL EDIT 1 of 3 — see ../../BACKEND.md.
+    # V2-LOCAL EDIT 1 of 5 — see ../../BACKEND.md.
     # This is sauron-v2's OWN COPY, served on :8200 for a frontend on :3200.
     # The :3100 origins stay because the copy must still be runnable in
     # isolation against v1's port layout while the two run side by side; the
@@ -267,6 +294,11 @@ _forwards = cached("forwards", _data_hash, lambda: forwards_payload(_dataset, _c
 # couple of seconds over a file that changes once a day, so it caches the
 # same way forwards does.
 _regret = cached("regret", _data_hash, lambda: regret_payload(_dataset))
+# 커브 표면(Lab). 주별로 솎은 격자 하나라 굽는 값이 싸지만, 캐시에 태우는
+# 것은 값 때문이 아니라 **굽기와 서버가 같은 페이로드를 내도록** 하기
+# 위해서다 — forwards 와 같은 자리, 같은 키.
+# FORWARD-PORT from braveworld (2026-08-14, `app/surface.py` 바이트 동일).
+_surface = cached("surface", _data_hash, lambda: surface_payload(_dataset))
 # Two things that used to sit here are gone, both from this region of the
 # popup: the curve heatmap (its 어제-column question was answered faster by
 # the table, and daily resolution over ten years was noise) and carry & roll
@@ -333,17 +365,53 @@ def universe() -> dict:
 
 
 @router.get("/api/universe/series/{series_id:path}")
-def universe_series_route(series_id: str) -> dict:
-    """V2-LOCAL. History for one expanded-universe row, for the preview pane."""
+def universe_series_route(series_id: str, interval: str | None = None) -> dict:
+    """V2-LOCAL. History for one expanded-universe row, for the preview pane.
+
+    `interval=w|m` returns weekly/monthly OHLC bars instead of daily points,
+    the same shape `/api/series/{id}` returns and built by the SAME function
+    (`derive.ohlc_buckets`). The chart type is a global reader preference, so a
+    route that could not answer it would leave 국고/크레딧/선물 rows drawing a
+    line while the control said 주봉 — the screen would be lying about which
+    series it is showing. Aggregation stays on this side (§16): the browser
+    never buckets a series.
+    """
     try:
-        return universe_series(series_id)
+        body = universe_series(series_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"unknown universe series {series_id}")
+    if interval in ("w", "m"):
+        pairs = [(p["t"], p["v"]) for p in body.get("points", [])]
+        return {"id": body["id"], "unit": body["unit"], "interval": interval,
+                "bars": ohlc_buckets(pairs, interval)}
+    return body
 
 
 @router.get("/api/forwards")
 def forwards() -> dict:
     return _forwards
+
+
+@router.get("/api/surface")
+def surface() -> dict:
+    # 커브 표면 — 테너 × 날짜 × 금리 (Lab). 리더 입력 없음 → 통째로 굽힌다.
+    return _surface
+
+
+@router.get("/api/surface3d")
+def surface3d() -> dict:
+    """V2-LOCAL. Lab 3D 커브 표면 — 국고·크레딧·스왑 3풀, 1~10Y (surface3d.py).
+
+    universe 처럼 라우트 안에서 게으르게 캐시한다 — SQL 이 절반이라 임포트
+    시점(모듈 상수)에 태우면 기동이 DB 에 묶인다. 키는 dataset 워터마크 +
+    credit_matrix 워터마크 둘 다다: universe 는 dataset 키만 쓰지만 이
+    페이로드는 크레딧이 절반이라 크레딧 쪽 낡음도 잡아야 한다.
+    """
+    # 키의 마지막 조각은 **페이로드 판 번호**다 — 데이터 워터마크만으로는 코드가
+    # 바뀐 것을 못 본다(실측 2026-08-18: 일별 전환 후 디스크 캐시가 주별을 그대로
+    # 돌려줬다). 전역 SCHEMA 범프는 forwards 등 남의 캐시까지 태우므로 국소로 적는다.
+    key = f"{_dataset.data_key}|{surface3d_watermark()}|p5-tenors"
+    return cached("surface3d", key, lambda: build_surface3d(_dataset))
 
 
 @router.get("/api/dv01/{series_id}")
@@ -408,6 +476,202 @@ def backtest(positions: str = "") -> dict:
         result["recon"] = book_recon(_dataset, parsed)
         return result
     except BacktestError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+# ── Cash Bond [OWNER, 2026-08-14] ───────────────────────────────────────────
+# Backtest 섹션의 여섯 번째 종목군. IRS 쪽 라우트와 같은 성질이다: 표는
+# 서버가 다 계산해 내려보내고(§16), 백테스트는 **라이브 전용**이다 — 읽는
+# 사람이 고르는 입력에 답이 달려 있어 정적 쌍둥이를 만들 수 없다.
+#
+# 민평은 워크북이 아니라 SQL 이다(`app/creditmatrix.py` 의 주석이 근거를
+# 든다). 조달 기준의 기본이 v1(base)과 달리 call 인 것은 `app/funding.py`
+# 의 V2 절 — infomax.기준금리 가 멈춰 있어 base 는 실패 상태다.
+
+
+def _funding_spec(basis: str, spread_bp: float) -> funding.FundingSpec:
+    try:
+        return funding.FundingSpec(basis=basis, spread_bp=spread_bp).validated()
+    except funding.FundingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("/api/settings/funding")
+def funding_settings(
+    basis: str = funding.DEFAULT_BASIS,
+    spreadBp: float = funding.DEFAULT_SPREAD_BP,
+) -> dict:
+    """Setting 탭이 조달 기준을 고르고 그 결과를 미리 보는 자리.
+
+    화면이 값을 저장하는 곳은 아니다 — 스펙은 URL 로 다니고 백테스트 요청에
+    실려 온다. 이 라우트는 "그 스펙이 유효한가, 지금 몇 %인가" 만 답한다.
+    base 가 게이트에 걸려 있으면 여기서 422 로 그 사실이 그대로 나간다 —
+    폴백 없이 실패 상태를 보여주는 것이 규칙이다 [OWNER 2026-08-18].
+    """
+    spec = _funding_spec(basis, spreadBp)
+    try:
+        prov = funding.provenance(spec)
+    except funding.FundingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {
+        "options": [
+            {"id": k, "label": v} for k, v in funding.BASIS_LABEL.items()
+        ],
+        "default": {"basis": funding.DEFAULT_BASIS, "spreadBp": funding.DEFAULT_SPREAD_BP},
+        **prov,
+    }
+
+
+@router.get("/api/cashbond/instruments")
+def cashbond_instruments() -> dict:
+    """표의 행 전부, 세타까지 계산해서.
+
+    조달을 안 받는다 [OWNER, 2026-08-14 — "채권에서는 조달 차감하지 않는 걸로"].
+    세타가 쿠폰캐리 + 롤다운이라 Setting 과 무관해졌고, 안 쓰는 인자를 남겨 두면
+    다음 사람이 그것이 쓰인다고 믿는다. 조달은 백테스트 쪽 라우트가 여전히 받는다.
+    """
+    try:
+        # IRS 세타는 자산스왑 행이 자기 스왑 다리 몫으로 쓴다. 커브 하나로
+        # 닫힌 식이라 매 요청 다시 계산해도 싸고(측정 33ms), 데이터가 갱신되면
+        # 자동으로 따라온다 — 여기 캐시를 두면 그 갱신을 놓친다.
+        irs_theta, _basis = theta_table(_dataset)
+        return cashbond.instruments(creditmatrix.load(), _dataset, irs_theta)
+    except (cashbond.CashBondError, creditmatrix.CreditMatrixError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("/api/cashbond/series/{series_id}")
+def cashbond_series(series_id: str) -> dict:
+    """한 종목의 전 기간 시계열 — 표를 눌렀을 때 뜨는 차트가 읽는다.
+
+    IRS 쪽 `/api/series/{id}` 와 **같은 몸통**(`derive.series_history`)을 쓴다.
+    같은 차트 컴포넌트(PreviewChart)가 먹을 모양이어야 하기 때문이다: 점마다
+    전일 대비(`d`, 늘 bp)와 52주 min/max/avg 가 붙어야 툴팁이 선다. 여기서
+    직접 만들면 두 화면이 같은 질문에 다른 정밀도로 답하게 된다.
+
+    `unit` 을 넘기는 것이 요점이다 — 현금채권은 %(그래서 `d` 가 ×100 되어 bp),
+    자산스왑은 이미 bp(그대로)다.
+    """
+    try:
+        m = creditmatrix.load()
+        kind, bond_type, tenor = cashbond.parse_id(series_id)
+        values = cashbond.series_for(m, _dataset, series_id)
+    except (cashbond.CashBondError, creditmatrix.CreditMatrixError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    unit = "%" if kind == cashbond.KIND_CASH else "bp"
+    pairs = [
+        (d.isoformat(), v) for d, v in zip(m.dates, values) if v is not None
+    ]
+    return {
+        "id": series_id,
+        "label": cashbond.instrument_label(kind, bond_type, tenor),
+        "unit": unit,
+        **series_history(pairs, unit),
+    }
+
+
+@router.get("/api/cashbond/backtest")
+def cashbond_backtest(
+    positions: str = "",
+    basis: str = funding.DEFAULT_BASIS,
+    spreadBp: float = funding.DEFAULT_SPREAD_BP,
+) -> dict:
+    """현금채권 북을 매일 재평가한다.
+
+    `positions` 문법은 IRS 백테스트와 같다 — `;` 로 나열하고 하나는
+    `id,direction,notional,entry[,exit]`. id 는 `CB:KTB:3Y` 또는
+    `ASW:KTB:3Y` 다. 조달은 쿼리로 따라온다(Setting 탭이 채운다).
+    """
+    if not positions.strip():
+        raise HTTPException(status_code=422, detail="포지션이 하나는 있어야 합니다.")
+
+    spec = _funding_spec(basis, spreadBp)
+    parsed: list[cashbond.BondPosition] = []
+    for raw in positions.split(";"):
+        raw = raw.strip()
+        if not raw:
+            continue
+        parts = [x.strip() for x in raw.split(",")]
+        if len(parts) not in (4, 5):
+            raise HTTPException(
+                status_code=422,
+                detail=f"잘못된 포지션 {raw!r}: id,direction,notional,entry[,exit] 형식입니다.",
+            )
+        try:
+            kind, bond_type, tenor = cashbond.parse_id(parts[0])
+            parsed.append(
+                cashbond.BondPosition(
+                    kind=kind,
+                    bond_type=bond_type,
+                    tenor=tenor,
+                    direction=int(parts[1]),
+                    notional=float(parts[2]),
+                    entry=dt.date.fromisoformat(parts[3]),
+                    exit=dt.date.fromisoformat(parts[4]) if len(parts) == 5 and parts[4] else None,
+                )
+            )
+        except (ValueError, cashbond.CashBondError) as exc:
+            raise HTTPException(status_code=422, detail=f"잘못된 포지션 {raw!r}: {exc}")
+
+    try:
+        m = creditmatrix.load()
+        result = cashbond.run_backtest(m, _dataset, parsed, spec)
+        # 일별 대사는 별도 패스다 — KRD 범프가 본체보다 비싸서 IRS 쪽도 함수를
+        # 둘로 나눴다(`backtest.book_recon` 의 근거). 응답은 한 덩어리에 얹는다.
+        result["recon"] = cashbond.book_recon(m, _dataset, parsed, spec)
+        return result
+    except (cashbond.CashBondError, creditmatrix.CreditMatrixError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except funding.FundingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+# ── RV Analysis — Strategy 섹션 (rv2) ───────────────────────────────────────
+# 라이브 전용이다: 민평이 SQL 에만 있고(Cash Bond 와 같은 성질), 조달·금통위
+# 경로가 읽는 사람의 입력이다. `creditmatrix.load()` 는 워터마크 캐시라 요청마다
+# 전량을 다시 긁지 않는다(그 모듈의 규약).
+
+
+@router.get("/api/rv/analysis")
+def rv_analysis(
+    h: int = 6,
+    basis: str = funding.DEFAULT_BASIS,
+    spreadBp: float = funding.DEFAULT_SPREAD_BP,
+    window: str = "52w",
+    mpc: str = "",
+) -> dict:
+    """세 구성(동일섹터 격자·동일테너 히트맵·크레딧 산점) 페이로드 전부.
+
+    다섯 파생량(carry_net·roll·매도 듀레이션·BEP·스왑점)을 서버가 끝낸다(§16).
+    `mpc` 는 `날짜:bp;…` — 달력 8회의 오버라이드이고 기본은 전부 0 이다.
+    """
+    if window not in ("52w", "all"):
+        raise HTTPException(status_code=422, detail=f"알 수 없는 이력 창입니다: {window!r} (52w 또는 all)")
+    if not 1 <= h <= 24:
+        raise HTTPException(status_code=422, detail=f"호라이즌이 범위를 벗어납니다: {h}개월 (1~24)")
+    spec = _funding_spec(basis, spreadBp)
+    try:
+        meetings = rv_mod.parse_meetings(mpc)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail=f"금통위 오버라이드를 읽지 못했어요: {exc}")
+    try:
+        return rv_mod.build_rv(
+            creditmatrix.load(), _dataset, spec,
+            h_months=h, meetings=meetings, window=window,
+        )
+    except (creditmatrix.CreditMatrixError, funding.FundingError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("/api/rv/history")
+def rv_history(sector: str, tenor: str, window: str = "52w") -> dict:
+    """크레딧 RV 클릭 상세의 두 소형 차트 — 스프레드 이력·섹터 상대 이력과
+    각각의 창 통계(±σ 밴드 재료). 숫자는 서버가 끝낸다(§16)."""
+    if window not in ("52w", "all"):
+        raise HTTPException(status_code=422, detail=f"알 수 없는 이력 창입니다: {window!r} (52w 또는 all)")
+    try:
+        return rv_mod.credit_history(creditmatrix.load(), sector, tenor, window)
+    except creditmatrix.CreditMatrixError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
 

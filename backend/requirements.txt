@@ -32,7 +32,7 @@ holidays>=0.45
 # easiest of the four to miss.
 python-dateutil>=2.8
 
-# ── V2-LOCAL EDIT 2 of 3 — see ../BACKEND.md ────────────────────────────────
+# ── V2-LOCAL EDIT 2 of 5 — see ../BACKEND.md ────────────────────────────────
 # `app/mysqldb.py` imports sqlalchemy AT MODULE SCOPE and the engine URL is
 # `mysql+pymysql://`, but neither was ever listed here. v1 has run fine because
 # the developer machine already had both; a clean copy dies on the first

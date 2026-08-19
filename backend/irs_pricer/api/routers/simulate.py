@@ -27,6 +27,7 @@ bad-input ValueErrors the other routers map.
 from __future__ import annotations
 
 import asyncio
+import json
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -358,9 +359,18 @@ async def simulate(req: SimulateRequest) -> StreamingResponse:
                 break
             except asyncio.TimeoutError:
                 yield b" "  # keepalive while the engine run is still in flight
+            except Exception as e:  # noqa: BLE001 — see below
+                # Headers are already on the wire, so a clean 4xx/500 is
+                # impossible here. Before 2026-08-19 an engine exception simply
+                # aborted the stream, and the client's only symptom was a JSON
+                # parse failure — the actual reason ("2026-08-18은(는) 영업일이
+                # 아닙니다 …") died in the server log. Ship it as an error
+                # payload instead: same shape as FastAPI's own {"detail": …},
+                # which the client already knows how to read on non-200s.
+                yield json.dumps({"detail": str(e)}).encode("utf-8")
+                return
         # Serialize through the frozen response model so the payload shape and
-        # typing match what response_model=SimulateResponse used to emit. An engine
-        # crash re-raises out of wait_for here (headers already sent) → stream aborts.
+        # typing match what response_model=SimulateResponse used to emit.
         yield SimulateResponse.model_validate(result).model_dump_json().encode("utf-8")
 
     return StreamingResponse(body_stream(), media_type="application/json")

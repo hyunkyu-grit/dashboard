@@ -118,8 +118,12 @@ def _row(ds, valuation_date: date) -> dict[str, float]:
     try:
         idx = ds.dates.index(valuation_date)
     except ValueError:
+        # NonBusinessDayError takes (date, reason) — the class builds the
+        # sentence. A bare-message call here raised TypeError INSIDE the raise,
+        # which aborted the simulate stream instead of becoming the clean 422
+        # this path exists to produce (measured 2026-08-19, backend.log).
         raise NonBusinessDayError(
-            f"{valuation_date}의 시장 데이터가 없습니다 (영업일이 아니거나 워크북에 없는 날짜입니다)."
+            valuation_date, "영업일이 아니거나 워크북에 없는 날짜"
         ) from None
     out: dict[str, float] = {}
     for node, series in ds.series.items():
@@ -136,7 +140,7 @@ def load_market_snapshot_irsdata(source: Path, valuation_date: date) -> MarketSn
     if _CD_NODE not in row:
         # CD가 없으면 변동 다리의 기준이 없다. 조용한 0으로 가격하면 스왑이
         # 통째로 틀린 채 숫자만 그럴듯하게 나온다.
-        raise NonBusinessDayError(f"{valuation_date}에 CD 91d(3M) 호가가 없습니다.")
+        raise NonBusinessDayError(valuation_date, "CD 91d(3M) 호가 없음")
 
     quotes = [
         RateQuote(tenor_years=ty, rate=row[node] / 100.0, tenor_months=tm)
@@ -144,7 +148,7 @@ def load_market_snapshot_irsdata(source: Path, valuation_date: date) -> MarketSn
         if node in row
     ]
     if not quotes:
-        raise NonBusinessDayError(f"{valuation_date}에 IRS par 호가가 하나도 없습니다.")
+        raise NonBusinessDayError(valuation_date, "IRS par 호가가 하나도 없음")
 
     on = row.get(_ON_NODE)
     return MarketSnapshot(

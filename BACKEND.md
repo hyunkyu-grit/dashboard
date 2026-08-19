@@ -35,9 +35,27 @@ So the divergence sentence above applies to **code, not to market data**: the co
 forks here, the data does not. If v1's SQL loader changes shape and this copy's does
 not, the two will disagree about the same rows — that is the failure mode to watch.
 
-## The three v2-local edits
+## The five v2-local edits
 
-Each is marked in place with a `V2-LOCAL EDIT n of 3` comment.
+Each is marked in place with a `V2-LOCAL EDIT n of 5` comment. Edits 4–5 landed
+2026-08-14 and are both about the same thing: **v1 keeps its Next app under
+`frontend/`, v2's IS the repo root.** Every path that assumed otherwise was
+silently dead.
+
+4. **`backend/scripts/build_static.py` — `OUT_ROOT`.** `frontend/public` →
+   `public`. It was writing to a directory nothing serves.
+5. **`backend/tests/test_build_static.py` — `_baked_manifest()`.** Same path
+   fix, plus: SKIP when no tree has been baked. Those two tests check that a
+   COMMITTED tree has not gone stale, and v2 has never baked one — they had
+   failed with `FileNotFoundError` since the copy was taken.
+
+   Two neighbours moved with them and are **not** numbered because they are the
+   same edit: `tests/test_static_agreement.py` (`frontend/public` → `public`,
+   and `:8100` → **`:8200`** — it was pointed at v1's backend, so on this copy
+   it always skipped; fixing the port woke it into 20 failures that all said
+   "no tree", and it now skips on that too), and `app/policy.py::CALENDAR_JSON`
+   (`frontend/src/data` → `src/data`; the file does not exist here yet and the
+   function returns None, which is its documented behaviour).
 
 1. **`backend/app/main.py` — CORS** (the `app.add_middleware(CORSMiddleware, ...)`
    block, `allow_origins`). Added `http://localhost:3200` and `http://127.0.0.1:3200`.
@@ -56,6 +74,39 @@ Each is marked in place with a `V2-LOCAL EDIT n of 3` comment.
    The port was never in the source. v1 passes it on the uvicorn command line from
    `C:\Users\infomax\.sauron\start-backend.ps1`, which lives outside the repo. So
    "bind :8200" is a launcher, not a source edit. **`:8100` is never bound here.**
+
+## Forward-ports FROM braveworld since the copy
+
+The copy was taken at `f5de1fa7`. Anything v1 committed after that is not here
+until it is brought over deliberately, and each one is recorded below.
+
+### 1. 세타 — `app/theta.py` (2026-08-14)
+
+v1 added it the same afternoon this copy was taken, in three commits
+(`ef98badc` → `d3886fd1` → `41705cba`). Brought over as:
+
+| File | How |
+|---|---|
+| `backend/app/theta.py` | **byte-identical copy** (md5 `923fc298…`, 296 lines) |
+| `backend/tests/test_theta.py` | byte-identical copy (15 tests, all pass here) |
+| `backend/app/payloads.py` | v1's two hunks applied verbatim — `payloads.py` is now **byte-identical to v1's** |
+| `backend/app/cache.py` | `SCHEMA_VERSION` 7 → **8**, v2-local |
+
+The schema bump is not optional and is not v1's: the same source rows now
+produce a **different payload** (`row.theta`, `summary.thetaBasis`). Without it a
+v7 cache keeps serving theta-less summaries and the screen draws a column of em
+dashes with no error anywhere — this repo's recurring silent-staleness failure.
+
+**v1 did NOT bump it** (braveworld is still at `SCHEMA_VERSION = 7`; checked
+2026-08-14). It gets away with it because its key also carries the source-data
+hash and the as-of date, so the next morning's bake misses the old entry anyway —
+but any host that re-reads the SAME day's data from a pre-theta cache serves the
+column empty. That is a latent v1 defect, reported here and **not** fixed there
+(this tree may not write to braveworld). It is also why the two `cache.py` files
+now differ: this is a deliberate divergence, not drift.
+
+Every convention behind the numbers is in `theta.py`'s own docstring. Nothing was
+re-derived on the frontend (§16): `perDv01` and `beBp` arrive finished.
 
 ### The cache directory needed no edit
 

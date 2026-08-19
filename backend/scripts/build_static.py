@@ -1,4 +1,4 @@
-"""Build the static API: read data/irsdata.xlsx, write frontend/public/api/**.
+"""Build the static API: read data/irsdata.xlsx, write public/api/**.
 
 Static conversion, Pass B.
 
@@ -70,11 +70,13 @@ from app.static_paths import (  # noqa: E402
     MANIFEST_PATH,
     RESOLUTIONS,
     SUMMARY_PATH,
+    SURFACE_PATH,
     VOLATILITY_PATH,
     assert_writable_path,
     dv01_path,
     series_path,
 )
+from app.surface import surface_payload  # noqa: E402
 from app.staleness import _BEHIND_AT as BEHIND_AT  # noqa: E402
 from app.staleness import _STALE_AT as STALE_AT  # noqa: E402
 from app.volatility import volatility_payload  # noqa: E402
@@ -83,7 +85,13 @@ from app.volatility import volatility_payload  # noqa: E402
 # `DATA`(irsdata.xlsx)는 없어졌다. 값이 바뀐다 — 1D 가 다른 계열이라 과거 짧은
 # 끝 커브와 거기서 파생되는 백테스트·포워드 수치가 전부 갈린다. 의도된 것이다.
 POLICY = REPO / "data" / "bokbaserate.xlsx"
-OUT_ROOT = REPO / "frontend" / "public"
+# V2-LOCAL EDIT 4 of 5 — see ../../BACKEND.md
+# v1 keeps its Next app under `frontend/`; v2's IS the repo root (`src/`,
+# `public/`), so the baked tree belongs at `public/api/**`. Left as `frontend/
+# public` this wrote a directory that nothing serves, and the two freshness
+# tests below it read a manifest that could never exist — they had failed since
+# the copy was taken.
+OUT_ROOT = REPO / "public"
 
 # Arrays written one element per line (see the module docstring). Everything
 # else stays compact — only the append-per-day series benefit.
@@ -327,6 +335,8 @@ def build(out_root: Path, quiet: bool = False) -> dict:
     hash_ = dataset.data_key  # 병합 로더가 만든 키 — 엑셀이 섞이면 지문이 붙는다
     fwd = cached("forwards", hash_, lambda: forwards_payload(dataset, curves))
     regret = cached("regret", hash_, lambda: regret_payload(dataset))
+    # 커브 표면(Lab) — 서버와 **같은 캐시 키, 같은 함수**로 굽는다.
+    surface = cached("surface", hash_, lambda: surface_payload(dataset))
 
     out = out_root / "api"
     if out.exists():
@@ -339,6 +349,7 @@ def build(out_root: Path, quiet: bool = False) -> dict:
     w.write(SUMMARY_PATH, payloads.wall_summary(dataset, bases, events, policy, regret))
     w.write(FORWARDS_PATH, fwd)
     w.write(VOLATILITY_PATH, payloads.volatility(dataset, bases, vol))
+    w.write(SURFACE_PATH, surface)
 
     ids = series_ids(dataset, fwd, vol)
     say(f"  {len(ids)} series → {len(ids) * (len(RESOLUTIONS) + 1)} files")
@@ -421,7 +432,7 @@ def build(out_root: Path, quiet: bool = False) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", type=Path, default=OUT_ROOT,
-                    help="output root (default: frontend/public)")
+                    help="output root (default: public/ — v2 has no frontend/ dir)")
     ap.add_argument("--quiet", action="store_true")
     a = ap.parse_args()
     print(f"building static API from mysql:{IRS_CLOSE_TABLE} → {a.out}")

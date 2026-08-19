@@ -386,9 +386,40 @@ def _run_one(
         leg.sign *= pos.direction
 
     entry_date = dates[entry_i]
-    clean0, accrued0 = _value_on(
-        legs, dataset, entry_i, entry_date, _cd_fixings(dataset, entry_i), cache
-    )
+    entry_fx = _cd_fixings(dataset, entry_i)
+    clean0, accrued0 = _value_on(legs, dataset, entry_i, entry_date, entry_fx, cache)
+
+    # ── 개시 = 거래일 → 발효일 한 밤 [OWNER, 2026-08-14] ────────────────────
+    # KRW CD-IRS 는 스팟 시작이다 (`VanillaSwap.to_irs_trade`: 발효일 =
+    # next_kr_business_day(거래일)). 그 한 밤 동안 스왑은 아직 발효 전이라
+    # 경과이자가 한 푼도 붙지 않는다 — `value_booked_trade` 가 경과이자를
+    # `val_date > a_start` 일 때만 잡기 때문이고, 그것은 옳다.
+    #
+    # 결과는 옳지 않았다. 캐리 = Δ경과이자 + 결제현금 이므로 그 밤의 캐리가
+    # 구조적으로 0 이 되고, 롤 = Δclean 이므로 **그 밤의 세타 전체가 롤다운으로
+    # 떨어졌다**. 같은 캘린더 밤을 하루 먼저 든 포지션과 나란히 재면 갈리는 것이
+    # 배분뿐임이 보인다 (2026-06-19 3Y 100억, 금→월 3일 밤):
+    #
+    #     06-18 진입(이튿날 밤)   캐리 −784,932   롤 + 12,180   Δdirty −772,752
+    #     06-19 진입(첫날  밤)   캐리        0   롤 −688,359   Δdirty −688,359
+    #
+    # 진입일 40개 표본에서 첫날 밤 롤의 중앙값이 이후 밤의 중앙값보다 3Y −91,802
+    # · 10Y −155,294 만큼 더 손실 쪽이었고(78% / 82%), 10일 보유에서는 보고된
+    # 롤다운의 24~26% 가 이 한 밤이었다.
+    #
+    # 캐리도 롤도 아닌 밤이라 **네 번째 칸으로 뺀다** [OWNER, 2026-08-14 —
+    # "지어내는 숫자가 없음"]. 경과이자를 거래일부터 발생시키는 대안은 법적으로
+    # 없는 하루치 이자를 만들어 내므로 오너가 물렸다.
+    #
+    # 총손익은 불변이다. 이 수정이 바꾸는 것은 clean 변화를 평가·롤다운·개시
+    # 셋으로 가르는 방식뿐이고, `own[i]`(= 손익 라인)은 한 줄도 건드리지 않는다.
+    eff_i = min(entry_i + 1, exit_i)
+    startup = 0.0
+    if eff_i > entry_i:
+        clean_eff_frozen, _a_eff = _value_on(
+            legs, dataset, eff_i, entry_date, entry_fx, cache, curve_idx=entry_i
+        )
+        startup = clean_eff_frozen - clean0
 
     # Valued only on the sampled dates INSIDE its own life, plus its exit — so
     # the frozen tail is the real closing figure, not the last sample before it.
@@ -410,11 +441,18 @@ def _run_one(
     last_carry = 0.0
     last_val = 0.0
     last_roll = 0.0
+    last_start = 0.0
     last_cash = 0.0
-    # Roll-down chain seed: the entry date itself, whose clean is clean0.
-    prev_i = entry_i
-    prev_clean = clean0
-    prev_fx = _cd_fixings(dataset, entry_i)
+    # 롤다운 체인의 시드는 **발효일**이다 (종전에는 거래일). 거래일→발효일
+    # 한 밤은 위에서 `startup` 으로 이미 빠졌으므로, 여기서 다시 세면 두 번
+    # 센다. `live` 안의 어떤 자리도 entry_i 와 eff_i 사이에 없다 — eff_i 가
+    # entry_i + 1 이기 때문 — 이라 시드를 옮겨도 체인에 구멍이 나지 않는다.
+    prev_i = eff_i
+    prev_fx = _cd_fixings(dataset, eff_i)
+    if eff_i > entry_i:
+        prev_clean, _a_seed = _value_on(legs, dataset, eff_i, entry_date, prev_fx, cache)
+    else:
+        prev_clean = clean0
     roll_cum = 0.0
     for i in live:
         fx = _cd_fixings(dataset, i)
@@ -454,11 +492,20 @@ def _run_one(
                 legs, dataset, i, entry_date, prev_fx, cache, curve_idx=prev_i
             )
             roll_cum += clean_frozen - prev_clean
+        # 개시는 발효일에 한 번 켜지고 그 뒤로 상수다 — 진입일 당일 행에서는
+        # 아직 그 밤이 지나지 않았으므로 0 이어야 한다 (그날 네 칸이 모두 0).
+        start_cum = startup if i >= eff_i else 0.0
         own[i] = last = val_total + carry
-        last_val = val_total - roll_cum
+        last_val = val_total - roll_cum - start_cum
         last_roll = roll_cum
+        last_start = start_cum
         last_carry, last_cash = carry, cash
-        prev_i, prev_clean, prev_fx = i, clean, fx
+        # 진입일 행에서는 체인 커서를 건드리지 않는다. 커서는 이미 발효일에
+        # 놓여 있고, 여기서 무조건 갱신하면 그 시드가 거래일로 되돌아가 다음
+        # 걸음이 개시의 밤을 롤다운으로 다시 센다 (이 수정을 처음 넣었을 때
+        # 정확히 그렇게 됐다 — 롤다운이 한 푼도 안 줄었다).
+        if i >= eff_i:
+            prev_i, prev_clean, prev_fx = i, clean, fx
 
     def at(i: int) -> float:
         if i < entry_i:
@@ -498,14 +545,18 @@ def _run_one(
         # position; shipping a full npv/cash series for each would be 12 × 400
         # × 2 numbers to draw one total line. `trace()` below reconstructs the
         # path when something needs to look at it.
-        # The three parts of `pnl`, which they sum to exactly (§backtest)
-        # [OWNER, 2026-08-11 — 교과서 3분해]. 평가 = what the curve MOVING
-        # did (clean change minus the roll chain). 롤다운 = clean change from
-        # aging alone on the unchanged curve. 캐리 = interest actually earned
-        # or paid, settled plus still accruing.
+        # The FOUR parts of `pnl`, which they sum to exactly (§backtest)
+        # [OWNER, 2026-08-11 — 교과서 3분해 · 2026-08-14 — 개시 분리]. 평가 =
+        # what the curve MOVING did (clean change minus the roll chain minus
+        # 개시). 롤다운 = clean change from aging alone on the unchanged curve,
+        # chained from the EFFECTIVE date. 캐리 = interest actually earned or
+        # paid, settled plus still accruing. 개시 = the trade-date→effective-date
+        # night, which is neither (the swap has not started, so nothing accrues).
         "valuation": round(last_val, 0),
         "rolldown": round(last_roll, 0),
         "carry": round(last_carry, 0),
+        # 개시 = 거래일→발효일 한 밤 (위 주석). 넷을 더하면 `pnl` 이다.
+        "startup": round(last_start, 0),
         "cash": round(last_cash, 0),
     }
     return record, series, prev_day
@@ -529,18 +580,29 @@ def trace(dataset: Dataset, pos: Position) -> list[dict]:
     for leg in legs:
         leg.sign *= pos.direction
     entry_date = dates[entry_i]
-    clean0, accrued0 = _value_on(
-        legs, dataset, entry_i, entry_date, _cd_fixings(dataset, entry_i)
-    )
+    entry_fx = _cd_fixings(dataset, entry_i)
+    clean0, accrued0 = _value_on(legs, dataset, entry_i, entry_date, entry_fx)
+
+    # 개시 — `_run_one` 과 같은 규약 (그쪽 주석이 근거를 든다)
+    eff_i = min(entry_i + 1, exit_i)
+    startup = 0.0
+    if eff_i > entry_i:
+        clean_eff_frozen, _a_eff = _value_on(
+            legs, dataset, eff_i, entry_date, entry_fx, curve_idx=entry_i
+        )
+        startup = clean_eff_frozen - clean0
 
     out = []
     # the same chained roll-down as `_run_one` (see the comments there — the
     # frozen step prices with the PREVIOUS point's fixings, so a fresh CD
     # print falls into 평가, not 롤다운) — the trace grid is the thinned full
-    # span, so each chain step is one grid step
-    prev_i = entry_i
-    prev_clean = clean0
-    prev_fx = _cd_fixings(dataset, entry_i)
+    # span, so each chain step is one grid step. 시드는 발효일이다.
+    prev_i = eff_i
+    prev_fx = _cd_fixings(dataset, eff_i)
+    if eff_i > entry_i:
+        prev_clean, _a_seed = _value_on(legs, dataset, eff_i, entry_date, prev_fx)
+    else:
+        prev_clean = clean0
     roll_cum = 0.0
     for i in _thin(list(range(entry_i, exit_i + 1)), MAX_POINTS):
         fx = _cd_fixings(dataset, i)
@@ -553,14 +615,18 @@ def trace(dataset: Dataset, pos: Position) -> list[dict]:
                 legs, dataset, i, entry_date, prev_fx, curve_idx=prev_i
             )
             roll_cum += clean_frozen - prev_clean
-        prev_i, prev_clean, prev_fx = i, clean, fx
+        start_cum = startup if i >= eff_i else 0.0
+        # 진입일 행에서는 커서를 안 옮긴다 — `_run_one` 과 같은 이유
+        if i >= eff_i:
+            prev_i, prev_clean, prev_fx = i, clean, fx
         out.append(
             {
                 "t": dates[i].isoformat(),
                 "pnl": round(val_total + carry, 0),
-                "valuation": round(val_total - roll_cum, 0),
+                "valuation": round(val_total - roll_cum - start_cum, 0),
                 "rolldown": round(roll_cum, 0),
                 "carry": round(carry, 0),
+                "startup": round(start_cum, 0),
                 "npv": round(clean + accrued, 0),
                 "cash": round(cash, 0),
             }
@@ -656,7 +722,7 @@ def _book_recon(
 
     # per-position statics: legs at entry, span, longest maturity, bump set
     pos_info = []
-    for pos, (entry_i, exit_i, _m) in zip(positions, spans):
+    for pos, (entry_i, exit_i, matured) in zip(positions, spans):
         legs = _build_legs(dataset, pos.series_id, pos.notional, entry_i)
         for leg in legs:
             leg.sign *= pos.direction
@@ -675,6 +741,12 @@ def _book_recon(
             "entry_i": entry_i, "exit_i": exit_i, "entry_date": entry_date,
             "legs": legs, "swaps": [_leg_swap(leg, entry_date) for leg in legs],
             "bump": bump,
+            # 마지막 행에서 이 포지션을 **들고 가는가**. 청산도 만기도 아니고
+            # 데이터가 끊겼을 뿐이면 내일 아침에도 그대로 들고 있다. 청산한
+            # 북은 반대로 이월 리스크가 0 이어야 한다 [OWNER, 2026-08-14].
+            "open_end": (
+                not matured and pos.exit is None and exit_i == len(dates) - 1
+            ),
             "prev": None,       # (clean + accrued + cash) — 어제의 실측 마크
             "prev_fwd": None,   # (carry_fwd, roll_fwd) — 어제 행이 booking 한 오늘치 세타
         })
@@ -710,7 +782,7 @@ def _book_recon(
         nxt = dates[i + 1] if i < last else next_kr_business_day(dates[last])
 
         krd = {lb: 0.0 for lb in labels}
-        day_carry = day_roll = day_val = 0.0
+        day_carry = day_roll = day_val = day_start = 0.0
         for info in pos_info:
             if i < info["entry_i"] or i > info["exit_i"]:
                 continue  # not yet on / closed & frozen: no risk, no day P&L
@@ -735,14 +807,40 @@ def _book_recon(
 
             # 포워드 세타 (i → nxt), 오늘 커브 동결·오늘 알려진 픽싱으로.
             # 청산/만기 행에서는 없다 — 그 마크에서 얼어붙는 포지션이다.
-            alive_fwd = i < info["exit_i"] or (i == last and info["exit_i"] == last)
+            #
+            # 두 물음이 다르다 [OWNER, 2026-08-14 — 현금채권 규약에 맞춤]:
+            #
+            #   `books_pnl`  그 밤이 **실현되는가**. 창 안에 다음 마킹이 있을
+            #                때만이다. 마지막 행의 밤은 데이터 뒤라 실현될
+            #                자리가 없다.
+            #   `alive_fwd`  그 밤을 **들고 가는가**. 청산도 만기도 아니고
+            #                데이터가 끊겼을 뿐이면 들고 간다 — 그때만 종가
+            #                KRD 를 재서 이월 앵커에 싣는다.
+            #
+            # 종전에는 하나였고, 마지막 행의 세타가 손익 칸에 들어가 일별 합이
+            # 딱 그 한 밤만큼 백테스트 총액을 넘었다 (실측 2026-08-14, 3Y
+            # 아웃라이트 100억: 열린 북 합−총액 −314,139원 = 마지막 행 캐리+롤
+            # −314,142원, 청산 북 −699,630원 = −699,630원). 대사표가 총액과
+            # 안 맞으면 대사표가 아니다.
+            books_pnl = i < info["exit_i"]
+            alive_fwd = books_pnl or (i == last and info["open_end"])
             if alive_fwd:
                 f_clean, f_accrued = dirty_on(info, nxt, zc_base, fx)
                 f_cash = _settled_to(info["legs"], info["entry_date"], nxt, fx)
                 carry_f = (f_accrued - accrued) + (f_cash - cash)
                 roll_f = f_clean - clean
-                day_carry += carry_f
-                day_roll += roll_f
+            if books_pnl:
+                if i == info["entry_i"]:
+                    # 거래일→발효일 한 밤 = 개시 [OWNER, 2026-08-14]. 이 밤은
+                    # 스왑이 발효 전이라 `carry_f` 가 구조적으로 0 이고, 종전에는
+                    # `roll_f` 가 통째로 롤다운 칸에 들어가 진입일 행에만 큰
+                    # 롤다운이 섰다 (`_run_one` 의 개시 주석에 실측이 있다).
+                    # 세타 자체는 그대로 booking 한다 — `prev_fwd` 가 내일
+                    # 백워드 평가에서 빼는 값이므로 칸만 옮긴다.
+                    day_start += carry_f + roll_f
+                else:
+                    day_carry += carry_f
+                    day_roll += roll_f
                 info["prev_fwd"] = (carry_f, roll_f)
             else:
                 info["prev_fwd"] = (0.0, 0.0)
@@ -789,10 +887,12 @@ def _book_recon(
                 # 기준 데일리. 차트의 `d`(종가 대 종가)와는 세타 귀속이 하루
                 # 어긋난다: 금요일 행이 주말치를 실으므로 여기가 튀고, 차트의
                 # d 는 월요일에 튄다. 그게 이 관행의 정의다(모듈 주석).
-                "actual": round(day_val + day_carry + day_roll),
+                "actual": round(day_val + day_carry + day_roll + day_start),
                 "valuation": round(day_val),
                 "rolldown": round(day_roll),
                 "carry": round(day_carry),
+                # 개시 — 진입일 행에만 선다 (그 밖의 날은 0)
+                "startup": round(day_start),
                 # 선형화 잔차: 추정(전일 KRD × Δbp)이 설명하는 대상은
                 # 평가(커브무브)뿐이다 — 세타를 섞어 빼던 종전 정의를 정리.
                 "residual": round(day_val) - total_est,
@@ -813,6 +913,7 @@ def _book_recon(
             "valuation": None,
             "rolldown": None,
             "carry": None,
+            "startup": None,
             "residual": None,
             "carryover": True,
         })
