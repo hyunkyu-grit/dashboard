@@ -32,7 +32,6 @@ import {
   type Manifest,
 } from "./freshness";
 
-export { API_BASE } from "./staticPaths";
 export type { DataSource, Freshness, FreshnessLevel, Manifest };
 
 /* THE change bases. Three [OWNER, 2026-07-31]: WTD and QTD were dropped —

@@ -8,7 +8,7 @@ import { CartesianChart } from '@coinbase/cds-web/visualizations/chart';
 
 import { CandidateB } from '@/chart/CandidateB';
 import { CandleLayerA, type Bar } from '@/chart/CandleLayerA';
-import { API_BASE } from '@/lib/staticPaths';
+import { seriesUrl } from '@/lib/staticPaths';
 
 /**
  * PASS B harness. `?c=a|b` picks the candidate, `?n=` caps the bar count,
@@ -22,11 +22,11 @@ import { API_BASE } from '@/lib/staticPaths';
  */
 async function loadBars(interval: 'w' | 'd'): Promise<Bar[]> {
   if (interval === 'w') {
-    const r = await fetch(`${API_BASE}/api/series/3Y?res=full&interval=w`);
+    const r = await fetch(seriesUrl('3Y', 'w'));
     const j = (await r.json()) as { bars: Bar[] };
     return j.bars;
   }
-  const r = await fetch(`${API_BASE}/api/series/3Y?res=full`);
+  const r = await fetch(seriesUrl('3Y', 'full'));
   const j = (await r.json()) as { points: { t: string; v: number }[] };
   const out: Bar[] = [];
   let prev = j.points[0]?.v ?? 0;

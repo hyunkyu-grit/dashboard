@@ -7,7 +7,7 @@
  */
 
 import { TRUNCATED_RESPONSE_MSG } from "@/lib/api";
-import { API_BASE, IS_STATIC } from "@/lib/staticPaths";
+import { simExpandUrl, simInstrumentsUrl, simulateUrl } from "@/lib/staticPaths";
 
 import type { EngineLeg, InstrumentCatalog, SimulateBody, SimResponse } from "./scenario";
 
@@ -16,13 +16,6 @@ export class SimulationUnavailable extends Error {
     super("시뮬레이션은 실행 중인 백엔드가 필요해요");
     this.name = "SimulationUnavailable";
   }
-}
-
-/** 배포된 정적 사이트에서는 같은 출처 경로로 나간다(next.config.ts 의 rewrite 가
- * 백엔드로 넘긴다). rewrite 가 없으면 404 이고, 그건 라우트가 정말 없다는 뜻이라
- * 그대로 `SimulationUnavailable` 이 된다 — 깨진 화면 대신 이유를 말한다. */
-function url(path: string): string {
-  return IS_STATIC ? path : `${API_BASE}${path}`;
 }
 
 async function readOrThrow<T>(r: Response, what: string): Promise<T> {
@@ -49,7 +42,7 @@ async function readOrThrow<T>(r: Response, what: string): Promise<T> {
 /** 고를 수 있는 상품들. 목록의 주인은 백엔드다 — 프론트가 자기 목록을 들면 두
  * 화면의 "주요 스프레드" 가 갈리고 그 순간 비교가 끝난다. */
 export async function fetchInstruments(): Promise<InstrumentCatalog> {
-  return readOrThrow(await fetch(url("/api/instruments")), "instruments");
+  return readOrThrow(await fetch(simInstrumentsUrl()), "instruments");
 }
 
 /** 상품 한 줄 → 엔진이 받는 다리들.
@@ -63,7 +56,7 @@ export async function expandInstrument(body: {
   notional: number;
   baseDate: string;
 }): Promise<{ seriesId: string; kind: string; legs: EngineLeg[] }> {
-  const r = await fetch(url("/api/instruments/expand"), {
+  const r = await fetch(simExpandUrl(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -77,7 +70,7 @@ export async function expandInstrument(body: {
  * 타임아웃(터널의 ~100초 벽)을 막는다. JSON 파서는 앞의 공백을 무시하므로
  * `r.json()` 이 그대로 통한다. */
 export async function runSimulation(body: SimulateBody): Promise<SimResponse> {
-  const r = await fetch(url("/api/simulate"), {
+  const r = await fetch(simulateUrl(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

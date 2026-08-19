@@ -48,7 +48,7 @@ import {
   type PolicyStep,
 } from '@/lib/api';
 import { fmtLevel, unitSuffix } from '@/lib/format';
-import { API_BASE } from '@/lib/staticPaths';
+import { seriesUrl } from '@/lib/staticPaths';
 import { fmtKrw, fmtKrwFromMan, splitKrw } from '@/lib/krw';
 import type { Row } from '@/table/rows';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
@@ -97,7 +97,7 @@ function loadSeriesPoints(id: string): Promise<{ t: string; v: number }[] | null
   if (!hit) {
     hit = (async () => {
       try {
-        const r = await fetch(`${API_BASE}/api/series/${encodeURIComponent(id)}?res=full`);
+        const r = await fetch(seriesUrl(id, 'full'));
         if (!r.ok) return null;
         const j = (await r.json()) as { points?: { t: string; v: number }[] };
         return j.points ?? null;

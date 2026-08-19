@@ -22,7 +22,7 @@ import {
 
 import { CD_SERIES_ID, type PolicyStep } from '@/lib/api';
 import { fmtDelta, fmtLevel, unitSuffix } from '@/lib/format';
-import { API_BASE } from '@/lib/staticPaths';
+import { cashbondSeriesUrl, seriesUrl, universeSeriesUrl } from '@/lib/staticPaths';
 import { type IdleCurve } from '@/chart/curve';
 import { alignByDate, policyByDate, referenceMode } from '@/chart/references';
 import { panRange, sliceRange, zoomRange, type ViewRange } from '@/chart/zoom';
@@ -143,10 +143,10 @@ async function loadSeries(
   // pane does not care which produced it (`derive.series_history` 가 셋 다 만든다).
   const url =
     row.group === 'cashbond' || row.group === 'asw'
-      ? `${API_BASE}/api/cashbond/series/${encodeURIComponent(row.id)}`
+      ? cashbondSeriesUrl(row.id)
       : row.seriesId
-        ? `${API_BASE}/api/series/${encodeURIComponent(row.seriesId)}?res=full`
-        : `${API_BASE}/api/universe/series/${encodeURIComponent(row.id)}`;
+        ? seriesUrl(row.seriesId, 'full')
+        : universeSeriesUrl(row.id);
   const r = await fetch(url);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const j = (await r.json()) as { unit?: string; points?: Point[]; stats?: SeriesStats | null };
@@ -294,7 +294,7 @@ let cdPromise: Promise<Point[] | null> | null = null;
 export function loadCd(): Promise<Point[] | null> {
   cdPromise ??= (async () => {
     try {
-      const r = await fetch(`${API_BASE}/api/series/${CD_SERIES_ID}?res=full`);
+      const r = await fetch(seriesUrl(CD_SERIES_ID, 'full'));
       if (!r.ok) return null;
       const j = (await r.json()) as { points?: Point[] };
       return j.points ?? null;

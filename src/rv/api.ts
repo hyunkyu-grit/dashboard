@@ -6,7 +6,7 @@
  */
 
 import { BacktestUnavailable } from '@/lib/api';
-import { API_BASE, IS_STATIC } from '@/lib/staticPaths';
+import { rvAnalysisUrl, rvHistoryUrl } from '@/lib/staticPaths';
 
 export type RvWindow = '52w' | 'all';
 
@@ -158,8 +158,7 @@ export async function fetchRv(params: {
     spreadBp: String(params.spreadBp),
     ...(params.mpc ? { mpc: params.mpc } : {}),
   });
-  const path = `/api/rv/analysis?${q.toString()}`;
-  const r = await fetch(IS_STATIC ? path : `${API_BASE}${path}`);
+  const r = await fetch(rvAnalysisUrl(q.toString()));
   if (r.status === 404) throw new BacktestUnavailable();
   if (!r.ok) {
     const detail = await r.json().catch(() => null);
@@ -178,8 +177,7 @@ export async function fetchRvHistory(params: {
     tenor: params.tenor,
     window: params.window,
   });
-  const path = `/api/rv/history?${q.toString()}`;
-  const r = await fetch(IS_STATIC ? path : `${API_BASE}${path}`);
+  const r = await fetch(rvHistoryUrl(q.toString()));
   if (r.status === 404) throw new BacktestUnavailable();
   if (!r.ok) {
     const detail = await r.json().catch(() => null);

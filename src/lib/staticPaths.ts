@@ -8,20 +8,19 @@
  * Two shapes, because a static host cannot select a file by query string:
  *
  *   static (default)  /api/series/10Y.full.json
- *   live backend      http://localhost:8100/api/series/10Y?res=full
+ *   live backend      https://<funnel-host>/api/series/10Y?res=full
  *
- * The live shape is kept for local development against the FastAPI app, which
- * stays the reference implementation. Set `NEXT_PUBLIC_API_BASE` to use it.
+ * The live shape is what the deployment uses: Vercel serves this frontend and
+ * `NEXT_PUBLIC_API_BASE` points at the Funnel-exposed FastAPI app
+ * [OWNER, 2026-08-20]. `lib/apiBase.ts` owns that value.
  */
 
-/** Set → talk to a live backend at that origin. Unset → read static files.
- *
- * V2-LOCAL: the default is v2's OWN backend on :8200, not the empty string.
- * v1 defaults to static because that is how it deploys; v2 is a spike with no
- * deployment and a live copy of the backend beside it, and defaulting to
- * "read static files that do not exist" would make every screen fail the same
- * way for the wrong reason. :8100 is braveworld's and is never used here. */
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://127.0.0.1:8200';
+/** 백엔드 출처. 정해지는 곳은 `lib/apiBase.ts` **하나**이고 여기서는 다시
+ * 내보내기만 한다 — 화면 코드가 `process.env` 를 직접 읽으면 규칙이 두 벌이
+ * 되고, 그중 하나만 고쳐지는 날이 온다. */
+import { API_BASE } from "./apiBase";
+
+export { API_BASE };
 
 /** True when no live backend is configured, i.e. the deployed case. */
 export const IS_STATIC = API_BASE === "";
@@ -120,3 +119,24 @@ export const fundingSettingsUrl = (basis: string, spreadBp: number) =>
 
 export const manifestUrl = () => "/api/manifest.json";
 export const healthUrl = () => `${API_BASE}/api/health`;
+
+/* ── 나머지 라이브 라우트 [2026-08-20, 배포 준비] ─────────────────────────────
+ * 이 아래 넷은 원래 화면 코드가 `${API_BASE}/api/...` 로 **직접 조립**하던
+ * 것이다. v1 에서 같은 모양이 정적 호스팅의 404 로 나타났고, 손으로 적은
+ * 목록은 `lib/` 밖을 안 봤기 때문에 그걸 놓쳤다. 조립이 한 파일 안에만 있으면
+ * 다음번 배포 형태 변경은 이 파일 하나를 고치는 일이 된다.
+ * `guards/api-base.test.ts` 가 `lib/` 밖의 재조립을 실패시킨다. */
+
+/** 유니버스 카탈로그(민평 종목 목록). 라이브 전용이다. */
+export const universeUrl = () => liveUrl("/api/universe");
+
+/** 유니버스 한 종목의 히스토리. `/api/series` 와 달리 정적 쌍둥이가 없다. */
+export const universeSeriesUrl = (id: string) =>
+  liveUrl(`/api/universe/series/${encodeURIComponent(id)}`);
+
+export const rvAnalysisUrl = (query: string) => liveUrl("/api/rv/analysis", query);
+export const rvHistoryUrl = (query: string) => liveUrl("/api/rv/history", query);
+
+export const simInstrumentsUrl = () => liveUrl("/api/instruments");
+export const simExpandUrl = () => liveUrl("/api/instruments/expand");
+export const simulateUrl = () => liveUrl("/api/simulate");

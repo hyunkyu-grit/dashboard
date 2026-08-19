@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the template. 실제 값이 아니라 **키 목록**이고, 이게 리포에
+# 없으면 다음 사람이 무엇을 설정해야 하는지 알 길이 없다.
+!.env.example
 
 # vercel
 .vercel

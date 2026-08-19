@@ -1,5 +1,5 @@
 import type { BasisKey, Unit } from '@/lib/api';
-import { API_BASE } from '@/lib/staticPaths';
+import { universeUrl } from '@/lib/staticPaths';
 
 import type { Row } from './rows';
 
@@ -54,7 +54,7 @@ export type UniversePayload = {
 };
 
 export async function fetchUniverse(): Promise<UniversePayload> {
-  const r = await fetch(`${API_BASE}/api/universe`);
+  const r = await fetch(universeUrl());
   if (!r.ok) throw new Error(`universe: HTTP ${r.status}`);
   return r.json();
 }
