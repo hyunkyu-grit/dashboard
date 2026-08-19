@@ -95,10 +95,14 @@ function BpField({ value, onCommit }: { value: number; onCommit: (v: number) => 
   };
   return (
     <Box width={76}>
-      {/* fontSize legal(13) — 컨트롤 값 13px 규칙(popup.ts 의 근거). */}
+      {/* fontSize legal(13) — 컨트롤 값 13px 규칙(popup.ts 의 근거).
+          height 32 — 앱의 행 컨트롤 등고(`guards/control-parity.test.ts`).
+          이 입력만 있는 줄에서는 지금 어긋난 것이 없지만, CDS `size="s"` 기본값
+          38 을 남겨 두면 옆에 Select 나 알약이 서는 날 그 행만 6px 벌어진다. */}
       <TextInput
         size="s"
         fontSize="legal"
+        height={32}
         accessibilityLabel="금통위 변동(bp)"
         suffix="bp"
         value={text}

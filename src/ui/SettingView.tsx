@@ -63,10 +63,16 @@ function SpreadField({ value, onCommit }: { value: number; onCommit: (v: number)
 
   return (
     <Box width={96}>
-      {/* fontSize legal(13) — 컨트롤 값 13px 규칙(popup.ts 의 근거). */}
+      {/* fontSize legal(13) — 컨트롤 값 13px 규칙(popup.ts 의 근거).
+          height 36 — **이 행의** 등고. 다른 행들은 32(Select·date·알약)이지만
+          이 칸의 이웃은 기준 SegmentedTabs 이고 그건 36 이다(실측). 32 로 내리면
+          중심선이 2px 벌어지고, CDS 기본값 38 로 두면 1px 벌어진다 — 36 만이
+          0 이다. 등고는 앱 전역 상수가 아니라 **행의 성질**이라는 실측 사례다
+          (`guards/control-parity.test.ts` 의 예외 목록에 이 사유가 있다). */}
       <TextInput
         size="s"
         fontSize="legal"
+        height={36}
         accessibilityLabel="조달 스프레드 (bp)"
         suffix="bp"
         value={text}
