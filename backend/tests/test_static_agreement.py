@@ -4,12 +4,12 @@ Static conversion, Pass B. The FastAPI app stays as the reference
 implementation for local development, so there are now two ways to get a
 payload. This is what stops them drifting.
 
-**This test cannot gate.** It needs a backend on :8100, and the working
+**This test cannot gate.** It needs a backend on :8200, and the working
 agreement runs the suite with the dev server stopped — so it SKIPS when the
 backend is unreachable, and the skip reason says how to run it rather than
 leaving a later session to rediscover why it never fires:
 
-    cd backend && python -m uvicorn app.main:app --port 8100
+    cd backend && python -m uvicorn app.main:app --port 8200
     python -m pytest tests/test_static_agreement.py -q
 
 A skipped test proves nothing, which is why the drift it guards against is
@@ -38,8 +38,11 @@ from app.static_paths import (  # noqa: E402
     series_path,
 )
 
-BASE = "http://127.0.0.1:8100"
-PUBLIC = REPO / "frontend" / "public"
+BASE = "http://127.0.0.1:8200"
+# V2-LOCAL: v2 의 Next 앱이 리포 루트라 구운 트리는 `public/` 이다.
+# (v1 은 `frontend/public`. 포트도 v1 것 :8100 → v2 :8200 으로 바꿨다 —
+#  안 바꾸면 v2 의 정적 트리를 **v1 백엔드**와 대조하게 된다.)
+PUBLIC = REPO / "public"
 
 # A sample, not the whole set: one of each id shape, because the shapes are
 # what differ (outright / spread / fly / forward / volatility), and one of each
@@ -63,14 +66,34 @@ def _backend_up() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(
-    not _backend_up(),
-    reason=(
-        "no backend on :8100 — this test compares the committed static files "
-        "against the live API and cannot gate. Start it with "
-        "`python -m uvicorn app.main:app --port 8100` and re-run."
+def _tree_baked() -> bool:
+    """Is there a static tree to compare at all? (V2-LOCAL)
+
+    This file needs BOTH sides. Until 2026-08-14 it only checked one of them
+    and pointed at v1's port, so on this copy it always skipped and the gap was
+    invisible. Fixing the port woke it up — into 20 failures that all said the
+    same thing: v2 has never baked a tree. That is not drift, it is absence,
+    and reporting absence as disagreement is how a suite stops being read."""
+    return (PUBLIC / "api" / "manifest.json").exists()
+
+
+pytestmark = [
+    pytest.mark.skipif(
+        not _backend_up(),
+        reason=(
+            "no backend on :8200 — this test compares the committed static files "
+            "against the live API and cannot gate. Start it with "
+            "`python -m uvicorn app.main:app --port 8200` and re-run."
+        ),
     ),
-)
+    pytest.mark.skipif(
+        not _tree_baked(),
+        reason=(
+            "no baked static tree at public/api — there is nothing to compare the "
+            "live API against. Run `python backend/scripts/build_static.py` first."
+        ),
+    ),
+]
 
 
 def get(url: str):
@@ -137,7 +160,7 @@ def test_the_static_tree_is_current_for_this_data_file():
 
     # 출처가 MySQL 이다 [OWNER, 2026-08-07]. 해시할 바이트가 없으므로 키가
     # **테이블 워터마크**(MAX(irs_date), COUNT(*))다 — `sql_data_hash`.
-    # 그래서 이 검사는 이제 DB 를 한 번 읽는다. 이 파일은 어차피 :8100 이
+    # 그래서 이 검사는 이제 DB 를 한 번 읽는다. 이 파일은 어차피 :8200 이
     # 떠 있어야 도는 파일이라(모듈 독스트링) 오프라인 조건이 새로 붙지 않는다.
     m = static("api/manifest.json")
     assert m["dataHash"] == sql_data_hash(load_dataset_sql().asof), (

@@ -98,8 +98,13 @@ def test_request_dates_roll_conservatively_and_visibly(ds):
 def test_exit_on_the_swap_start_date_has_zero_carry(ds):
     """The schedule accrues from the swap's START (entry + 1 business day).
     Exiting ON that start date means zero days accrued and nothing settled:
-    carry must be EXACTLY 0 KRW and the PnL entirely clean-price (평가+롤다운
-    — the one chained aging step of the 3분해 [OWNER, 2026-08-11])."""
+    carry must be EXACTLY 0 KRW.
+
+    That structural zero is exactly WHY 개시 exists [OWNER, 2026-08-14]. This
+    position's whole life is the trade-date→effective-date night, so the entire
+    P&L lands in 개시 and the roll chain — which is seeded at the effective date
+    — never takes a step. Before the split, this same night was reported as
+    롤다운, which is what made a fresh position show roll-down on day one."""
     entry = dt.date(2026, 7, 29)
     start = dt.date(2026, 7, 30)  # next business day
     res = run_backtest(ds, [Position("10Y", +1, N, entry, start)])
@@ -107,7 +112,8 @@ def test_exit_on_the_swap_start_date_has_zero_carry(ds):
     assert p["exit"] == start.isoformat()
     assert p["carry"] == 0.0
     assert p["cash"] == 0.0
-    assert p["pnl"] == p["valuation"] + p["rolldown"]
+    assert p["rolldown"] == 0.0
+    assert p["pnl"] == p["valuation"] + p["startup"]
 
 
 # ── V5-5: carry sign, exercised in BOTH directions with the fixing average ──

@@ -74,7 +74,12 @@ class TestSnapshot:
         O/N pillar it never had — one of the two ways the new source is better,
         and a reason the numbers differ beyond the series change alone."""
         assert snap.on_rate is not None
-        assert snap.on_rate == pytest.approx(0.02561, abs=1e-9)
+        # 0.02561 → 0.02556 (2026-08-19): the workbook is a LIVE file — the
+        # frozen 08-13 snapshot v2 was born with got replaced by v1's daily
+        # bake, whose intraday revision moved this pillar 0.5bp. Same rule as
+        # test_the_series_really_is_the_composite_one: refresh → update the
+        # number; a re-routed loader would move 3Y too, and it did not.
+        assert snap.on_rate == pytest.approx(0.02556, abs=1e-9)
 
     def test_the_series_really_is_the_composite_one(self, snap):
         """3Y = 3.9225%, not True Data's 3.8875%.
@@ -101,7 +106,11 @@ def test_fixings_are_cd_and_start_in_2016():
     nothing.
     """
     fx = factory.load_fixing_history(DATA_DIR)
-    assert min(fx) == date(2016, 1, 18)
+    # 01-18 → 01-19 (2026-08-19): the refreshed workbook (v1's daily bake)
+    # blanks one more leading 3M row, so the first non-blank fixing moved a
+    # day. The property under test — leading blanks DROPPED, never zeros —
+    # is the assertion below it and is unchanged.
+    assert min(fx) == date(2016, 1, 19)
     assert fx[BASE] == pytest.approx(0.029, abs=1e-9)
     assert all(v > 0 for v in fx.values())
 

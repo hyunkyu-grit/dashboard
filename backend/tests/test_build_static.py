@@ -39,6 +39,33 @@ from app.static_paths import (  # noqa: E402
     slug,
 )
 
+
+def _baked_manifest() -> dict:
+    """The manifest of the CHECKED-IN static tree, or a skip.
+
+    V2-LOCAL EDIT 5 of 5 — see ../../BACKEND.md. Two things were wrong here and
+    both were silent:
+
+    1. The path said `frontend/public`, which is v1's layout. v2's Next app IS
+       the repo root, so the tree lives at `public/api/**` — the old path could
+       never exist and these two tests had failed since the day the backend was
+       copied (`FileNotFoundError`, not an assertion).
+    2. Even at the right path there may be no tree at all. These tests do not
+       test the BUILDER (that is the rest of this file, which builds into
+       `tmp_path`); they test that a tree somebody baked and committed has not
+       gone stale. With nothing baked there is nothing to be stale, and a
+       failure there is noise that hides real ones. So: skip, and say what to
+       run.
+    """
+    m = B.OUT_ROOT / "api" / "manifest.json"
+    if not m.exists():
+        pytest.skip(
+            f"no baked static tree at {m.relative_to(REPO)} — this checks that a "
+            "COMMITTED tree has not gone stale, so there is nothing to check. "
+            "Run `python backend/scripts/build_static.py` to bake one."
+        )
+    return json.loads(m.read_text("utf-8"))
+
 # 이 파일은 **빌드 결과**를 검사한다. 빌드가 읽는 것과 같은 출처를 읽어야
 # 비교가 성립하고, 2026-08-07 부터 그것은 MySQL 이다 [OWNER — "그냥 모든 걸
 # MySQL로"]. `DATA`(irsdata.xlsx)는 그래서 없어졌다.
@@ -422,9 +449,7 @@ def test_the_horizon_stays_well_ahead_of_the_ladder_being_needed():
     dataset's asof, so it shortens as the data file ages without a rebuild.
     Below 60 remaining business days the freshness badge is working off a
     nearly exhausted ladder and would soon clamp."""
-    m = json.loads(
-        (REPO / "frontend" / "public" / "api" / "manifest.json").read_text("utf-8")
-    )
+    m = _baked_manifest()
     today = dt.date.today().isoformat()
     remaining = sum(1 for d in m["businessDaysAfter"] if d > today)
     assert remaining >= 60, (
@@ -435,9 +460,7 @@ def test_the_horizon_stays_well_ahead_of_the_ladder_being_needed():
 
 
 def test_the_manifest_publishes_its_coverage():
-    m = json.loads(
-        (REPO / "frontend" / "public" / "api" / "manifest.json").read_text("utf-8")
-    )
+    m = _baked_manifest()
     cov = m["holidayCoverage"]
     assert cov["ladderThrough"] == m["businessDaysAfter"][-1]
     assert cov["ladderDays"] == len(m["businessDaysAfter"])

@@ -120,7 +120,14 @@ def test_the_gap_from_the_dv01_approximation_grows_with_the_horizon(ds):
         approx = d_bp * r["legs"][0]["dv01"] * N * 1e-4
         return (r["pnl"] - approx) / abs(approx)
 
-    short = gap(dt.date(2026, 7, 23))
+    # `short` is RELATIVE to the workbook's end, not a calendar date: the
+    # workbook is a live file (v1's daily bake), and a fixed 2026-07-23 entry
+    # meant "short" grew a market week every refresh. It broke on 2026-08-19,
+    # when five appended sessions of a sharp sell-off pushed the "short" gap
+    # past the 209-day one. Five sessions back keeps the horizon genuinely
+    # short whatever the file's last date is; convexity noise over a week is
+    # far below the mid/long gaps the monotonicity is about.
+    short = gap(ds.dates[-6])
     mid = gap(dt.date(2026, 1, 2))
     long = gap(dt.date(2020, 1, 2))
     assert short > mid > long          # increasingly negative
@@ -416,7 +423,10 @@ def test_carry_and_valuation_sum_to_the_pnl(ds):
         ],
     )
     for p in book["positions"]:
-        assert abs((p["valuation"] + p["rolldown"] + p["carry"]) - p["pnl"]) <= 1, p["id"]
+        # 넷이다 [OWNER, 2026-08-14 — 개시 분리]: 거래일→발효일 한 밤은 캐리도
+        # 롤다운도 아니라 자기 칸으로 빠졌다 (backtest._run_one 의 개시 주석).
+        parts = p["valuation"] + p["rolldown"] + p["carry"] + p["startup"]
+        assert abs(parts - p["pnl"]) <= 1, p["id"]
 
 
 def test_carry_follows_the_fixed_rate_against_the_average_cd(ds):
@@ -456,7 +466,9 @@ def test_valuation_carries_the_rate_move(ds):
 def test_the_trace_splits_the_same_way(ds):
     path = trace(ds, Position("10Y", +1, N, dt.date(2025, 7, 30)))
     for pt in path:
-        assert abs((pt["valuation"] + pt["rolldown"] + pt["carry"]) - pt["pnl"]) <= 1
+        parts = pt["valuation"] + pt["rolldown"] + pt["carry"] + pt["startup"]
+        # 네 칸을 각각 반올림하므로 허용오차도 하나 늘었다 (칸당 ±0.5원)
+        assert abs(parts - pt["pnl"]) <= 2
 
 
 def test_each_point_carries_a_real_one_day_change(ds):

@@ -190,7 +190,7 @@ def test_payer_and_receiver_mirror_to_the_won(ds):
         Position("10Y", -1, N, dt.date(2025, 8, 4)),
     ])
     p, r = res["positions"]
-    for k in ("pnl", "valuation", "rolldown", "carry", "cash"):
+    for k in ("pnl", "valuation", "rolldown", "carry", "startup", "cash"):
         assert abs(p[k] + r[k]) <= KRW_TOL, k
     assert abs(res["pnl"]) <= 2 * KRW_TOL  # two independently rounded figures
 
@@ -201,7 +201,7 @@ def test_notional_scales_linearly_to_the_won(ds):
         Position("10Y", +1, 2 * N, dt.date(2025, 8, 4)),
     ])
     p, p2 = res["positions"]
-    for k in ("pnl", "valuation", "rolldown", "carry", "cash"):
+    for k in ("pnl", "valuation", "rolldown", "carry", "startup", "cash"):
         # 2× the rounded single is within 2 KRW of the rounded double
         assert abs(p2[k] - 2 * p[k]) <= 2 * KRW_TOL, k
 
@@ -237,8 +237,8 @@ def test_held_to_maturity_the_pnl_is_the_carry(ds):
         zc = bootstrap_zero_curve(par_rates_at_index(ds, entry_i))
         budget = RESID_BP * pv01(zc, TENOR_T[pos.series_id]) * N * 1e-4
         last = trace(ds, pos)[-1]
-        assert abs(last["valuation"] + last["rolldown"]) <= budget, (
-            pos.entry, last["valuation"], last["rolldown"], budget)
+        assert abs(last["valuation"] + last["rolldown"] + last["startup"]) <= budget, (
+            pos.entry, last["valuation"], last["rolldown"], last["startup"], budget)
         assert abs(last["pnl"] - last["carry"]) <= budget + KRW_TOL
 
 
