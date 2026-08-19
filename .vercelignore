@@ -1,0 +1,27 @@
+# Vercel 이 받아야 하는 것은 Next 앱뿐이다.
+#
+# 이 리포는 프런트와 백엔드가 한 트리에 있고, `data/` 에는 25MB 넘는 시장
+# 데이터 워크북이 들어 있다. 그것들은 이 PC 의 :8200 백엔드가 읽는 것이지
+# Vercel 이 읽는 것이 아니다 — 화면은 전부 클라이언트에서 fetch 한다.
+#
+# 올리지 않는 이유가 용량만은 아니다: 민평·IRS 종가 원본을 배포 호스트에
+# 복사해 둘 이유가 없다. 빌드에 필요 없는 것은 보내지 않는다.
+#
+# (`vercel deploy` 로 직접 올릴 때 적용된다. GitHub 연동 빌드는 리포를 통째로
+#  클론하므로 이 파일이 그 경로까지 막지는 못한다 — 그쪽에서도 `data/` 는
+#  `public/` 밖이라 공개되지 않고 빌드에 쓰이지도 않는다.)
+
+backend/
+data/
+design/
+.impeccable/
+backend.log
+
+# 문서. 배포물에 필요 없다.
+*.md
+!README.md
+
+# 로컬 산출물
+.next/
+coverage/
+tsconfig.tsbuildinfo
