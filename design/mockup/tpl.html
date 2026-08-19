@@ -1,0 +1,449 @@
+<meta charset="utf-8">
+<title>KRW 금리 데스크</title>
+<style>
+/* ── Pretendard, 자체 호스팅 ──────────────────────────────────────────────
+   pretendard@1.3.9, SIL OFL-1.1. 이 페이지가 쓰는 글자만 남긴 가변 서브셋이라
+   2,009KB → 74KB 이고 wght 축(45~930)은 그대로 살아 있다.
+
+   `local()` 은 쓰지 않는다. 이 PC 에 Pretendard 가 설치돼 있지 않다는 것을
+   레지스트리에서 확인했고, local() 만 걸어두면 아무 경고 없이 Malgun 으로
+   폴백한다 — Malgun 은 굵기가 3종뿐이라 550/600/650 이 전부 Bold 로 스냅해서
+   위계가 통째로 사라진다. 실제로 그렇게 되어 있었다. */
+@font-face{
+  font-family:'Pretendard SR';
+  src:url(data:font/woff2;base64,__FONT__) format('woff2');
+  font-weight:45 930; font-style:normal; font-display:block;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   면(surface)이 셋이다: 바탕 → 카드 → 채운 컨트롤.
+
+   앞 판에는 이게 없었다. 전부 한 평면 위에 헤어라인만 그어져 있어서 제품이
+   아니라 와이어프레임으로 읽혔다. Coinbase 도 토스도 회색 바탕 위에 흰 카드를
+   얹고, 컨트롤은 테두리가 아니라 채운 회색이다. 깊이는 장식이 아니라 "여기까지가
+   한 덩어리"라는 정보다.
+
+   색상은 여전히 둘뿐 — 상승(적)·하락(청). 면은 전부 무채색이라 방향색과
+   경쟁하지 않는다.
+   ───────────────────────────────────────────────────────────────────────── */
+:root{
+  --ground:#f0f1f4; --card:#ffffff; --chip:#eaecf0; --chip-hi:#e0e3e8;
+  --ink:#0b0d12; --muted:#5f636d;
+  /* 회색 본문 단계는 둘뿐이다. 흰 바탕에서 4.5:1 을 넘는 회색은 #767676
+     언저리가 한계라 세 번째 단계는 --muted 와 사실상 같은 색이 된다. 앞 판의
+     --faint(#979da8)는 2.50:1 로 기준의 절반이었고 보조행·단위·열머리가 전부
+     그 색이었다. 보조는 명도가 아니라 크기와 굵기로 구분한다. */
+  --line:#e4e6ea; --line-strong:#d3d7dd;
+  --up:#bf342a; --down:#1a4ed6;
+  --shadow:0 1px 2px rgba(11,13,18,.04), 0 4px 16px rgba(11,13,18,.05);
+  --r:16px; --r-sm:10px;
+
+  /* 굵기는 두 단계뿐. 실측: Coinbase 400/600, 토스증권 500/600,
+     Robinhood 400/700 — 어디도 본문에 세 단계를 쓰지 않는다. 한글은
+     12~13px 에서 400 이면 획이 뭉개져 500 이 본문이다(토스 지배 조합 13/600). */
+  --w:500; --w-em:600;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#06070a; --card:#0f1218; --chip:#1a1e27; --chip-hi:#222732;
+    --ink:#eef0f4; --muted:#989eaa;
+    --line:#1d222b; --line-strong:#2a3038;
+    --up:#ff6f63; --down:#7fa2ff;
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 4px 20px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#06070a; --card:#0f1218; --chip:#1a1e27; --chip-hi:#222732;
+  --ink:#eef0f4; --muted:#989eaa;
+  --line:#1d222b; --line-strong:#2a3038;
+  --up:#ff6f63; --down:#7fa2ff;
+  --shadow:0 1px 2px rgba(0,0,0,.5), 0 4px 20px rgba(0,0,0,.35);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:'Pretendard SR',"Pretendard Variable",Pretendard,"Noto Sans KR",
+    "Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  font-size:14px; line-height:1.45; font-weight:var(--w);
+  -webkit-font-smoothing:antialiased;
+}
+/* 키보드 포커스만 보인다(:focus 아닌 :focus-visible). 잉크 링이라 방향색과 안 겹친다. */
+:focus-visible{outline:2px solid var(--ink); outline-offset:2px; border-radius:8px}
+.row:focus-visible{outline-offset:-2px}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms !important; animation-iteration-count:1 !important;
+    transition-duration:.01ms !important}
+}
+
+.card{background:var(--card); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow)}
+
+/* ── 셸 ─────────────────────────────────────────────────────────────────── */
+.shell{display:grid; grid-template-columns:230px minmax(0,1fr) minmax(400px,25vw);
+  gap:0; min-height:100vh; align-items:start}
+
+/* ── 사이드바 — 자산군은 필터가 아니라 장소다. 그래서 칩이 아니라 내비다.
+      바탕 위에 그대로 얹혀 있고, 고른 항목만 카드로 떠오른다. ───────────── */
+aside{padding:20px 14px; position:sticky; top:0; height:100vh; overflow:auto}
+.brand{display:flex; align-items:center; gap:7px; padding:2px 10px 20px}
+.brand b{font-size:15px; font-weight:var(--w-em); letter-spacing:-.015em}
+.brand span{font-size:11px; color:var(--muted); padding:1px 6px; background:var(--chip); border-radius:6px}
+.navsec{font-size:11.5px; color:var(--muted); padding:16px 10px 6px}
+.nav{display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+  padding:8px 10px; border:0; border-radius:var(--r-sm); background:transparent; cursor:pointer;
+  font:inherit; font-size:13.5px; color:var(--muted); transition:background .12s, color .12s}
+.nav:hover{background:var(--chip); color:var(--ink)}
+.nav[aria-current="true"]{background:var(--card); color:var(--ink); font-weight:var(--w-em);
+  box-shadow:var(--shadow)}
+.nav .n{margin-left:auto; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums}
+.nav.off{cursor:default; opacity:.45}
+.nav.off:hover{background:transparent; color:var(--muted)}
+
+/* ── 본문 ───────────────────────────────────────────────────────────────── */
+main{padding:20px 20px 44px; min-width:0; max-width:1400px; margin:0 auto; width:100%}
+.top{display:flex; align-items:center; gap:8px; padding:0 4px 16px}
+.tag{display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted);
+  background:var(--chip); border-radius:999px; padding:5px 11px}
+.dot{width:6px; height:6px; border-radius:50%; background:#1a8a4b}
+.spacer{margin-left:auto}
+.ghost{border:0; background:var(--chip); color:var(--muted); border-radius:999px;
+  padding:5px 12px; font:inherit; font-size:12px; cursor:pointer; transition:background .12s,color .12s}
+.ghost:hover{background:var(--chip-hi); color:var(--ink)}
+
+.pane{padding:20px 20px 8px}
+h1{font-size:22px; font-weight:var(--w-em); letter-spacing:-.02em; margin:0 0 4px}
+.sub{font-size:13px; color:var(--muted); margin:0 0 16px}
+
+/* 컨트롤은 테두리가 아니라 채운 회색이다 — 실물 제품들이 전부 그렇다 */
+.filters{display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+.filters .lbl{font-size:12px; color:var(--muted); margin-right:4px}
+.pill{border:0; background:var(--chip); color:var(--muted); border-radius:999px;
+  padding:6px 13px; font:inherit; font-size:12.5px; cursor:pointer; white-space:nowrap;
+  transition:background .12s, color .12s}
+.pill:hover{background:var(--chip-hi); color:var(--ink)}
+.pill[aria-pressed="true"]{background:var(--ink); color:var(--card); font-weight:var(--w-em)}
+.note{font-size:12.5px; color:var(--muted); padding:10px 0 0}
+
+/* ── 목록 ───────────────────────────────────────────────────────────────── */
+.head{display:grid; align-items:end; gap:14px; padding:14px 20px 8px;
+  font-size:12px; color:var(--muted); border-bottom:1px solid var(--line)}
+.rows{display:flex; flex-direction:column; padding:4px 8px 8px}
+.row{display:grid; align-items:center; gap:14px; padding:9px 12px; border:0; width:100%;
+  background:transparent; font:inherit; color:inherit; text-align:left; cursor:pointer;
+  border-radius:var(--r-sm); transition:background .12s}
+.row+.row{box-shadow:0 -1px 0 var(--line)}
+.row:hover{background:var(--chip)}
+.row:hover+.row, .row:hover{box-shadow:none}
+.row[aria-selected="true"]{background:var(--chip); box-shadow:none}
+.head, .row{grid-template-columns:26px minmax(150px,290px) 104px 78px 78px 78px minmax(96px,1fr) 126px}
+
+/* 행마다 앵커가 하나 있어야 눈이 걸린다. Coinbase 는 코인 로고, 여기서는
+   커브 위의 자리 — 금리 하는 사람이 종목을 떠올리는 단위 그대로다. */
+.mk{display:flex; align-items:center; justify-content:center; width:26px; height:26px;
+  border-radius:8px; background:var(--chip); font-size:10px; color:var(--muted);
+  font-weight:var(--w-em); letter-spacing:-.02em; font-variant-numeric:tabular-nums}
+.row[aria-selected="true"] .mk{background:var(--card)}
+
+.nm{min-width:0}
+.nm b{display:block; font-size:14.5px; font-weight:var(--w-em); letter-spacing:-.008em;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.nm i{display:block; font-style:normal; font-size:12.5px; color:var(--muted); margin-top:1px}
+.val{text-align:right; font-size:15px; font-weight:var(--w-em); font-variant-numeric:tabular-nums;
+  letter-spacing:-.01em}
+.val u{text-decoration:none; font-size:11px; color:var(--muted); font-weight:var(--w); margin-left:3px}
+.chg{text-align:right; font-size:13.5px; font-weight:var(--w); font-variant-numeric:tabular-nums}
+.up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--muted)}
+.spark{height:24px; width:100%}
+.spark path{fill:none; stroke-width:1.6px}
+
+.pos{display:flex; align-items:center; gap:9px; justify-content:flex-end}
+.track{position:relative; width:62px; height:5px; border-radius:3px; background:var(--chip-hi)}
+.track i{position:absolute; top:-2.5px; width:2px; height:10px; border-radius:1px;
+  background:var(--ink); transform:translateX(-1px)}
+.pct{font-size:12.5px; color:var(--muted); font-variant-numeric:tabular-nums; width:36px; text-align:right}
+
+.absent{margin-top:16px; padding:16px 20px}
+.absent p{margin:0 0 8px; font-size:12.5px; color:var(--muted); max-width:78ch}
+.absent p:last-child{margin:0}
+.absent p b{font-weight:var(--w-em); color:var(--ink)}
+
+/* ── 우측 레일 — 고른 하나. 화면에서 제일 큰 글자는 값이어야 한다. ─────── */
+.rail{padding:20px 20px 20px 8px; position:sticky; top:0; height:100vh; overflow:auto}
+.rpane{padding:20px}
+.rk{font-size:12px; color:var(--muted)}
+.rn{font-size:16px; font-weight:var(--w-em); letter-spacing:-.015em; margin:3px 0 14px}
+.hero{font-size:46px; font-weight:var(--w-em); letter-spacing:-.035em; line-height:1;
+  font-variant-numeric:tabular-nums; margin:0}
+.hero u{text-decoration:none; font-size:19px; color:var(--muted); font-weight:var(--w);
+  margin-left:6px; letter-spacing:0}
+.delta{display:flex; align-items:center; gap:7px; margin:9px 0 0; font-size:13.5px;
+  font-weight:var(--w-em); font-variant-numeric:tabular-nums}
+.delta em{font-style:normal; color:var(--muted); font-weight:var(--w); font-size:12.5px}
+.per{display:flex; gap:5px; margin:18px 0 12px}
+.per .pill{padding:4px 11px; font-size:12px}
+.chart{width:100%; height:190px; display:block}
+.chart path.ln{fill:none; stroke-width:1.75px}
+.chart circle{stroke:var(--card); stroke-width:2.5px}
+.stats{margin-top:16px}
+.st{display:flex; justify-content:space-between; align-items:baseline; padding:8px 0;
+  border-top:1px solid var(--line)}
+.st span{font-size:12.5px; color:var(--muted)}
+.st b{font-size:13.5px; font-weight:var(--w-em); font-variant-numeric:tabular-nums}
+.rpos{margin-top:16px; padding-top:14px; border-top:1px solid var(--line)}
+.rpos .track{width:100%; height:6px}
+.rpos .cap{display:flex; justify-content:space-between; margin-top:8px; font-size:12px;
+  color:var(--muted); font-variant-numeric:tabular-nums}
+
+@media (max-width:1240px){
+  .shell{grid-template-columns:1fr}
+  aside,.rail{position:static; height:auto}
+  aside{display:flex; flex-wrap:wrap; gap:5px; padding:14px}
+  .brand{width:100%; padding-bottom:6px}
+  .navsec{display:none}
+  .nav{width:auto; background:var(--chip); border-radius:999px; padding:6px 12px}
+  .rail{padding:0 14px 20px}
+  main{padding:0 14px 20px}
+  .head,.row{grid-template-columns:26px minmax(120px,1.4fr) 96px 74px 0 0 0 96px}
+  .spark,.head>:nth-child(5),.head>:nth-child(6),.row>:nth-child(5),.row>:nth-child(6){display:none}
+}
+</style>
+
+<div class="shell">
+  <aside>
+    <div class="brand"><b>Sauron</b><span>v2</span></div>
+    <div class="navsec">스왑</div>
+    <div id="nav1"></div>
+    <div class="navsec">현물 · 선물 · 크레딧</div>
+    <div id="nav2"></div>
+  </aside>
+
+  <main>
+    <div class="top">
+      <span class="tag"><i class="dot"></i><span id="asof"></span></span>
+      <span class="tag" id="src"></span>
+      <span class="spacer"></span>
+      <button class="ghost" id="tg">다크</button>
+    </div>
+
+    <div class="card">
+      <div class="pane">
+        <h1 id="gname"></h1>
+        <p class="sub" id="gsub"></p>
+        <div class="filters">
+          <span class="lbl">스크리너</span>
+          <button class="pill" data-f="hi">52주 고점권</button>
+          <button class="pill" data-f="lo">52주 저점권</button>
+          <button class="pill" data-f="mv">오늘 크게 움직임</button>
+          <button class="pill" data-f="key">주요</button>
+        </div>
+        <div class="note" id="fnote"></div>
+      </div>
+
+      <div class="head">
+        <span></span>
+        <span>종목</span>
+        <span style="text-align:right" id="hcur"></span>
+        <span style="text-align:right" id="h1d">전일</span>
+        <span style="text-align:right" id="hmtd">월초 대비</span>
+        <span style="text-align:right" id="hytd">연초 대비</span>
+        <span>3개월</span>
+        <span style="text-align:right">52주 위치</span>
+      </div>
+      <div class="rows" id="rows"></div>
+    </div>
+
+    <div class="card absent" id="absent"></div>
+  </main>
+
+  <div class="rail">
+    <div class="card rpane">
+      <div class="rk" id="rkind"></div>
+      <div class="rn" id="rname"></div>
+      <p class="hero" id="rhero"></p>
+      <p class="delta" id="rdelta"></p>
+      <div class="per">
+        <button class="pill" data-p="20">1M</button>
+        <button class="pill" data-p="60" aria-pressed="true">3M</button>
+        <button class="pill" data-p="120">6M</button>
+        <button class="pill" data-p="260">1Y</button>
+      </div>
+      <svg class="chart" id="rchart"></svg>
+      <div class="stats" id="rstats"></div>
+      <div class="rpos" id="rposw"></div>
+    </div>
+  </div>
+</div>
+
+<script id="D" type="application/json">__DATA__</script>
+<script>
+const D=JSON.parse(document.getElementById('D').textContent);
+const G=D.groups;
+const ORDER1=['outright','spread','fly'];
+const ORDER2=['govt','bss','credit','futures'];
+const SRC={outright:'IRS 종가',spread:'IRS 종가',fly:'IRS 종가',
+  govt:'민평 종가',bss:'민평 × IRS',credit:'민평 종가',futures:'선물 종가'};
+const SUB={
+  outright:'고정금리 지급/수취의 절대 수준이다. 단위는 %.',
+  spread:'두 만기의 차. 커브가 서는지 눕는지를 본다. 단위는 bp.',
+  fly:'가운데 만기가 양 날개 대비 비싼지 싼지. 단위는 bp.',
+  govt:'국고채 민평 수익률. 단위는 %.',
+  bss:'국고 대비 스왑의 차. 음수면 스왑이 국고보다 낮다. 단위는 bp.',
+  credit:'국고 대비 신용 스프레드. 단위는 bp.',
+  futures:'3년·10년 국채선물 정산가. 단위는 가격.',
+};
+
+/* 값의 자릿수는 단위가 정한다. %는 소수 셋째, bp는 첫째, 가격은 둘째. */
+const fv=(v,u)=> v==null?'—':(u==='%'?v.toFixed(3):u==='가격'?v.toFixed(2):v.toFixed(1));
+const uu=(u)=> u==='%'?'%':u==='가격'?'':'bp';
+/* 변화의 단위는 값의 단위와 다르다 — %로 호가되는 것도 변화는 bp로 읽는다. */
+const du=(u)=> u==='가격'?'':'bp';
+const arrow=(d)=> d>0?'↗':d<0?'↘':'→';
+const cls=(d)=> d>0?'up':d<0?'down':'flat';
+const fd=(d,u)=> (d==null?'—':(d>0?'+':'')+(u==='가격'?d.toFixed(2):d.toFixed(2).replace(/\.?0+$/,'')||'0'));
+
+/* 행 앵커 = 커브 위의 자리. 스프레드/플라이는 앞다리를 쓴다. */
+const mark=(r)=>{
+  if(r.kind==='futures') return /10/.test(r.label)?'10Y':'3Y';
+  const k=Array.isArray(r.sortKey)?r.sortKey[0]:null;
+  if(k==null) return '·';
+  if(k<0.1) return '1D';
+  if(k<1) return Math.round(k*12)+'M';
+  return (Number.isInteger(k)?k:k.toFixed(1))+'Y';
+};
+
+let gk='outright', filt=null, sel=null, win=60;
+
+function nav(host,keys){
+  host.innerHTML=keys.map(k=>{
+    const g=G[k]; const n=D.counts[k]??(g?g.rows.length:0);
+    return `<button class="nav" data-g="${k}" aria-current="${k===gk}">
+      <span>${g?g.label:k}</span><span class="n">${n}</span></button>`;
+  }).join('')
+  + (host.id==='nav2'? D.absent.map(a=>`<button class="nav off"><span>${a.label}</span><span class="n">—</span></button>`).join(''):'');
+}
+
+function path(hist,w,h,pad){
+  if(!hist||hist.length<2) return {d:'',a:''};
+  const lo=Math.min(...hist), hi=Math.max(...hist), sp=(hi-lo)||1;
+  const x=i=>i*(w/(hist.length-1));
+  const y=v=>pad+(1-(v-lo)/sp)*(h-pad*2);
+  let d='M'+x(0).toFixed(2)+' '+y(hist[0]).toFixed(2);
+  for(let i=1;i<hist.length;i++) d+='L'+x(i).toFixed(2)+' '+y(hist[i]).toFixed(2);
+  return {d, a:d+`L${w} ${h}L0 ${h}Z`, lx:x(hist.length-1), ly:y(hist[hist.length-1]), lo, hi};
+}
+
+const F={
+  hi:{t:r=>r.range1y&&r.range1y.pct>=90, d:'1년 레인지의 위쪽 10% 안에 있는 종목이다.'},
+  lo:{t:r=>r.range1y&&r.range1y.pct<=10, d:'1년 레인지의 아래쪽 10% 안에 있는 종목이다.'},
+  mv:{t:r=>r.movePct!=null&&r.movePct>=90, d:'오늘 변화폭이 1년 중 상위 10%에 드는 종목이다.'},
+  key:{t:r=>!!r.key, d:'데스크가 늘 보는 축이다.'},
+};
+
+function rowsOf(){
+  const rs=(G[gk]?.rows)||[];
+  return filt? rs.filter(F[filt].t) : rs;
+}
+
+function render(){
+  nav(nav1,ORDER1); nav(nav2,ORDER2);
+  asof.textContent='데이터 '+D.asof;
+  src.textContent=SRC[gk];
+  gname.textContent=G[gk].label;
+  gsub.textContent=SUB[gk];
+  /* 변화의 단위는 열 머리에 한 번만. 셀마다 반복하면 비교할 숫자끼리 멀어진다. */
+  const U0=(G[gk].rows[0]||{}).unit;
+  hcur.textContent=D.asof.slice(5).replace('-','/')+' 종가';
+  h1d.textContent='전일'+(du(U0)?` (${du(U0)})`:'');
+  fnote.textContent=filt?F[filt].d:'';
+  document.querySelectorAll('.filters .pill').forEach(b=>b.setAttribute('aria-pressed',b.dataset.f===filt));
+
+  const rs=rowsOf();
+  if(!rs.length){
+    rows.innerHTML=`<p class="note" style="padding:20px 12px">${G[gk].label} 중에 «${document.querySelector(`[data-f="${filt}"]`).textContent}»에 걸리는 종목이 오늘은 없어요.</p>`;
+  } else {
+    rows.innerHTML=rs.map(r=>{
+      const d1=r.deltas?.d1;
+      const hh=(r.hist||[]).slice(-60);
+      const s=path(hh,100,24,3);
+      /* 선의 색은 그 선이 그리는 구간의 부호다. 3개월 선을 오늘 하루 변화로
+         칠하면, 석 달 오른 종목이 오늘 1bp 내렸다고 파랗게 보인다. */
+      const nc=hh.length>1?hh[hh.length-1]-hh[0]:0;
+      const c=nc>0?'var(--up)':nc<0?'var(--down)':'var(--muted)';
+      const p=r.range1y?.pct;
+      return `<button class="row" data-id="${r.id}" aria-selected="${r.id===sel}">
+        <span class="mk">${mark(r)}</span>
+        <span class="nm"><b>${r.label}</b><i>1년 평균 ${fv(r.range1y?.avg,r.unit)}${uu(r.unit)}${r.quoted===true?' · 호가':r.quoted===null?' · 보간':''}</i></span>
+        <span class="val">${fv(r.now,r.unit)}<u>${uu(r.unit)}</u></span>
+        <span class="chg ${cls(d1)}">${arrow(d1)} ${fd(d1,r.unit)}</span>
+        <span class="chg ${cls(r.deltas?.mtd)}">${fd(r.deltas?.mtd,r.unit)}</span>
+        <span class="chg ${cls(r.deltas?.ytd)}">${fd(r.deltas?.ytd,r.unit)}</span>
+        <svg class="spark" viewBox="0 0 100 24" preserveAspectRatio="none"><path d="${s.d}" stroke="${c}" vector-effect="non-scaling-stroke"/></svg>
+        <span class="pos"><span class="track"><i style="left:${p??0}%"></i></span><span class="pct">${p==null?'—':p.toFixed(0)+'%'}</span></span>
+      </button>`;
+    }).join('');
+  }
+  absent.innerHTML=D.absent.map(a=>`<p><b>${a.label}</b> — ${a.reason}</p>`).join('');
+  drawRail();
+}
+
+function drawRail(){
+  const rs=rowsOf();
+  const r=rs.find(x=>x.id===sel)||rs[0];
+  if(!r){rname.textContent='—'; rhero.textContent=''; rdelta.textContent=''; rchart.innerHTML=''; rstats.innerHTML=''; rposw.innerHTML=''; return;}
+  sel=r.id;
+  rkind.textContent=G[gk].label+' · '+SRC[gk];
+  rname.textContent=r.label;
+  rhero.innerHTML=fv(r.now,r.unit)+`<u>${uu(r.unit)}</u>`;
+  const d1=r.deltas?.d1;
+  rdelta.className='delta '+cls(d1);
+  rdelta.innerHTML=`${arrow(d1)} ${fd(d1,r.unit)}${du(r.unit)} <em>전일 대비</em>`;
+
+  const h=(r.hist||[]).slice(-win);
+  /* viewBox 를 실제 픽셀 폭으로 맞춘다. 1000 짜리 좌표계를 눌러 넣으면
+     preserveAspectRatio="none" 이 x 를 압축해서 점 채움이 타원으로 뭉개진다. */
+  const W=Math.max(240,Math.round(rchart.clientWidth||rchart.getBoundingClientRect().width));
+  rchart.setAttribute('viewBox',`0 0 ${W} 190`);
+  const s=path(h,W,190,12);
+  const c=h.length>1&&h[h.length-1]>=h[0]?'var(--up)':'var(--down)';
+  rchart.innerHTML=`<defs><pattern id="dt" width="5" height="5" patternUnits="userSpaceOnUse">
+      <circle cx="1.2" cy="1.2" r=".9" fill="${c}" opacity=".3"/></pattern></defs>
+    <path d="${s.a}" fill="url(#dt)"/>
+    <path class="ln" d="${s.d}" stroke="${c}" vector-effect="non-scaling-stroke"/>
+    <circle cx="${s.lx}" cy="${s.ly}" r="4" fill="${c}"/>`;
+
+  const lo=Math.min(...h), hi=Math.max(...h), av=h.reduce((a,b)=>a+b,0)/h.length;
+  const per=({20:'1개월',60:'3개월',120:'6개월',260:'1년'})[win];
+  rstats.innerHTML=[[per+' 최고',hi],[per+' 최저',lo],[per+' 평균',av]]
+    .map(([k,v])=>`<div class="st"><span>${k}</span><b>${fv(v,r.unit)}${uu(r.unit)}</b></div>`).join('')
+    +`<div class="st"><span>관측</span><b>${h.length}일</b></div>`;
+
+  const p=r.range1y?.pct;
+  rposw.innerHTML=`<div class="rk" style="margin-bottom:8px">52주 위치</div>
+    <div class="track"><i style="left:${p??0}%"></i></div>
+    <div class="cap"><span>${fv(r.range1y?.min,r.unit)}</span><span>${p==null?'—':p.toFixed(0)+'%'}</span><span>${fv(r.range1y?.max,r.unit)}</span></div>`;
+
+  document.querySelectorAll('.row').forEach(b=>b.setAttribute('aria-selected',b.dataset.id===sel));
+  document.querySelectorAll('.per .pill').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.p===win));
+}
+
+/* 이벤트는 컨테이너 하나에 위임한다 — 1,000행에 리스너 1,000개를 달지 않는다. */
+document.addEventListener('click',e=>{
+  const n=e.target.closest('.nav[data-g]'); if(n){gk=n.dataset.g; filt=null; sel=null; render(); return;}
+  const f=e.target.closest('.filters .pill'); if(f){filt=filt===f.dataset.f?null:f.dataset.f; sel=null; render(); return;}
+  const p=e.target.closest('.per .pill'); if(p){win=+p.dataset.p; drawRail(); return;}
+  const r=e.target.closest('.row[data-id]'); if(r){sel=r.dataset.id; drawRail(); return;}
+  if(e.target.id==='tg'){
+    const d=document.documentElement.getAttribute('data-theme')==='dark';
+    document.documentElement.setAttribute('data-theme',d?'light':'dark');
+    tg.textContent=d?'다크':'라이트'; drawRail();
+  }
+});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='ArrowDown'&&e.key!=='ArrowUp') return;
+  const rs=rowsOf(); const i=rs.findIndex(x=>x.id===sel);
+  const j=Math.max(0,Math.min(rs.length-1,i+(e.key==='ArrowDown'?1:-1)));
+  if(rs[j]){sel=rs[j].id; e.preventDefault(); drawRail();}
+});
+let rz; addEventListener('resize',()=>{clearTimeout(rz); rz=setTimeout(drawRail,120)});
+render();
+</script>
