@@ -1,0 +1,151 @@
+/* 백테스트의 **북** — "그때 들어갔으면 지금 얼마였을까".
+ *
+ * 한 거래가 아니라 북이다 [v1 OWNER, 2026-07-31]: 행마다 종목·방향·규모·진입일·
+ * 청산일이 따로 논다. 실제로 레그인은 다른 날에 하고 레그아웃도 다른 날에 한다.
+ *
+ * 이 파일은 순수하다 — DOM 도 fetch 도 없다. 창이 하는 일(입력·실행·표시)과
+ * 북이 무엇인가(모양·인코딩·기억)를 갈라두면 규칙을 DOM 없이 검증할 수 있다.
+ */
+
+import { encodePositions, type PositionInput } from "@/lib/api";
+import type { Group, Row } from "@/table/rows";
+
+/** 한 창에 열두 줄. v1 의 상한이고, 근거는 화면이 아니라 **읽기**다: 열둘을
+ * 넘으면 헤드라인 한 줄이 무엇의 합인지 눈으로 못 세게 된다. */
+export const MAX_POSITIONS = 12;
+
+/**
+ * 북에 담을 수 있는 종목 [v1 V-PASS V5, 2026-08-03].
+ *
+ * 엔진이 받는 것만 고른다. **포워드는 빠진다** — `backtest._legs_for` 가 '-' 로
+ * 다리를 쪼개고 `_validate` 가 'x' 가 든 id 를 전부 거부하므로, 목록에 넣어두면
+ * 실행할 때마다 422 가 난다. 변동성은 비율이라 애초에 포지션이 아니다. 민평·선물도
+ * 스왑이 아니다.
+ *
+ * **서버가 거부하는 것을 화면이 제안하지 않는다** — 이 리포가 이름 붙여 둔
+ * claim-vs-behaviour 결함이 정확히 그것이다.
+ */
+export const BOOKABLE_GROUPS: Group[] = ["outright", "spread", "fly"];
+
+export function isBookable(row: Row): boolean {
+  return BOOKABLE_GROUPS.includes(row.group);
+}
+
+export interface BookRow extends PositionInput {
+  /** 표시용 로컬 키. id 는 중복될 수 있다(같은 종목을 다른 날 두 번). */
+  key: string;
+}
+
+let seq = 0;
+export function newRow(id: string, entry: string): BookRow {
+  seq += 1;
+  return { key: `r${seq}`, id, direction: 1, eok: 100, entry, exit: "" };
+}
+
+/**
+ * 방향을 **뭐라고 부르는가** [v1 OWNER, 외부 조사 후 2026-07-31].
+ *
+ * 엔진에서 `+1` 은 언제나 "호가값을 롱" 이다. 그걸 뭐라 부르는지는 종목마다 다른
+ * 질문이었다:
+ *
+ *   아웃라이트 — **페이 / 리시브**. 원화 데스크는 이걸 동사로 쓴다("IRS 페이했다").
+ *   고정 지급/수취는 회계의 말이지 트레이딩의 말이 아니다.
+ *
+ *   스프레드 — **스티프너 / 플래트너**는 시장 표준이다. 스티프너를 산다 = 가장 긴
+ *   다리에 고정을 지급한다(Clarus), 그리고 그게 `backtest._legs_for` 가 만드는
+ *   것이다. 다리를 옆에 같이 적으므로 용어만 믿을 필요는 없다.
+ *
+ *   버터플라이 — **용어가 없다.** 그게 조사의 결론이지 빈틈이 아니다. Clarus 는
+ *   플라이를 사는 것 = 벨리 페이라 하고, 다른 데스크 글은 반대로 쓴다.
+ *   TraditionData 는 아예 "한 트레이더의 'buy the fly' 가 다른 트레이더의 그것과
+ *   같다는 보장이 없다 — 다리를 명시하지 않는 한" 이라고 적는다. 그래서 **다리를
+ *   적고 단어를 만들지 않는다.** (v1 이 벨리 지급/수취, 벨리 페이/리시브 두 번
+ *   지어냈다가 둘 다 오너가 처음 듣는 말이었다.)
+ *
+ * `backtest._legs_for` 를 그대로 반영한다: 2다리 `A-B` 는 +1 에서 B 를 페이,
+ * 3다리 `A-B-C` 는 +1 에서 벨리 B 를 페이. 라벨이 거래와 조용히 어긋나면 라벨이
+ * 없는 것보다 나쁘다.
+ */
+export function directionLabel(id: string, direction: number): string {
+  const legs = id.split("-");
+  const pay = direction > 0 ? "페이" : "리시브";
+  const rec = direction > 0 ? "리시브" : "페이";
+  if (legs.length === 3) return `${legs[1]} ${pay} · ${legs[0]}/${legs[2]} ${rec}`;
+  if (legs.length === 2) {
+    const word = direction > 0 ? "스티프너" : "플래트너";
+    return `${word} (${legs[1]} ${pay} · ${legs[0]} ${rec})`;
+  }
+  return pay; // 아웃라이트 — 스왑 하나다
+}
+
+/** 실행할 수 있는 줄만. 종목과 진입일이 있고 규모가 0 이 아니어야 한다 —
+ * 반쯤 채운 줄을 서버에 보내면 422 를 라벨 없이 받는다. */
+export function runnable(book: BookRow[]): BookRow[] {
+  return book.filter((r) => r.id && r.entry && r.eok !== 0);
+}
+
+/* ── URL — 북은 붙여넣을 수 있는 링크다 ─────────────────────────────────────
+ *
+ * 인코딩은 `lib/api.ts::encodePositions` 것 하나뿐이다(서버가 읽는 바로 그 문자열).
+ * 여기 있는 것은 그 역이고, **왕복이 성립하는지**를 가드가 본다 — 링크를 열었을
+ * 때 다른 북이 뜨면 그건 남의 답을 내 질문으로 읽는 것이다.
+ */
+export function encodeBook(book: BookRow[]): string {
+  return encodePositions(runnable(book));
+}
+
+/** `id,direction,notional,entry[,exit]` 를 `;` 로 이은 문자열의 역. 모양이 안 맞는
+ * 조각은 **버린다** — 반쯤 해석한 북으로 실행하느니 그 줄이 없는 게 낫다. */
+export function decodeBook(s: string | undefined | null): BookRow[] {
+  if (!s) return [];
+  const out: BookRow[] = [];
+  for (const part of s.split(";")) {
+    const f = part.split(",");
+    if (f.length < 4) continue;
+    const [id, dir, notional, entry, exit] = f;
+    const direction = Number(dir);
+    const n = Number(notional);
+    if (!id || !entry || !Number.isFinite(direction) || !Number.isFinite(n)) continue;
+    if (direction !== 1 && direction !== -1) continue;
+    seq += 1;
+    out.push({
+      key: `u${seq}`,
+      id,
+      direction,
+      // 서버 문법은 원이고 화면은 억이다. 나누는 자리는 여기 하나뿐.
+      eok: n / 1e8,
+      entry,
+      exit: exit ?? "",
+    });
+    if (out.length >= MAX_POSITIONS) break;
+  }
+  return out;
+}
+
+/* ── 세션 기억 ──────────────────────────────────────────────────────────────
+ *
+ * 창을 닫았다 열면 **적어둔 북이 그대로** 있다. 창 위치와 같은 이유로 모듈
+ * 변수다(localStorage 아님): 북은 그 세션의 질문이고, 어제의 질문이 오늘 창을
+ * 열자마자 떠 있으면 그건 남의 답이다.
+ *
+ * 결과도 같이 기억한다. 이미 실행을 눌러서 받은 답을 다시 보여주는 것은
+ * "스스로 실행되지 않는다" 를 어기지 않는다 — 아무것도 돌지 않는다.
+ */
+export interface BacktestMemory {
+  book?: BookRow[];
+  result?: unknown;
+}
+
+const memory = new Map<string, BacktestMemory>();
+
+export function saveBacktestMemory(key: string, patch: BacktestMemory): void {
+  memory.set(key, { ...memory.get(key), ...patch });
+}
+
+export function loadBacktestMemory(key: string): BacktestMemory {
+  return memory.get(key) ?? {};
+}
+
+export function forgetBacktestMemory(): void {
+  memory.clear();
+}
