@@ -18,25 +18,24 @@
 는 주장인데, 죽은 피드에서는 그 주장을 할 수 없다. 그래서 base 에는 신선도
 게이트가 있다(아래).
 
-## V2 — 기준 시계열의 출처가 v1 과 다르다 [OWNER 2026-08-18 — "v2 데이터 소스는 SQL만"]
+## V2 — 기준 시계열의 출처 [OWNER, 2026-08-20 — "ECOS API 로 아예 교체"]
 
-v1 은 base 를 `data/bokbaserate.xlsx` 에서 읽었다. v2 는 엑셀 보조 경로를
-이식하지 않으므로 SQL 후보 `infomax.기준금리`(일자·한국·미국, 퍼센트)를 쓴다.
-검증 실측 (2026-08-18):
+v1 은 base 를 `data/bokbaserate.xlsx` 에서 읽었고, v2 는 한때 SQL 후보
+`infomax.기준금리` 를 썼다. **둘 다 낡아 있었다.** 2026-08-20 실측:
 
-    값 대사   v1 xlsx 와 겹치는 3,733일 **전건 일치** (오차 0)
-    기간      2012-12-31 시작 — 민평(2020-01-02)을 완전히 덮는다
-    최신성    **실패.** 테이블이 2026-03-21 에 멈췄고, 그 뒤의 금리 결정
-              (2026-07-16 인상 2.50→2.75%)이 빠져 있다. 평탄 연장하면
-              그 뒤 구간의 조달이 25bp 낮게 잡힌다 — 화면 어디에도 안 보이는
-              방식으로.
+    SQL `infomax.기준금리`   2026-03-21 에서 멈춤, 마지막 2.50%
+                             → 2026-07-16 인상(2.50→2.75%)이 **없다**
+    `data/bokbaserate.xlsx`  2026-07-16 까지, 마지막 2.75%
+                             → 값은 맞지만 갱신이 사람 손에 달려 있다
+    **ECOS**                 2026-08-17 까지, 마지막 2.75%  ← 인상이 있고 신선하다
 
-그래서 base 는 **신선하지 않으면 실패 상태로 선다**(`_require_fresh`). 폴백은
-없다 — SQL 이 못 주는 것을 xlsx 가 조용히 메우는 경로가 이 규칙이 금지하는
-바로 그것이다. 테이블이 다시 적재되면 게이트는 저절로 열린다.
+멈춘 계단을 평탄 연장하면 7월 이후 조달이 25bp 낮게 잡힌다 — 화면 어디에도 안
+보이는 방식으로. 그래서 출처를 **발표 기관 자신**(한국은행 ECOS Open API)으로
+옮겼다. `app/ecos.py` 가 그 클라이언트다.
 
-기본 기준도 그래서 v1(base)과 다르게 **call** 이다. 기본값이 항상 422 를
-돌려주는 화면은 제품이 아니고, 콜금리는 신선하다(검증 시점 2026-08-17 까지).
+신선도 게이트는 남는다. 다만 이제 재는 대상이 ECOS 다 — ECOS 는 진짜 일별
+피드라서 "최근 영업일에 행이 없다" 가 곧 "피드가 멈췄다" 를 뜻한다. 앞의 두
+출처에서는 그 잣대가 맞지 않았다(하나는 결정 시계열, 하나는 죽은 테이블).
 
 ## 적용 범위 [OWNER, 2026-08-14 — "Cash Bond 전용"]
 
@@ -60,9 +59,10 @@ from dataclasses import dataclass
 
 log = logging.getLogger("app.funding")
 
-#: 화면 기본값. v1 은 base("기준금리 + 10bp")였다 — v2 가 call 인 이유는 모듈
-#: 주석의 V2 절 참조(기준금리 테이블이 멈춰 있어 base 는 실패 상태다).
-DEFAULT_BASIS = "call"
+#: 화면 기본값 [OWNER, 2026-08-20 — "조달 기본값은 한은 기준금리"]. v1 과 같은
+#: 자리로 돌아왔다. 한때 call 이었던 것은 선호가 아니라 기준금리 출처가 멈춰
+#: 있었기 때문이고, 그 출처를 ECOS 로 옮겨 풀었다(모듈 주석의 V2 절).
+DEFAULT_BASIS = "base"
 DEFAULT_SPREAD_BP = 10.0
 
 BASIS_LABEL = {"base": "기준금리", "call": "콜금리"}
@@ -116,35 +116,36 @@ def _business_age(last: dt.date) -> int:
 
 
 def _require_fresh(last: dt.date) -> None:
+    """ECOS 피드가 살아 있는가.
+
+    ECOS 기준금리는 **일별** 시계열이라 결정이 없는 날도 행이 선다. 그래서
+    "최근 영업일에 행이 없다" 가 곧 "피드가 멈췄다" 를 뜻한다 — 앞서 쓰던 두
+    출처에서는 이 잣대가 맞지 않았다(하나는 결정만 담는 시계열, 하나는 죽은
+    테이블). 멈춘 것을 평탄 연장하면 그 사이의 금통위를 조용히 놓친다."""
     age = _business_age(last)
     if age > STALE_BUSINESS_DAYS:
         raise FundingError(
-            f"기준금리 테이블(infomax.기준금리)이 {last.isoformat()} 에 멈춰 있습니다"
-            f" (영업일 {age}일 경과). 멈춘 계단을 평탄 연장하면 그 뒤의 금리 결정을"
-            f" 놓칩니다 (실측: 2026-07-16 인상 2.50→2.75% 가 이 테이블에 없다) —"
-            f" 조달 기준을 콜금리로 바꾸거나 테이블을 갱신하세요."
+            f"ECOS 기준금리가 {last.isoformat()} 에서 멈춰 있습니다"
+            f" (영업일 {age}일 경과). 멈춘 계단을 평탄 연장하면 그 사이의 금리"
+            f" 결정을 놓칩니다 — 조달 기준을 콜금리로 바꾸거나 피드를 확인하세요."
         )
 
 
 def _base_rate_series() -> list[tuple[dt.date, float]]:
-    """한국은행 기준금리, 날짜 오름차순 (date, decimal) — SQL `infomax.기준금리`.
+    """한국은행 기준금리, 날짜 오름차순 (date, decimal) — **ECOS**.
 
-    `한국` 열은 퍼센트다(2.5 = 2.5%). 검증과 신선도 게이트는 모듈 주석의 V2 절.
+    출처를 고른 이유와 앞선 두 후보가 왜 탈락했는지는 모듈 주석의 V2 절.
+    `app/ecos.py` 가 망·캐시·키를 다 진다. 여기서는 그 값이 **신선한지**만 본다.
     """
-    from . import mysqldb
+    from . import ecos
 
-    rows = mysqldb.read_sql(
-        "SELECT 일자, 한국 FROM infomax.기준금리 "
-        "WHERE 한국 IS NOT NULL ORDER BY 일자 ASC"
-    )
-    if not rows:
-        raise FundingError("기준금리 시계열이 비어 있습니다 (infomax.기준금리).")
-    out: list[tuple[dt.date, float]] = []
-    for r in rows:
-        d = r[0]
-        if isinstance(d, dt.datetime):
-            d = d.date()
-        out.append((d, float(r[1]) / 100.0))
+    try:
+        out = ecos.base_rate_series()
+    except ecos.EcosError as exc:
+        # ECOS 의 문장은 이미 사람 말이다 — 감싸되 덮지 않는다.
+        raise FundingError(f"기준금리를 가져오지 못했습니다: {exc}") from exc
+    if not out:
+        raise FundingError("기준금리 시계열이 비어 있습니다 (ECOS).")
     _require_fresh(out[-1][0])
     return out
 

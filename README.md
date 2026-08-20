@@ -28,6 +28,7 @@ powershell -ExecutionPolicy Bypass -File backend\serve.ps1 -Local   # :8200
 |---|---|---|
 | `NEXT_PUBLIC_API_BASE` | Vercel 대시보드 | **프로덕션 빌드가 실패한다.** 백엔드 주소, 끝에 `/` 없이 |
 | `BW_MYSQL_HOST/PORT/USER/PASSWORD/DB` | 백엔드 셸 (사용자 환경변수로 설정됨) | SQL 을 읽는 순간 죽는다 |
+| `ECOS_API_KEY` | 백엔드 셸 (사용자 환경변수로 설정됨) | 조달 기준의 기준금리를 못 가져온다. 기본은 **기준금리 +10bp** 다 |
 | `SAURON_ALLOWED_ORIGINS` | 백엔드 셸 | 로컬 개발 오리진만 허용. `rateslab*.vercel.app` 은 기본 정규식이 이미 허용 |
 | `SAURON_TEST_BASE` | 백엔드 테스트 | `http://127.0.0.1:8200` |
 

@@ -148,6 +148,7 @@ powershell -ExecutionPolicy Bypass -File backend\serve.ps1 -Local   # 개발·�
 | 이름 | 읽는 곳 | 없으면 |
 |---|---|---|
 | `BW_MYSQL_HOST/PORT/USER/PASSWORD/DB` | `app/mysqldb.py` | SQL 을 읽는 순간 `MissingCredentials` 로 죽는다. 기본값 없음 (2026-08-20) |
+| `ECOS_API_KEY` | `app/ecos.py` | 조달 기준의 **기준금리**를 못 가져온다 → base 가 실패, 화면은 콜금리로 안내. 기본값 없음 (2026-08-20) |
 | `SAURON_ALLOWED_ORIGINS` | `app/cors.py` | 로컬 개발 오리진만 허용 |
 | `SAURON_ALLOWED_ORIGIN_REGEX` | `app/cors.py` | `rateslab` 프로젝트의 vercel.app 프리뷰 패턴 |
 | `SAURON_DEV_LOCAL` | `app/dev_marker.py` | 쪽지를 안 남긴다(=공개 서비스로 취급) |

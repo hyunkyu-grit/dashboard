@@ -94,18 +94,22 @@ def _seed_base_series():
 
 
 class TestBaseFreshnessGate:
-    """V2 전용 — 멈춘 기준금리 테이블은 실패 상태로 선다 (funding.py V2 절)."""
+    """멈춘 기준금리 피드는 실패 상태로 선다 (funding.py V2 절).
+
+    2026-08-20 에 출처가 SQL `infomax.기준금리` 에서 **ECOS** 로 바뀌었다
+    [OWNER — "ECOS API 로 아예 교체"]. 그래서 이 클래스는 이제 `mysqldb` 가
+    아니라 `ecos` 를 가로챈다. 게이트 자체의 명제는 그대로다 — 멈춘 계단을
+    평탄 연장하면 그 사이의 금통위를 조용히 놓친다.
+    """
 
     def test_a_stale_series_is_refused_with_the_stop_date_named(self, monkeypatch):
-        stale = [(dt.date(2026, 3, 21) - dt.timedelta(days=k), 2.5) for k in range(5, -1, -1)]
+        from app import ecos
+
+        stale = [(dt.date(2026, 3, 21) - dt.timedelta(days=k), 0.025) for k in range(5, -1, -1)]
         monkeypatch.setattr(
             fd, "_call_rate_series", lambda: (_ for _ in ()).throw(AssertionError)
         )
-        from app import mysqldb
-
-        monkeypatch.setattr(
-            mysqldb, "read_sql", lambda q: [(d, r) for d, r in stale]
-        )
+        monkeypatch.setattr(ecos, "base_rate_series", lambda: list(stale))
         fd.reset_cache()
         with pytest.raises(fd.FundingError) as e:
             fd._base_rate_series()
@@ -113,19 +117,35 @@ class TestBaseFreshnessGate:
         assert "콜금리" in str(e.value)  # 대안을 같은 문장이 말한다
 
     def test_a_fresh_series_passes_the_gate(self, monkeypatch):
-        today = dt.date.today()
-        fresh = [(today - dt.timedelta(days=3), 2.5), (today, 2.75)]
-        from app import mysqldb
+        from app import ecos
 
-        monkeypatch.setattr(mysqldb, "read_sql", lambda q: list(fresh))
+        today = dt.date.today()
+        fresh = [(today - dt.timedelta(days=3), 0.025), (today, 0.0275)]
+        monkeypatch.setattr(ecos, "base_rate_series", lambda: list(fresh))
         fd.reset_cache()
         s = fd._base_rate_series()
         assert s[-1] == (today, 0.0275)
 
-    def test_the_default_basis_is_call_not_base(self):
-        # v1 은 base 가 기본이었다. v2 에서 base 는 게이트 뒤라 기본이 될 수
-        # 없다 — 기본값이 늘 422 인 화면은 제품이 아니다.
-        assert fd.DEFAULT_BASIS == "call"
+    def test_an_ecos_failure_becomes_a_funding_sentence(self, monkeypatch):
+        """ECOS 의 문장은 이미 사람 말이다 — 감싸되 덮지 않는다."""
+        from app import ecos
+
+        def boom():
+            raise ecos.EcosError("ECOS_API_KEY 가 없습니다")
+
+        monkeypatch.setattr(ecos, "base_rate_series", boom)
+        fd.reset_cache()
+        with pytest.raises(fd.FundingError) as e:
+            fd._base_rate_series()
+        assert "ECOS_API_KEY" in str(e.value)
+
+    def test_the_default_basis_is_base(self):
+        """[OWNER, 2026-08-20 — "조달 기본값은 한은 기준금리"].
+
+        2026-08-19 까지 이 자리는 `call` 을 핀하고 있었고, 근거는 "base 가
+        게이트 뒤라 기본이 될 수 없다" 였다. 출처를 ECOS 로 옮겨 그 근거가
+        없어졌다 — 완화가 아니라 명제가 바뀐 것이다."""
+        assert fd.DEFAULT_BASIS == "base"
 
 
 # ── 가격의 기준선 ───────────────────────────────────────────────────────────

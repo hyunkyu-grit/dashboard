@@ -17,10 +17,12 @@ import { useSyncExternalStore } from 'react';
 /** 조달 기준 시계열. 백엔드 `app/funding.py:BASIS_LABEL` 의 키와 같아야 한다. */
 export type FundingBasis = 'base' | 'call';
 
-/** 기본값. v1 은 base("기준금리 + 10bp")였다 — v2 가 **call** 인 이유는 백엔드
- * `app/funding.py` 의 V2 절이다: SQL `infomax.기준금리` 가 2026-03-21 에 멈춰
- * base 는 신선도 게이트에 걸린 실패 상태이고, 늘 422 인 기본값은 제품이 아니다. */
-export const FUNDING_DEFAULT = { basis: 'call' as FundingBasis, spreadBp: 10 };
+/** 기본값 [OWNER, 2026-08-20 — "조달 기본값은 한은 기준금리"]. v1 과 같은 자리다.
+ *
+ * 한때 call 이었던 것은 취향이 아니라 기준금리 **출처가 멈춰 있었기** 때문이다
+ * (SQL `infomax.기준금리` 가 2026-03-21 에서 정지, 7/16 인상 누락). 출처를
+ * 한국은행 ECOS 로 옮겨 그 이유가 없어졌다 — `backend/app/funding.py` 의 V2 절. */
+export const FUNDING_DEFAULT = { basis: 'base' as FundingBasis, spreadBp: 10 };
 
 const KEY = 'sr-funding';
 
