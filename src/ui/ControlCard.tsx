@@ -53,13 +53,17 @@ export function ControlCard({
 export function ControlCollapsible({
   title,
   summary,
+  defaultOpen = false,
   children,
 }: {
   title: string;
   summary: string;
+  /** 화면의 **주 컨트롤**은 펴 둔다. 접힌 것만 쌓아 두면 설정 열이 위에 뭉치고
+   * 아래가 텅 비는데, 이 앱의 다른 설정 열(Simulation)은 꽉 찬다. */
+  defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <VStack className="sr-simcard" gap={open ? 1 : 0} width="100%">
       <Pressable

@@ -2274,6 +2274,36 @@ thead th {
   width: 100%;
 }
 
+/* 시트가 뜨는 기준 상자. 카드가 `overflow: hidden` 이라 시트는 카드 안에서
+ * 카드의 둥근 모서리를 따라 잘린다 — 그게 «카드 위로 올라온다» 의 올바른 모양이다. */
+.sr-cal-card {
+  position: relative;
+}
+
+/* 뒤를 덮는 면. 이게 없으면 시트와 그 아래 달력이 같은 평면으로 읽힌다 —
+ * 메가 패널이 이미 겪은 그 일이다. 누르면 닫힌다. */
+.sr-cal-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--sr-scrim);
+  z-index: 2;
+}
+
+/* 바닥에서 올라오는 시트. **불투명하다** — 바탕이 `--sr-popover` 라 라이트에서는
+ * 흰색, 다크에서는 카드보다 한 칸 위다. 뒤의 격자가 비쳐 보이지 않는다. */
+.sr-cal-sheet {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 3;
+  max-height: 78%;
+  overflow-y: auto;
+  padding: 16px;
+  border-top: 1px solid var(--color-bgLine);
+  background: var(--sr-popover);
+  box-shadow: var(--sr-popover-shadow);
+}
+
 .sr-cal-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -2345,24 +2375,21 @@ thead th {
   background: var(--color-bgSecondary);
 }
 
-/* 그날 발행액의 크기. 숫자 옆의 막대가 아니라 **칸 바닥의 띠**다 — 칸이 작아
- * 막대를 옆에 두면 숫자가 밀린다.
+/* 그날 발행액의 크기 — **칸의 채움**이 진다.
  *
- * 홈(track)이 있어야 게이지로 읽힌다. 홈 없이 칠한 띠만 두었더니 287px 짜리 칸에서
- * 거의 폭 전체를 채운 날이 나오고, 그게 **행을 가르는 구분선**처럼 보였다(실측
- * 2026-08-20). 홈은 이 화면이 이미 쓰는 칸 경계선과 같은 잉크다. */
-.sr-cal-track {
-  width: 100%;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--color-bgLine);
-  overflow: hidden;
-}
-
-.sr-cal-bar {
-  height: 100%;
-  border-radius: 2px;
-  background: var(--color-fgMuted);
+ * Main 이 변화 열에 크기 틴트를 까는 그 문법이다(`table/tint.ts`). 바닥에 눕는
+ * 막대였는데, 그건 칸에 한 줄을 더 요구해서 일정이 셋인 날이 넘쳤다(실측
+ * 2026-08-20: 필요 110px, 준 높이 77px, 행끼리 겹쳤다).
+ *
+ * 색이 아니라 **잉크의 농도**다 — 이 앱에서 색은 방향만 나르고 발행량에는 방향이
+ * 없다. 상한이 0.10 인 것은 그 위에 muted 13px 글자가 서기 때문이다(Main 의 변화
+ * 열이 0.20 에서 멈추는 것과 같은 이유이고, 여기 글자가 더 흐리므로 더 낮다). */
+.sr-cal-cell {
+  background-image: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--color-fgMuted) calc(var(--sr-cal-fill, 0) * 10%), transparent),
+    transparent
+  );
 }
 
 /* 그날의 일정 — **이름을 적는다**.

@@ -96,6 +96,16 @@ export function IssuancePage() {
     void load(ym);
   }, [load, ym]);
 
+  /* 시트는 Esc 로도 닫힌다 — 이 앱의 다른 떠 있는 것들과 같은 규약이다. */
+  useEffect(() => {
+    if (!sel) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSel(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sel]);
+
   useEffect(() => {
     if (!sel) {
       setDay(null);
@@ -203,7 +213,10 @@ export function IssuancePage() {
 
         {/* 섹터가 0 인 달에도 목록은 자리를 지킨다 — 날마다 늘었다 줄었다 하면
             체크박스가 어디 있었는지 못 찾는다(원본의 규칙). */}
+        {/* 이 화면의 **주 필터**라 펴 둔다 — 접힌 것만 쌓아 두면 설정 열이 위에
+            뭉치고 아래가 340px 빈다(Simulation 의 설정 열은 꽉 찬다). */}
         <ControlCollapsible
+          defaultOpen
           title="섹터"
           summary={off.size === 0 ? '전부' : `${cal.sectors.length - off.size}개`}
         >
@@ -239,53 +252,24 @@ export function IssuancePage() {
           </Text>
         </ControlCollapsible>
 
-        <ControlCard title="시야">
-          <VStack gap={0.5} width="100%">
-            <HStack gap={1} alignItems="baseline" width="100%">
-              <Text as="span" font="legal" color="fgMuted" noWrap>
-                발행 공시
-              </Text>
-              <Box style={{ marginInlineStart: 'auto' }}>
-                <Text as="span" font="legal" tabularNumbers noWrap>
-                  {cal.issuanceThrough ?? '—'}
-                </Text>
-              </Box>
-            </HStack>
-            <HStack gap={1} alignItems="baseline" width="100%">
-              <Text as="span" font="legal" color="fgMuted" noWrap>
-                국고채 입찰 결과
-              </Text>
-              <Box style={{ marginInlineStart: 'auto' }}>
-                <Text as="span" font="legal" tabularNumbers noWrap>
-                  {cal.auctionThrough ?? '—'}
-                </Text>
-              </Box>
-            </HStack>
-            <Text as="p" font="legal" color="fgMuted">
-              그 뒤의 빈칸은 «없음» 이 아니라 «아직 공시 안 됨» 이에요. 은행채·여전채에는
-              발행계획이라는 게 없어요.
-            </Text>
-          </VStack>
-        </ControlCard>
       </VStack>
 
       {/* ── 달력 ──────────────────────────────────────────────────────── */}
-      <VStack className="sr-card" flexGrow={1} minWidth={0} minHeight={0}>
-        {/* 카드 머리는 Main 의 «IRS 커브» 카드와 **같은 해부**다(실측 2026-08-20):
-            패딩 16/16/12 · 간격 4 · 제목 label1 **muted** · 아래 한 줄 legal muted,
-            둘 다 왼쪽에 쌓인다. 대비는 페이지 h1 이 진다.
+      <VStack className="sr-card sr-cal-card" flexGrow={1} minWidth={0} minHeight={0}>
+        {/* **히어로가 없다.** 백테스트의 종목 카드는 display3 숫자를 세우지만,
+            거기는 차트가 남는 높이를 아무렇게나 받아도 되는 화면이다. 달력은
+            내용이 곧 격자라 48px 히어로 하나가 다섯 주를 전부 눌러 **칸이 자기
+            내용보다 짧아지고 행끼리 겹쳤다**(실측 2026-08-20: 필요 110px, 실제
+            77px). 이 달의 합계는 아래 통계 블록이 진다.
 
-            첫 판은 여기에 세 문장짜리 문단을 얹었는데, 앱의 어느 카드도 그러지
-            않는다 — 안내는 카드 **바닥**으로 내렸다(Main 이 범례를 두는 자리다). */}
-        <VStack gap={0.5} paddingX={2} paddingTop={2} paddingBottom={1.5} width="100%">
+            그래서 머리는 Main 의 «IRS 커브» 카드와 같은 두 줄이다 — 이름 muted,
+            그 아래 메타 한 줄. */}
+        <VStack gap={0.5} paddingX={2} paddingTop={2} paddingBottom={1} width="100%">
           <Text as="h2" font="label1" color="fgMuted" tabularNumbers noWrap>
             {ym.slice(0, 4)}년 {Number(ym.slice(5, 7))}월
           </Text>
-          {/* Main 은 이 줄에 `TextCaption`(13px w600)을 쓴다. 그 shorthand 는
-              @deprecated 라 새 코드에선 못 쓰고, `font="caption"` 이 같은 것이다
-              (CLAUDE.md §4). `legal` 은 w500 이라 반 톤 얇게 붙는다. */}
           <Text as="span" font="caption" color="fgMuted" tabularNumbers noWrap>
-            발행 {monthTotal.toFixed(2)}조 · {monthCount}건 · 오늘 {cal.today}
+            납입기일 기준 · 오늘 {cal.today} · 칸을 누르면 그날이 펴져요
           </Text>
         </VStack>
 
@@ -327,6 +311,10 @@ export function IssuancePage() {
                     data-off={d.biz ? '0' : '1'}
                     data-today={d.today ? '1' : '0'}
                     data-sel={sel === d.iso ? '1' : '0'}
+                    /* 크기는 **칸의 채움**이 진다 — Main 이 변화 열에 크기 틴트를
+                       까는 그 문법이다. 바닥의 막대였는데, 그건 한 줄을 더 먹어서
+                       세 일정이 있는 날의 칸을 넘치게 했다. */
+                    style={{ ['--sr-cal-fill' as string]: amt > 0 ? (amt / peak).toFixed(3) : '0' }}
                     accessibilityLabel={`${d.iso} 발행 ${amt.toFixed(2)}조 ${n}건${
                       d.ev.length ? `, ${d.ev.map((e) => e.label).join(', ')}` : ''
                     }`}
@@ -349,9 +337,12 @@ export function IssuancePage() {
                         </Text>
                       ) : null}
                     </HStack>
+                    {/* 두 줄까지만 적고 나머지는 «+N» 이다 — 달력의 관례이고
+                        (구글 캘린더가 그렇다), 셋을 다 적으면 칸이 18px 더 필요해
+                        다섯 주가 카드에 안 들어간다. 전부는 누르면 나온다. */}
                     {d.ev.length > 0 ? (
                       <Box className="sr-cal-evs">
-                        {d.ev.map((e, i) => (
+                        {d.ev.slice(0, 2).map((e, i) => (
                           <Text
                             key={`${e.lane}${i}`}
                             as="span"
@@ -362,39 +353,43 @@ export function IssuancePage() {
                             {e.label}
                           </Text>
                         ))}
+                        {d.ev.length > 2 ? (
+                          <Text as="span" className="sr-cal-ev" font="legal" color="fgMuted">
+                            +{d.ev.length - 2}
+                          </Text>
+                        ) : null}
                       </Box>
                     ) : null}
-                    {/* 크기는 **칸 바닥**에 눕는다 — 한 줄의 다섯 칸이 같은 바닥을
-                        공유하므로 그 주의 요일별 크기가 눈으로 견줘진다. */}
-                    <Box style={{ marginBlockStart: 'auto' }} width="100%">
-                      {amt > 0 ? (
-                        <Box className="sr-cal-track">
-                          <Box
-                            className="sr-cal-bar"
-                            style={{ width: `${Math.max(3, (amt / peak) * 100)}%` }}
-                          />
-                        </Box>
-                      ) : null}
-                    </Box>
+
                   </Pressable>
                 );
               })}
             </Box>
           </VStack>
 
-          {sel ? <DayDetail iso={sel} day={day} onClose={() => setSel(null)} /> : null}
-
-          {/* 읽는 법과 한계가 한자리에. Main 이 카드 바닥에 범례를 두는 자리다. */}
-          <VStack gap={0.25} width="100%">
-            <Text as="span" font="legal" color="fgMuted">
-              칸의 숫자는 납입기일 기준 발행액이고, 휴일에 걸린 건 다음 영업일로 밀어요.
-              토·일은 뺐고 평일 공휴일은 남겨 뒀어요. 칸을 누르면 그날이 아래에 펴져요.
-            </Text>
-            <Text as="span" font="legal" color="fgMuted">
-              {cal.caveats.map((c) => c.replace(/^[A-Z0-9_]+:\s*/, '')).join(' · ')}
-            </Text>
-          </VStack>
         </VStack>
+
+        {/* ── 그날 하루 — 카드 위로 **떠오르는 시트** [OWNER, 2026-08-20] ─────
+            흐름 안에 두었더니 격자 바로 아래 같은 평면에 서서 «글자가 달력이랑
+            겹쳐서 거의 안 보이는 수준» 이 됐다. 덮개가 없으면 패널이 패널로 안
+            읽힌다는 것은 이 앱이 메가 패널에서 이미 겪은 일이다(type.css 의
+            `.sr-megascrim` 주석).
+
+            바탕은 `--sr-popover` — 라이트는 흰색, 다크는 카드보다 한 칸 위. 뒤는
+            `--sr-scrim` 이 덮는다. */}
+        {sel ? (
+          <>
+            <Box
+              className="sr-cal-scrim"
+              aria-hidden
+              onClick={() => setSel(null)}
+            />
+            <VStack className="sr-cal-sheet" role="dialog" aria-label={`${sel} 발행 상세`}>
+              <DayDetail iso={sel} day={day} onClose={() => setSel(null)} />
+            </VStack>
+          </>
+        ) : null}
+
       </VStack>
     </HStack>
   );

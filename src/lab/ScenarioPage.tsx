@@ -282,7 +282,11 @@ export function ScenarioPage({ policy }: { policy?: PolicyStep }) {
 
         {/* 접힌 줄이 여덟 분기를 다 말한다 — 펼쳐야만 알 수 있으면 설정한 경로가
             조용히 잊힌다. */}
-        <ControlCollapsible title="기준금리 경로" summary={pathSummary}>
+        {/* 이 화면의 **주 컨트롤**이라 펴 둔다 — 접어 두면 설정 열이 위에 뭉치고
+            아래가 330px 비는데, Simulation 의 설정 열은 꽉 찬다(실측 2026-08-20). */}
+          <ControlCollapsible
+            defaultOpen
+            title="기준금리 경로" summary={pathSummary}>
           <Text as="p" font="legal" color="fgMuted">
             그 분기에 기준금리가 어디 있는지를 놓아요. 0은 동결이고, 값을 그대로 두면
             그 수준을 유지한다는 뜻이에요.
@@ -398,11 +402,14 @@ export function ScenarioPage({ policy }: { policy?: PolicyStep }) {
 
       {/* ── 결과 ──────────────────────────────────────────────────────────── */}
       <VStack className="sr-card" flexGrow={1} minWidth={0} minHeight={0}>
-        <VStack gap={1} paddingX={2} paddingTop={2} paddingBottom={1.5}>
+        {/* 카드 머리는 **한 층**이다 — 왼쪽에 탭, 오른쪽에 as-of.
+            백테스트의 종목 카드가 «9M» 옆에 구간 칩을 두는 그 자리다.
+
+            «정책 경로 시나리오» 라는 제목이 여기 있었다. 페이지 h1 이 이미
+            «시나리오» 이고 차트 카드는 자기 이름을 따로 갖는데, 그러면 머리가 두
+            층이 되고 as-of 가 두 번 찍힌다 [OWNER 지적, 2026-08-20]. */}
+        <VStack gap={1} paddingX={2} paddingTop={2} paddingBottom={view === 'result' ? 1.5 : 0}>
           <HStack gap={1.5} alignItems="center" width="100%" flexWrap="wrap">
-            <Text as="h2" font="label1" noWrap>
-              정책 경로 시나리오
-            </Text>
             <SegmentedTabs
               accessibilityLabel="결과 · 모형 · 성분"
               tabs={VIEW_TABS}
@@ -425,16 +432,21 @@ export function ScenarioPage({ policy }: { policy?: PolicyStep }) {
           {view === 'result' ? <Verdict rows={rows} /> : null}
         </VStack>
 
+        {/* 「모형」·「성분」은 **패딩을 스스로 진다** — 차트/표 아래 통계 블록이 카드
+            가장자리에 닿아야 칸 사이 헤어라인이 카드를 가로지른다(백테스트가 그렇다). */}
         <VStack
-          gap={2}
-          paddingX={2}
-          paddingBottom={2}
+          gap={view === 'result' ? 2 : 0}
+          paddingX={view === 'result' ? 2 : 0}
+          paddingBottom={view === 'result' ? 2 : 0}
           minWidth={0}
           flexGrow={1}
           minHeight={0}
           /* 「모형」은 그림이라 **안 흐른다** — 플롯이 남는 높이를 먹어야 하는데
              `auto` 로 두면 스크롤 컨테이너가 높이를 안 주고 내용 높이로 접힌다. */
-          style={{ overflowY: view === 'model' ? 'hidden' : 'auto' }}
+          /* 「모형」·「성분」은 스스로 높이를 나눈다 — 바깥이 `auto` 면 스크롤
+             컨테이너가 높이를 안 주고 내용 높이로 접혀서, 차트도 표도 카드
+             바닥까지 못 간다. 안쪽에서 필요한 곳만 흐른다. */
+          style={{ overflowY: view === 'result' ? 'auto' : 'hidden' }}
         >
           {view === 'result' ? (
             <>

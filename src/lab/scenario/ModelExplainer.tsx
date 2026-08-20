@@ -27,9 +27,18 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHeader,
+  TableRow,
+} from '@coinbase/cds-web/tables';
 import { Text } from '@coinbase/cds-web/typography';
 
-import { fetchScenarioMacro, type MacroPayload } from './api';
+import { tintStyle } from '@/table/tint';
+
+import { fetchScenarioMacro, type MacroPayload, type MacroSeries } from './api';
 import { BASIS, IRS_TENORS, type Diffs, type IrsTenor } from './combine';
 import { H_12M, type ScenarioRow } from './assemble';
 
@@ -59,14 +68,15 @@ const TENOR_LABEL: Record<IrsTenor, string> = {
  * 물가를 0.6pp 올려도 3년이 거의 안 움직이는 것은 «모형이 물가를 무시해서» 가
  * 아니라 **내가 금통위를 못 움직이게 묶어 뒀기 때문**이다. 그 사실이 이 격자에서
  * 유일하게 읽히는 자리이므로, 이름을 «금통위» 로 두면 그 정보가 죽는다. */
-const DRIVERS: { key: string; label: string; bases: string[] }[] = [
-  { key: 'cpi', label: '물가', bases: ['cpi'] },
-  { key: 'gap', label: 'GDP 갭', bases: ['gap'] },
-  { key: 'exports', label: '수출', bases: ['exports'] },
-  { key: 'oil', label: '유가', bases: ['oil'] },
+const DRIVERS: { key: string; label: string; note: string; bases: string[] }[] = [
+  { key: 'cpi', label: '물가', note: '필립스 eq.23·24 로 들어가요', bases: ['cpi'] },
+  { key: 'gap', label: 'GDP 갭', note: '소비·투자 PAC 의 수요 충격이에요', bases: ['gap'] },
+  { key: 'exports', label: '수출', note: '수출 방정식 eq.17 의 잔차예요', bases: ['exports'] },
+  { key: 'oil', label: '유가', note: '수입물가 eq.31 의 원유 항이에요', bases: ['oil'] },
   {
     key: 'policy',
     label: '금통위 경로 고정',
+    note: '준칙이 따라가려는 걸 내가 막은 몫이에요',
     bases: Array.from({ length: 8 }, (_, i) => `policy_q${i + 1}`),
   },
 ];
@@ -115,161 +125,233 @@ export function ModelExplainer({ rows, diffs }: { rows: ScenarioRow[]; diffs: Di
   if (rows.length === 0) return null;
 
   return (
-    <VStack gap={3} minWidth={0} width="100%" flexGrow={1} minHeight={0}>
+    <VStack gap={0} minWidth={0} width="100%" flexGrow={1} minHeight={0}>
       <Decomposition grid={grid} rows={rows} />
       <MacroStrip macro={macro} error={macroErr} />
     </VStack>
   );
 }
 
-/* ── 성분 ───────────────────────────────────────────────────────────────────── */
+/* ── 성분 ─────────────────────────────────────────────────────────────────────
+ *
+ * Main 의 아웃라이트 표와 **같은 문법**이다 [OWNER, 2026-08-20 — "밑에 꽉 채우고
+ * 시인성 좋게, 메인/백테스트 탭 생각해서"]:
+ *
+ *     이름 열 왼쪽 · 숫자 열 오른쪽 (`.sr-label` / `.sr-num`)
+ *     행이 두 줄 — 주값 아래 muted 보조
+ *     **변화 칸에 크기 틴트** (`tintStyle` — Main 의 1D·MTD·YTD 열이 쓰는 그것)
+ *     열 머리는 muted, 표가 카드 폭을 꽉 채움
+ *
+ * 앞 판은 20px 짜리 자작 격자였다. 촘촘해서 한 화면에는 들어갔지만 읽히지 않았고,
+ * 앱의 어떤 표와도 안 닮았다.
+ */
 
 function Decomposition({
   grid,
   rows,
 }: {
-  grid: { key: string; label: string; cells: number[] }[];
+  grid: { key: string; label: string; note: string; cells: number[] }[];
   rows: ScenarioRow[];
 }) {
-  const modelSum = rows.map((r) => r.deltaBp);
-  const carry = rows.map((r) => r.marketCarryBp);
-  const vs = rows.map((r) => r.vsMarketBp);
   const cols = rows.map((r) => TENOR_LABEL[r.tenor] ?? r.tenor);
+  const sums: { label: string; note: string; cells: (number | null)[]; tint?: boolean; strong?: boolean }[] = [
+    { label: '모형이 말하는', note: '위 다섯의 합', cells: rows.map((r) => r.deltaBp) },
+    { label: '시장이 프라이싱한', note: '1Y 시작 포워드 − 스팟', cells: rows.map((r) => r.marketCarryBp) },
+    {
+      label: '차이 = 트레이드',
+      note: '음수면 리시브 · 양수면 페이',
+      cells: rows.map((r) => r.vsMarketBp),
+      tint: true,
+      strong: true,
+    },
+  ];
 
   return (
-    <VStack gap={0.5} minWidth={0} width="100%">
-      <Text as="h3" font="caption" color="fgMuted">
-        무엇이 그 차이를 만드나 (12개월, bp)
-      </Text>
-      <Box className="sr-scn-decomp" style={{ ['--sr-decomp-cols' as string]: cols.length }}>
-        <span className="sr-scn-dc-h" />
-        {cols.map((c) => (
-          <span key={c} className="sr-scn-dc-h sr-scn-dc-n">
-            <Text as="span" font="legal" color="fgMuted" tabularNumbers noWrap>
-              {c}
-            </Text>
-          </span>
-        ))}
+    <VStack gap={0} minWidth={0} width="100%" flexGrow={1} minHeight={0}>
+      {/* 이름과 메타가 **한 줄**이다. 쌓으면 20px 을 먹는데, 그러면 여덟 행짜리 표의
+          마지막 줄 — 이 화면의 답인 「차이 = 트레이드」 — 이 카드 밖으로 밀린다
+          (실측 2026-08-20: 37px 넘쳤고 잘린 것이 정확히 그 줄이었다). */}
+      <HStack gap={1.5} alignItems="baseline" paddingX={2} paddingTop={2} paddingBottom={1} flexWrap="wrap">
+        <Text as="h3" font="label1" color="fgMuted" noWrap>
+          무엇이 그 차이를 만드나
+        </Text>
+        <Box style={{ marginInlineStart: 'auto' }}>
+          <Text as="span" font="caption" color="fgMuted" noWrap>
+            12개월 · bp · 모형이 선형이라 다섯의 합이 정확히 «모형이 말하는» 이에요
+          </Text>
+        </Box>
+      </HStack>
 
-        {grid.map((d) => (
-          <Row key={d.key} label={d.label} cells={d.cells} muted />
-        ))}
-
-        <Row label="모형이 말하는" cells={modelSum} rule />
-        <Row label="시장이 프라이싱한" cells={carry} />
-        <Row label="차이 = 트레이드" cells={vs} strong />
+      <Box paddingX={2} flexGrow={1} minHeight={0} style={{ overflowY: 'auto' }}>
+        <Table tableLayout="auto">
+          <TableHeader>
+            <TableRow>
+              <TableCell as="th" scope="col" className="sr-label">
+                <Text as="span" font="legal" color="fgMuted">
+                  손잡이
+                </Text>
+              </TableCell>
+              {cols.map((c) => (
+                <TableCell as="th" scope="col" key={c} className="sr-num" justifyContent="flex-end">
+                  <Text as="span" font="legal" color="fgMuted" noWrap>
+                    {c}
+                  </Text>
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {grid.map((d) => (
+              <Row key={d.key} label={d.label} note={d.note} cells={d.cells} muted />
+            ))}
+            {sums.map((r) => (
+              <Row key={r.label} {...r} />
+            ))}
+          </TableBody>
+        </Table>
       </Box>
-      <Text as="span" font="legal" color="fgMuted">
-        맨 아랫줄이 트레이드예요 — 음수면 리시브, 양수면 페이. 「금통위 경로 고정」은
-        한국은행이 하는 일이 아니라 <b>내가 8분기를 못 박아 둔 몫</b>이에요. 다른
-        손잡이를 움직이면 준칙이 금리를 따라가려 하는데, 경로를 고정해 두면 그걸
-        막는 값이 거기 잡혀요.
-      </Text>
     </VStack>
   );
 }
 
+/** 표의 한 행. 두 줄짜리 이름 칸은 Main·Strategy 의 행 문법 그대로다. */
 function Row({
   label,
+  note,
   cells,
   muted,
-  rule,
+  tint,
   strong,
 }: {
   label: string;
+  note: string;
   cells: (number | null)[];
   muted?: boolean;
-  rule?: boolean;
+  tint?: boolean;
   strong?: boolean;
 }) {
   return (
-    <>
-      <span className="sr-scn-dc-l" data-rule={rule ? '1' : '0'}>
-        <Text as="span" font="legal" color={muted ? 'fgMuted' : undefined} noWrap>
-          {label}
-        </Text>
-      </span>
+    <TableRow>
+      {/* 손잡이 다섯은 **한 줄**, 합계 셋만 두 줄이다.
+          전부 두 줄로 두었더니 여덟 행이 480px 이라 답인 마지막 줄이 카드 밖으로
+          밀렸다(실측: 창 855 에서 53px 넘침). 위계로도 이쪽이 맞다 — 재료는
+          한 줄이고, 결론은 두 줄을 받을 자격이 있다. */}
+      <TableCell className="sr-label">
+        {muted ? (
+          <HStack gap={1} alignItems="baseline" minWidth={0}>
+            <Text as="span" font="label2" color="fgMuted" noWrap>
+              {label}
+            </Text>
+            <Text as="span" font="legal" color="fgMuted" noWrap>
+              {note}
+            </Text>
+          </HStack>
+        ) : (
+          <VStack gap={0} minWidth={0}>
+            <Text as="span" font="label2" noWrap>
+              {label}
+            </Text>
+            <Text as="span" font="legal" color="fgMuted" noWrap>
+              {note}
+            </Text>
+          </VStack>
+        )}
+      </TableCell>
       {cells.map((v, i) => (
-        <span key={i} className="sr-scn-dc-n" data-rule={rule ? '1' : '0'}>
+        <TableCell
+          key={i}
+          className="sr-num"
+          justifyContent="flex-end"
+          /* 크기 틴트는 **트레이드 행에만**. Main 도 변화 열에만 칠한다 —
+             모든 칸을 칠하면 어디가 답인지가 사라진다. */
+          style={tint ? tintStyle(v) : undefined}
+        >
           <Text
             as="span"
             font={strong ? 'label2' : 'legal'}
-            color={muted && v === 0 ? 'fgMuted' : muted ? 'fgMuted' : undefined}
+            color={muted ? 'fgMuted' : undefined}
             tabularNumbers
             noWrap
+            className={tint ? dirCls(v) : undefined}
           >
-            {v === null ? '—' : v === 0 && muted ? '·' : fmt(v)}
+            {/* 0 도 **숫자로 적는다**. «·» 로 비워 뒀더니 거의 안 보였고, Main 은
+                변화가 없는 칸에 «0.0» 을 적는다(3M 행의 1D 열). 빈 점은 «해당
+                없음» 처럼 읽히는데 여기 0 은 «기여가 정확히 0» 이다. */}
+            {v === null ? '—' : fmt(v)}
           </Text>
-        </span>
+        </TableCell>
       ))}
-    </>
+    </TableRow>
   );
 }
 
-/* ── 모형이 딛고 선 자리 ────────────────────────────────────────────────────── */
+function dirCls(v: number | null): string | undefined {
+  if (v === null || v === 0) return undefined;
+  return v > 0 ? 'sr-up' : 'sr-down';
+}
 
-/** ECOS 실측 세 줄. 손잡이가 «물가 +0.5pp» 라고 할 때, 그 0.5pp 가 무엇에
- * 얹히는 값인지가 같이 서야 그 말을 검사할 수 있다.
+/* ── 모형이 딛고 선 자리 ──────────────────────────────────────────────────────
  *
- * GDP 갭은 한국은행이 발표하지 않는다 — 실질GDP 에 HP(1600) 을 건 우리 프록시라
- * 화면이 그렇게 적는다(`official: false`). 그 필터가 BIGFOOT 것과 같은 값을
- * 내는지는 `backend/tests/test_labmacro.py` 가 검사한다. */
+ * 백테스트가 차트 아래 「이 구간 / 변화 / 52주」를 두는 그 블록이다 —
+ * `.sr-stats` 세 칸, 사이는 여백이 아니라 헤어라인이라 셋이 **한 덩어리**로
+ * 읽힌다.
+ *
+ * 손잡이가 «물가 +0.5pp» 라고 할 때 그 0.5pp 가 무엇에 얹히는 값인지가 같이
+ * 서야 그 말을 검사할 수 있다. GDP 갭은 한국은행이 발표하지 않는다 — 실질GDP 에
+ * HP(1600) 을 건 우리 프록시라 이름에 그렇게 적는다.
+ */
 function MacroStrip({ macro, error }: { macro: MacroPayload | null; error: string | null }) {
-  if (error) {
+  if (error || !macro || macro.series.length === 0) {
     return (
-      <Text as="p" font="legal" color="fgMuted">
-        모형이 딛고 선 거시 실측은 못 불러왔어요 ({error}). 시나리오 계산은 구운 기저와
-        오늘의 커브로 도니 그대로예요.
-      </Text>
-    );
-  }
-  if (!macro) {
-    return (
-      <Text as="p" font="legal" color="fgMuted">
-        모형이 딛고 선 거시 실측을 불러오는 중이에요.
-      </Text>
+      <Box className="sr-stats" paddingX={2} paddingY={2}>
+        <Text as="span" font="legal" color="fgMuted">
+          {error
+            ? `모형이 딛고 선 거시 실측은 못 불러왔어요 (${error}). 시나리오 계산은 구운 기저와 오늘의 커브로 도니 그대로예요.`
+            : '모형이 딛고 선 거시 실측을 불러오는 중이에요.'}
+        </Text>
+      </Box>
     );
   }
 
   return (
-    <VStack gap={0.5} minWidth={0} width="100%">
-      <HStack gap={1.5} alignItems="baseline" width="100%" flexWrap="wrap">
-        <Text as="h3" font="caption" color="fgMuted" noWrap>
-          손잡이가 얹히는 값 · 한국은행 ECOS
+    <HStack className="sr-stats" flexWrap="wrap">
+      {macro.series.map((s) => (
+        <MacroColumn key={s.key} s={s} asof={macro.asof} />
+      ))}
+    </HStack>
+  );
+}
+
+function MacroColumn({ s, asof }: { s: MacroSeries; asof: string | null }) {
+  const last = s.points.at(-1);
+  const prev = s.points.at(-5);
+  return (
+    <VStack gap={1} paddingX={2} paddingY={1.5} flexGrow={1} minWidth={0} className="sr-statcol">
+      <HStack gap={1} alignItems="baseline" flexWrap="wrap">
+        <Text as="h4" font="title3" noWrap>
+          {s.label}
         </Text>
-        <Text as="span" font="legal" color="fgMuted" tabularNumbers noWrap>
-          {macro.asof ?? '—'}
+        <Text as="span" font="legal" color="fgMuted" noWrap>
+          {s.official ? asof : `${asof} · 우리 추정`}
         </Text>
       </HStack>
-      <HStack gap={1} width="100%" flexWrap="wrap" alignItems="stretch">
-        {macro.series.map((s) => {
-          const last = s.points.at(-1);
-          const prev = s.points.at(-5);
-          return (
-            <VStack key={s.key} className="sr-simcard" gap={0} minWidth={150} flexGrow={1} flexBasis={0}>
-              <Text as="span" font="legal" color="fgMuted" noWrap>
-                {s.label}
-                {s.official ? '' : ' · 우리 추정'}
-              </Text>
-              <Text as="span" font="label1" tabularNumbers noWrap>
-                {last ? `${last.v >= 0 ? '' : '−'}${Math.abs(last.v).toFixed(2)}` : '—'}
-                <Text as="span" font="legal" color="fgMuted">
-                  {' '}
-                  {s.unit}
-                </Text>
-              </Text>
-              <Text as="span" font="legal" color="fgMuted" tabularNumbers noWrap>
-                {prev && last ? `1년 전 ${prev.v.toFixed(2)} · ` : ''}
-                {s.source}
-              </Text>
-            </VStack>
-          );
-        })}
+      <HStack gap={3} flexWrap="wrap">
+        <Stat label="지금" value={last ? `${last.v.toFixed(2)}${s.unit.replace('% YoY', '%')}` : '—'} />
+        <Stat label="1년 전" value={prev ? `${prev.v.toFixed(2)}` : '—'} />
+        <Stat label="출처" value={s.source} wide />
       </HStack>
-      <Text as="span" font="legal" color="fgMuted">
-        {macro.notes.join(' ')} 방정식은 한국은행 WP 2025-3(eq.7~44)·미국 블록은 IMF
-        WP/08/278, 재현 검사 12/13(면제 하나 — 물가 저점 −0.079pp). 미국→한국 연결
-        β=1.05 는 논문에 없는 값이라 우리가 고른 거예요.
+    </VStack>
+  );
+}
+
+function Stat({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
+  return (
+    <VStack gap={0.25} minWidth={0}>
+      <Text as="span" font="caption" color="fgMuted" noWrap>
+        {label}
+      </Text>
+      <Text as="span" font="body" tabularNumbers noWrap={!wide}>
+        {value}
       </Text>
     </VStack>
   );
