@@ -40,7 +40,7 @@ import type { PolicyStep, Unit } from '@/lib/api';
 import { fmtLevel, unitSuffix } from '@/lib/format';
 import { fmtKrw } from '@/lib/krw';
 import { loadCd, RefKey } from '@/ui/PreviewPane';
-import { READOUT_CARD_W } from '@/ui/ReadoutCard';
+import { readoutLeft } from '@/ui/ReadoutCard';
 
 /** `PnlSeries` — v1 과 같은 구조 프롭. IRS 북(`BacktestResult`)과 현금채권
  * (`CashBondBacktest`)이 둘 다 이 모양을 만족하고, 차트는 그 둘의 차이를 알
@@ -78,9 +78,6 @@ export function pnlAtDates(
   return out;
 }
 
-function clampLeft(x: number, boxW: number): number {
-  return Math.min(Math.max(boxW - READOUT_CARD_W - 8, 0), Math.max(0, x + 12));
-}
 
 /** 돈 두 줄 — 누적과 당일. 방향색은 값의 부호. */
 function MoneyRow({ k, v }: { k: string; v: number | null }) {
@@ -166,7 +163,7 @@ export function LinkedCharts({
 
   const onMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
-    setHoverX(clampLeft(e.clientX - r.left, r.width));
+    setHoverX(readoutLeft(e.clientX - r.left, r.width));
   }, []);
   const leave = useCallback(() => setHover(undefined), []);
 
@@ -315,7 +312,7 @@ export function LinkedCharts({
         {/* 돈 카드 — 날짜 · 레벨 · 누적 · 당일. `당일` 은 늘 1영업일이다(서버가
             발행점마다 전영업일을 따로 평가한다) — 점이 며칠씩 떨어져 그려져도. */}
         {hp ? (
-          <VStack className="sr-readout" style={{ left: hoverX, width: READOUT_CARD_W }} aria-hidden="true">
+          <VStack className="sr-readout" style={{ left: hoverX }} aria-hidden="true">
             <TextLabel2 as="span" noWrap>
               {hp.t}
             </TextLabel2>

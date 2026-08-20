@@ -158,6 +158,18 @@ body,
   position: absolute;
   top: 8px;
   z-index: 2;
+  /* 폭은 **내용이 정한다** [2026-08-20]. 고정 148 이던 시절에는 호출부가 자기
+     최장 줄을 계산해서 넘겨야 했고, 두 명이 연속으로 그 함정에 빠졌다
+     (`ReadoutCard.tsx::READOUT_CARD_MAX` 머리글에 두 실측이 있다).
+     `max-content` 는 가장 긴 줄만큼만 넓어지고, 그보다 짧은 줄들은 그 폭으로
+     늘어나므로 값의 오른쪽 정렬은 그대로다. 상한이 있는 이유는 카드가 그림을
+     통째로 덮는 일을 막기 위해서다. */
+  width: max-content;
+  max-width: 260px;
+  /* 커서 자리. 담긴 상자가 `--sr-readout-x` 에 **이미 클램프된** 값을 적는다 —
+     그래야 카드가 커서를 따라다니는 데 리렌더가 필요 없다. `left` 를 prop 으로
+     받는 자리(데이터 좌표에 붙는 카드)는 인라인 스타일이 이 값을 이긴다. */
+  left: var(--sr-readout-x, 0px);
   gap: 4px;
   padding: 8px;
   border: 1px solid var(--color-bgLine);

@@ -1,0 +1,135 @@
+/* 리드아웃 카드의 폭과 자리 — **호출부가 아무것도 몰라도 맞아야 한다**.
+ *
+ * v1 패리티 레인 검증 라운드에서 나온 것(2026-08-20).
+ *
+ * ## 왜 생겼나
+ *
+ * 카드는 **고정 폭 148** 이었고, 호출부가 자기 최장 줄을 계산해서 `width` 로
+ * 넘겨야 했다. 두 명이 연속으로 그 함정에 빠졌다:
+ *
+ *   RvScatter      "버퍼 +10.8bp (1.2σ)" 가 삐져나감 → 오너 지적 후 200 [08-19]
+ *   ResultsWindow  "스왑롤다운 −12억 3,456만원" ≈ 213px → 148 에서 65px 초과 [08-20]
+ *
+ * 두 번째는 **첫 번째의 교훈이 코드 주석에 있었는데도** 났다. 호출부가 알아야만
+ * 맞는 기본값은 기본값이 아니라 함정이다.
+ *
+ * 폭 계산이 어디로 갔는지 세는 것이 이 가드다 — CSS 가 `max-content` 로 잡고,
+ * 아무도 픽셀을 다시 세지 않는다.
+ *
+ * ## 폭 모델 (실측 보정)
+ *
+ * 한글 14px ≈ 14px · 등폭 숫자 14px = 8.60px(`columns.ts` 실측 chPx) ·
+ * 줄 gap 8px · 좌우 패딩 8+8. RV 의 최장 줄로 검산하면 ≈196px 이고 그때 고른
+ * 값이 200 이었다 — 모델이 그 실측과 맞는다.
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+
+import { describe, expect, it } from 'vitest';
+
+import { READOUT_CARD_MAX, readoutLeft } from '../src/ui/ReadoutCard';
+
+import { stripComments } from './_source';
+
+const ROOT = path.resolve(__dirname, '..');
+const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
+
+/** 카드를 띄우는 모든 표면. 새 표면이 생기면 여기 추가되어야 한다. */
+const SURFACES = [
+  'src/ui/PreviewPane.tsx',
+  'src/backtest/LinkedCharts.tsx',
+  'src/sim/CurvePreview.tsx',
+  'src/sim/ResultsWindow.tsx',
+  'src/rv/RvPage.tsx',
+  'src/rv/RvScatter.tsx',
+];
+
+describe('폭은 내용이 정한다 — 호출부가 세지 않는다', () => {
+  it('CSS 가 max-content 로 잡고 상한을 둔다', () => {
+    const css = read('src/theme/type.css');
+    const block = css.slice(css.indexOf('.sr-readout {'), css.indexOf('.sr-readout-rows'));
+    expect(block).toMatch(/width: max-content/);
+    expect(block).toMatch(/max-width: \d+px/);
+  });
+
+  it('어느 표면도 카드에 픽셀 폭을 넘기지 않는다', () => {
+    /* 이 한 줄이 되살아나는 순간 함정도 같이 돌아온다. */
+    const offenders = SURFACES.filter((f) => /<ReadoutCard[\s\S]{0,200}?width=\{/.test(read(f)));
+    expect(offenders).toEqual([]);
+  });
+
+  it('표면별 폭 상수가 없다', () => {
+    const offenders: string[] = [];
+    for (const f of SURFACES) {
+      const src = stripComments(read(f));
+      for (const m of src.matchAll(/const \w*CARD_W\w*\s*=\s*\d+/g)) offenders.push(`${f}: ${m[0]}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe('클램프는 한 벌이다', () => {
+  it('모든 표면이 readoutLeft 를 지난다 — 자기 산술을 쓰지 않는다', () => {
+    /* 2026-08-20 이전에는 셋(LinkedCharts · RvPage · RvScatter)이 각자 같은
+     * 식을 복제하고 있었다. 복제는 언젠가 갈린다. */
+    const missing = SURFACES.filter((f) => !read(f).includes('readoutLeft('));
+    expect(missing).toEqual([]);
+  });
+
+  it('손으로 쓴 클램프 식이 남아 있지 않다', () => {
+    const offenders: string[] = [];
+    for (const f of SURFACES) {
+      const src = stripComments(read(f));
+      // `Math.min(Math.max(0, x + 12), …)` 계열
+      if (/Math\.min\(Math\.max\(0, x \+ 12\)/.test(src)) offenders.push(f);
+      if (/boxW - \w+ - 8/.test(src)) offenders.push(f);
+    }
+    expect([...new Set(offenders)]).toEqual([]);
+  });
+
+  it('카드는 상자 안에 머문다 — 폭과 무관하게', () => {
+    const boxW = 400;
+    for (const x of [-50, 0, 100, 399, 900]) {
+      const left = readoutLeft(x, boxW);
+      expect(left).toBeGreaterThanOrEqual(0);
+      expect(left + READOUT_CARD_MAX).toBeLessThanOrEqual(boxW);
+    }
+  });
+
+  it('상자가 카드보다 좁으면 0 에 붙는다 — 음수로 나가지 않는다', () => {
+    expect(readoutLeft(100, 100)).toBe(0);
+    expect(readoutLeft(0, 10)).toBe(0);
+  });
+
+  it('커서 오른쪽 12px 에 선다 — 커서를 덮지 않는다', () => {
+    expect(readoutLeft(40, 1000)).toBe(52);
+  });
+});
+
+describe('상한이 실제로 넉넉한지 — 실측 보정 모델', () => {
+  /** 한글 14px, 등폭 14px 숫자 8.60px(`columns.ts` 실측). */
+  const w = (s: string) =>
+    [...s].reduce((acc, ch) => acc + (/[가-힣]/.test(ch) ? 14 : 8.6), 0);
+  /** 카드가 한 줄을 담는 데 필요한 폭 = 라벨 + gap 8 + 값 + 좌우 패딩 16. */
+  const need = (label: string, value: string) => w(label) + 8 + w(value) + 16;
+
+  it('모델이 RV 의 실측(200) 언저리에 든다 — ±15%', () => {
+    /* 그 값을 고를 때 근거였던 최장 줄. 모델이 이걸 못 맞히면 아래 판정도 못
+     * 믿는다. 밴드가 넓은 이유는 모델이 **근사**여서다: 공백과 `+ - .` 을
+     * 숫자 폭(8.6)으로 세는데 실제로는 그보다 좁아, 기호가 많은 줄에서 6% 쯤
+     * 과대평가한다(이 줄에서 212 vs 실측 200). 과대평가는 안전한 방향이다 —
+     * 상한이 필요보다 넉넉해질 뿐 모자라지 않는다. */
+    const est = need('캐리 + 롤', '+16.7 + -4.8bp');
+    expect(est).toBeGreaterThan(200 * 0.85);
+    expect(est).toBeLessThan(200 * 1.15);
+  });
+
+  it('시뮬 성분의 최장 줄이 옛 고정 폭 148 을 넘는다 — 이 가드의 계기', () => {
+    expect(need('스왑롤다운', '−12억 3,456만원')).toBeGreaterThan(148);
+  });
+
+  it('상한이 그 줄을 담는다', () => {
+    expect(need('스왑롤다운', '−12억 3,456만원')).toBeLessThanOrEqual(READOUT_CARD_MAX);
+  });
+});

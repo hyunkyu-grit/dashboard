@@ -60,7 +60,7 @@ import {
 import { BacktestUnavailable } from '@/lib/api';
 import { useFunding } from '@/state/funding';
 import { ErrorState, LoadingState } from '@/ui/DataState';
-import { READOUT_CARD_W, ReadoutCard, ReadoutLevel } from '@/ui/ReadoutCard';
+import { ReadoutCard, ReadoutLevel, readoutLeft } from '@/ui/ReadoutCard';
 import { DROPDOWN_STYLES } from '@/ui/window/popup';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { useUrlState } from '@/ui/useUrlState';
@@ -161,7 +161,7 @@ function BandChart({
         onMouseMove={(e: React.MouseEvent<HTMLDivElement>) => {
           const r = e.currentTarget.getBoundingClientRect();
           const x = e.clientX - r.left;
-          setHoverX(Math.min(Math.max(0, x + 12), r.width - READOUT_CARD_W - 8));
+          setHoverX(readoutLeft(x, r.width));
         }}
         onMouseLeave={() => setIdx(null)}
       >

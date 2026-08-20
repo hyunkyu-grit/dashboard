@@ -30,9 +30,25 @@ import type { Unit } from '@/lib/api';
 import { fmtDelta, fmtLevel } from '@/lib/format';
 import { fmtKrw } from '@/lib/krw';
 
-/** 카드의 고정 폭. 호출자가 `left` 를 이 값으로 클램프해서 카드가 그림 밖으로
- * 나가지 않게 한다 — 복사본이 아니라 진짜 숫자로 재도록 내보낸다. */
-export const READOUT_CARD_W = 148;
+/** 카드가 커질 수 있는 **상한**. 폭 자체는 CSS 가 `max-content` 로 잡는다
+ * (`.sr-readout`) — 카드는 자기 가장 긴 줄만큼만 넓다.
+ *
+ * ## 왜 고정 폭을 버렸나
+ *
+ * 2026-08-19 까지 이 값은 **고정 폭 148** 이었고, 호출부가 자기 최장 줄을
+ * 계산해서 넘겨야 했다. 두 명이 연속으로 그 함정에 빠졌다:
+ *
+ *   RvScatter   "버퍼 +10.8bp (1.2σ)" 가 삐져나감 → 오너 지적 후 200 으로 [08-19]
+ *   ResultsWindow  "스왑롤다운 −12억 3,456만원" ≈ 213px → 148 에서 65px 초과 [08-20]
+ *
+ * 두 번째는 **첫 번째의 교훈이 코드에 있었는데도** 났다. 호출부가 알아야만
+ * 맞는 기본값은 기본값이 아니라 함정이다. 이제 아무도 몰라도 된다.
+ *
+ * 상한은 클램프의 기준이기도 하다 — `readoutLeft` 가 실제 폭 대신 이 값을 쓰면
+ * 카드가 그림 밖으로 나가는 일은 **폭과 무관하게** 없다. 대가는 오른쪽
+ * 가장자리에서 좁은 카드가 필요보다 조금 일찍 멈추는 것이고, 값이 카드 밖으로
+ * 나가는 것보다 그쪽이 낫다. */
+export const READOUT_CARD_MAX = 260;
 
 /** 카드가 찍는 라벨, 그리는 순서대로. 두 표면이 공유한다.
  *
@@ -68,27 +84,31 @@ export const READOUT_LABEL = {
  *
  * 2026-08-20: 미리보기 pane 안에만 있던 것을 여기로 옮겼다 — 시뮬 차트도 같은
  * 카드를 띄우게 되면서 두 화면이 각자 클램프하면 언젠가 갈린다. */
-export function readoutLeft(x: number, boxW: number, width = READOUT_CARD_W): number {
+export function readoutLeft(x: number, boxW: number, width = READOUT_CARD_MAX): number {
   return Math.min(Math.max(boxW - width - 8, 0), Math.max(0, x + 12));
 }
 
 export function ReadoutCard({
   title,
   left,
-  width = READOUT_CARD_W,
   children,
 }: {
   title: string;
-  left: number;
-  /** 기본은 차트 카드의 148. 줄이 더 긴 표면(RV 사분면 — 버퍼 "+10.8bp
-   * (1.2σ)" 병기)은 자기 폭을 넘기고 **left 클램프도 같은 값으로** 한다 —
-   * 폭만 넓히면 카드 오른쪽이 그림 밖으로 나간다(2026-08-19, 사분면 실측:
-   * 148 안에서 값이 카드 밖으로 삐져나왔다 [OWNER]). */
-  width?: number;
+  /** 픽셀 자리. **생략하면** 카드는 담긴 상자의 `--sr-readout-x` 를 읽는다 —
+   * 그쪽이 기본이고, 그래야 커서를 따라다니는 데 리렌더가 필요 없다
+   * (`readoutLeft` 로 이미 클램프된 값을 상자에 적어 둔다).
+   *
+   * 명시적으로 넘기는 자리는 커서가 아니라 **데이터 좌표**에 붙는 카드다
+   * (RV 사분면의 강조 점). 그건 hover 가 없어도 서야 하므로 x 가 상태다. */
+  left?: number;
   children: React.ReactNode;
 }) {
   return (
-    <VStack className="sr-readout" style={{ left, width }} aria-hidden="true">
+    <VStack
+      className="sr-readout"
+      style={left == null ? undefined : { left }}
+      aria-hidden="true"
+    >
       <TextLabel2 as="span" noWrap>
         {title}
       </TextLabel2>

@@ -34,7 +34,7 @@ import { useState } from 'react';
 import { HStack, VStack } from '@coinbase/cds-web/layout';
 import { TextLabel2, TextLegal } from '@coinbase/cds-web/typography';
 
-import { ReadoutCard } from '@/ui/ReadoutCard';
+import { READOUT_CARD_MAX, ReadoutCard, readoutLeft } from '@/ui/ReadoutCard';
 import { useMeasure } from '@/ui/useMeasure';
 
 import type { RvCreditItem } from './api';
@@ -42,11 +42,11 @@ import { bp1, sig } from './fmt';
 
 const PAD = { top: 24, right: 16, bottom: 44, left: 48 };
 
-/** 이 표면의 리드아웃 카드 폭 — 기본 148 에서는 "버퍼 +10.8bp (1.2σ)" 같은
- * 병기 값이 카드 밖으로 삐져나갔다(실측 2026-08-19 [OWNER — "오른쪽 사분면에
- * 나오는 패널도 고쳐다오"]). 가장 긴 줄(라벨 "캐리 + 롤" + 값 "+16.7 +
- * -4.8bp")이 14px 등폭으로 한 줄에 서는 폭이다. */
-const RV_CARD_W = 200;
+/* 이 표면이 카드 폭 상수(200)를 들고 있었다 — 기본 148 에서 "버퍼 +10.8bp
+ * (1.2σ)" 가 삐져나갔기 때문이다(실측 2026-08-19 [OWNER]). 2026-08-20 에
+ * 카드가 스스로 `max-content` 로 폭을 잡게 되면서 이 상수가 필요 없어졌다 —
+ * 호출부가 자기 최장 줄을 계산하는 일 자체가 함정이었다. 클램프만 상한을
+ * 쓴다(`READOUT_CARD_MAX`). */
 
 /** Coverage 의 유망 경계(σ) — 버퍼가 평소 3M 변동 한 단위를 흡수하는 선
  * [트레이더 출발값]. */
@@ -129,7 +129,7 @@ export function RvScatter({
         onMouseMove={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
           const x = e.clientX - r.left;
-          setHoverX(Math.min(Math.max(0, x + 12), Math.max(0, r.width - RV_CARD_W - 8)));
+          setHoverX(readoutLeft(x, r.width));
         }}
       >
         <svg
@@ -235,7 +235,7 @@ export function RvScatter({
             ? hoverX
             : Math.min(
                 Math.max(0, X(active.relRv ?? 0) + 12),
-                Math.max(0, W - RV_CARD_W - 8),
+                Math.max(0, W - READOUT_CARD_MAX - 8),
               );
           /* 줄 순서는 랭킹 표의 열 순서(버퍼 → BEP → 상대 RV)를 따르고, z 는
              한 줄에 셋을 욱여넣지 않는다 — 148 카드에서 그 줄이 밖으로
@@ -244,7 +244,6 @@ export function RvScatter({
             <ReadoutCard
               title={`${active.sectorLabel} ${active.tenor}`}
               left={left}
-              width={RV_CARD_W}
             >
               <Row k="스프레드" v={`${bp1(active.nowBp)}bp`} />
               <Row
