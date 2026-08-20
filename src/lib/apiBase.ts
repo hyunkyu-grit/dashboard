@@ -33,9 +33,41 @@ export const MISSING_API_BASE_MESSAGE =
   "멈춥니다. Funnel 주소를 넣거나(예: https://<host>.ts.net), 백엔드 없이 " +
   "굽겠다면 빈 문자열을 명시하세요(NEXT_PUBLIC_API_BASE=).";
 
-/** 끝의 `/` 를 떼어 낸다 — 호출부는 전부 `${base}/api/...` 로 잇는다. */
-function normalize(raw: string): string {
-  return raw.replace(/\/+$/, "");
+export const BAD_API_BASE_MESSAGE =
+  "NEXT_PUBLIC_API_BASE 가 http(s) 절대 주소가 아닙니다: ";
+
+/** 값을 쓸 수 있는 모양으로 만들고, 아니면 던진다.
+ *
+ * 끝의 `/` 를 떼는 것이 원래 하던 일의 전부였다. 2026-08-20 에 하나 더 배웠다:
+ * **눈에 안 보이는 글자가 앞에 붙어 들어올 수 있다.** PowerShell 5.1 에서
+ * 값을 파이프로 `vercel env add` 에 넘겼더니 BOM(U+FEFF)이 앞에 붙은 채
+ * 저장됐고, 번들에는 이렇게 구워졌다:
+ *
+ *     "\uFEFFhttps://e110430.tailc7b701.ts.net/v2"
+ *
+ * 그 문자열은 절대 URL 로 파싱되지 않아서 브라우저가 **상대 경로**로 취급한다.
+ * 요청이 백엔드가 아니라 사이트 자신에게 가고, 화면에는 이렇게 뜬다:
+ *
+ *     시장 데이터를 불러오지 못했어요 — forwards: HTTP 404
+ *
+ * 404 는 "그 라우트가 없다" 는 뜻이라, 읽는 사람은 백엔드를 의심하러 간다.
+ * 실제로 백엔드는 멀쩡했다. 그래서 여기서 **모양을 검사하고 빌드를 죽인다** —
+ * 배포 뒤의 404 보다 빌드 실패가 낫다는 이 파일의 원칙 그대로다. */
+export function normalizeApiBase(raw: string): string {
+  /* BOM·제로폭 공백·앞뒤 공백을 걷는다. 사람이 대시보드에 붙여 넣을 때 줄바꿈이
+   * 딸려 오는 것도 같은 계열이다. */
+  const cleaned = raw.replace(/[\uFEFF\u200B-\u200D]/g, "").trim().replace(/\/+$/, "");
+  if (cleaned === "") return "";
+  let parsed: URL;
+  try {
+    parsed = new URL(cleaned);
+  } catch {
+    throw new Error(BAD_API_BASE_MESSAGE + JSON.stringify(raw));
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(BAD_API_BASE_MESSAGE + JSON.stringify(raw));
+  }
+  return cleaned;
 }
 
 function resolve(): string {
@@ -46,7 +78,7 @@ function resolve(): string {
     if (IS_PRODUCTION_BUILD) throw new Error(MISSING_API_BASE_MESSAGE);
     return DEV_FALLBACK_API_BASE;
   }
-  return normalize(raw);
+  return normalizeApiBase(raw);
 }
 
 /** 백엔드의 출처. 빈 문자열이면 같은 출처(=정적/프록시 모드)라는 뜻이다. */

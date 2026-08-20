@@ -182,6 +182,70 @@ describe('소스', () => {
   });
 });
 
+/** 번들에 남은 주소처럼 생긴 리터럴. 앞에 스킴 말고 뭐라도 붙어 있으면
+ *  브라우저가 상대경로로 읽는다 — 그게 이 검사가 보는 것이다. */
+const RE_TSNET_LITERAL = /"([^"\s]*https?:\/\/[^"\s]*ts\.net[^"\s]*)"/g;
+
+describe('API base 의 모양', () => {
+  /* 2026-08-20 실화: PowerShell 5.1 에서 값을 파이프로 `vercel env add` 에
+   * 넘겼더니 BOM(U+FEFF)이 앞에 붙은 채 저장됐고, 번들에 이렇게 구워졌다:
+   *
+   *     "\uFEFFhttps://e110430.tailc7b701.ts.net/v2"
+   *
+   * 절대 URL 로 파싱이 안 되니 브라우저가 상대 경로로 취급했고, 요청이 백엔드가
+   * 아니라 사이트 자신에게 가서 `forwards: HTTP 404` 가 났다. 백엔드는 멀쩡했다.
+   * 눈에 안 보이는 한 글자가 원인이라 화면만 봐서는 영영 못 찾는다. */
+
+  it('보이지 않는 글자가 앞에 붙어도 걷어 낸다', async () => {
+    const { normalizeApiBase } = await import('../src/lib/apiBase');
+    const want = 'https://e110430.tailc7b701.ts.net/v2';
+    expect(normalizeApiBase('\uFEFF' + want)).toBe(want);
+    expect(normalizeApiBase('\u200B' + want)).toBe(want);
+    expect(normalizeApiBase('  ' + want + '\n')).toBe(want);
+    expect(normalizeApiBase(want + '/')).toBe(want);
+    expect(normalizeApiBase('')).toBe('');
+  });
+
+  it('절대 주소가 아니면 던진다 — 배포 뒤 404 보다 빌드 실패가 낫다', async () => {
+    const { normalizeApiBase } = await import('../src/lib/apiBase');
+    for (const bad of ['localhost:8200', '/v2', 'ts.net/v2', 'ftp://x.example.com']) {
+      expect(() => normalizeApiBase(bad), bad).toThrow();
+    }
+  });
+
+  it('청크 판정기가 BOM 붙은 리터럴을 실제로 잡는다', () => {
+    // 사고 당시 청크에 실제로 있던 모양 그대로.
+    const chunk = 'let a=function(){let e="\\uFEFFhttps://e110430.tailc7b701.ts.net/v2";return e}';
+    const found = [...chunk.replace(/\\\\uFEFF/g, '\uFEFF')
+      .matchAll(RE_TSNET_LITERAL)].map((m) => m[1]);
+    expect(found.length).toBe(1);
+    expect(found[0].startsWith('https://')).toBe(false);
+    // 그리고 정상 값은 통과한다.
+    const ok = 'let e="https://e110430.tailc7b701.ts.net/v2"';
+    const good = [...ok.matchAll(RE_TSNET_LITERAL)].map((m) => m[1]);
+    expect(good).toEqual(['https://e110430.tailc7b701.ts.net/v2']);
+  });
+
+  it('배포된 청크의 값도 같은 검사를 통과한다', () => {
+    /* 소스가 옳아도 **구워진 값**이 틀릴 수 있다 — 위 사고가 정확히 그랬다.
+     * 청크에서 리터럴을 꺼내 같은 판정기에 건다. */
+    const chunks = path.join(ROOT, '.next', 'static', 'chunks');
+    if (!existsSync(chunks)) return;
+    const literals = new Set<string>();
+    for (const file of walk(chunks, '.js')) {
+      const js = readFileSync(file, 'utf8');
+      /* 빌드가 치환한 값은 `let e="…"` 꼴로 남는다. 주소처럼 생긴 리터럴만 본다. */
+      for (const m of js.matchAll(RE_TSNET_LITERAL)) literals.add(m[1]);
+    }
+    for (const lit of literals) {
+      // 앞에 스킴 말고 다른 것이 붙어 있으면 상대경로가 된다.
+      expect(lit.startsWith('http://') || lit.startsWith('https://'), JSON.stringify(lit)).toBe(
+        true,
+      );
+    }
+  });
+});
+
 describe('빌드 산출물', () => {
   const chunks = path.join(ROOT, '.next', 'static', 'chunks');
   const built = existsSync(chunks);
