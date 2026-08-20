@@ -54,3 +54,8 @@ __pycache__/
 
 # vitest
 /coverage
+
+# impeccable 스킬의 런타임 스크래치(pid/port/token). 어제 세션이 남긴 것이
+# `git add -A` 로 딸려 들어간 적이 있다 — 커밋에 들어갈 내용이 아니다.
+# `.impeccable/critique/` 는 산출물이라 추적한다.
+.impeccable/live/
