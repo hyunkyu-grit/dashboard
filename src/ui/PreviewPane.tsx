@@ -15,6 +15,7 @@ import {
   CartesianChart,
   Line,
   PeriodSelector,
+  Point,
   Scrubber,
   XAxis,
   YAxis,
@@ -27,6 +28,7 @@ import { cashbondSeriesUrl, seriesUrl, universeSeriesUrl } from '@/lib/staticPat
 import { type IdleCurve } from '@/chart/curve';
 import { alignByDate, policyByDate, referenceMode } from '@/chart/references';
 import { panRange, sliceRange, zoomRange, type ViewRange } from '@/chart/zoom';
+import { windowExtremes } from '@/chart/extremes';
 import type { Row } from '@/table/rows';
 
 import { useFillHeight } from './useFillHeight';
@@ -434,16 +436,16 @@ export function PreviewPane({
     if (win.length === 0) return null;
     const first = win[0].v;
     const last = win[win.length - 1].v;
-    let hi = -Infinity;
-    let lo = Infinity;
-    for (const p of win) {
-      if (p.v > hi) hi = p.v;
-      if (p.v < lo) lo = p.v;
-    }
+    /* 고·저는 `chart/extremes.ts` 가 낸다 — **자리까지** 같이 온다. 여기서
+       값만 훑던 시절에는 "어느 날이 최고인가" 를 아무도 몰랐고, 그래서 그
+       점을 찍을 수도 없었다. 동점 규칙(가장 최근)도 그 파일이 진다. */
+    const ext = windowExtremes(win.map((p) => p.v));
+    if (ext == null) return null;
+    const { hi, lo } = ext;
     /* `spanLen` 은 확대 계산이 기준으로 삼는 **모수**다 — 지금 보이는 조각이
        아니라 구간 전체의 길이. 이게 없으면 확대할수록 모수가 줄어서 축소가
        전체로 돌아오지 못한다. */
-    return { win, first, last, hi, lo, net: last - first, spanLen: span.length };
+    return { win, first, last, hi, lo, ext, net: last - first, spanLen: span.length };
   }, [data, days, zoom]);
 
   /* THE sign of this chart. `--sr-up` / `--sr-down` are read as CSS variables
@@ -911,6 +913,32 @@ export function PreviewPane({
               areaType="dotted"
               connectNulls={false}
             />
+            {/* 보이는 구간의 고·저 — **그려진 조각의 성질**이다(52주 통계와
+                다른 질문에 답한다). 확대하면 따라 움직이고, 리드아웃의
+                최고/최저 숫자와 **같은 스캔**에서 나오므로 점과 숫자가 어긋날
+                수 없다(`chart/extremes.ts`).
+
+                라벨은 안 붙인다 — 값은 이미 리드아웃 카드에 있고, 점이 하는 말은
+                "그게 언제였나" 하나다. 잉크는 muted: 종목 선이 주인공이고 이건
+                그 위의 주석이다. */}
+            {view.ext ? (
+              <>
+                <Point
+                  dataX={view.ext.hiIdx}
+                  dataY={view.ext.hi}
+                  yAxisId={MAIN_AXIS}
+                  radius={3}
+                  fill="var(--color-fgMuted)"
+                />
+                <Point
+                  dataX={view.ext.loIdx}
+                  dataY={view.ext.lo}
+                  yAxisId={MAIN_AXIS}
+                  radius={3}
+                  fill="var(--color-fgMuted)"
+                />
+              </>
+            ) : null}
             {/* 기준선은 종목 선 뒤에 선다: 채움 없고, 종목 선(2px)보다 얇게.
                 **둘이 똑같이 그려진다** — 같은 굵기, 같은 불투명도. 다른 것은
                 **색 하나**다(호박/보라, 같은 지각적 무게 — `direction.css`).
