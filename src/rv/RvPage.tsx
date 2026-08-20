@@ -908,6 +908,7 @@ export function RvPage() {
             onHover={setHovered}
             highlightId={hovered?.seriesId ?? null}
             exclusions={data.credit.exclusions}
+            hMonths={data.hMonths}
           />
         </VStack>
 

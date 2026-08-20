@@ -95,7 +95,7 @@ function rtl(ui: React.ReactElement) {
 
 describe('명구 — 랭킹이지 투자판단이 아니다', () => {
   it('랭킹 표가 명구를 단다', () => {
-    const { container } = rtl(<RankingTable items={ITEMS} onSelect={noop} />);
+    const { container } = rtl(<RankingTable hMonths={6} items={ITEMS} onSelect={noop} />);
     expect(container.textContent).toContain('투자판단이 아니라 RV 랭킹이에요');
   });
 
@@ -106,7 +106,7 @@ describe('명구 — 랭킹이지 투자판단이 아니다', () => {
 
   it('별·메달·추천 문구는 어디에도 없다', () => {
     for (const el of [
-      rtl(<RankingTable items={ITEMS} onSelect={noop} />),
+      rtl(<RankingTable hMonths={6} items={ITEMS} onSelect={noop} />),
       render(<ScoreHeat items={ITEMS} onSelect={noop} />),
       render(<RvScatter items={ITEMS} onSelect={noop} />),
     ]) {
@@ -147,7 +147,7 @@ describe('사분면 — 서술형, 명령형 금지', () => {
   });
 
   it('열 머리 넷은 뜻 설명 표식을 단다 — 사분면 두 축이 앞에 [OWNER 2026-08-20]', () => {
-    const { container } = rtl(<RankingTable items={ITEMS} onSelect={noop} />);
+    const { container } = rtl(<RankingTable hMonths={6} items={ITEMS} onSelect={noop} />);
     const helps = [...container.querySelectorAll('.sr-rv-thhelp')].map((e) => e.textContent);
     expect(helps).toEqual(['한 달 수익', '지난주 백분위', '버퍼', '상대 RV']);
     // 헤지수단 표기는 표에서도 은퇴했다.
@@ -168,7 +168,7 @@ describe('사분면 — 서술형, 명령형 금지', () => {
 
 describe('랭크와 Δ — 서버 값 통과 [OWNER 2026-08-19]', () => {
   it('순서는 서버 rank 그대로이고 Δ 는 ▲▼로, 어제 없던 항목은 공란이다', () => {
-    const { container } = rtl(<RankingTable items={ITEMS} onSelect={noop} />);
+    const { container } = rtl(<RankingTable hMonths={6} items={ITEMS} onSelect={noop} />);
     const firstCells = [...container.querySelectorAll('tbody tr')].map(
       (tr) => tr.querySelector('td')?.textContent,
     );
@@ -191,7 +191,7 @@ describe('랭크와 Δ — 서버 값 통과 [OWNER 2026-08-19]', () => {
 
 describe('표 의미론 — 여는 것은 버튼, 행은 행', () => {
   it('랭킹 표: tr 에 role 이 없고, 종목 칸의 실제 <button> 이 키보드 경로다', () => {
-    const { container } = rtl(<RankingTable items={ITEMS} onSelect={noop} />);
+    const { container } = rtl(<RankingTable hMonths={6} items={ITEMS} onSelect={noop} />);
     for (const tr of container.querySelectorAll('tbody tr')) {
       expect(tr.getAttribute('role')).toBeNull(); // role="button" 은 표 탐색을 부순다
       expect(tr.getAttribute('tabindex')).toBeNull();

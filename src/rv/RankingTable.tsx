@@ -3,11 +3,12 @@
 /* 크레딧 RV 랭킹 표 (레인 C 1구역) — 합성층 [트레이더 피드백 2026-08-18].
  *
  * **"투자판단이 아니라 RV 랭킹이에요"** — 이 명구는 의무다. Score 는 오늘 후보들
- * 사이의 랭크 백분위 50:50(Coverage·Relative RV)이고, 별점·메달·추천 문구는
+ * 사이의 랭크 백분위 50:50(spreadVolPct·Relative RV)이고, 별점·메달·추천 문구는
  * 없다: 화면이 주장하는 것은 숫자와 순서까지다.
  *
  * 절대축(버퍼)·상대축(RV)은 **독립 숫자로 먼저** 선다(원칙 ①) — Score 한 칸만
- * 보이면 합성이 원료를 가린다. 버퍼는 bp 와 σ 병기(원칙 ④ "+12bp (1.5σ)").
+ * 보이면 합성이 원료를 가린다. 버퍼는 bp 단독이다 — 원칙 ④ 의 σ 병기는
+ * 2026-08-20 에 은퇴했고 사분면 두 축이 그 자리를 대신한다(`rv.py` 머리).
  *
  * ── 조판 (2026-08-19 크리틱 P1) ─────────────────────────────────────────────
  * 74행이 카드 안에서 스크롤하고 **열 머리는 sticky 다** — 행 30 에서 "버퍼가
@@ -97,6 +98,7 @@ export function RankingTable({
   onHover,
   highlightId,
   exclusions,
+  hMonths,
 }: {
   items: RvCreditItem[];
   onSelect: (p: RvCreditItem) => void;
@@ -106,6 +108,10 @@ export function RankingTable({
   highlightId?: string | null;
   /** 랭킹에서 뺀 항목들 — 조용히 빼지 않는다(사유는 서버 것 그대로). */
   exclusions?: { id: string; label: string; reason: string }[];
+  /** 보유 기간(개월) — 버퍼 풀이가 이 숫자를 말한다. H 는 화면 컨트롤(3/6/12)
+   * 이라 여기에 상수를 적으면 화면이 거짓말을 한다(기본 6개월인데 "3개월"이라고
+   * 적혀 있었다 — Setting 탭의 같은 종류였던 거짓 문구와 한 짝). */
+  hMonths: number;
 }) {
   /* 역방향 연동의 스크롤 — 강조된 행이 화면 밖이면 nearest 로만 데려온다
      (표가 제멋대로 크게 움직이면 손이 놀란다). */
@@ -159,7 +165,7 @@ export function RankingTable({
               <th className="sr-rv-th">
                 <ThHelp
                   label="버퍼"
-                  help="금리가 몇 bp 올라도 본전인지예요. 3개월 캐리와 롤을 듀레이션으로 나눈 값이에요."
+                  help={`금리가 몇 bp 올라도 본전인지예요. ${hMonths}개월 캐리와 롤을 파는 시점의 듀레이션으로 나눈 값이에요.`}
                 />
               </th>
               <th className="sr-rv-th">
