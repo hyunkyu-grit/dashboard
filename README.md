@@ -5,7 +5,7 @@
 
 - 프런트: Vercel → https://rateslab.vercel.app
 - 백엔드: 이 PC 의 :8200, Tailscale Funnel 로 공개
-  → https://e110430.tailc7b701.ts.net:8443
+  → https://e110430.tailc7b701.ts.net/v2  (예비: `…ts.net:8443`)
 
 ## 실행
 
@@ -52,7 +52,11 @@ pnpm lint
   가드가 실패한다.
 - `serve.ps1 -Local` 로 띄운 백엔드만 PID 쪽지를 남기고, 백엔드 테스트는 그
   쪽지가 있는 포트만 건드린다. 공개 서비스에 테스트가 도는 것을 막는다.
-- Funnel 은 :443 이 아니라 **:8443**. :443 은 v1(swap-monitor)이 쓰고 있다.
+- Funnel 의 :443 루트(`/`)는 v1(swap-monitor→:8100)이 쓴다. v2 는 같은 443 의
+  **`/v2` 경로**에 얹혀 있고, Tailscale 이 접두사를 벗겨서 넘긴다. 443 이라
+  포트를 막는 망에서도 열린다. `:8443` 도 같은 백엔드를 물고 있는 예비 주소다.
+- 백엔드는 `SauronV2Backend` 예약 태스크가 로그인 때 띄운다. `BW_MYSQL_*` 는
+  사용자 환경변수라 태스크가 물려받는다.
 
 ## 파일
 
