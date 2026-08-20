@@ -692,32 +692,57 @@ def cashbond_backtest(
 
 @router.get("/api/rv/analysis")
 def rv_analysis(
-    h: int = 6,
+    h: int = rv_mod.H_DEFAULT_MONTHS,
     basis: str = funding.DEFAULT_BASIS,
     spreadBp: float = funding.DEFAULT_SPREAD_BP,
     window: str = "52w",
     mpc: str = "",
+    reinvest: str = "none",
+    reinvestRate: float = 0.0,
+    paths: str = "",
 ) -> dict:
     """세 구성(동일섹터 격자·동일테너 히트맵·크레딧 산점) 페이로드 전부.
 
-    다섯 파생량(carry_net·roll·매도 듀레이션·BEP·스왑점)을 서버가 끝낸다(§16).
-    `mpc` 는 `날짜:bp;…` — 달력 8회의 오버라이드이고 기본은 전부 0 이다.
+    파생량(carry·roll·재투자·매도 듀레이션·BEP·스왑점·경로별 총수익)을 서버가
+    끝낸다(§16).
+
+        mpc          `날짜:bp;…` — 달력 회의의 오버라이드, 기본 전부 0
+        reinvest     none | manual | residual (워크북 만기선택!B11)
+        reinvestRate manual 일 때의 연 이자율(%). 화면 단위 그대로 받아 decimal 로
+        paths        `3M:0,6M:5,…|3M:20,…` — 비평행 경로(워크북 케이스 C/C-2)
     """
     if window not in ("52w", "all"):
         raise HTTPException(status_code=422, detail=f"알 수 없는 이력 창입니다: {window!r} (52w 또는 all)")
     if not 1 <= h <= 24:
         raise HTTPException(status_code=422, detail=f"호라이즌이 범위를 벗어납니다: {h}개월 (1~24)")
+    if reinvest not in rv_mod.REINVEST_MODES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"알 수 없는 재투자 방식입니다: {reinvest!r} ({', '.join(rv_mod.REINVEST_MODES)})",
+        )
+    # 재투자 금리는 화면이 퍼센트로 준다 — 손이 미끄러진 300%가 조용히 계산되지
+    # 않도록 여기서 자른다(funding.spread_bp·금통위 ±100bp 와 같은 판단).
+    if not -10.0 <= reinvestRate <= 30.0:
+        raise HTTPException(
+            status_code=422, detail=f"재투자금리가 범위를 벗어납니다: {reinvestRate}% (−10~30)"
+        )
     spec = _funding_spec(basis, spreadBp)
     try:
         meetings = rv_mod.parse_meetings(mpc)
     except (ValueError, TypeError) as exc:
         raise HTTPException(status_code=422, detail=f"금통위 오버라이드를 읽지 못했어요: {exc}")
     try:
+        curve_paths = rv_mod.parse_paths(paths)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail=f"커스텀 커브를 읽지 못했어요: {exc}")
+    try:
         return rv_mod.build_rv(
             creditmatrix.load(), _dataset, spec,
             h_months=h, meetings=meetings, window=window,
+            reinvest=reinvest, reinvest_rate=reinvestRate / 100.0,
+            paths=curve_paths,
         )
-    except (creditmatrix.CreditMatrixError, funding.FundingError) as exc:
+    except (creditmatrix.CreditMatrixError, funding.FundingError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
 

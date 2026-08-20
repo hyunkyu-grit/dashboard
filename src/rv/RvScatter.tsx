@@ -3,9 +3,20 @@
 /* 크레딧 RV 사분면 — **미리보기 pane** [OWNER — "백테스트처럼": 주인공(랭킹)
  * 옆에서 hover 를 따라오는 자리, Backtest 의 PreviewPane 문법].
  *
- *   x = Relative RV (σ) — z 3성분 합성(40/40/20). 경계 = 0. 오른쪽 = 평소보다
- *       넓다 = 싸다 (deviation 만 — 원칙 ③).
- *   y = BEP Coverage (σ) — 버퍼 ÷ 3M 실현 변동성. 경계 = 1σ [출발값].
+ *   x = 월환산 총수익 (bp/월) — (캐리 + 롤 + 재투자) ÷ H. **듀레이션으로 안
+ *       나눈다** = "한 달에 몇 bp 버나". 경계 = 오늘 후보 중앙값.
+ *   y = 지난주 스프레드의 창 백분위 (%) — 직전 5영업일 평균을 52주/전체 분포에서
+ *       midrank 로. 경계 = 50.
+ *
+ * **두 축은 2026-08-20 에 갈렸다** [OWNER — 트레이더 피드백 "BEP·상대 RV 가
+ * 무슨 말인지 잘 모르겠다"]. 전임자는 x=Relative RV(σ) · y=BEP Coverage(σ) 로
+ * 둘 다 σ 였고, 읽는 사람이 두 σ 의 뜻을 외워야 했다. 새 두 축은 각자 자기
+ * 단위로 말한다 — bp/월과 백분위.
+ *
+ * x 경계가 0 이 아니라 **중앙값**인 이유: 조달 차감 후에도 후보 대부분이 양수라
+ * (앵커 실측 6.8~11.5bp/월) 0 을 그으면 전부 오른쪽에 몰려 사분면이 죽는다.
+ * y 의 경계가 "자기 이력의 중앙"이므로 x 도 "오늘 후보들의 중앙"으로 짝을
+ * 맞췄고, 축 라벨이 그 사실을 쓴다.
  *
  * **크기는 실측이다**(useMeasure) [OWNER 2026-08-19 — "패널을 꽉 채우는 게
  * 나을 거 같다"]: 고정 viewBox 를 meet 로 끼우면 남는 쪽이 여백이 된다.
@@ -26,7 +37,9 @@
  * **연동은 양방향** [OWNER] — 표 행 hover → 점 강조(highlightId), 점 hover →
  * 표 행 강조·스크롤(onHover 콜백).
  *
- * 점수를 재계산하지 않는다(§16) — relRv·coverage 는 서버 값, 여기는 좌표 변환뿐.
+ * 점수를 재계산하지 않는다(§16) — trMonthBp·pctLastWeek 는 서버 값, 여기는
+ * 좌표 변환과 **중앙값 하나**뿐이다(경계선을 그으려면 필요하고, 서버가 주는
+ * 값들의 순서 통계라 새 사실을 만들지 않는다).
  */
 
 import { useState } from 'react';
@@ -48,12 +61,15 @@ const PAD = { top: 24, right: 16, bottom: 44, left: 48 };
  * 호출부가 자기 최장 줄을 계산하는 일 자체가 함정이었다. 클램프만 상한을
  * 쓴다(`READOUT_CARD_MAX`). */
 
-/** Coverage 의 유망 경계(σ) — 버퍼가 평소 3M 변동 한 단위를 흡수하는 선
- * [트레이더 출발값]. */
-export const COVERAGE_LINE = 1;
+/** y 축(지난주 스프레드 백분위)의 사분면 경계 — 자기 이력의 중앙. */
+export const PCT_LINE = 50;
 
-function nice(v: number): string {
-  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+/** 순서 통계 하나 — x 경계선. 짝수 개면 두 가운데의 평균. */
+function median(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  const a = [...xs].sort((p, q) => p - q);
+  const i = Math.floor(a.length / 2);
+  return a.length % 2 ? a[i] : (a[i - 1] + a[i]) / 2;
 }
 
 /** ReadoutCard 안의 한 줄 — 공용 카드의 줄 문법(라벨 뮤트 · 값 등폭 우측). */
@@ -90,30 +106,32 @@ export function RvScatter({
   const W = mw || 640;
   const H = mh || 400;
 
-  /* 좌표가 있는 항목만 선다 — σ 미확정은 아래 한 줄이 개수로 말한다. */
+  /* 좌표가 있는 항목만 선다 — 백분위 미확정은 아래 한 줄이 개수로 말한다.
+     (x 는 항상 있다 — 버퍼가 정의되는 후보만 서버가 항목으로 싣는다.) */
   const pts = items.filter(
-    (p): p is RvCreditItem & { relRv: number; coverage: number } =>
-      p.relRv != null && p.coverage != null,
+    (p): p is RvCreditItem & { pctLastWeek: number } => p.pctLastWeek != null,
   );
   const unplaced = items.length - pts.length;
-  const favorable = pts.filter((p) => p.relRv > 0 && p.coverage >= COVERAGE_LINE).length;
 
-  /* x 는 0 대칭 — 경계가 0 인데 도메인이 쏠리면 "가운데" 가 거짓말이 된다. */
-  const xAbs = Math.max(1.5, ...pts.map((p) => Math.abs(p.relRv)));
-  const x0 = -xAbs * 1.08;
-  const x1 = xAbs * 1.08;
-  const yLo = Math.min(0, ...pts.map((p) => p.coverage));
-  /* y 도메인은 **3σ 에서 캡** — outlier 둘(10σ급)이 축을 늘리면 이 축의
-     질문(1σ 경계 근처의 분해능)이 죽는다(3차 크리틱 실측: 1σ ≈ 30px, 38점이
-     110px 에 압축). 초과점은 상단 가장자리에 앉고 리드아웃이 실값을 말한다. */
-  const Y_CAP = 3;
-  const yHi = Math.max(
-    COVERAGE_LINE * 1.5,
-    Math.min(Y_CAP, Math.max(...pts.map((p) => p.coverage))),
-  );
-  const yPad = (yHi - yLo) * 0.08 || 1;
-  const y0 = yLo - yPad;
-  const y1 = yHi + yPad;
+  /* x 경계 = 오늘 후보 중앙값(파일 머리의 근거). y 경계 = 50. */
+  const xMid = median(pts.map((p) => p.trMonthBp));
+  const favorable = pts.filter(
+    (p) => p.trMonthBp >= xMid && p.pctLastWeek >= PCT_LINE,
+  ).length;
+
+  /* x 도메인은 실측 범위 + 8% — 대칭으로 잡을 이유가 없다(0 이 경계가 아니다).
+     한 점뿐이면 폭이 0 이 되므로 최소 폭을 준다. */
+  const xLo = Math.min(...pts.map((p) => p.trMonthBp), xMid);
+  const xHi = Math.max(...pts.map((p) => p.trMonthBp), xMid);
+  const xPad = (xHi - xLo) * 0.08 || 1;
+  const x0 = xLo - xPad;
+  const x1 = xHi + xPad;
+  /* y 는 **0~100 고정** — 백분위는 정의상 그 안이고, 실측 범위로 늘였다 줄이면
+     "50 이 가운데" 라는 이 축의 유일한 읽기가 날마다 움직인다. 옛 축(σ)이
+     3σ 캡을 둬야 했던 이유가 도메인이 열려 있었기 때문인데, 여기서는 애초에
+     닫혀 있어 캡이 필요 없다. */
+  const y0 = -4;
+  const y1 = 104;
 
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
@@ -138,62 +156,68 @@ export function RvScatter({
           height={H}
           viewBox={`0 0 ${W} ${H}`}
           role="img"
-          aria-label={`크레딧 RV 사분면 — ${pts.length}개 중 ${favorable}개가 평소보다 넓고 여유 있는 구역이에요`}
+          aria-label={`크레딧 RV 사분면 — ${pts.length}개 중 ${favorable}개가 중앙값보다 많이 벌고 평소보다 넓은 구역이에요`}
         >
           {/* 유망 사분면(오른쪽·위)만 옅은 스크림. */}
           <rect
-            x={X(0)}
+            x={X(xMid)}
             y={Y(y1)}
-            width={X(x1) - X(0)}
-            height={Y(COVERAGE_LINE) - Y(y1)}
+            width={X(x1) - X(xMid)}
+            height={Y(PCT_LINE) - Y(y1)}
             fill="color-mix(in srgb, var(--sr-up) 5%, transparent)"
           />
           {/* 프레임 — 바닥·왼쪽 축선만(차트 카드의 헤어라인 규율). */}
           <line x1={PAD.left} x2={W - PAD.right} y1={H - PAD.bottom} y2={H - PAD.bottom} stroke="var(--color-bgLine)" />
           <line x1={PAD.left} x2={PAD.left} y1={PAD.top} y2={H - PAD.bottom} stroke="var(--color-bgLine)" />
-          {/* 사분면 경계 — x = 0, y = 1σ. */}
-          <line x1={X(0)} x2={X(0)} y1={PAD.top} y2={H - PAD.bottom} stroke="var(--color-bgLine)" />
-          <line x1={PAD.left} x2={W - PAD.right} y1={Y(COVERAGE_LINE)} y2={Y(COVERAGE_LINE)} stroke="var(--color-bgLine)" />
+          {/* 사분면 경계 — x = 후보 중앙값, y = 50%. */}
+          <line x1={X(xMid)} x2={X(xMid)} y1={PAD.top} y2={H - PAD.bottom} stroke="var(--color-bgLine)" />
+          <line x1={PAD.left} x2={W - PAD.right} y1={Y(PCT_LINE)} y2={Y(PCT_LINE)} stroke="var(--color-bgLine)" />
 
           {/* 사분면 라벨 — 두 축의 말 그대로 서술 [OWNER 2026-08-19 — "싸고
-              버팀/비싸지만 방어적" 계열은 어휘가 거칠다고 교체]. x 축이 "평소
-              대비" 이탈이고 y 축이 버퍼의 여유이므로, 라벨도 그 두 사실만
-              말한다 — 싸다/비싸다 같은 가치 판단 단어를 얹지 않는다. */}
+              버팀/비싸지만 방어적" 계열은 어휘가 거칠다고 교체]. 가치 판단
+              단어를 얹지 않는 그 규율은 그대로이고, 두 축이 바뀐 만큼 문구도
+              바뀌었다 — x 는 버는 돈, y 는 평소 대비 스프레드 폭이다. */}
           <text x={W - PAD.right - 6} y={PAD.top + 16} textAnchor="end" className="sr-rv-quad">
-            평소보다 넓음 · 여유 있음
+            많이 벌고 · 평소보다 넓음
           </text>
           <text x={W - PAD.right - 6} y={H - PAD.bottom - 8} textAnchor="end" className="sr-rv-quad">
-            평소보다 넓음 · 여유 부족
+            많이 벌지만 · 평소보다 좁음
           </text>
           <text x={PAD.left + 6} y={PAD.top + 16} className="sr-rv-quad">
-            평소보다 좁음 · 여유 있음
+            덜 벌고 · 평소보다 넓음
           </text>
           <text x={PAD.left + 6} y={H - PAD.bottom - 8} className="sr-rv-quad">
-            평소보다 좁음 · 여유 부족
+            덜 벌고 · 평소보다 좁음
           </text>
 
-          {[-Math.round(xAbs * 10) / 10, 0, Math.round(xAbs * 10) / 10].map((v) => (
-            <text key={v} x={X(v)} y={H - PAD.bottom + 18} textAnchor="middle" className="sr-rv-tick">
-              {v === 0 ? '0' : sig(v)}
+          {[xLo, xMid, xHi].map((v, i) => (
+            <text
+              key={i}
+              x={X(v)}
+              y={H - PAD.bottom + 18}
+              textAnchor={i === 0 ? 'start' : i === 2 ? 'end' : 'middle'}
+              className="sr-rv-tick"
+            >
+              {v.toFixed(1)}
             </text>
           ))}
           <text x={PAD.left + plotW / 2} y={H - 6} textAnchor="middle" className="sr-rv-tick">
-            상대 RV (σ) — 오른쪽일수록 평소보다 넓어요
+            한 달에 버는 돈 (bp) — 가운데 선이 후보 중앙값이에요
           </text>
-          {[0, COVERAGE_LINE].map((v) => (
+          {[0, PCT_LINE, 100].map((v) => (
             <text key={v} x={PAD.left - 8} y={Y(v) + 4} textAnchor="end" className="sr-rv-tick">
-              {nice(v)}
+              {v}
             </text>
           ))}
           <text x={PAD.left} y={14} className="sr-rv-tick">
-            Coverage (σ) — 버퍼 ÷ 3M 변동
+            지난주 스프레드 백분위 (%) — 위쪽이 평소보다 넓어요
           </text>
 
           {pts.map((p) => {
-            const cx = X(p.relRv);
-            /* 캡 초과점은 상단 가장자리에 앉는다(중심이 프레임 안에 남게 8px
-               여유) — 지우면 "왜 없지"가 되고, 축을 늘리면 화면이 죽는다. */
-            const cy = Math.max(PAD.top + 8, Y(Math.min(p.coverage, y1)));
+            const cx = X(p.trMonthBp);
+            /* y 도메인이 0~100 으로 닫혀 있어 캡·클램프가 필요 없다 — 백분위는
+               정의상 그 안에 있다(옛 σ 축이 3σ 캡을 둬야 했던 자리). */
+            const cy = Y(p.pctLastWeek);
             const on = hover === p || p.seriesId === highlightId;
             return (
               <g key={p.seriesId}>
@@ -234,23 +258,31 @@ export function RvScatter({
           const left = hover
             ? hoverX
             : Math.min(
-                Math.max(0, X(active.relRv ?? 0) + 12),
+                Math.max(0, X(active.trMonthBp) + 12),
                 Math.max(0, W - READOUT_CARD_MAX - 8),
               );
-          /* 줄 순서는 랭킹 표의 열 순서(버퍼 → BEP → 상대 RV)를 따르고, z 는
-             한 줄에 셋을 욱여넣지 않는다 — 148 카드에서 그 줄이 밖으로
-             삐져나가던 원인이었다. */
+          /* 줄 순서는 랭킹 표의 열 순서(월수익 → 백분위 → 버퍼 → 상대 RV)를
+             따르고, z 는 한 줄에 셋을 욱여넣지 않는다 — 148 카드에서 그 줄이
+             밖으로 삐져나가던 원인이었다. **두 축이 맨 위**다: 점의 위치를
+             설명하는 두 숫자가 카드의 첫 두 줄이어야 한다. */
           return (
             <ReadoutCard
               title={`${active.sectorLabel} ${active.tenor}`}
               left={left}
             >
-              <Row k="스프레드" v={`${bp1(active.nowBp)}bp`} />
+              <Row k="한 달 수익" v={`${sig(active.trMonthBp)}bp`} />
               <Row
-                k="버퍼"
-                v={`${sig(active.bufferBp)}bp${active.coverage != null ? ` (${active.coverage.toFixed(1)}σ)` : ''}`}
+                k="지난주 백분위"
+                v={
+                  active.pctLastWeek != null
+                    ? `${active.pctLastWeek.toFixed(0)}%${
+                        active.lastWeekBp != null ? ` (${bp1(active.lastWeekBp)}bp)` : ''
+                      }`
+                    : '—'
+                }
               />
-              <Row k="BEP" v={`${bp1(active.bepSpreadBp)}bp`} />
+              <Row k={`${active.baseLabel} 대비`} v={`${bp1(active.nowBp)}bp`} />
+              <Row k="버퍼" v={`${sig(active.bufferBp)}bp`} />
               <Row k="상대 RV" v={active.relRv != null ? `${sig(active.relRv, 2)}σ` : '—'} />
               <Row k="z 절대" v={active.zAbs != null ? String(active.zAbs) : '—'} />
               <Row k="z 섹터" v={active.zSector != null ? String(active.zSector) : '—'} />
@@ -264,11 +296,11 @@ export function RvScatter({
       {/* 각주 한 줄 — 마커 열쇠가 없어져(잉크 단일) 안내만 남았다. */}
       <HStack gap={1.5} alignItems="center" flexWrap="wrap">
         <TextLegal as="span" color="fgMuted">
-          오른쪽 위가 평소보다 넓고 여유 있는 자리예요 · 누르면 이력이 열려요
+          오른쪽 위가 많이 벌면서 평소보다 넓은 자리예요 · 누르면 이력이 열려요
         </TextLegal>
         {unplaced > 0 ? (
           <TextLegal as="span" color="fgMuted">
-            σ 미확정 {unplaced}개는 좌표가 없어 못 섰어요
+            백분위 미확정 {unplaced}개는 좌표가 없어 못 섰어요
           </TextLegal>
         ) : null}
       </HStack>

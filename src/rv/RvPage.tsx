@@ -66,11 +66,13 @@ import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { useUrlState } from '@/ui/useUrlState';
 
 import {
+  REINVEST_LABEL,
   fetchRv,
   fetchRvHistory,
   type RvCreditItem,
   type RvHistoryPayload,
   type RvPayload,
+  type RvReinvestMode,
   type RvWindow,
 } from './api';
 import { bp1, sig } from './fmt';
@@ -82,7 +84,21 @@ import { TenorHeat } from './TenorHeat';
 
 /** 금통위 Δbp 입력 — blur/Enter 커밋(시뮬 NumField 의 규율: onChange 즉시
  * 파싱은 "-" 를 0 으로 만든다). */
-function BpField({ value, onCommit }: { value: number; onCommit: (v: number) => void }) {
+function BpField({
+  value,
+  onCommit,
+  label = '금통위 변동(bp)',
+  suffix = 'bp',
+  width = 76,
+}: {
+  value: number;
+  onCommit: (v: number) => void;
+  /** 접근성 이름 — 같은 모양의 칸이 화면에 열여덟 개 서므로 각자 이름이 있어야
+   * 한다(금통위 3 + 재투자금리 1 + 경로 2×7). */
+  label?: string;
+  suffix?: string;
+  width?: number;
+}) {
   const shown = String(value);
   const [text, setText] = useState(shown);
   const [editing, setEditing] = useState(false);
@@ -94,7 +110,7 @@ function BpField({ value, onCommit }: { value: number; onCommit: (v: number) => 
     else setText(shown);
   };
   return (
-    <Box width={76}>
+    <Box width={width}>
       {/* fontSize legal(13) — 컨트롤 값 13px 규칙(popup.ts 의 근거).
           height 32 — 앱의 행 컨트롤 등고(`guards/control-parity.test.ts`).
           이 입력만 있는 줄에서는 지금 어긋난 것이 없지만, CDS `size="s"` 기본값
@@ -103,8 +119,8 @@ function BpField({ value, onCommit }: { value: number; onCommit: (v: number) => 
         size="s"
         fontSize="legal"
         height={32}
-        accessibilityLabel="금통위 변동(bp)"
-        suffix="bp"
+        accessibilityLabel={label}
+        suffix={suffix}
         value={text}
         onChange={(e) => {
           setEditing(true);
@@ -261,28 +277,30 @@ function DrillWindow({
         /* TextCaption 은 uppercase 라 "bp"가 "BP"로 선다 — 단위가 든 문장은
            TextLegal (§8.9, 이 리포가 이미 밟은 함정). */
         <TextLegal as="span" color="fgMuted" noWrap>
-          국고 대비 · bp · {window === '52w' ? '52주' : '전체 이력'}
+          {point.baseLabel} 대비 · bp · {window === '52w' ? '52주' : '전체 이력'}
         </TextLegal>
       }
       onClose={onClose}
     >
       <VStack gap={1.5} padding={2} width="100%">
         {/* 머리 요약 — 창을 연 이유의 숫자들이 칸으로 먼저 선다(랭킹 표의
-            열 순서 그대로: 지금 → 버퍼 → BEP → 상대 RV). 문장 두 줄에 흩어져
-            있던 것의 재조판 [OWNER 2026-08-19 — "이력창 정돈"]. */}
+            열 순서 그대로: 한 달 수익 → 지난주 백분위 → 버퍼 → 상대 RV).
+            문장 두 줄에 흩어져 있던 것의 재조판 [OWNER 2026-08-19 — "이력창
+            정돈"]. 2026-08-20 에 열 순서가 사분면 두 축 우선으로 바뀌면서 이
+            줄도 같이 움직였다 — 표·그림·창이 같은 순서여야 한 사실이 된다. */}
         <HStack gap={3} flexWrap="wrap">
-          <Stat k="지금" v={`${bp1(point.nowBp)}bp`} />
-          <Stat
-            k="버퍼"
-            v={`${sig(point.bufferBp)}bp${
-              point.coverage != null ? ` (${point.coverage.toFixed(1)}σ)` : ''
-            }`}
-          />
-          <Stat k="BEP" v={`${bp1(point.bepSpreadBp)}bp`} />
+          <Stat k="한 달 수익" v={`${sig(point.trMonthBp)}bp`} />
+          {point.pctLastWeek != null ? (
+            <Stat k="지난주 백분위" v={`${point.pctLastWeek.toFixed(0)}%`} />
+          ) : null}
+          <Stat k={`${point.baseLabel} 대비`} v={`${bp1(point.nowBp)}bp`} />
+          <Stat k="버퍼" v={`${sig(point.bufferBp)}bp`} />
           {point.relRv != null ? <Stat k="상대 RV" v={`${sig(point.relRv, 2)}σ`} /> : null}
           <Stat k="캐리 + 롤" v={`${sig(point.carryBp)} + ${sig(point.rollBp)}bp`} />
-          {point.covPct != null ? (
-            <Stat k="Coverage 백분위" v={`${point.covPct.toFixed(0)}%`} />
+          {/* Score 가 어디서 왔는지 — 표에는 안 서고 여기서만 보인다. 사분면
+              y축(지난주 백분위)과 **다른 통계**라 이름도 다르다. */}
+          {point.spreadVolPct != null ? (
+            <Stat k="변동성 대비 백분위" v={`${point.spreadVolPct.toFixed(0)}%`} />
           ) : null}
         </HStack>
         {err ? (
@@ -300,13 +318,13 @@ function DrillWindow({
         ) : (
           <>
             <BandChart
-              title="스프레드 — 국고 대비"
+              title={`스프레드 — ${data.baseLabel} 대비`}
               dates={data.points.map((p) => p.t)}
               values={data.points.map((p) => p.s)}
               stats={data.spread}
             />
             <BandChart
-              title="섹터 상대 — 같은 테너 횡단면 평균 대비"
+              title={`섹터 상대 — ${data.baseLabel} 대비인 ${data.peers}개 평균 대비`}
               dates={data.points.map((p) => p.t)}
               values={data.points.map((p) => p.rel)}
               stats={data.rel}
@@ -322,6 +340,7 @@ function DrillWindow({
                 point.zCurve ?? '—'
               } (가중 40/40/20) — `
             : ''}
+          Score 는 변동성 대비 백분위와 상대 RV 를 반반 섞은 값이에요.
           차트의 가는 선은 창 평균과 ±1σ예요.
         </TextLegal>
       </VStack>
@@ -350,7 +369,61 @@ export function RvPage() {
     [mpc],
   );
 
+  /** 보유기간 H(개월) — 워크북 `만기선택!B7`. **두 레인이 같은 값을 쓴다**
+   * [OWNER 2026-08-20]: 전에는 레인 A 6M / 크레딧 3M 으로 갈려 있어서 "버퍼"와
+   * "한 달 수익"이 다른 기간을 말했다. 워크북에는 H 가 하나뿐이고 그것도
+   * 상수가 아니라 읽는 사람이 채우는 칸이라, 여기서도 컨트롤로 올렸다. */
+  const [hMonths, setHMonths] = useState(6);
+
+  /** 재투자 — 워크북 `만기선택!B11`. **만기가 H 안에 드는 후보에만 닿는다**
+   * (6M 호라이즌이면 3M 후보 하나). 기본은 재투자 안 함이고, 그 갈래가 앵커
+   * 8행의 세계다 — 켜면 그 후보들의 총수익이 움직인다. */
+  const [reinvest, setReinvest] = useState<RvReinvestMode>('none');
+  /** 직접 입력 금리(연 %) — 서버가 −10~30 으로 자른다. */
+  const [reinvestRate, setReinvestRate] = useState(3.0);
+
+
   const [data, setData] = useState<RvPayload>();
+
+  /** 경로 편집기가 세우는 테너 — **서버가 준 목록**(heat.tenors)이 진짜다.
+   * 상수 사본을 들면 서버 상한(MAX_YEARS)이 움직인 날 조용히 갈린다: 상한이
+   * 내려가면 422 가 말해 주지만 **올라가면 아무도 안 짖는다**(프런트가 새
+   * 테너를 안 내놓을 뿐이다). 아래 상수는 첫 프레임(데이터 도착 전)의 자리만
+   * 메우고, 그때는 값이 전부 0 이라 인코딩 결과가 어느 쪽이든 빈 문자열이다. */
+  const tenorList = useMemo(
+    () => data?.heat.tenors ?? ['3M', '6M', '9M', '1Y', '1.5Y', '2Y', '2.5Y', '3Y'],
+    [data],
+  );
+
+  /** 비평행 커스텀 커브 두 벌 — 워크북 케이스 C/C-2. 테너별 Δ(bp) 이고, 빈 벌은
+   * 열이 안 선다. 금통위 오버라이드와 같은 살림(React 상태 + 인코딩 + 재조회):
+   * 계산 조건이지 화면 배치가 아니라서 URL 에 안 싣는다. */
+  const [paths, setPaths] = useState<Record<string, number>[]>([{}, {}]);
+  /* 한 벌이라도 0 이 아니면 **여덟 테너를 전부** 싣는다 — 0 을 빼면 안 된다.
+   *
+   * 처음엔 `.filter(bp !== 0)` 이었는데, 그러면 워크북의 기본 모양인
+   * "단기 0 · 장기 +20" 램프가 표현되지 않는다: 0 이 빠져 노드가 3Y 하나만
+   * 남고, 한 노드짜리 경로는 평탄 외삽이라 **평행이동과 같아진다**(실측으로
+   * 걸렸다). 명시한 0 과 안 적은 칸은 딴 사실이고, 이 화면에서 0 은 "그
+   * 테너는 안 움직인다"는 명시다. */
+  const pathsEncoded = useMemo(
+    () =>
+      paths
+        .map((p) =>
+          Object.values(p).some((bp) => bp !== 0)
+            ? tenorList.map((t) => `${t}:${p[t] ?? 0}`).join(',')
+            : '',
+        )
+        // 빈 벌만 뺀다 — 둘 다 비면 경로 열 자체가 안 선다.
+        .filter((chunk) => chunk !== '')
+        .join('|'),
+    [paths, tenorList],
+  );
+  const activePaths = useMemo(
+    () => paths.map((p, i) => ({ i, on: Object.values(p).some((v) => v !== 0) })).filter((x) => x.on),
+    [paths],
+  );
+
   const [error, setError] = useState<string>();
   const [unavailable, setUnavailable] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -365,14 +438,26 @@ export function RvPage() {
     setError(undefined);
     setUnavailable(false);
     setRefreshing(true);
-    fetchRv({ window, basis: funding.basis, spreadBp: funding.spreadBp, mpc: mpcEncoded })
+    fetchRv({
+      window,
+      basis: funding.basis,
+      spreadBp: funding.spreadBp,
+      h: hMonths,
+      mpc: mpcEncoded,
+      reinvest,
+      reinvestRate,
+      paths: pathsEncoded,
+    })
       .then(setData)
       .catch((e: unknown) => {
         if (e instanceof BacktestUnavailable) setUnavailable(true);
         else setError(e instanceof Error ? e.message : String(e));
       })
       .finally(() => setRefreshing(false));
-  }, [window, funding.basis, funding.spreadBp, mpcEncoded]);
+  }, [
+    window, funding.basis, funding.spreadBp, hMonths,
+    mpcEncoded, reinvest, reinvestRate, pathsEncoded,
+  ]);
 
   useEffect(() => {
     load();
@@ -437,11 +522,26 @@ export function RvPage() {
           <Cond k="민평" v={data.asof.creditMatrix} strong={asofSplit} />
           <Cond k="IRS" v={data.asof.irs ?? '—'} strong={asofSplit} />
           <Cond k="후보" v={`${data.candidates}개`} />
-          {/* H 는 두 값이다 — 레인 A [OWNER 6M] / 크레딧 RV [트레이더 3M]. */}
-          <Cond k="H" v={`같은 섹터끼리 ${data.hMonths}개월 · 크레딧 ${data.credit.hMonths}개월`} />
+          {/* H 는 한 값이다 [OWNER 2026-08-20] — 두 레인이 같은 기간을 쓴다. */}
+          <Cond k="H" v={`${data.hMonths}개월`} />
           <Cond k="조달" v={data.funding.label} />
           {window === 'all' ? <Cond k="이력 창" v="전체(2020~)" /> : null}
           {mpcEncoded ? <Cond k="금통위" v="조정 중" /> : null}
+          {/* 기본이 아닌 조건만 선다 — 다섯 상시 사실 옆에 늘 붙어 있으면
+              "필요한 정보만" 규칙(2026-08-19)이 무너진다. */}
+          {reinvest !== 'none' ? (
+            <Cond
+              k="재투자"
+              v={
+                reinvest === 'manual'
+                  ? `${REINVEST_LABEL[reinvest]} ${reinvestRate}%`
+                  : REINVEST_LABEL[reinvest]
+              }
+            />
+          ) : null}
+          {activePaths.length > 0 ? (
+            <Cond k="커브 경로" v={`${activePaths.length}개`} />
+          ) : null}
           {/* 창·금통위 재조회 동안 옛 숫자가 서 있다 — 그 사실을 바가 말한다. */}
           {refreshing ? (
             <TextLegal as="span" color="fgMuted" noWrap>
@@ -527,6 +627,112 @@ export function RvPage() {
                 </Button>
               ) : null}
             </HStack>
+
+            {/* ── 보유기간 H [OWNER 2026-08-20 — 워크북 만기선택!B7] ────────
+                두 레인이 같은 값을 쓴다. 알약인 이유는 값이 몇 개뿐이고, 옆의
+                재투자·이력 창과 같은 컨트롤 문법이어야 하기 때문이다. */}
+            <HStack gap={0.5} alignItems="center" flexWrap="wrap">
+              <Text font="caption" as="span" color="fgMuted" noWrap>
+                보유기간
+              </Text>
+              {[3, 6, 12].map((mo) => (
+                <button
+                  key={mo}
+                  type="button"
+                  className="sr-rv-pillbtn"
+                  data-on={hMonths === mo || undefined}
+                  aria-pressed={hMonths === mo}
+                  onClick={() => setHMonths(mo)}
+                >
+                  {mo}개월
+                </button>
+              ))}
+              <Text font="legal" as="span" color="fgMuted">
+                같은 섹터끼리와 크레딧 RV 가 같은 기간을 써요
+              </Text>
+            </HStack>
+
+            {/* ── 재투자 [OWNER 2026-08-20 — 워크북 만기선택!B11] ──────────
+                만기가 H 안에 드는 후보(6M 이면 3M 하나)의 남은 기간을 어떻게
+                굴리나. 기본 "안 함"이 앵커 8행의 세계다. */}
+            <HStack gap={0.5} alignItems="center" flexWrap="wrap">
+              <Text font="caption" as="span" color="fgMuted" noWrap>
+                재투자
+              </Text>
+              {(['none', 'residual', 'manual'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className="sr-rv-pillbtn"
+                  data-on={reinvest === mode || undefined}
+                  aria-pressed={reinvest === mode}
+                  onClick={() => setReinvest(mode)}
+                >
+                  {REINVEST_LABEL[mode]}
+                </button>
+              ))}
+              {reinvest === 'manual' ? (
+                <BpField
+                  value={reinvestRate}
+                  label="재투자 금리(연 %)"
+                  suffix="%"
+                  onCommit={(v) => setReinvestRate(Math.max(-10, Math.min(30, v)))}
+                />
+              ) : null}
+              <Text font="legal" as="span" color="fgMuted">
+                만기가 보유기간 안에 드는 후보에만 붙어요
+              </Text>
+            </HStack>
+
+            {/* ── 비평행 커브 경로 [OWNER 2026-08-20 — 워크북 케이스 C/C-2] ─
+                평행이동 격자가 Δy 하나를 전 테너에 똑같이 얹는다면, 여기는
+                테너마다 다른 Δ 를 넣는다. 후보가 맞는 크기는 **자기 잔존만기
+                지점의 보간값**이라(워크북 E열) 같은 경로가 후보마다 다르게
+                닿는다 — 레인 A 표의 `Δ@잔존` 열이 그 값을 말한다. */}
+            <VStack gap={0.5}>
+              <HStack gap={1} alignItems="baseline" flexWrap="wrap">
+                <Text font="caption" as="span" color="fgMuted" noWrap>
+                  커브 경로
+                </Text>
+                <Text font="legal" as="span" color="fgMuted">
+                  테너마다 다르게 움직이는 경우예요 · 비워 두면 열이 안 생겨요
+                </Text>
+                {pathsEncoded ? (
+                  <Button size="s" variant="secondary" onClick={() => setPaths([{}, {}])}>
+                    전부 0으로
+                  </Button>
+                ) : null}
+              </HStack>
+              {paths.map((row, pi) => (
+                <HStack key={pi} gap={1} alignItems="flex-end" flexWrap="wrap">
+                  <VStack gap={0.25} width={76} justifyContent="flex-end">
+                    <Text font="legal" as="span" color="fgMuted" noWrap>
+                      경로 {pi + 1}
+                    </Text>
+                  </VStack>
+                  {tenorList.map((t) => (
+                    <VStack key={t} gap={0.25} width={76}>
+                      <Text font="caption" as="span" color="fgMuted" noWrap>
+                        {t}
+                      </Text>
+                      <BpField
+                        value={row[t] ?? 0}
+                        label={`경로 ${pi + 1} ${t} 변동(bp)`}
+                        onCommit={(v) =>
+                          setPaths((prev) =>
+                            prev.map((r, i) =>
+                              i === pi
+                                ? { ...r, [t]: Math.max(-200, Math.min(200, v)) }
+                                : r,
+                            ),
+                          )
+                        }
+                      />
+                    </VStack>
+                  ))}
+                </HStack>
+              ))}
+            </VStack>
           </VStack>
         </CdsCollapsible>
       </VStack>
@@ -553,8 +759,8 @@ export function RvPage() {
               </TextDisplay3>
             </button>
             <TextBody as="span" color="fgMuted" tabularNumbers noWrap>
-              Score {top.score?.toFixed(0)} · 버퍼 {sig(top.bufferBp)}bp
-              {top.coverage != null ? ` (${top.coverage.toFixed(1)}σ)` : ''}
+              Score {top.score?.toFixed(0)} · 한 달 {sig(top.trMonthBp)}bp
+              {top.pctLastWeek != null ? ` · 지난주 ${top.pctLastWeek.toFixed(0)}%` : ''}
               {top.rankDelta != null
                 ? top.rankDelta === 0
                   ? ' · 순위변동 없음'
@@ -667,7 +873,12 @@ export function RvPage() {
                 />
               </Box>
             </HStack>
-            <SectorLane sector={sector} dys={data.dys} hMonths={data.hMonths} />
+            <SectorLane
+              sector={sector}
+              dys={data.dys}
+              hMonths={data.hMonths}
+              pathCount={data.paths.length}
+            />
 
             <VStack paddingX={2} paddingTop={0.5}>
               <TextLabel1 as="h3" noWrap>

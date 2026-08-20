@@ -30,16 +30,18 @@ function item(over: Partial<RvCreditItem>): RvCreditItem {
   return {
     sector: 'BD',
     sectorLabel: '은행채 AAA',
+    base: 'KDB',
+    baseLabel: '산금채 AAA',
     tenor: '3Y',
     years: 3.0,
     nowBp: 70.0,
     carryBp: 6.9,
     rollBp: 5.0,
     bufferBp: 11.9,
-    bepSpreadBp: 81.9,
-    vol3mBp: 8.0,
-    coverage: 1.5,
-    covPct: 70.0,
+    trMonthBp: 8.4,
+    pctLastWeek: 70.0,
+    lastWeekBp: 69.2,
+    spreadVolPct: 66.0,
     pct: 62.0,
     cheapBp: 4.0,
     zAbs: 0.8,
@@ -58,18 +60,24 @@ function item(over: Partial<RvCreditItem>): RvCreditItem {
 
 const ITEMS: RvCreditItem[] = [
   item({}),
-  // 비싼 쪽(relRv<0) + 숏 불가 — 속빈 마커의 유일한 자격.
-  item({ sector: 'CB1', sectorLabel: '회사채 AAA', tenor: '5Y', years: 5.0,
-    shortable: false, shortVia: null, seriesId: 'CRD-CB1-5Y',
-    relRv: -0.6, coverage: 0.4, score: 30.0, rank: 3, rankDelta: -1 }),
-  // 싼 쪽(relRv>0)인데 숏 불가 — 사면 되므로 **채운다** [OWNER 2026-08-19].
-  item({ sector: 'OFB', sectorLabel: '캐피탈채 AA-', tenor: '6M', years: 0.5,
-    shortable: false, shortVia: null, seriesId: 'CRD-OFB-6M',
-    relRv: 0.9, coverage: 2.0, score: 60.0, rank: 2, rankDelta: null }),
-  // σ 미확정 — 좌표 없음. 산점에는 못 서고 표에는 — 로 선다.
+  // 왼쪽 아래 — 덜 벌고 평소보다 좁다. (2026-08-20: 만기 상한 3Y 라 5Y 는
+  // 이 화면에 못 서므로 픽스처도 2.5Y 로 내렸다.)
+  item({ sector: 'CB1', sectorLabel: '회사채 AAA', tenor: '2.5Y', years: 2.5,
+    base: 'KDB', baseLabel: '산금채 AAA',
+    shortable: false, shortVia: null, seriesId: 'CRD-CB1-2.5Y',
+    relRv: -0.6, trMonthBp: 5.1, pctLastWeek: 22.0, score: 30.0, rank: 3,
+    rankDelta: -1 }),
+  // 오른쪽 위 — 많이 벌고 평소보다 넓다.
+  item({ sector: 'OFB', sectorLabel: '캐피탈채 AA-', tenor: '1Y', years: 1.0,
+    base: 'KDB', baseLabel: '산금채 AAA',
+    shortable: false, shortVia: null, seriesId: 'CRD-OFB-1Y',
+    relRv: 0.9, trMonthBp: 12.6, pctLastWeek: 91.0, score: 60.0, rank: 2,
+    rankDelta: null }),
+  // 백분위 미확정 — 좌표 없음. 산점에는 못 서고 표에는 — 로 선다.
   item({ sector: 'CARD', sectorLabel: '카드채 AA+', tenor: '2Y', years: 2.0,
+    base: 'KDB', baseLabel: '산금채 AAA',
     shortVia: 'IRS', seriesId: 'CRD-CARD-2Y',
-    vol3mBp: null, coverage: null, covPct: null, relRv: null, score: null,
+    pctLastWeek: null, lastWeekBp: null, spreadVolPct: null, relRv: null, score: null,
     rank: null, rankDelta: null }),
 ];
 
@@ -111,10 +119,10 @@ describe('사분면 — 서술형, 명령형 금지', () => {
   it('네 라벨이 좌표의 뜻을 말한다 [OWNER 2026-08-19 — "싸고 버팀" 계열 교체]', () => {
     const { container } = render(<RvScatter items={ITEMS} onSelect={noop} />);
     for (const label of [
-      '평소보다 넓음 · 여유 있음',
-      '평소보다 넓음 · 여유 부족',
-      '평소보다 좁음 · 여유 있음',
-      '평소보다 좁음 · 여유 부족',
+      '많이 벌고 · 평소보다 넓음',
+      '많이 벌지만 · 평소보다 좁음',
+      '덜 벌고 · 평소보다 넓음',
+      '덜 벌고 · 평소보다 좁음',
     ]) {
       expect(container.textContent).toContain(label);
     }
@@ -135,13 +143,13 @@ describe('사분면 — 서술형, 명령형 금지', () => {
     for (const d of dots) expect(d.getAttribute('fill')).toBe('var(--color-fg)');
     expect(container.textContent).not.toContain('헤지수단');
     // 좌표에 못 선 항목은 숫자로 말한다 — 조용히 사라지지 않는다.
-    expect(container.textContent).toContain('σ 미확정 1개');
+    expect(container.textContent).toContain('백분위 미확정 1개');
   });
 
-  it('열 머리 셋(버퍼·BEP·상대 RV)은 뜻 설명 표식을 단다', () => {
+  it('열 머리 넷은 뜻 설명 표식을 단다 — 사분면 두 축이 앞에 [OWNER 2026-08-20]', () => {
     const { container } = rtl(<RankingTable items={ITEMS} onSelect={noop} />);
     const helps = [...container.querySelectorAll('.sr-rv-thhelp')].map((e) => e.textContent);
-    expect(helps).toEqual(['버퍼', 'BEP', '상대 RV']);
+    expect(helps).toEqual(['한 달 수익', '지난주 백분위', '버퍼', '상대 RV']);
     // 헤지수단 표기는 표에서도 은퇴했다.
     expect(container.textContent).not.toContain('헤지수단');
   });
@@ -149,7 +157,9 @@ describe('사분면 — 서술형, 명령형 금지', () => {
   it('비시각 요약은 svg 가 진다 — 점은 포인터 지름길이라 탭 정지가 아니다', () => {
     const { container } = render(<RvScatter items={ITEMS} onSelect={noop} />);
     const svg = container.querySelector('svg.sr-rv-scatter');
-    expect(svg?.getAttribute('aria-label')).toMatch(/\d+개 중 \d+개가 평소보다 넓고 여유 있는/);
+    expect(svg?.getAttribute('aria-label')).toMatch(
+      /\d+개 중 \d+개가 중앙값보다 많이 벌고 평소보다 넓은/,
+    );
     for (const d of container.querySelectorAll('circle.sr-rv-dot')) {
       expect(d.getAttribute('tabindex')).toBeNull();
     }
@@ -165,7 +175,7 @@ describe('랭크와 Δ — 서버 값 통과 [OWNER 2026-08-19]', () => {
     // rank 1(BD 3Y) → 2(OFB 6M) → 3(CB1 5Y) → 랭크 없음(—) 순.
     expect(firstCells).toEqual(['1', '2', '3', '—']);
     expect(container.textContent).toContain('▲2'); // BD 3Y 올라옴
-    expect(container.textContent).toContain('▼1'); // CB1 5Y 내려감
+    expect(container.textContent).toContain('▼1'); // CB1 2.5Y 내려감
     // 글리프는 소리로도 뜻이어야 한다 — "black up-pointing triangle" 금지.
     const up = [...container.querySelectorAll('[role="img"]')].find(
       (el) => el.textContent === '▲2',
@@ -223,12 +233,14 @@ describe('껍질 ≠ 창 안 승자 (PN-2)', () => {
     label: '특은채',
     candidates: [
       // 껍질에는 있으나 창 안 승자가 아닌 후보 — 앵커의 6M 이 이 모양이다.
-      { tenor: '6M', years: 0.5, dur: 0, carryBp: 9.5, rollBp: 0, trBp: 9.5,
+      { tenor: '6M', years: 0.5, dur: 0, carryBp: 9.5, rollBp: 0, reinvBp: 0,
+        reinvDays: 0, trBp: 9.5,
         bepBp: null, maturityHold: true, inHull: true, winFrom: null, winTo: null,
-        tr: [9.5, 9.5, 9.5] },
-      { tenor: '3Y', years: 3.0, dur: 2.6, carryBp: 46.2, rollBp: 22.8, trBp: 69.0,
+        tr: [9.5, 9.5, 9.5], pathTr: [], pathDy: [] },
+      { tenor: '3Y', years: 3.0, dur: 2.6, carryBp: 46.2, rollBp: 22.8, reinvBp: 0,
+        reinvDays: 0, trBp: 69.0,
         bepBp: 29.1, maturityHold: false, inHull: true, winFrom: -50, winTo: 13,
-        tr: [120.0, 69.0, 10.0] },
+        tr: [120.0, 69.0, 10.0], pathTr: [], pathDy: [] },
     ],
     swapPoints: [{ from: '3Y', to: '9M', dyBp: 13.0 }],
     filtered: 0,

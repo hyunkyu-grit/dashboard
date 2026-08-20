@@ -1979,6 +1979,17 @@ thead th {
   white-space: nowrap;
 }
 
+/* 경로 칸의 작은 숫자 — 그 경로가 **이 만기의 잔존만기 지점**에서 실제로 움직인
+   폭(bp). 총수익 옆에 붙되 뮤트·작게 서서 주된 숫자를 안 다툰다. 같은 경로가
+   행마다 다르게 닿는다는 사실이 이 칸의 존재 이유라 열 머리로는 못 옮긴다
+   [OWNER 2026-08-20 — 워크북 케이스 C/C-2 의 E열]. */
+.sr-rv-pathdy {
+  margin-left: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-fgMuted);
+}
+
 /* 행 구분 헤어라인 — 랭킹 표 전용. 틴트 격자(히트맵·Δy 격자)에는 선을 긋지
    않는다("격자 안에는 선이 없다" — ForwardMatrix 의 같은 규칙). */
 .sr-rv-divided tbody td {

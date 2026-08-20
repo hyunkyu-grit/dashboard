@@ -141,17 +141,25 @@ export function RankingTable({
               <th className="sr-rv-th sr-rv-left">종목</th>
               {/* 세 열은 머리가 뜻을 설명한다 [OWNER — "커서 가져다 대면
                   친절하고 간결하게"]. 문장은 토스체. */}
+              {/* 열 순서 = 사분면 두 축 먼저 [OWNER 2026-08-20]. 표와 그림이
+                  같은 두 숫자로 시작해야 hover 연동이 한 사실을 가리킨다. */}
               <th className="sr-rv-th">
                 {/* 문장은 짧게 — 두 문장까지 [OWNER 2026-08-19 "간결하게"]. */}
                 <ThHelp
-                  label="버퍼"
-                  help="3개월 캐리와 롤로 버는 폭이에요. 괄호는 평소 3개월 변동의 몇 배인지(σ)예요."
+                  label="한 달 수익"
+                  help="캐리와 롤로 한 달에 버는 돈이에요. 금리가 안 움직인다고 볼 때예요."
                 />
               </th>
               <th className="sr-rv-th">
                 <ThHelp
-                  label="BEP"
-                  help="지금 스프레드 + 버퍼예요. 3개월 뒤 여기까지 벌어지면 본전이에요."
+                  label="지난주 백분위"
+                  help="지난주 스프레드가 과거 52주 중 몇 %쯤 넓었는지예요. 종목마다 무엇 대비인지는 이름 아래에 적혀 있어요."
+                />
+              </th>
+              <th className="sr-rv-th">
+                <ThHelp
+                  label="버퍼"
+                  help="금리가 몇 bp 올라도 본전인지예요. 3개월 캐리와 롤을 듀레이션으로 나눈 값이에요."
                 />
               </th>
               <th className="sr-rv-th">
@@ -200,15 +208,21 @@ export function RankingTable({
                     </span>
                     {/* 헤지수단 표기는 은퇴했다 [OWNER 2026-08-19 — "명시 빼기"].
                         shortable 게이트는 서버 계약에 잔존한다. */}
-                    <span className="sr-rv-sub">지금 {bp1(p.nowBp)}bp</span>
+                    {/* 앵커를 여기 적는다 [트레이더 피드백 2026-08-20] — 한
+                        표에 국고 대비와 특은 대비가 섞이므로, 숫자 옆에 무엇
+                        대비인지 없으면 두 열을 같은 자로 읽게 된다. */}
+                    <span className="sr-rv-sub">
+                      {p.baseLabel} 대비 {bp1(p.nowBp)}bp
+                    </span>
                   </button>
                 </td>
-                {/* bp 와 σ 병기 — bp 하나로 주지 않는다(원칙 ④). 성분 분해는
-                    native title 이 아니라 사분면 리드아웃 카드가 진다. */}
+                {/* 사분면 두 축 — 성분 분해(캐리/롤·z 셋)는 native title 이
+                    아니라 사분면 리드아웃 카드가 진다. */}
+                <td className="sr-rv-td">{sig(p.trMonthBp)}bp</td>
                 <td className="sr-rv-td">
-                  {sig(p.bufferBp)}bp{p.coverage != null ? ` (${p.coverage.toFixed(1)}σ)` : ''}
+                  {p.pctLastWeek != null ? `${p.pctLastWeek.toFixed(0)}%` : '—'}
                 </td>
-                <td className="sr-rv-td">{bp1(p.bepSpreadBp)}</td>
+                <td className="sr-rv-td">{sig(p.bufferBp)}bp</td>
                 <td className="sr-rv-td">
                   {p.relRv != null ? `${sig(p.relRv, 2)}σ` : '—'}
                 </td>

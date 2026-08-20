@@ -19,7 +19,7 @@
  */
 
 import { VStack } from '@coinbase/cds-web/layout';
-import { TextLegal } from '@coinbase/cds-web/typography';
+import { Text, TextLegal } from '@coinbase/cds-web/typography';
 
 import { tintFor } from '@/theme/tint';
 
@@ -62,7 +62,15 @@ export function TenorHeat({
           <tbody>
             {heat.sectors.map((s) => (
               <tr key={s.id}>
-                <td className="sr-rv-td sr-rv-left">{s.label}</td>
+                {/* 앵커를 섹터 이름 아래 [트레이더 피드백 2026-08-20] — 이
+                    히트맵 한 장에 국고 대비 행과 특은 대비 행이 섞인다. 열
+                    머리 하나로는 못 적으므로 행마다 적는다. */}
+                <td className="sr-rv-td sr-rv-left">
+                  <span className="sr-rv-stack">
+                    <span className="sr-rv-name">{s.label}</span>
+                    <span className="sr-rv-sub">{s.baseLabel} 대비</span>
+                  </span>
+                </td>
                 {s.cells.map((c, i) => {
                   const item = c ? byKey.get(`${s.id}|${c.tenor}`) : undefined;
                   return (
@@ -77,14 +85,14 @@ export function TenorHeat({
                           type="button"
                           className="sr-rv-cellbtn"
                           tabIndex={-1}
-                          title={`${s.label} ${c.tenor} — 지금 ${bp1(c.nowBp)}bp, 관측 ${c.obs}일`}
+                          title={`${s.label} ${c.tenor} — ${s.baseLabel} 대비 ${bp1(c.nowBp)}bp, 관측 ${c.obs}일`}
                           aria-label={`${s.label} ${c.tenor} 이력 단면 열기`}
                           onClick={() => onSelect(item)}
                         >
                           {pctOf(c).toFixed(0)}
                         </button>
                       ) : c ? (
-                        <span title={`${s.label} ${c.tenor} — 지금 ${bp1(c.nowBp)}bp, 관측 ${c.obs}일`}>
+                        <span title={`${s.label} ${c.tenor} — ${s.baseLabel} 대비 ${bp1(c.nowBp)}bp, 관측 ${c.obs}일`}>
                           {pctOf(c).toFixed(0)}
                         </span>
                       ) : (
@@ -103,6 +111,12 @@ export function TenorHeat({
           숫자가 높을수록 지금 스프레드가 평소
           ({window === '52w' ? '52주' : '전체 이력'})보다 넓은 쪽이에요.
         </TextLegal>
+        {/* 앵커가 두 벌이라는 사실 자체를 한 줄로 — 행마다 붙은 라벨이
+            무엇인지 처음 보는 사람이 알아야 한다. */}
+        <Text font="legal" as="span" color="fgMuted">
+          은행·회사·카드·캐피탈은 산금채(특은) 대비로 재요. 같은 등급 안에서
+          붙었는지 벌어졌는지가 보이도록요.
+        </Text>
       </VStack>
     </VStack>
   );

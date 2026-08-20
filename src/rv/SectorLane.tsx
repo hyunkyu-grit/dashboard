@@ -2,6 +2,12 @@
 
 /* 동일섹터 레인 (레인 A) — 만기 × Δy 격자, 칸 = H 보유 총수익 bp.
  *
+ * 격자 오른쪽에 **비평행 경로 열**이 붙는다 [OWNER 2026-08-20 — 워크북 케이스
+ * C/C-2]. 격자가 Δy 하나를 전 테너에 똑같이 얹는 세계라면, 경로 열은 테너마다
+ * 다른 Δ 를 얹은 세계다. 한 후보가 맞는 크기는 **자기 잔존만기 지점의 보간값**
+ * 이라(워크북 E열) 같은 경로가 후보마다 다르게 닿는다 — 그래서 열이 총수익과
+ * `Δ@잔존` 을 나란히 적는다. 경로가 없으면 열 자체가 안 선다.
+ *
  * **결정 숫자는 격자가 아니라 스왑점 목록이다** — 1bp 격자는 껍질 멤버를
  * 건너뛴다(rv1 실측: KDB 10Y 의 승리 구간 +5.2~+5.7bp 는 정수 bp 를 하나도 안
  * 품는다). 격자는 지형을 읽는 밀도이고, "어느 Δy 에서 갈아타나"는 아래 스왑점
@@ -15,7 +21,7 @@
  */
 
 import { HStack, VStack } from '@coinbase/cds-web/layout';
-import { TextCaption, TextLabel2, TextLegal } from '@coinbase/cds-web/typography';
+import { Text, TextCaption, TextLabel2, TextLegal } from '@coinbase/cds-web/typography';
 
 import { tintFor } from '@/theme/tint';
 
@@ -25,11 +31,15 @@ export function SectorLane({
   sector,
   dys,
   hMonths,
+  pathCount = 0,
 }: {
   sector: RvSector;
   dys: number[];
   hMonths: number;
+  /** 비평행 경로 개수 — 0 이면 경로 열이 안 선다. */
+  pathCount?: number;
 }) {
+  const paths = Array.from({ length: pathCount }, (_, i) => i);
   const scale = Math.max(
     ...sector.candidates.flatMap((c) => c.tr.map((v) => Math.abs(v))),
     0,
@@ -50,6 +60,11 @@ export function SectorLane({
               <th className="sr-rv-th">버퍼</th>
               {/* "승리 구간" → "1등 구간" [OWNER 2026-08-19 — 어휘 순화 컨펌]. */}
               <th className="sr-rv-th">1등 구간</th>
+              {paths.map((i) => (
+                <th key={i} className="sr-rv-th">
+                  경로 {i + 1}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -92,6 +107,30 @@ export function SectorLane({
                     ? `${c.winFrom > 0 ? '+' : ''}${c.winFrom}..${c.winTo > 0 ? '+' : ''}${c.winTo}`
                     : '—'}
                 </td>
+                {/* 경로 칸은 격자와 같은 틴트 자를 쓴다 — 같은 양(총수익 bp)을
+                    옆에 놓고 읽는 자리라 다른 자로 칠하면 비교가 거짓이 된다.
+                    괄호는 그 경로가 **이 후보의 잔존만기에서** 실제로 몇 bp
+                    였나(워크북 E열) — 같은 경로가 행마다 다르게 닿는 사실. */}
+                {paths.map((i) => {
+                  const v = c.pathTr[i];
+                  const dy = c.pathDy[i];
+                  if (v == null) return <td key={i} className="sr-rv-td">—</td>;
+                  return (
+                    <td
+                      key={i}
+                      className="sr-rv-td"
+                      style={{ background: tintFor(v, scale) }}
+                    >
+                      {v.toFixed(0)}
+                      {dy != null ? (
+                        <span className="sr-rv-pathdy">
+                          {dy > 0 ? '+' : ''}
+                          {dy.toFixed(0)}
+                        </span>
+                      ) : null}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
@@ -122,6 +161,14 @@ export function SectorLane({
           칸은 금리가 그만큼 움직였을 때 {hMonths}개월 들고 있으면 얻는 수익(bp)이에요.
           테두리 친 칸이 그 만기가 1등인 구간이고, 교체점을 지나면 1등이 바뀌어요.
         </TextLegal>
+        {paths.length > 0 ? (
+          /* 신규 줄은 `Text font=` — shorthand 는 @deprecated 이고 래칫이
+             천장을 지킨다(CLAUDE.md). */
+          <Text font="legal" as="span" color="fgMuted">
+            경로 열은 테너마다 다르게 움직이는 경우예요. 작은 숫자는 그 경로가 이
+            만기의 남은 기간에서 실제로 움직인 폭이에요 — 만기마다 달라요.
+          </Text>
+        ) : null}
       </VStack>
     </VStack>
   );
