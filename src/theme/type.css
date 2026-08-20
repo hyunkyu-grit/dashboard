@@ -2174,3 +2174,83 @@ thead th {
 .sr-scn-deftable > * + * {
   border-top: 1px solid var(--color-bgLine);
 }
+
+/* ── Lab 발행 캘린더 (`lab/IssuancePage.tsx`) ────────────────────────────────
+ *
+ * 달력 격자다. CDS 에 달력 컴포넌트가 없고(있는 것은 날짜 **입력**이다), 여기서
+ * 필요한 것은 «한 달을 한 눈에» 라 7열 격자가 전부다.
+ *
+ * 칸은 누를 수 있다 — 그날 상세가 아래에 열린다. 그래서 hover·선택 상태가 있고,
+ * 비영업일은 눌러도 볼 것이 없지만 **자리는 지킨다**(빠지면 요일이 어긋난다). */
+.sr-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+  width: 100%;
+}
+
+.sr-cal-dow {
+  padding: 0 6px 4px;
+  text-align: right;
+}
+
+.sr-cal-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 78px;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sr-cal-cell:hover {
+  border-color: var(--color-bgLine);
+}
+
+/* 주말·공휴일은 **눌러 둔다**. 첫 판은 반대로 평일에 바탕을 깔았는데, 그러면
+ * 평일이 한 덩어리 슬래브가 되고 주말이 거기 뚫린 구멍처럼 읽혔다(실측
+ * 2026-08-20). 달력의 관례는 주말을 죽이는 쪽이다. */
+.sr-cal-cell[data-off='1'] {
+  background: var(--color-bgAlternate);
+}
+
+.sr-cal-cell[data-today='1'] {
+  border-color: var(--color-fgMuted);
+}
+
+.sr-cal-cell[data-sel='1'] {
+  border-color: var(--color-fg);
+  background: var(--color-bgSecondary);
+}
+
+/* 그날 발행액의 크기. 숫자 옆의 막대가 아니라 **칸 바닥의 띠**다 — 칸이 작아
+ * 막대를 옆에 두면 숫자가 밀린다. */
+.sr-cal-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-fgMuted);
+  min-width: 2px;
+}
+
+/* 일정 점. 레인마다 다른 글리프가 아니라 같은 점이고, 무엇인지는 상세가 말한다 —
+ * 칸 안에서 레인을 색으로 구분하면 방향색과 싸운다(색은 방향만 나른다). */
+.sr-cal-dots {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.sr-cal-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-fgMuted);
+}
+
+/* 앞달·뒷달로 넘어가는 자리를 메우는 빈 칸. 배경도 테두리도 없다. */
+.sr-cal-blank {
+  min-height: 78px;
+}

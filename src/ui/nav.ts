@@ -171,17 +171,18 @@ export function tabForSection(s: SectionId, lastGroup: Group): TabId {
  *
  * 세입자는 **탭이 아니라 URL 상태**다(`?g=lab&lab=scenario`). 탭을 늘리면
  * `sectionOf()` 가 드는 «섹션은 유도값» 규칙에 두 번째 상태가 끼어든다. */
-export type LabId = 'surface' | 'scenario';
+export type LabId = 'surface' | 'scenario' | 'issuance';
 
 export const DEFAULT_LAB: LabId = 'surface';
 
 export const LAB_ITEMS: { id: LabId; label: string; desc: string; glyph: string }[] = [
   { id: 'surface', label: '커브 표면', desc: '풀별 커브가 지난 몇 해 어떻게 움직였나', glyph: '◇' },
   { id: 'scenario', label: '시나리오', desc: '이 금통위 경로가 프라이싱되면 커브는 어디가 정합인가', glyph: '◆' },
+  { id: 'issuance', label: '발행 캘린더', desc: '내일 이 섹터에 얼마가 새로 얹히나', glyph: '▤' },
 ];
 
 export function isLabId(v: string | undefined): v is LabId {
-  return v === 'surface' || v === 'scenario';
+  return v === 'surface' || v === 'scenario' || v === 'issuance';
 }
 
 /** 메가 패널을 여는 섹션. 나머지는 목적지가 하나뿐이라 버튼이다. */

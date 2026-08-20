@@ -112,6 +112,15 @@ function liveUrl(path: string, query?: string): string {
  * 이 요청은 화면당 **한 번**이고, 서버가 없으면 화면이 그 사실을 말한다. */
 export const scenarioAnchorsUrl = () => liveUrl("/api/scenario/anchors");
 
+/* ── Lab 발행 캘린더 [2026-08-20] ─────────────────────────────────────────────
+ * CSV 를 읽는 화면이라 정적 쌍둥이를 구울 수 없다 — 수집기가 5분마다 새로 쓰는
+ * 파일이 원천이고, 구운 판은 그 순간 낡는다. */
+export const issuanceCalendarUrl = (ym: string, months: number) =>
+  liveUrl("/api/issuance/calendar", `ym=${encodeURIComponent(ym)}&months=${months}`);
+
+export const issuanceDayUrl = (iso: string) =>
+  liveUrl(`/api/issuance/day/${encodeURIComponent(iso)}`);
+
 export const cashbondInstrumentsUrl = () => liveUrl("/api/cashbond/instruments");
 
 export const cashbondSeriesUrl = (id: string) =>

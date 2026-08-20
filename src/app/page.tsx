@@ -55,6 +55,7 @@ import { TopNav } from '@/ui/TopNav';
 import { useUrlState } from '@/ui/useUrlState';
 import { DEFAULT_LAB, isLabId, type LabId } from '@/ui/nav';
 import { Surface3D } from '@/ui/Surface3D';
+import { IssuancePage } from '@/lab/IssuancePage';
 import { ScenarioPage } from '@/lab/ScenarioPage';
 
 /** Swap groups first (v1's), then the Cash Bond pair (2026-08-18).
@@ -561,11 +562,17 @@ const BANNER_H = 34;
           <ErrorBoundary
             region="연구실"
             fallback={
-              lab === 'scenario' ? '시나리오 화면을 그리지 못했어요.' : '커브 표면을 그리지 못했어요.'
+              lab === 'scenario'
+                ? '시나리오 화면을 그리지 못했어요.'
+                : lab === 'issuance'
+                  ? '발행 캘린더를 그리지 못했어요.'
+                  : '커브 표면을 그리지 못했어요.'
             }
           >
             {lab === 'scenario' ? (
               <ScenarioPage policy={data?.summary.policy} />
+            ) : lab === 'issuance' ? (
+              <IssuancePage />
             ) : (
               <Surface3D policy={data?.summary.policy} />
             )}

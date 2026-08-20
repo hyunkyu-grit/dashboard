@@ -83,8 +83,9 @@ from .theta import theta_table
 from .dv01 import build_dv01_table
 from .events import detect_event_clusters
 from .forwards import forwards_payload
+from .issuance import IssuanceUnavailable, build as build_issuance, day_detail as issuance_day, months_from
 from .labscenario import build_anchors
-from .policy import load_base_rate, policy_step
+from .policy import load_base_rate, policy_step, MPC_DATES
 from .staleness import dataset_freshness
 from .surface import surface_payload
 from .surface3d import build_surface3d, surface3d_watermark
@@ -437,6 +438,38 @@ def scenario_anchors() -> dict:
     가 이미 겪은 «조용히 갈리는 사본» 이 하나 더 생긴다.
     """
     return build_anchors(_dataset, _curves, _policy.get("latest"))
+
+
+@router.get("/api/issuance/calendar")
+def issuance_calendar(ym: str = "", months: int = 2) -> dict:
+    """V2-LOCAL. 발행 캘린더 (issuance.py) — Lab 의 세 번째 세입자.
+
+    `ym` 은 `YYYY-MM`, 비우면 오늘 달. 수집기가 CSV 를 새로 쓰면 mtime 이 캐시 키라
+    다음 요청이 알아서 읽는다 — 서버를 건드릴 필요가 없다.
+
+    금통위 날짜는 `policy.MPC_DATES` 가 준다. 그 목록은 `src/data/calendar.json` 의
+    사본이고 둘의 일치는 테스트가 본다 — 이 모듈이 세 번째 사본을 만들지 않는다.
+    """
+    today = _dataset.asof
+    try:
+        y, m = (int(ym[:4]), int(ym[5:7])) if len(ym) >= 7 else (today.year, today.month)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"{ym} 는 YYYY-MM 이 아니에요")
+    span = months_from(y, m, max(1, min(6, months)))
+    mpc = [d.isoformat() for d in MPC_DATES]
+    try:
+        return build_issuance(span, mpc)
+    except IssuanceUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/api/issuance/day/{iso}")
+def issuance_day_detail(iso: str) -> dict:
+    """그날 하루 — 발행 종목 · 국고채 입찰(+응찰 강도) · 공개시장운영 · 금통위."""
+    try:
+        return issuance_day(iso, [d.isoformat() for d in MPC_DATES])
+    except IssuanceUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 @router.get("/api/dv01/{series_id}")
