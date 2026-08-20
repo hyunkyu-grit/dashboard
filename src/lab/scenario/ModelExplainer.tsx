@@ -1,290 +1,276 @@
 'use client';
 
-/* 「모형」 탭 — 설명하는 대신 보여준다.
+/* 「성분」 탭 — 그 차이가 무엇으로 이루어져 있나, 그리고 무엇에 얹혀 있나.
  *
- * 첫 판은 글이 너무 많았다 [OWNER, 2026-08-20 — "모형 개복잡해보이는데 더
- * 단순화해서 그래프랑 같이"]. 여섯 절에 표 두 개였고, 읽어야 알 수 있는 화면은
- * 아무도 안 읽는다.
+ * 「모형」 탭에서 갈라져 나왔다 [OWNER, 2026-08-20 — "얘는 다른 탭으로 빼고"].
+ * 그림 한 장과 숫자 격자를 한 탭에 쌓으니 둘 다 작아졌고, 그림은 «예쁘게» 될
+ * 자리를 못 받았다. 이제 그림은 「모형」이 온전히 갖고, 여기는 숫자만 진다.
  *
- * 그래서 뒤집었다: **충격을 하나 고르면 모형이 그 충격에 어떻게 반응하는지를
- * 그린다.** 「금통위 경로는 준칙 eq.35 를 덮어쓰고 CD 를 거쳐 IRS 로 간다」 를
- * 문장으로 읽는 것보다, +25bp 를 넣었을 때 기준금리·물가·갭·국고가 24분기 동안
- * 어떻게 움직이는지를 보는 편이 빠르다.
+ * ── 성분은 지어낸 것이 아니라 산술이다 ──────────────────────────────────────
+ * 모형이 선형이라(기저가 `linearity_gate` 를 자기 안에 싣고 다닌다) 분해가
+ * **정확**하다:
  *
- * 그림은 새 데이터가 필요 없다 — 결과 탭이 쓰는 **같은 기저와 같은 함수**로
- * 나온다(`combine`). 화면이 자기가 쓰는 모형을 자기 코드로 그리는 셈이라, 그림과
- * 숫자가 갈릴 수 없다.
+ *     Δ(τ) = Σ_k  coef_k × basis_k.irs[τ][h=4]
  *
- * ── 남긴 글 ────────────────────────────────────────────────────────────────
- * 도해 넉 줄(무엇을 빌렸나), 출처 목록, 못 하는 것 네 줄. 그 밖은 전부 걷었다 —
- * 손잡이 표 여섯 줄은 그래프가 대신하고, CD 전이 수치와 검증 통계는 한 줄로 접었다.
+ * `combine` 이 계수를 `diffs.coefs` 로 이미 내놓는다. 여기서 하는 일은 그 곱을
+ * 손잡이 이름별로 묶는 것뿐이고, 합이 표의 `deltaBp` 와 맞는지는
+ * `guards/scenario-decompose.test.ts` 가 본다.
+ *
+ * ── 부호가 뒤집혀 보이는 자리 ───────────────────────────────────────────────
+ * 금통위 +25bp 한 분기가 3년 IRS 를 **내린다**(−3.5bp). 오타가 아니다. 기저의
+ * `irs` 는 레벨이 아니라 `engine_contribution` = «h분기 뒤부터의 CD 평균 − 오늘
+ * 부터의 CD 평균» 이다. 지나가는 인상은 12개월 뒤엔 이미 빠져 있으므로 그때의
+ * 3년 스왑은 오늘의 3년보다 낮다. 시장 캐리와 정확히 같은 종류의 양이라 나란히
+ * 놓고 뺄 수 있는 것이고, 그게 이 화면이 성립하는 이유다.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
-import { SegmentedTabs } from '@coinbase/cds-web/tabs';
 import { Text } from '@coinbase/cds-web/typography';
-import { CartesianChart, Line, XAxis, YAxis } from '@coinbase/cds-web/visualizations/chart';
 
-import { BASIS, impulse } from './combine';
+import { fetchScenarioMacro, type MacroPayload } from './api';
+import { BASIS, IRS_TENORS, type Diffs, type IrsTenor } from './combine';
+import { H_12M, type ScenarioRow } from './assemble';
 
-/* ── 충격 다섯 ──────────────────────────────────────────────────────────────
+const TENOR_LABEL: Record<IrsTenor, string> = {
+  '1y': '1Y',
+  '2y': '2Y',
+  '3y': '3Y',
+  '5y': '5Y',
+  '10y': '10Y',
+};
+
+/** 손잡이 하나가 어느 기저들로 이루어졌나. 금통위만 여덟 벌이다(분기별).
  *
- * Fed 가 빠져 있다. 미국 기저(`us_*`)가 BIGFOOT 자신의 조건부 산출물과 400배
- * 어긋나 있어서다 — `combine.ts` 의 `US_BASES_USABLE` 주석에 실측이 있다. **이 탭이
- * 응답을 그리기 시작하자마자 드러났다** — 그림이 제 몫을 한 셈이다.
+ * ── 순서와 이름이 여기서 중요하다 [실측 2026-08-20] ─────────────────────────
+ * 금통위가 **맨 아래**이고 이름이 «금통위» 가 아니라 «금통위 경로 고정» 이다.
+ * 그 줄은 한국은행이 하는 일이 아니라 **내가 8분기를 못 박아 둔 결과**이기
+ * 때문이다.
  *
- * 크기는 **기저가 담고 있는 단위 충격 그대로**다(`basis_scales`). 여기서 크기를
- * 새로 정하면 그림이 기저와 다른 것을 보여주게 된다. */
-const SHOCKS: {
-  id: string;
-  /** 기저에 저장된 이름. 그 기저가 곧 이 충격의 단위 응답이다. */
-  basis: string;
-  label: string;
-  size: string;
-  enters: string;
-}[] = [
+ * `combine` 은 정책 계수를 풀어서 앞 8분기 `i_kr` 이 내가 놓은 경로와 정확히
+ * 같아지게 만든다(`cPol = M⁻¹(target − other)`). 그래서 다른 손잡이를 건드리면
+ * 준칙이 금리를 따라 움직이려 하고, 경로가 고정돼 있으면 그것을 **막는 몫**이
+ * 전부 이 줄에 잡힌다. 실측:
+ *
+ *     유가 +12% (경로 동결)   유가 −9.1  ·  금통위 +6.0   → 3Y Δ −3.1bp
+ *     물가 +0.6pp (경로 동결) 물가 −22.5 ·  금통위 +23.2  → 3Y Δ  +0.8bp
+ *
+ * 물가를 0.6pp 올려도 3년이 거의 안 움직이는 것은 «모형이 물가를 무시해서» 가
+ * 아니라 **내가 금통위를 못 움직이게 묶어 뒀기 때문**이다. 그 사실이 이 격자에서
+ * 유일하게 읽히는 자리이므로, 이름을 «금통위» 로 두면 그 정보가 죽는다. */
+const DRIVERS: { key: string; label: string; bases: string[] }[] = [
+  { key: 'cpi', label: '물가', bases: ['cpi'] },
+  { key: 'gap', label: 'GDP 갭', bases: ['gap'] },
+  { key: 'exports', label: '수출', bases: ['exports'] },
+  { key: 'oil', label: '유가', bases: ['oil'] },
   {
-    id: 'policy',
-    label: '금통위',
-    size: '한 분기만 +25bp',
-    enters: '준칙(eq.35)을 그 분기 동안 덮어써요. 그 뒤엔 준칙이 도로 가져가요.',
-    basis: 'policy_q1',
-  },
-  {
-    id: 'cpi',
-    label: '물가',
-    size: '네 분기 +0.5pp',
-    enters: '필립스(eq.23-24)로 들어가요. 준칙이 반응해서 금리가 따라 올라가요.',
-    basis: 'cpi',
-  },
-  {
-    id: 'gap',
-    label: 'GDP 갭',
-    size: '네 분기 −0.5pp',
-    enters: '소비·투자 PAC 방정식의 수요 충격이에요. 주택·가계부채도 같이 움직여요.',
-    basis: 'gap',
-  },
-  {
-    id: 'exports',
-    label: '수출',
-    size: '네 분기 −5%',
-    enters: '수출 방정식(eq.17)의 잔차로 들어가요. 갭을 거쳐 물가로 번져요.',
-    basis: 'exports',
-  },
-  {
-    id: 'oil',
-    label: '유가',
-    size: '+10%',
-    enters: '수입물가(eq.31)의 원유 항이에요. 물가를 밀어 올려요.',
-    basis: 'oil',
+    key: 'policy',
+    label: '금통위 경로 고정',
+    bases: Array.from({ length: 8 }, (_, i) => `policy_q${i + 1}`),
   },
 ];
 
-const SHOCK_TABS = SHOCKS.map((s) => ({ id: s.id, label: s.label }));
+/** 한 손잡이가 한 테너의 12개월 Δ 에 넣은 bp. 선형이라 이 곱이 곧 기여분이다. */
+function contribBp(diffs: Diffs, bases: string[], tenor: IrsTenor): number {
+  let pp = 0;
+  for (const name of bases) {
+    const c = diffs.coefs[name];
+    if (!c) continue;
+    const entry = BASIS.bases[name];
+    if (!entry) continue;
+    pp += c * entry.irs[tenor][H_12M];
+  }
+  return pp * 100;
+}
 
-/** 그림에 세우는 다섯 줄. 단위가 둘이라 그룹을 나눠 적는다. */
-const PANELS: { key: 'i_kr' | 'cpi_yoy' | 'y_gap' | 'kr3y' | 'kr10y'; label: string; bp: boolean }[] =
-  [
-    { key: 'i_kr', label: '기준금리', bp: true },
-    { key: 'kr3y', label: '국고 3년', bp: true },
-    { key: 'kr10y', label: '국고 10년', bp: true },
-    { key: 'cpi_yoy', label: '물가 (YoY)', bp: false },
-    { key: 'y_gap', label: 'GDP 갭', bp: false },
-  ];
+const fmt = (v: number, d = 1) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(d)}`;
 
-/** 도해 넉 줄. ②와 ③이 남의 모형이라는 사실이 이 도해의 요점이다. */
-const FLOW = [
-  { head: '① 내가 놓는 것', line: '금통위 경로 · CPI · GDP 갭 · 수출 · 유가' },
-  { head: '② 한국 블록', line: '한국은행 WP 2025-3 — 준칙 · 필립스 · UIP · 기간구조' },
-  { head: '③ 미국 블록', line: 'IMF QPM 2008 + 연준 FRB/US 기간프리미엄 (손잡이는 내려 둠)' },
-  { head: '④ 시장으로', line: '정책 → CD 전이 → 기대 CD 평균 → IRS' },
-];
+/* ── 화면 ──────────────────────────────────────────────────────────────────── */
 
-const SOURCES = [
-  ['한국 방정식', '한국은행 WP 2025-3 (BOK-LOOK) eq.7~44 · 기대는 Appendix A 위성 VAR'],
-  ['조정 동학', '연준 FRB/US 의 PAC(다항조정비용) — 기계만 빌려 한국 방정식에 씌웠어요'],
-  ['미국 블록', 'IMF WP/08/278 (Carabenciov 외) 소형 NK 3방정식'],
-  ['미국 기간프리미엄', 'pyfrbus 1.1.1 — 연준 FRB/US 의 10년물에 맞춘 12탭 커널'],
-  ['정책 → CD', '기준금리 변경 33건(2010-07~2025-05) 이벤트스터디 — 발표일에 55.8%, 나머지는 τ 78.8영업일'],
-  ['데이터', '한국은행 ECOS · FRED'],
-];
+export function ModelExplainer({ rows, diffs }: { rows: ScenarioRow[]; diffs: Diffs }) {
+  const [macro, setMacro] = useState<MacroPayload | null>(null);
+  const [macroErr, setMacroErr] = useState<string | null>(null);
 
-const CANNOT = [
-  '확률이 아니에요. «이 경로가 프라이싱되면 커브는 어디가 정합인가» 라는 가격결정 질문이에요.',
-  '스왑스프레드에 수급·헤지 플로우가 없어요. 평균회귀만 봐요.',
-  '기간프리미엄이 IRS 다리에 안 실려 있어서 장기 테너 예측이 보수적이에요.',
-  '기저는 구운 것이라 계수가 그날의 추정이에요. 오늘의 커브만 라이브고요.',
-];
+  useEffect(() => {
+    let live = true;
+    void fetchScenarioMacro()
+      .then((m) => live && setMacro(m))
+      .catch((e) => live && setMacroErr(e instanceof Error ? e.message : String(e)));
+    return () => {
+      live = false;
+    };
+  }, []);
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  /** 성분 격자 — 행이 손잡이, 열이 테너. 합계 세 줄이 그 아래 선다. */
+  const grid = useMemo(
+    () =>
+      DRIVERS.map((d) => ({
+        ...d,
+        cells: IRS_TENORS.map((t) => contribBp(diffs, d.bases, t)),
+      })),
+    [diffs],
+  );
+
+  if (rows.length === 0) return null;
+
   return (
-    <VStack gap={1} minWidth={0} width="100%">
-      <Text as="h3" font="caption" color="fgMuted">
-        {title}
-      </Text>
-      {children}
+    <VStack gap={3} minWidth={0} width="100%" flexGrow={1} minHeight={0}>
+      <Decomposition grid={grid} rows={rows} />
+      <MacroStrip macro={macro} error={macroErr} />
     </VStack>
   );
 }
 
-/** 응답 한 칸. 선 하나뿐이라 색이 필요 없다 — 잉크로 그리고 진폭을 숫자로 적는다.
- *
- * 여러 변수를 한 축에 겹치면 단위가 섞이고(bp 와 pp), 색을 다섯 개 지어내야 한다.
- * 작은 그림 다섯 장이 그 둘을 다 피한다. */
-function Panel({ label, path, bp }: { label: string; path: number[]; bp: boolean }) {
-  const scale = bp ? 100 : 1;
-  const vals = path.map((v) => v * scale);
-  const ext = vals.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0);
-  const unit = bp ? 'bp' : 'pp';
+/* ── 성분 ───────────────────────────────────────────────────────────────────── */
+
+function Decomposition({
+  grid,
+  rows,
+}: {
+  grid: { key: string; label: string; cells: number[] }[];
+  rows: ScenarioRow[];
+}) {
+  const modelSum = rows.map((r) => r.deltaBp);
+  const carry = rows.map((r) => r.marketCarryBp);
+  const vs = rows.map((r) => r.vsMarketBp);
+  const cols = rows.map((r) => TENOR_LABEL[r.tenor] ?? r.tenor);
+
   return (
-    <VStack gap={0.5} minWidth={168} flexGrow={1} flexBasis={0}>
-      <HStack gap={1} alignItems="baseline" width="100%">
-        <Text as="span" font="legal" color="fgMuted" noWrap>
+    <VStack gap={0.5} minWidth={0} width="100%">
+      <Text as="h3" font="caption" color="fgMuted">
+        무엇이 그 차이를 만드나 (12개월, bp)
+      </Text>
+      <Box className="sr-scn-decomp" style={{ ['--sr-decomp-cols' as string]: cols.length }}>
+        <span className="sr-scn-dc-h" />
+        {cols.map((c) => (
+          <span key={c} className="sr-scn-dc-h sr-scn-dc-n">
+            <Text as="span" font="legal" color="fgMuted" tabularNumbers noWrap>
+              {c}
+            </Text>
+          </span>
+        ))}
+
+        {grid.map((d) => (
+          <Row key={d.key} label={d.label} cells={d.cells} muted />
+        ))}
+
+        <Row label="모형이 말하는" cells={modelSum} rule />
+        <Row label="시장이 프라이싱한" cells={carry} />
+        <Row label="차이 = 트레이드" cells={vs} strong />
+      </Box>
+      <Text as="span" font="legal" color="fgMuted">
+        맨 아랫줄이 트레이드예요 — 음수면 리시브, 양수면 페이. 「금통위 경로 고정」은
+        한국은행이 하는 일이 아니라 <b>내가 8분기를 못 박아 둔 몫</b>이에요. 다른
+        손잡이를 움직이면 준칙이 금리를 따라가려 하는데, 경로를 고정해 두면 그걸
+        막는 값이 거기 잡혀요.
+      </Text>
+    </VStack>
+  );
+}
+
+function Row({
+  label,
+  cells,
+  muted,
+  rule,
+  strong,
+}: {
+  label: string;
+  cells: (number | null)[];
+  muted?: boolean;
+  rule?: boolean;
+  strong?: boolean;
+}) {
+  return (
+    <>
+      <span className="sr-scn-dc-l" data-rule={rule ? '1' : '0'}>
+        <Text as="span" font="legal" color={muted ? 'fgMuted' : undefined} noWrap>
           {label}
         </Text>
-        <Box style={{ marginInlineStart: 'auto' }}>
-          <Text as="span" font="legal" tabularNumbers noWrap>
-            {ext >= 0 ? '+' : '−'}
-            {Math.abs(ext).toFixed(bp ? 1 : 3)}
-            {unit}
+      </span>
+      {cells.map((v, i) => (
+        <span key={i} className="sr-scn-dc-n" data-rule={rule ? '1' : '0'}>
+          <Text
+            as="span"
+            font={strong ? 'label2' : 'legal'}
+            color={muted && v === 0 ? 'fgMuted' : muted ? 'fgMuted' : undefined}
+            tabularNumbers
+            noWrap
+          >
+            {v === null ? '—' : v === 0 && muted ? '·' : fmt(v)}
           </Text>
-        </Box>
-      </HStack>
-      <CartesianChart
-        animate={false}
-        height={72}
-        accessibilityLabel={`${label} 24분기 반응, 최대 ${ext.toFixed(bp ? 1 : 3)}${unit}`}
-        inset={{ top: 6, right: 4, bottom: 4, left: 4 }}
-        series={[{ id: 'r', data: vals, color: 'var(--color-fg)', yAxisId: 'y' }]}
-        xAxis={{ data: vals.map((_, i) => i) }}
-        yAxis={[{ id: 'y' }]}
-      >
-        {/* 눈금 라벨을 끄는 prop 이 없다(`showTickLabels` 는 CDS 에 없음, 실측
-            2026-08-20) — 포맷터가 빈 문자열을 돌려주는 것이 그 자리다. */}
-        <XAxis showGrid={false} showLine={false} showTickMarks={false} tickLabelFormatter={() => ''} />
-        <YAxis
-          axisId="y"
-          position="right"
-          showGrid={false}
-          showLine={false}
-          showTickMarks={false}
-          tickLabelFormatter={() => ''}
-        />
-        <Line seriesId="r" curve="linear" strokeWidth={1.5} />
-      </CartesianChart>
-    </VStack>
+        </span>
+      ))}
+    </>
   );
 }
 
-export function ModelExplainer() {
-  const [shockId, setShockId] = useState(SHOCKS[0].id);
-  const shock = SHOCKS.find((s) => s.id === shockId) ?? SHOCKS[0];
-  /* `combine` 이 아니라 `impulse` 다 — 그쪽은 8분기를 내가 놓은 자리에 고정하려고
-     정책 계수를 푸는데, 충격반응에서 그러면 «Fed 가 올리는데 한은은 2년간 꿈쩍도
-     안 한다» 를 푸는 셈이 된다(실측: 기준금리 +520bp). 기저에 저장된 것은 애초에
-     «그 충격에 준칙이 반응한 결과» 라 읽기만 하면 된다. */
-  const resp = useMemo(() => impulse(BASIS, shock.basis), [shock]);
+/* ── 모형이 딛고 선 자리 ────────────────────────────────────────────────────── */
+
+/** ECOS 실측 세 줄. 손잡이가 «물가 +0.5pp» 라고 할 때, 그 0.5pp 가 무엇에
+ * 얹히는 값인지가 같이 서야 그 말을 검사할 수 있다.
+ *
+ * GDP 갭은 한국은행이 발표하지 않는다 — 실질GDP 에 HP(1600) 을 건 우리 프록시라
+ * 화면이 그렇게 적는다(`official: false`). 그 필터가 BIGFOOT 것과 같은 값을
+ * 내는지는 `backend/tests/test_labmacro.py` 가 검사한다. */
+function MacroStrip({ macro, error }: { macro: MacroPayload | null; error: string | null }) {
+  if (error) {
+    return (
+      <Text as="p" font="legal" color="fgMuted">
+        모형이 딛고 선 거시 실측은 못 불러왔어요 ({error}). 시나리오 계산은 구운 기저와
+        오늘의 커브로 도니 그대로예요.
+      </Text>
+    );
+  }
+  if (!macro) {
+    return (
+      <Text as="p" font="legal" color="fgMuted">
+        모형이 딛고 선 거시 실측을 불러오는 중이에요.
+      </Text>
+    );
+  }
 
   return (
-    <VStack gap={3} minWidth={0} width="100%">
-      <Section title="충격 하나를 넣으면 모형이 이렇게 반응해요">
-        <HStack gap={1.5} alignItems="center" flexWrap="wrap">
-          <SegmentedTabs
-            accessibilityLabel="충격 종류"
-            tabs={SHOCK_TABS}
-            activeTab={SHOCK_TABS.find((t) => t.id === shockId) ?? null}
-            onChange={(t) => t && setShockId(t.id)}
-          />
-          <Text as="span" font="legal" color="fgMuted">
-            {shock.size}
-          </Text>
-        </HStack>
-        <Text as="p" font="legal" color="fgMuted">
-          {shock.enters}
+    <VStack gap={0.5} minWidth={0} width="100%">
+      <HStack gap={1.5} alignItems="baseline" width="100%" flexWrap="wrap">
+        <Text as="h3" font="caption" color="fgMuted" noWrap>
+          손잡이가 얹히는 값 · 한국은행 ECOS
         </Text>
-        {/* 가로 24분기. 축 눈금은 안 그린다 — 여기서 읽을 것은 값이 아니라 모양
-            이고, 크기는 칸마다 오른쪽 위에 숫자로 적혀 있다. */}
-        <HStack gap={2} width="100%" flexWrap="wrap" alignItems="flex-start">
-          {PANELS.map((p) => (
-            <Panel key={p.key} label={p.label} path={resp[p.key]} bp={p.bp} />
-          ))}
-        </HStack>
-        <Text as="span" font="legal" color="fgMuted">
-          가로는 24분기(6년)예요. 크기는 기저에 저장된 단위 충격 그대로고, 금통위는
-          준칙이 반응한 결과까지 포함한 값이에요 — 여기서는 경로를 고정하지 않아요.
+        <Text as="span" font="legal" color="fgMuted" tabularNumbers noWrap>
+          {macro.asof ?? '—'}
         </Text>
-      </Section>
-
-      <Section title="숫자가 지나오는 길">
-        <VStack gap={0} width="100%" className="sr-scn-deftable">
-          {FLOW.map((f) => (
-            <HStack key={f.head} gap={1.5} width="100%" alignItems="baseline" paddingY={1}>
-              <Box width={104} flexShrink={0}>
-                <Text as="span" font="label2" noWrap>
-                  {f.head}
-                </Text>
-              </Box>
-              <Text as="span" font="legal" color="fgMuted">
-                {f.line}
+      </HStack>
+      <HStack gap={1} width="100%" flexWrap="wrap" alignItems="stretch">
+        {macro.series.map((s) => {
+          const last = s.points.at(-1);
+          const prev = s.points.at(-5);
+          return (
+            <VStack key={s.key} className="sr-simcard" gap={0} minWidth={150} flexGrow={1} flexBasis={0}>
+              <Text as="span" font="legal" color="fgMuted" noWrap>
+                {s.label}
+                {s.official ? '' : ' · 우리 추정'}
               </Text>
-            </HStack>
-          ))}
-        </VStack>
-        <Text as="p" font="legal" color="fgMuted">
-          ②와 ③은 우리가 만든 게 아니라 경제학자들이 이미 세워 둔 모형이에요. 우리가
-          한 일은 그 둘을 원화 커브에 닿게 이은 거예요.
-        </Text>
-      </Section>
-
-      <Section title="어디서 빌렸나">
-        <VStack gap={0} width="100%" className="sr-scn-deftable">
-          {SOURCES.map(([k, v]) => (
-            <HStack key={k} gap={1.5} width="100%" alignItems="baseline" paddingY={1}>
-              <Box width={104} flexShrink={0}>
-                <Text as="span" font="label2" noWrap>
-                  {k}
+              <Text as="span" font="label1" tabularNumbers noWrap>
+                {last ? `${last.v >= 0 ? '' : '−'}${Math.abs(last.v).toFixed(2)}` : '—'}
+                <Text as="span" font="legal" color="fgMuted">
+                  {' '}
+                  {s.unit}
                 </Text>
-              </Box>
-              <Text as="span" font="legal" color="fgMuted">
-                {v}
               </Text>
-            </HStack>
-          ))}
-        </VStack>
-      </Section>
-
-      <Section title="얼마나 믿나">
-        <Text as="p" font="legal" color="fgMuted">
-          논문이 보고한 충격반응을 우리 구현이 다시 그리는지로 검사해요 — 한국 준칙
-          +25bp · 미국 준칙 +25bp · 유가 +10% 를 넣고 갭·물가·주택·가계부채·소비의
-          저점과 고점이 논문 밴드에 드는지 봐요. <b>13개 중 12개 통과</b>, 하나는
-          면제로 기록했어요(물가 저점 −0.079pp, 밴드 하한 −0.07 을 살짝 벗어남).
-          미국 커널은 100bp × 4분기까지 맞춰졌고 그 밖은 선형 외삽이에요. 기저
-          as-of 는 {BASIS.as_of} 예요.
-        </Text>
-        <Text as="p" font="legal" color="fgMuted">
-          논문 표에서 자리가 유일하게 정해지지 않는 계수는 추측하지 않고 비워 둬요 —
-          그런 슬롯으로 세운 방정식은 아예 만들어지지 않아요. 위 그림의 금통위
-          물가 저점이 −0.079pp 인데, 그게 바로 면제로 기록된 그 값이에요.
-        </Text>
-        <Text as="p" font="legal" color="fgMuted">
-          Fed 손잡이는 내려 뒀어요. 미국 기저가 엔진의 조건부 산출물과 크게 어긋나
-          있어요 — 같은 충격에 대해 그쪽은 기준금리 −1.3bp 를 적는데 기저는
-          +537bp 를 담고 있어요. 고쳐서 다시 구운 뒤에 올릴게요.
-        </Text>
-      </Section>
-
-      <Section title="이 화면이 말하지 않는 것">
-        <VStack gap={0.5} width="100%">
-          {CANNOT.map((t) => (
-            <Text key={t} as="span" font="legal" color="fgMuted">
-              · {t}
-            </Text>
-          ))}
-        </VStack>
-      </Section>
+              <Text as="span" font="legal" color="fgMuted" tabularNumbers noWrap>
+                {prev && last ? `1년 전 ${prev.v.toFixed(2)} · ` : ''}
+                {s.source}
+              </Text>
+            </VStack>
+          );
+        })}
+      </HStack>
+      <Text as="span" font="legal" color="fgMuted">
+        {macro.notes.join(' ')} 방정식은 한국은행 WP 2025-3(eq.7~44)·미국 블록은 IMF
+        WP/08/278, 재현 검사 12/13(면제 하나 — 물가 저점 −0.079pp). 미국→한국 연결
+        β=1.05 는 논문에 없는 값이라 우리가 고른 거예요.
+      </Text>
     </VStack>
   );
 }

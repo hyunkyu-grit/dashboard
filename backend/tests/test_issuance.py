@@ -71,13 +71,21 @@ def test_months_from_wraps_the_year():
 
 
 @needs_data
-def test_a_month_grid_is_a_whole_month():
-    p = build(months_from(2026, 8, 1), MPC, today=dt.date(2026, 8, 20))
-    m = p["months"]["2026-08"]
-    assert len(m["days"]) == 31
-    # 2026-08-01 은 토요일 — 격자 앞을 다섯 칸 비운다.
-    assert m["lead"] == 5
-    assert [d["d"] for d in m["days"]][:3] == [1, 2, 3]
+def test_a_month_grid_is_every_weekday_of_the_month():
+    """한 달치 평일이 하나도 안 빠지고 온다.
+
+    토·일을 뺀 뒤에도 «달의 전부» 라는 성질은 지켜야 한다 — 중간이 비면 화면이
+    그걸 «그날 아무 일도 없었다» 로 보여주는데, 사실은 서버가 안 보낸 것이다.
+    """
+    m = build(months_from(2026, 8, 1), MPC, today=dt.date(2026, 8, 20))["months"]["2026-08"]
+    weekdays = [
+        d
+        for d in (dt.date(2026, 8, i) for i in range(1, 32))
+        if d.weekday() < 5
+    ]
+    assert [d["iso"] for d in m["days"]] == [d.isoformat() for d in weekdays]
+    # 2026-08-03(월)이 첫 평일 — 앞 여백 없음.
+    assert m["lead"] == 0
 
 
 @needs_data
@@ -151,8 +159,54 @@ def test_the_auction_strength_rides_along():
 
 
 @needs_data
+def test_weekends_are_dropped_but_weekday_holidays_stay():
+    """토·일은 격자에서 빠지고 평일 공휴일은 남는다 [OWNER, 2026-08-20].
+
+    잃는 것이 없다 — 입찰·공개시장운영·금통위는 영업일에만 서고 발행 납입일은
+    Following 으로 이미 밀려 있다. 반대로 평일 공휴일은 정말로 «거래가 없던 날»
+    이라 자리가 뜻이다(8/17 대체공휴일).
+    """
+    m = build(months_from(2026, 8, 1), MPC, today=dt.date(2026, 8, 20))["months"]["2026-08"]
+    assert {d["dow"] for d in m["days"]} == {0, 1, 2, 3, 4}
+    assert 17 in [d["d"] for d in m["days"]], "평일 공휴일이 같이 빠졌어요"
+    # 1일(토)·2일(일)이 빠졌으므로 5열 격자의 앞 여백은 0 이다.
+    assert m["lead"] == 0
+
+
+def test_the_gloss_speaks_the_apps_register():
+    """설명이 해요체다.
+
+    원본은 합니다체다. 사실은 그대로 두고 어미만 옮겼다 — 한 화면에 두 목소리가
+    서면 그게 곧 «디자인 통일성이 낮다» 는 것이다.
+    """
+    from app.issuance_gloss import LANE, explain
+
+    text = " ".join(
+        v or "" for lane in LANE.values() for v in lane.values()
+    )
+    assert "니다" not in text, "합니다체가 남았어요"
+    # 받침 없는 말 뒤는 «예요» 다 — 눈으로 고르면 «업무이에요» 가 남는다.
+    assert "업무예요" in explain("omo")["what"]
+
+
+@needs_data
+def test_the_day_carries_its_own_explanation():
+    """판정만 남기고 설명이 사라지면 «강한 수요» 가 무엇을 잰 것인지 알 수 없다.
+
+    서버가 문장의 단일 출처다 — 프런트에 두면 두 벌이 되고 한쪽만 고치면 갈린다.
+    """
+    d = day_detail("2026-08-10", MPC)
+    assert set(d["gloss"]) == {"iss", "ktb", "omo", "mpc"}
+    ktb = d["gloss"]["ktb"]
+    assert ktb["title"] == "국고채 입찰"
+    assert "응찰률" in (ktb["note"] or ""), "응찰률을 어떻게 읽는지가 빠졌어요"
+    # 라벨에 걸리는 덧붙임도 같이 온다(그날 비경쟁인수가 있다).
+    assert any(a["gloss"] for a in d["auctions"])
+
+
+@needs_data
 def test_issuance_only():
     """만기도래는 페이로드에 없다 [OWNER]."""
     d = day_detail("2026-08-10", MPC)
-    assert set(d) == {"date", "issuing", "auctions", "omo", "mpc"}
+    assert set(d) == {"date", "gloss", "issuing", "auctions", "omo", "mpc"}
     assert all("maturityDue" not in r for r in d["issuing"])

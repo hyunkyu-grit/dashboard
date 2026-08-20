@@ -59,3 +59,6 @@ __pycache__/
 # `git add -A` 로 딸려 들어간 적이 있다 — 커밋에 들어갈 내용이 아니다.
 # `.impeccable/critique/` 는 산출물이라 추적한다.
 .impeccable/live/
+
+# 개발 서버 로그 (재기동 시 만들어짐)
+.dev.log

@@ -117,7 +117,7 @@ class TestCache:
 class TestWrongSeries:
     def test_a_different_item_name_is_refused(self, monkeypatch):
         """코드가 바뀌어 다른 시리즈를 가리키게 되는 날, 조용히 읽지 않는다."""
-        def page(key, first, last, end):
+        def page(key, stat, cycle, item, start, end, first, last):
             return {
                 "list_total_count": "1",
                 "row": [{"TIME": "20260817", "DATA_VALUE": "3.5",
@@ -130,7 +130,7 @@ class TestWrongSeries:
         assert "기준금리" in str(e.value)
 
     def test_the_expected_item_name_passes(self, monkeypatch):
-        def page(key, first, last, end):
+        def page(key, stat, cycle, item, start, end, first, last):
             return {
                 "list_total_count": "1",
                 "row": [{"TIME": "20260817", "DATA_VALUE": "2.75",
@@ -139,6 +139,32 @@ class TestWrongSeries:
 
         monkeypatch.setattr(ecos, "_fetch_page", page)
         assert ecos.fetch_rows() == [{"TIME": "20260817", "DATA_VALUE": "2.75"}]
+
+    def test_the_guard_travels_to_every_series(self, monkeypatch):
+        """기준금리만 지키던 규율이 새 계열에도 그대로 붙는다.
+
+        `fetch_series` 가 생기면서 이 검사가 전부가 됐다 — 계열이 셋으로 늘었는데
+        이름 검사가 기준금리에만 남아 있으면, 나머지 둘은 코드가 다른 통계를
+        가리켜도 숫자가 멀쩡해 보인다.
+        """
+        def page(key, stat, cycle, item, start, end, first, last):
+            return {
+                "list_total_count": "1",
+                "row": [{"TIME": "2026Q1", "DATA_VALUE": "1.0",
+                         "ITEM_NAME1": "재화와 서비스의 수출"}],
+            }
+
+        monkeypatch.setattr(ecos, "_fetch_page", page)
+        assert ecos.fetch_series("200Y108", "Q", "10301", "1995Q1", expect_name="수출")
+        with pytest.raises(ecos.EcosError) as e:
+            ecos.fetch_series("200Y108", "Q", "10601", "1970Q1", expect_name="국내총생산")
+        assert "국내총생산" in str(e.value)
+
+    def test_the_end_stamp_matches_the_cycle(self):
+        """ECOS 는 주기마다 끝값의 모양이 다르다. 일별 모양을 분기에 주면 빈다."""
+        assert ecos._default_end("D").endswith("1231")
+        assert ecos._default_end("Q").endswith("Q4")
+        assert ecos._default_end("M").endswith("12")
 
     def test_an_error_body_is_not_read_as_data(self, monkeypatch):
         """ECOS 는 오류도 HTTP 200 으로 준다. 몸통 모양이 유일한 판별이다."""
@@ -158,5 +184,5 @@ class TestWrongSeries:
 
         monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: Fake())
         with pytest.raises(ecos.EcosError) as e:
-            ecos._fetch_page("k", 1, 10, "20261231")
+            ecos._fetch_page("k", "722Y001", "D", "0101000", "19990506", "20261231", 1, 10)
         assert "StatisticSearch" in str(e.value)

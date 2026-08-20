@@ -1,4 +1,4 @@
-/* 시나리오가 서버와 주고받는 하나 — 앵커.
+/* 시나리오가 서버와 주고받는 둘 — 앵커와 거시 실측.
  *
  * 손잡이는 프런트가 돌린다(`combine.ts`). 서버가 답하는 것은 **오늘의 시장**뿐이라
  * 이 요청은 화면당 한 번이고, 그래서 손잡이를 끌 때 왕복이 없다.
@@ -8,7 +8,7 @@
  * 이 화면은 굽기에 실을 수 없다.
  */
 
-import { scenarioAnchorsUrl } from '@/lib/staticPaths';
+import { scenarioAnchorsUrl, scenarioMacroUrl } from '@/lib/staticPaths';
 
 import type { Anchors } from './assemble';
 
@@ -38,4 +38,42 @@ export async function fetchScenarioAnchors(): Promise<AnchorsPayload> {
   return (await r.json().catch(() => {
     throw new Error('서버가 응답을 끝내지 못했어요, 다시 열어 보세요');
   })) as AnchorsPayload;
+}
+
+/** 모형이 딛고 선 거시 실측 — 손잡이 셋이 무엇에 얹히는 값인지.
+ *
+ * **없어도 화면은 선다.** 시나리오의 본체는 구운 기저와 오늘의 커브라 이 실측이
+ * 빠져도 계산은 그대로다. 그래서 백엔드도 503 이 아니라 빈 목록을 주고, 여기서도
+ * 실패를 시나리오 전체의 실패로 올리지 않는다.
+ */
+export type MacroPoint = { q: string; v: number };
+
+export type MacroSeries = {
+  key: string;
+  label: string;
+  unit: string;
+  /** 어느 손잡이가 이 값에 얹히는가. */
+  knob: string;
+  source: string;
+  /** 한국은행이 **발표하는** 통계인가. GDP 갭은 아니다 — HP 필터 산출물이다. */
+  official: boolean;
+  points: MacroPoint[];
+};
+
+export type MacroPayload = {
+  asof: string | null;
+  quarters: number;
+  series: MacroSeries[];
+  notes: string[];
+  /** 옛 캐시로 연명 중인가. 그렇다면 `notes[0]` 이 그 사실을 말한다. */
+  stale: boolean;
+};
+
+export async function fetchScenarioMacro(): Promise<MacroPayload> {
+  const r = await fetch(scenarioMacroUrl());
+  if (r.status === 404) throw new ScenarioUnavailable();
+  if (!r.ok) throw new Error(`거시 실측: HTTP ${r.status}`);
+  return (await r.json().catch(() => {
+    throw new Error('서버가 응답을 끝내지 못했어요');
+  })) as MacroPayload;
 }

@@ -34,6 +34,7 @@ import { ControlCard, ControlCollapsible } from '@/ui/ControlCard';
 import { ErrorState, LoadingState } from '@/ui/DataState';
 
 import {
+  type Gloss,
   fetchIssuanceCalendar,
   fetchIssuanceDay,
   IssuanceUnavailable,
@@ -43,11 +44,11 @@ import {
   type Strength,
 } from './issuance/api';
 
-const DOW = ['월', '화', '수', '목', '금', '토', '일'];
+/** 다섯 열이다 [OWNER, 2026-08-20] — 토·일은 백엔드가 보내지 않는다. */
+const DOW = ['월', '화', '수', '목', '금'];
 
-/* 칸의 일정 점은 색도 글리프도 안 쓴다 — 색은 방향만 나르고, 레인이 무엇인지는
- * 누른 뒤 상세가 말한다. 칸 안에서 레인을 구분하려 들면 여섯 칸짜리 격자에
- * 범례가 하나 더 붙는다. */
+/* 칸의 일정은 색을 안 쓴다 — 색은 방향만 나른다. 레인은 잉크의 세기로만 가르고
+ * (금통위만 진하다), 그 이상은 누른 뒤 상세가 말한다. */
 
 const jo = (v: number) => (v >= 0.005 ? `${v.toFixed(2)}조` : '');
 const eok = (v: number | null | undefined) =>
@@ -270,25 +271,26 @@ export function IssuancePage() {
 
       {/* ── 달력 ──────────────────────────────────────────────────────── */}
       <VStack className="sr-card" flexGrow={1} minWidth={0} minHeight={0}>
-        <VStack gap={1} paddingX={2} paddingTop={2} paddingBottom={1.5}>
-          <HStack gap={1} alignItems="baseline" width="100%" flexWrap="wrap">
-            <Text as="h2" font="label1" noWrap>
-              발행 캘린더
-            </Text>
-            <Box style={{ marginInlineStart: 'auto' }}>
-              <Text as="span" font="legal" color="fgMuted" noWrap>
-                {ym} · 오늘 {cal.today}
-              </Text>
-            </Box>
-          </HStack>
-          <Text as="span" font="legal" color="fgMuted">
-            칸의 숫자는 납입기일 기준 발행액이고, 휴일에 걸린 건 다음 영업일로 밀어요.
-            점은 그날의 일정이에요 — 누르면 아래에 펴져요.
+        {/* 카드 머리는 Main 의 «IRS 커브» 카드와 **같은 해부**다(실측 2026-08-20):
+            패딩 16/16/12 · 간격 4 · 제목 label1 **muted** · 아래 한 줄 legal muted,
+            둘 다 왼쪽에 쌓인다. 대비는 페이지 h1 이 진다.
+
+            첫 판은 여기에 세 문장짜리 문단을 얹었는데, 앱의 어느 카드도 그러지
+            않는다 — 안내는 카드 **바닥**으로 내렸다(Main 이 범례를 두는 자리다). */}
+        <VStack gap={0.5} paddingX={2} paddingTop={2} paddingBottom={1.5} width="100%">
+          <Text as="h2" font="label1" color="fgMuted" tabularNumbers noWrap>
+            {ym.slice(0, 4)}년 {Number(ym.slice(5, 7))}월
+          </Text>
+          {/* Main 은 이 줄에 `TextCaption`(13px w600)을 쓴다. 그 shorthand 는
+              @deprecated 라 새 코드에선 못 쓰고, `font="caption"` 이 같은 것이다
+              (CLAUDE.md §4). `legal` 은 w500 이라 반 톤 얇게 붙는다. */}
+          <Text as="span" font="caption" color="fgMuted" tabularNumbers noWrap>
+            발행 {monthTotal.toFixed(2)}조 · {monthCount}건 · 오늘 {cal.today}
           </Text>
         </VStack>
 
         <VStack
-          gap={2}
+          gap={1.5}
           paddingX={2}
           paddingBottom={2}
           minWidth={0}
@@ -296,8 +298,11 @@ export function IssuancePage() {
           minHeight={0}
           style={{ overflowY: 'auto' }}
         >
-          <VStack gap={0.5} width="100%">
-            <Box className="sr-cal-grid">
+          {/* 이 줄기가 카드의 남는 높이를 받아 격자에 넘긴다. `minHeight={0}` 이
+              없으면 flex 아이템의 기본 최소 높이가 자기 내용이라 안 줄어든다. */}
+          <VStack gap={0.5} width="100%" flexGrow={1} minHeight={0}>
+            {/* 머리는 `sr-cal-cols` — 열 자리만 공유하고 높이 규칙은 안 받는다. */}
+            <Box className="sr-cal-cols">
               {DOW.map((w) => (
                 <Box key={w} className="sr-cal-dow">
                   <Text as="span" font="legal" color="fgMuted" noWrap>
@@ -327,32 +332,48 @@ export function IssuancePage() {
                     }`}
                     onClick={() => setSel(sel === d.iso ? null : d.iso)}
                   >
-                    <HStack gap={1} alignItems="baseline" width="100%">
-                      <Text as="span" font="legal" color={d.biz ? undefined : 'fgMuted'} tabularNumbers>
-                        {d.d}
-                      </Text>
-                      <Box style={{ marginInlineStart: 'auto' }}>
-                        <Text as="span" font="legal" color="fgMuted" tabularNumbers noWrap>
-                          {n > 0 ? `${n}건` : ''}
-                        </Text>
-                      </Box>
-                    </HStack>
-                    <Text as="span" font="label2" tabularNumbers noWrap>
-                      {jo(amt)}
+                    {/* 칸 안의 모든 것이 **왼쪽 한 줄에** 선다. 토·일을 빼면서 칸이
+                        287px 로 넓어졌는데(실측), 건수를 `margin-inline-start:auto`
+                        로 반대편 끝에 붙여 뒀더니 날짜와 250px 떨어져 어느 칸에
+                        속한 숫자인지가 안 읽혔다 [OWNER «얼라인 개판», 2026-08-20]. */}
+                    <Text as="span" font="legal" color={d.biz ? undefined : 'fgMuted'} tabularNumbers>
+                      {d.d}
                     </Text>
+                    <HStack gap={0.75} alignItems="baseline" minWidth={0}>
+                      <Text as="span" font="label2" tabularNumbers noWrap>
+                        {jo(amt)}
+                      </Text>
+                      {n > 0 ? (
+                        <Text as="span" font="legal" color="fgMuted" tabularNumbers noWrap>
+                          {n}건
+                        </Text>
+                      ) : null}
+                    </HStack>
                     {d.ev.length > 0 ? (
-                      <Box className="sr-cal-dots">
+                      <Box className="sr-cal-evs">
                         {d.ev.map((e, i) => (
-                          <Box key={`${e.lane}${i}`} className="sr-cal-dot" />
+                          <Text
+                            key={`${e.lane}${i}`}
+                            as="span"
+                            className="sr-cal-ev"
+                            font="legal"
+                            color={e.lane === 'mpc' ? undefined : 'fgMuted'}
+                          >
+                            {e.label}
+                          </Text>
                         ))}
                       </Box>
                     ) : null}
+                    {/* 크기는 **칸 바닥**에 눕는다 — 한 줄의 다섯 칸이 같은 바닥을
+                        공유하므로 그 주의 요일별 크기가 눈으로 견줘진다. */}
                     <Box style={{ marginBlockStart: 'auto' }} width="100%">
                       {amt > 0 ? (
-                        <Box
-                          className="sr-cal-bar"
-                          style={{ width: `${Math.max(4, (amt / peak) * 100)}%` }}
-                        />
+                        <Box className="sr-cal-track">
+                          <Box
+                            className="sr-cal-bar"
+                            style={{ width: `${Math.max(3, (amt / peak) * 100)}%` }}
+                          />
+                        </Box>
                       ) : null}
                     </Box>
                   </Pressable>
@@ -363,9 +384,16 @@ export function IssuancePage() {
 
           {sel ? <DayDetail iso={sel} day={day} onClose={() => setSel(null)} /> : null}
 
-          <Text as="span" font="legal" color="fgMuted">
-            {cal.caveats.map((c) => c.replace(/^[A-Z0-9_]+:\s*/, '')).join(' · ')}
-          </Text>
+          {/* 읽는 법과 한계가 한자리에. Main 이 카드 바닥에 범례를 두는 자리다. */}
+          <VStack gap={0.25} width="100%">
+            <Text as="span" font="legal" color="fgMuted">
+              칸의 숫자는 납입기일 기준 발행액이고, 휴일에 걸린 건 다음 영업일로 밀어요.
+              토·일은 뺐고 평일 공휴일은 남겨 뒀어요. 칸을 누르면 그날이 아래에 펴져요.
+            </Text>
+            <Text as="span" font="legal" color="fgMuted">
+              {cal.caveats.map((c) => c.replace(/^[A-Z0-9_]+:\s*/, '')).join(' · ')}
+            </Text>
+          </VStack>
         </VStack>
       </VStack>
     </HStack>
@@ -374,6 +402,36 @@ export function IssuancePage() {
 
 /* ── 그날 하루 ──────────────────────────────────────────────────────────────── */
 
+/** 레인 하나의 머리 — 이름 · 무엇이고 왜 보는지.
+ *
+ * 문장은 **서버가 준 그대로** 출력한다. 첫 이식에서 이걸 빼먹었더니 «강한 수요/
+ * 약한 수요» 라는 판정만 남고 그 판정이 무엇을 잰 것인지가 사라졌다
+ * [OWNER 지적, 2026-08-20]. */
+function LaneHead({ g }: { g: Gloss }) {
+  return (
+    <VStack gap={0.25} width="100%" minWidth={0}>
+      <Text as="h4" font="label2" noWrap>
+        {g.title}
+      </Text>
+      <Text as="p" font="legal" color="fgMuted">
+        {[g.what, g.why].filter(Boolean).join(' ')}
+      </Text>
+    </VStack>
+  );
+}
+
+/** 레인 각주 — 이 판정을 어떻게 읽는지. 표 아래에 붙는다. */
+function LaneNote({ text }: { text: string | null }) {
+  if (!text) return null;
+  return (
+    <Text as="p" font="legal" color="fgMuted">
+      {text}
+    </Text>
+  );
+}
+
+/** 그날 하루. 섹션마다 «머리 → 표 → 각주» 다 — Main 이 카드마다 쓰는 문법이고,
+ * Coinbase 가 «섹션 제목 + 설명 문단 + 표» 를 쓰는 것과 같은 골격이다. */
 function DayDetail({
   iso,
   day,
@@ -384,7 +442,7 @@ function DayDetail({
   onClose: () => void;
 }) {
   return (
-    <VStack gap={1.5} width="100%" minWidth={0}>
+    <VStack gap={3} width="100%" minWidth={0}>
       <HStack gap={1} alignItems="baseline" width="100%">
         <Text as="h3" font="label1" tabularNumbers noWrap>
           {iso}
@@ -403,64 +461,87 @@ function DayDetail({
       ) : (
         <>
           {day.mpc ? (
-            <VStack gap={0.25} width="100%">
-              <Text as="span" font="caption" color="fgMuted">
-                금통위
-              </Text>
-              <Text as="span" font="legal">
+            <VStack gap={1} width="100%" minWidth={0}>
+              <LaneHead g={day.gloss.mpc} />
+              <Text as="span" font="label2" tabularNumbers>
                 {day.mpc.decision
                   ? `${day.mpc.decision.decision ?? '결정'} · ${
                       day.mpc.decision.before ?? '—'
                     }% → ${day.mpc.decision.after ?? '—'}%`
                   : '회의가 있는 날이에요. 결과는 아직이에요.'}
               </Text>
+              <LaneNote text={day.gloss.mpc.note} />
             </VStack>
           ) : null}
 
           {day.auctions.length > 0 ? (
-            <VStack gap={1} width="100%" className="sr-scn-deftable">
-              <Text as="span" font="caption" color="fgMuted">
-                국고채 입찰
-              </Text>
-              {day.auctions.map((a, i) => (
-                <VStack key={`${a.kind}${i}`} gap={0.25} width="100%" paddingY={1}>
-                  <HStack gap={1} alignItems="baseline" flexWrap="wrap">
-                    <Text as="span" font="label2" noWrap>
-                      {a.kind} {a.name}
+            <VStack gap={1} width="100%" minWidth={0}>
+              <LaneHead g={day.gloss.ktb} />
+              <VStack gap={0} width="100%" className="sr-scn-deftable">
+                {day.auctions.map((a, i) => (
+                  <VStack key={`${a.kind}${i}`} gap={0.25} width="100%" paddingY={1}>
+                    <HStack gap={1.5} alignItems="baseline" width="100%" flexWrap="wrap">
+                      <Text as="span" font="label2" noWrap>
+                        {a.kind} {a.name}
+                      </Text>
+                      <Box style={{ marginInlineStart: 'auto' }}>
+                        <Text as="span" font="label2" tabularNumbers noWrap>
+                          {eok(a.allotted)}
+                        </Text>
+                      </Box>
+                    </HStack>
+                    <Text as="span" font="legal" color="fgMuted" tabularNumbers>
+                      응찰률 {pct(a.ratio)} · 가중평균 {pct(a.wavgRate)}
+                      {a.dealers != null ? ` · 인수기관 ${a.dealers}개` : ''}
                     </Text>
-                    <Text as="span" font="legal" color="fgMuted" tabularNumbers noWrap>
-                      낙찰 {eok(a.allotted)} · 응찰률 {pct(a.ratio)} · 가중평균{' '}
-                      {pct(a.wavgRate)}
-                    </Text>
-                  </HStack>
-                  {a.strength ? <StrengthLine s={a.strength} /> : null}
-                </VStack>
-              ))}
+                    {a.strength ? <StrengthLine s={a.strength} /> : null}
+                    {a.gloss.map((g) => (
+                      <Text key={g} as="p" font="legal" color="fgMuted">
+                        {g}
+                      </Text>
+                    ))}
+                  </VStack>
+                ))}
+              </VStack>
+              <LaneNote text={day.gloss.ktb.note} />
             </VStack>
           ) : null}
 
           {day.omo.length > 0 ? (
-            <VStack gap={0.25} width="100%">
-              <Text as="span" font="caption" color="fgMuted">
-                공개시장운영
-              </Text>
-              {day.omo.map((o, i) => (
-                <Text key={`${o.kind}${i}`} as="span" font="legal" tabularNumbers>
-                  {o.kind}
-                  {o.name ? ` ${o.name}` : ''} · 낙찰 {eok(o.allotted)}
-                  {o.rate != null ? ` · ${pct(o.rate)}` : ''}
-                </Text>
-              ))}
+            <VStack gap={1} width="100%" minWidth={0}>
+              <LaneHead g={day.gloss.omo} />
+              <VStack gap={0} width="100%" className="sr-scn-deftable">
+                {day.omo.map((o, i) => (
+                  <VStack key={`${o.kind}${i}`} gap={0.25} width="100%" paddingY={1}>
+                    <HStack gap={1.5} alignItems="baseline" width="100%" flexWrap="wrap">
+                      <Text as="span" font="label2" noWrap>
+                        {o.kind}
+                        {o.name ? ` ${o.name}` : ''}
+                      </Text>
+                      <Box style={{ marginInlineStart: 'auto' }}>
+                        <Text as="span" font="label2" tabularNumbers noWrap>
+                          {eok(o.allotted)}
+                          {o.rate != null ? ` · ${pct(o.rate)}` : ''}
+                        </Text>
+                      </Box>
+                    </HStack>
+                    {o.gloss.map((g) => (
+                      <Text key={g} as="p" font="legal" color="fgMuted">
+                        {g}
+                      </Text>
+                    ))}
+                  </VStack>
+                ))}
+              </VStack>
+              <LaneNote text={day.gloss.omo.note} />
             </VStack>
           ) : null}
 
-          <VStack gap={0.5} width="100%" minWidth={0}>
-            <Text as="span" font="caption" color="fgMuted">
-              발행 {day.issuing.length}건
-            </Text>
+          <VStack gap={1} width="100%" minWidth={0}>
+            <LaneHead g={day.gloss.iss} />
             {day.issuing.length === 0 ? (
               <Text as="span" font="legal" color="fgMuted">
-                이 날짜에 공시된 발행이 없어요 — 아직 안 나온 것일 수도 있어요.
+                이 날짜에 공시된 발행이 없어요.
               </Text>
             ) : (
               <VStack gap={0} width="100%" className="sr-scn-deftable">
@@ -473,16 +554,18 @@ function DayDetail({
                     paddingY={1}
                     flexWrap="wrap"
                   >
-                    <Text as="span" font="label2" noWrap>
-                      {r.issuer}
-                      {r.round ? ` ${r.round}` : ''}
-                    </Text>
-                    <Text as="span" font="legal" color="fgMuted" noWrap>
-                      {r.sector}
-                      {r.rating ? ` · ${r.rating}` : ''}
-                      {r.maturity ? ` · 만기 ${r.maturity}` : ''}
-                      {r.coupon != null ? ` · ${r.coupon.toFixed(3)}%` : ''}
-                    </Text>
+                    <VStack gap={0} minWidth={0}>
+                      <Text as="span" font="label2" noWrap>
+                        {r.issuer}
+                        {r.round ? ` ${r.round}` : ''}
+                      </Text>
+                      <Text as="span" font="legal" color="fgMuted" noWrap>
+                        {r.sector}
+                        {r.rating ? ` · ${r.rating}` : ''}
+                        {r.maturity ? ` · 만기 ${r.maturity}` : ''}
+                        {r.coupon != null ? ` · ${r.coupon.toFixed(3)}%` : ''}
+                      </Text>
+                    </VStack>
                     <Box style={{ marginInlineStart: 'auto' }}>
                       <Text as="span" font="label2" tabularNumbers noWrap>
                         {eok(r.eok)}
@@ -492,6 +575,7 @@ function DayDetail({
                 ))}
               </VStack>
             )}
+            <LaneNote text={day.gloss.iss.note} />
           </VStack>
         </>
       )}

@@ -79,10 +79,19 @@ def api_key() -> str:
     return key
 
 
-def _fetch_page(key: str, first: int, last: int, end: str) -> dict:
+def _fetch_page(
+    key: str,
+    stat: str,
+    cycle: str,
+    item: str,
+    start: str,
+    end: str,
+    first: int,
+    last: int,
+) -> dict:
     url = (
         f"{API_ROOT}/StatisticSearch/{key}/json/kr/{first}/{last}/"
-        f"{BASE_RATE_STAT}/{BASE_RATE_CYCLE}/{BASE_RATE_START}/{end}/{BASE_RATE_ITEM}"
+        f"{stat}/{cycle}/{start}/{end}/{item}"
     )
     try:
         with urllib.request.urlopen(url, timeout=30) as r:
@@ -95,19 +104,31 @@ def _fetch_page(key: str, first: int, last: int, end: str) -> dict:
     return payload["StatisticSearch"]
 
 
-def fetch_rows(end: str | None = None) -> list[dict]:
-    """`{TIME, DATA_VALUE}` 행 전부. 페이지를 이어 받는다."""
+def fetch_series(
+    stat: str,
+    cycle: str,
+    item: str,
+    start: str,
+    end: str | None = None,
+    expect_name: str | None = None,
+) -> list[dict]:
+    """ECOS 계열 하나를 `{TIME, DATA_VALUE}` 행으로. 페이지를 이어 받는다.
+
+    `expect_name` 은 응답의 `ITEM_NAME1` 에 들어 있어야 하는 조각이다. 코드가
+    가리키는 계열이 바뀌면 **숫자는 멀쩡한데 뜻이 달라진다** — 그건 화면에서
+    안 보이므로 여기서 막는다(기준금리가 이미 쓰던 규율이다).
+    """
     key = api_key()
-    end = end or f"{dt.date.today().year + 1}1231"
+    end = end or _default_end(cycle)
     rows: list[dict] = []
     first = 1
     while True:
-        block = _fetch_page(key, first, first + PAGE - 1, end)
+        block = _fetch_page(key, stat, cycle, item, start, end, first, first + PAGE - 1)
         page = block.get("row") or []
-        if page and page[0].get("ITEM_NAME1") not in (None, BASE_RATE_ITEM_NAME):
+        if page and expect_name and expect_name not in str(page[0].get("ITEM_NAME1") or ""):
             raise EcosError(
                 f"ECOS 시리즈가 기대와 다릅니다: {page[0].get('ITEM_NAME1')!r} "
-                f"(코드 {BASE_RATE_STAT}/{BASE_RATE_ITEM} 이 기준금리를 가리키지 않습니다)"
+                f"(코드 {stat}/{item} 이 {expect_name!r} 를 가리키지 않습니다)"
             )
         rows += page
         total = int(block.get("list_total_count") or 0)
@@ -115,8 +136,32 @@ def fetch_rows(end: str | None = None) -> list[dict]:
             break
         first += PAGE
     if not rows:
-        raise EcosError("ECOS 가 기준금리 행을 하나도 주지 않았습니다.")
+        raise EcosError(f"ECOS 가 {stat}/{item} 행을 하나도 주지 않았습니다.")
     return [{"TIME": r["TIME"], "DATA_VALUE": r["DATA_VALUE"]} for r in rows]
+
+
+def _default_end(cycle: str) -> str:
+    """주기마다 끝값의 모양이 다르다 — 일별은 `YYYYMMDD`, 분기는 `YYYYQ4`."""
+    y = dt.date.today().year + 1
+    if cycle == "D":
+        return f"{y}1231"
+    if cycle == "M":
+        return f"{y}12"
+    if cycle == "Q":
+        return f"{y}Q4"
+    return str(y)
+
+
+def fetch_rows(end: str | None = None) -> list[dict]:
+    """기준금리 행 전부."""
+    return fetch_series(
+        BASE_RATE_STAT,
+        BASE_RATE_CYCLE,
+        BASE_RATE_ITEM,
+        BASE_RATE_START,
+        end,
+        expect_name=BASE_RATE_ITEM_NAME,
+    )
 
 
 def _cache_age_hours(payload: dict) -> float | None:

@@ -19,6 +19,8 @@ export class IssuanceUnavailable extends Error {
 export type CalDay = {
   d: number;
   iso: string;
+  /** 0=월 … 4=금. 토·일은 애초에 안 온다. */
+  dow: number;
   /** 영업일인가. 비영업일도 자리는 지킨다 — 빠지면 요일이 어긋난다. */
   biz: boolean;
   past: boolean;
@@ -31,7 +33,7 @@ export type CalDay = {
 };
 
 export type CalMonth = {
-  /** 1일의 요일(월=0). 격자 앞을 그만큼 비운다. */
+  /** 5열 격자의 앞 여백. 1일이 토·일이면 그 이틀은 빠졌으므로 0 이다. */
   lead: number;
   days: CalDay[];
 };
@@ -67,8 +69,19 @@ export type Strength = {
   notes?: string[];
 };
 
+/** 레인 하나가 무엇이고 왜 보는지. **서버가 문장의 단일 출처**라 화면은 그대로
+ * 출력만 한다 — 프런트에 문장을 두면 두 벌이 되고 한쪽만 고치면 조용히 갈린다. */
+export type Gloss = {
+  title: string | null;
+  what: string | null;
+  why: string | null;
+  note: string | null;
+  extra: string[];
+};
+
 export type IssuanceDay = {
   date: string;
+  gloss: { iss: Gloss; ktb: Gloss; omo: Gloss; mpc: Gloss };
   issuing: {
     issuer: string;
     sector: string;
@@ -97,6 +110,8 @@ export type IssuanceDay = {
     dealers: number | null;
     issueDate: string | null;
     strength: Strength | null;
+    /** 라벨에 걸리는 덧붙임(물가채·외평채·비경쟁인수·교환·바이백 …). */
+    gloss: string[];
   }[];
   omo: {
     kind: string;
@@ -104,6 +119,7 @@ export type IssuanceDay = {
     planned: number | null;
     allotted: number | null;
     rate: number | null;
+    gloss: string[];
   }[];
   /** 금통위가 **있는 날**인지와 그날 **무엇을 정했는지**는 다른 사실이다.
    * `scheduled` 는 검증된 달력이, `decision` 은 수집기의 결과표가 답한다. */

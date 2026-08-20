@@ -53,7 +53,7 @@ import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { StartFilter } from '@/ui/StartFilter';
 import { TopNav } from '@/ui/TopNav';
 import { useUrlState } from '@/ui/useUrlState';
-import { DEFAULT_LAB, isLabId, type LabId } from '@/ui/nav';
+import { DEFAULT_LAB, isLabId, LAB_ITEMS, type LabId } from '@/ui/nav';
 import { Surface3D } from '@/ui/Surface3D';
 import { IssuancePage } from '@/lab/IssuancePage';
 import { ScenarioPage } from '@/lab/ScenarioPage';
@@ -116,6 +116,14 @@ export default function Home() {
   const [groupParam, setGroupParam] = useUrlState('g', 'outright');
   const [selectedId, setSelectedId] = useUrlState('r', undefined, 'push');
 
+  /* Lab 안에서 지금 보고 있는 세입자 [2026-08-20]. **탭이 아니라 URL 상태**다 —
+     탭을 늘리면 `sectionOf()` 가 드는 «섹션은 유도값» 규칙에 두 번째 상태가
+     끼어든다. 모르는 값은 기본 세입자로 떨어진다(딥링크 게이트, GROUPS 와 같은
+     규율). */
+  const [labParam, setLabParam] = useUrlState('lab');
+  const lab: LabId = isLabId(labParam) ? labParam : DEFAULT_LAB;
+
+
   /* ONE value in the URL, and the section is derived from it (`ui/nav.ts`).
    * Splitting section and tab into two states makes combinations representable
    * that the screen does not have — "Backtest with no asset class" — which is
@@ -136,9 +144,14 @@ export default function Home() {
   if (isGroupTab) lastGroupRef.current = tab as Group;
   const group = (isGroupTab ? tab : lastGroupRef.current) as Group;
 
+  /* 페이지 제목은 **지금 보고 있는 것의 이름**이다. Backtest 가 섹션 이름이 아니라
+     «아웃라이트» 를 h1 으로 쓰는 것과 같은 규칙 — Lab 도 세입자 이름을 쓴다
+     [디자인 얼라인 2026-08-20]. 그래야 카드 안에 같은 제목을 한 번 더 적지 않는다. */
   const sectionTitle = isGroupTab
     ? GROUP_LABEL[group]
-    : (SECTIONS.find((s) => s.id === section)?.label ?? 'Main');
+    : section === 'lab'
+      ? (LAB_ITEMS.find((i) => i.id === lab)?.label ?? 'Lab')
+      : (SECTIONS.find((s) => s.id === section)?.label ?? 'Main');
 
   const load = useCallback(async () => {
     setError(undefined);
@@ -349,13 +362,6 @@ const BANNER_H = 34;
 
   /* 시뮬레이션 **결과 창** — 설정은 페이지에 있고 결과만 뜬다(v1 형태).
      URL 에 존재만 싣는다(`?sim=1`): 입력이 페이지에 있어서 값을 실을 자리가 아니다. */
-  /* Lab 안에서 지금 보고 있는 세입자 [2026-08-20]. **탭이 아니라 URL 상태**다 —
-     탭을 늘리면 `sectionOf()` 가 드는 «섹션은 유도값» 규칙에 두 번째 상태가
-     끼어든다. 모르는 값은 기본 세입자로 떨어진다(딥링크 게이트, GROUPS 와 같은
-     규율). */
-  const [labParam, setLabParam] = useUrlState('lab');
-  const lab: LabId = isLabId(labParam) ? labParam : DEFAULT_LAB;
-
   const [simParam, setSim] = useUrlState('sim');
   const simOpen = simParam != null;
 

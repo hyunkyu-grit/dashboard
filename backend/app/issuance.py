@@ -52,6 +52,7 @@ import os
 import pathlib
 
 from .engine_port import _is_kr_business_day, _next_business_day
+from .issuance_gloss import explain, for_label
 from .issuance_strength import annotate as annotate_auctions
 
 #: CSV 가 사는 곳. 수집기가 쓰는 그 디렉터리를 그대로 읽는다.
@@ -264,10 +265,18 @@ def build(
                 events.append({"lane": "omo", "label": kind})
             if iso in mpc_set:
                 events.append({"lane": "mpc", "label": "금통위"})
+            if d.weekday() >= 5:
+                # 토·일은 격자에서 뺀다 [OWNER, 2026-08-20]. 잃는 것이 없다 —
+                # 입찰·공개시장운영·금통위는 영업일에만 서고, 발행 납입일은
+                # Following 으로 이미 영업일로 밀려 있다. **평일 공휴일은 남는다**
+                # (그날은 정말로 «거래가 없던 날» 이라 자리를 지켜야 한다).
+                continue
             days.append(
                 {
                     "d": d.day,
                     "iso": iso,
+                    # 0=월 … 4=금. 화면이 날짜를 다시 파싱하지 않게 여기서 준다.
+                    "dow": d.weekday(),
                     "biz": _is_kr_business_day(d),
                     "past": d < today,
                     "today": d == today,
@@ -279,7 +288,11 @@ def build(
                     "ev": events,
                 }
             )
-        months[f"{y}-{m:02d}"] = {"lead": first.weekday(), "days": days}
+        # 5열 격자의 앞 여백. 1일이 토·일이면 그 이틀은 빠졌으므로 여백이 0 이다.
+        months[f"{y}-{m:02d}"] = {
+            "lead": first.weekday() if first.weekday() < 5 else 0,
+            "days": days,
+        }
 
     # 사이드바 섹터 목록. 이 구간에 발행이 0 인 섹터도 **자리를 지킨다** —
     # 목록이 날마다 늘었다 줄었다 하면 체크박스가 어디 있었는지 못 찾는다.
@@ -361,6 +374,8 @@ def day_detail(iso: str, mpc_dates: list[str]) -> dict:
             "dealers": r.get("인수기관수"),
             "issueDate": (str(r.get("발행일") or "")[:10] or None),
             "strength": r.get("강도"),
+            # 라벨에 걸리는 덧붙임(물가채·외평채·비경쟁인수·교환·바이백 …).
+            "gloss": for_label(f"{r.get('구분') or ''} {r.get('종목명') or ''}"),
         }
         for r in _auctions(stamp)
         if r.get("입찰일") == iso
@@ -373,6 +388,7 @@ def day_detail(iso: str, mpc_dates: list[str]) -> dict:
             "planned": r.get("예정금액"),
             "allotted": r.get("낙찰금액"),
             "rate": r.get("금리"),
+            "gloss": for_label((r.get("구분") or "").strip()),
         }
         for r in _omo(stamp)
         if r["일자"] == iso
@@ -380,6 +396,17 @@ def day_detail(iso: str, mpc_dates: list[str]) -> dict:
 
     return {
         "date": iso,
+        # 레인이 무엇이고 왜 보는지. **서버가 문장의 단일 출처다** — 프런트에
+        # 문장을 두면 두 벌이 되고 한쪽만 고치면 조용히 갈린다(원본의 규칙).
+        #
+        # 첫 이식에서 이걸 빼먹었더니 응찰 강도가 «강한 수요/약한 수요» 라는
+        # 판정만 남고 그 판정이 무엇을 잰 것인지가 화면에서 사라졌다.
+        "gloss": {
+            "iss": explain("iss"),
+            "ktb": explain("ktb"),
+            "omo": explain("omo"),
+            "mpc": explain("pol"),
+        },
         "issuing": issuing,
         "auctions": auctions,
         "omo": omo,

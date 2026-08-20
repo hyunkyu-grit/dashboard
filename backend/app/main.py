@@ -84,6 +84,7 @@ from .dv01 import build_dv01_table
 from .events import detect_event_clusters
 from .forwards import forwards_payload
 from .issuance import IssuanceUnavailable, build as build_issuance, day_detail as issuance_day, months_from
+from .labmacro import MacroUnavailable, build as build_macro
 from .labscenario import build_anchors
 from .policy import load_base_rate, policy_step, MPC_DATES
 from .staleness import dataset_freshness
@@ -438,6 +439,24 @@ def scenario_anchors() -> dict:
     가 이미 겪은 «조용히 갈리는 사본» 이 하나 더 생긴다.
     """
     return build_anchors(_dataset, _curves, _policy.get("latest"))
+
+
+@router.get("/api/scenario/macro")
+def scenario_macro() -> dict:
+    """V2-LOCAL. 모형이 딛고 선 거시 실측 — 한국은행 ECOS (labmacro.py).
+
+    손잡이 셋(물가·갭·수출)이 무엇에 얹히는 값인지를 화면이 같이 보여주기 위한
+    것이다. 캐시는 모듈이 진다(분기 계열이라 TTL 12시간).
+
+    ECOS 가 죽어도 **화면은 서야 한다** — 시나리오의 본체는 구운 기저와 오늘의
+    커브라 이 실측이 없어도 계산은 그대로다. 그래서 503 이 아니라 빈 목록을 주고
+    화면이 그 자리에 이유를 적는다.
+    """
+    try:
+        return build_macro()
+    except MacroUnavailable as exc:
+        logging.getLogger("app.main").warning("거시 실측 없음: %s", exc)
+        return {"asof": None, "quarters": 0, "series": [], "notes": [str(exc)], "stale": True}
 
 
 @router.get("/api/issuance/calendar")

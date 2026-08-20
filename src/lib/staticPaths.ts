@@ -111,6 +111,7 @@ function liveUrl(path: string, query?: string): string {
  * 앵커(오늘의 스팟 호가 + 12개월 시장 캐리)뿐이다. 손잡이는 프런트가 돌리므로
  * 이 요청은 화면당 **한 번**이고, 서버가 없으면 화면이 그 사실을 말한다. */
 export const scenarioAnchorsUrl = () => liveUrl("/api/scenario/anchors");
+export const scenarioMacroUrl = () => liveUrl("/api/scenario/macro");
 
 /* ── Lab 발행 캘린더 [2026-08-20] ─────────────────────────────────────────────
  * CSV 를 읽는 화면이라 정적 쌍둥이를 구울 수 없다 — 수집기가 5분마다 새로 쓰는

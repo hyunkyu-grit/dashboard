@@ -50,6 +50,7 @@ import { DROPDOWN_STYLES } from '@/ui/window/popup';
 import { fetchScenarioAnchors, ScenarioUnavailable, type AnchorsPayload } from './scenario/api';
 import { assembleRows, type ScenarioRow } from './scenario/assemble';
 import { BASIS, ZERO_KNOBS, combine, outOfDomain, type Knobs } from './scenario/combine';
+import { ModelChart } from './scenario/ModelChart';
 import { ModelExplainer } from './scenario/ModelExplainer';
 import { PRESETS, knobsFromPreset, matchPreset, type PresetId } from './scenario/presets';
 
@@ -71,7 +72,11 @@ const PRESET_TABS = [
  * 객체 신원으로 비교한다. */
 const VIEW_TABS = [
   { id: 'result' as const, label: '결과' },
+  /* 「모형」은 **그림 하나**다. 「성분」이 숫자를 진다 [OWNER, 2026-08-20 —
+     "얘는 다른 탭으로 빼고 위에 그래프는 메인이나 백테스트처럼 예쁘게"].
+     한 탭에 쌓았더니 그림이 카드 높이를 못 받아 위쪽 1/3 에 눌려 있었다. */
   { id: 'model' as const, label: '모형' },
+  { id: 'parts' as const, label: '성분' },
 ];
 
 const TENOR_LABEL: Record<string, string> = {
@@ -177,7 +182,7 @@ export function ScenarioPage({ policy }: { policy?: PolicyStep }) {
   /* 「모형」 탭이 있는 이유 [OWNER, 2026-08-20]: 이 숫자는 우리가 만든 모형이
      아니라 경제학자들이 세워 둔 것을 빌려 쓴 결과다. 무엇을 빌렸는지 말할 수
      없으면 화면은 트레이더에게 «믿거나 말거나» 를 요구하는 셈이다. */
-  const [view, setView] = useState<'result' | 'model'>('result');
+  const [view, setView] = useState<'result' | 'model' | 'parts'>('result');
 
   const load = useCallback(async () => {
     setRetrying(true);
@@ -399,7 +404,7 @@ export function ScenarioPage({ policy }: { policy?: PolicyStep }) {
               정책 경로 시나리오
             </Text>
             <SegmentedTabs
-              accessibilityLabel="결과 또는 모형"
+              accessibilityLabel="결과 · 모형 · 성분"
               tabs={VIEW_TABS}
               activeTab={VIEW_TABS.find((t) => t.id === view) ?? null}
               onChange={(t) => t && setView(t.id)}
@@ -427,7 +432,9 @@ export function ScenarioPage({ policy }: { policy?: PolicyStep }) {
           minWidth={0}
           flexGrow={1}
           minHeight={0}
-          style={{ overflowY: 'auto' }}
+          /* 「모형」은 그림이라 **안 흐른다** — 플롯이 남는 높이를 먹어야 하는데
+             `auto` 로 두면 스크롤 컨테이너가 높이를 안 주고 내용 높이로 접힌다. */
+          style={{ overflowY: view === 'model' ? 'hidden' : 'auto' }}
         >
           {view === 'result' ? (
             <>
@@ -435,8 +442,10 @@ export function ScenarioPage({ policy }: { policy?: PolicyStep }) {
               <PathStrip iKr={diffs.i_kr} />
               <Ledger anchors={anchors} outside={outside} />
             </>
+          ) : view === 'model' ? (
+            <ModelChart rows={rows} asof={anchors.asof} />
           ) : (
-            <ModelExplainer />
+            <ModelExplainer rows={rows} diffs={diffs} />
           )}
         </VStack>
       </VStack>
@@ -494,13 +503,21 @@ function ResultTable({
         <Table tableLayout="auto">
           <TableHeader>
             <TableRow>
-              <TableCell as="th" scope="col">
+              {/* **숫자 열은 오른쪽, 이름 열은 왼쪽** — Main 의 아웃라이트 표가
+                  그렇다. 오른쪽 정렬은 `tabular-nums` 를 켜 둔 이유 그 자체다:
+                  소수점이 세로로 서야 두 행을 읽지 않고 견줄 수 있다.
+
+                  칸을 실제로 미는 것은 `.sr-num` 이 아니라 그 안의 CSS 한 줄이다 —
+                  type.css 의 `.sr-num [class*='column-']` 주석 참조. Main 에서
+                  이 결함이 안 보였던 건 그 표가 열을 `ch` 로 재서 슬랙이 없기
+                  때문이고, 이 표는 카드를 꽉 채우므로 칸마다 150px 씩 남는다. */}
+              <TableCell as="th" scope="col" className="sr-label">
                 <Text as="span" font="legal" color="fgMuted">
                   테너
                 </Text>
               </TableCell>
               {['현재', '시나리오 12M', 'Δ 전망', '시장 캐리', 'Δ vs 시장'].map((h) => (
-                <TableCell as="th" scope="col" key={h} justifyContent="flex-end">
+                <TableCell as="th" scope="col" key={h} className="sr-num" justifyContent="flex-end">
                   <Text as="span" font="legal" color="fgMuted" noWrap>
                     {h}
                   </Text>
@@ -512,7 +529,7 @@ function ResultTable({
             {rows.map((r) => (
               <TableRow key={r.tenor}>
                 {/* 행이 두 줄이다 — 주값 아래 보조값. Main·Strategy 의 행 문법. */}
-                <TableCell>
+                <TableCell className="sr-label">
                   <VStack gap={0} minWidth={0}>
                     <Text as="span" font="label2" noWrap>
                       {TENOR_LABEL[r.tenor] ?? r.tenor}
@@ -526,29 +543,29 @@ function ResultTable({
                     </Text>
                   </VStack>
                 </TableCell>
-                <TableCell justifyContent="flex-end">
+                <TableCell className="sr-num" justifyContent="flex-end">
                   <Text as="span" font="legal" color="fgMuted" tabularNumbers noWrap>
                     {fmtLevel(r.spot, '%')}
                   </Text>
                 </TableCell>
-                <TableCell justifyContent="flex-end">
+                <TableCell className="sr-num" justifyContent="flex-end">
                   <Text as="span" font="label2" tabularNumbers noWrap>
                     {fmtLevel(r.scenario12m, '%')}
                   </Text>
                 </TableCell>
-                <TableCell justifyContent="flex-end">
+                <TableCell className="sr-num" justifyContent="flex-end">
                   <Text as="span" font="legal" color="fgMuted" tabularNumbers noWrap>
                     {fmtBp(r.deltaBp)}
                   </Text>
                 </TableCell>
-                <TableCell justifyContent="flex-end">
+                <TableCell className="sr-num" justifyContent="flex-end">
                   <Text as="span" font="legal" color="fgMuted" tabularNumbers noWrap>
                     {fmtBp(r.marketCarryBp)}
                   </Text>
                 </TableCell>
                 {/* 판정이 실린 칸은 칠한다 — Main 의 변화 칸, Strategy 의 Score 와
                     같은 문법. 잉크 색만으로는 «여기가 답» 이라고 못 말한다. */}
-                <TableCell justifyContent="flex-end">
+                <TableCell className="sr-num" justifyContent="flex-end">
                   <span className="sr-scn-vs" data-dir={dirAttr(r.vsMarketBp)}>
                     <Text
                       as="span"
@@ -581,8 +598,10 @@ function ResultTable({
 
 function PathStrip({ iKr }: { iKr: number[] }) {
   const max = Math.max(0.05, ...iKr.map((v) => Math.abs(v)));
+  /* `flexShrink` 가 켜져 있어야 스트립의 `flex: 0 1 36px` 이 실제로 양보한다 —
+     flex 아이템의 기본 최소 높이는 자기 내용이라 그것부터 풀어야 한다. */
   return (
-    <VStack gap={1} minWidth={0} width="100%">
+    <VStack gap={1} minWidth={0} width="100%" flexShrink={1} minHeight={0}>
       <HStack gap={1} alignItems="baseline" flexWrap="wrap">
         <Text as="span" font="caption" color="fgMuted">
           모형이 보는 기준금리 24분기

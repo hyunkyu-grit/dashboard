@@ -584,6 +584,21 @@ tr[aria-current='true'] > td {
   justify-content: flex-end;
 }
 
+/* …그리고 그 한 줄로는 **안 닿는다**.
+ *
+ * `TableCell` 은 children 을 여섯 겹으로 감싸고, 값을 실제로 안는 마지막 겹이
+ * **세로 flex**(`column-…`)다(실측 2026-08-20). 세로축에서 `justify-content` 는
+ * 위아래를 다루므로 `justifyContent="flex-end"` 는 가로로 아무것도 못 한다 —
+ * 가로로 미는 것은 `align-items` 이고, CDS 는 거기에 `flex-start` 를 심어 둔다.
+ * 209px 칸에 44px 숫자가 왼쪽 끝에 붙어 있는 것을 재고 나서야 보였다.
+ *
+ * Main 의 표에서 이 결함이 안 보인 이유는 정렬이 되고 있어서가 아니라 **슬랙이
+ * 없어서**다(열을 `ch` 로 잰다). 그래서 이 규칙은 Main 에서 무동작이다.
+ * `.sr-label` 은 건드리지 않으므로 이름 열은 그대로 왼쪽에 남는다. */
+.sr-num [class*='column-'] {
+  align-items: flex-end;
+}
+
 .sr-num span {
   text-align: right;
 }
@@ -2096,12 +2111,23 @@ thead th {
  *
  * 높이는 인라인 `--h` 로 온다 — 값마다 다르므로 클래스로 못 적는다(CLAUDE.md
  * §4 의 "동적 값은 CSS 변수"). 색은 방향뿐이다. */
+/* 24분기 스트립. 높이가 **고정이 아니라 양보한다** [OWNER, 2026-08-20 — "스크롤
+ * 최대한 안 하는 방향으로"].
+ *
+ * 36px 로 못 박아 두었더니 창이 911→855 로 줄자 결과 탭이 18px 넘쳤다(실측).
+ * 이 막대들은 백분율 높이라 눌려도 서로의 비율이 그대로다 — 표나 각주와 달리
+ * 줄어들어도 잃는 정보가 없다. 그래서 이 탭에서 양보하는 자리는 여기가 맞다.
+ *
+ * 24px 아래로는 방향이 안 읽히므로 거기가 바닥이고, 그보다 낮은 창이면 그때는
+ * 스크롤이 맞다. */
 .sr-scn-strip {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
   gap: 2px;
   height: 36px;
+  flex: 0 1 36px;
+  min-height: 24px;
 }
 
 .sr-scn-col {
@@ -2189,27 +2215,104 @@ thead th {
 /* ── Lab 발행 캘린더 (`lab/IssuancePage.tsx`) ────────────────────────────────
  *
  * 달력 격자다. CDS 에 달력 컴포넌트가 없고(있는 것은 날짜 **입력**이다), 여기서
- * 필요한 것은 «한 달을 한 눈에» 라 7열 격자가 전부다.
+ * 필요한 것은 «한 달을 한 눈에» 라 격자가 전부다.
+ *
+ * **다섯 열이다** [OWNER, 2026-08-20] — 토·일을 뺐다. 잃는 것이 없다: 입찰·
+ * 공개시장운영·금통위는 영업일에만 서고 발행 납입일은 Following 으로 이미 밀려
+ * 있다. 주말 두 칸이 빠지니 남은 다섯 칸이 그만큼 넓어져 숫자가 붙지 않는다.
+ * **평일 공휴일은 남는다** — 그날은 정말로 «거래가 없던 날» 이라 자리가 뜻이다.
  *
  * 칸은 누를 수 있다 — 그날 상세가 아래에 열린다. 그래서 hover·선택 상태가 있고,
  * 비영업일은 눌러도 볼 것이 없지만 **자리는 지킨다**(빠지면 요일이 어긋난다). */
-.sr-cal-grid {
+/* ── 성분 격자 (`lab/scenario/ModelExplainer.tsx`) ───────────────────────────
+ *
+ * 행이 손잡이, 열이 테너. `Table` 이 아니라 격자인 이유는 **높이**다 — CDS
+ * TableCell 은 값 둘레를 여섯 겹으로 감싸며 행마다 36px 을 먹는데, 여덟 행이면
+ * 그것만으로 이 탭이 스크롤을 부른다(실측 2026-08-20: 모형 탭이 365px 넘쳤다).
+ * 여기 행은 20px 이다.
+ *
+ * 첫 열은 이름이라 왼쪽, 나머지는 숫자라 오른쪽 — 앱의 표 규약 그대로다. */
+.sr-scn-decomp {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: minmax(96px, max-content) repeat(var(--sr-decomp-cols), minmax(0, 1fr));
+  column-gap: 12px;
+  width: 100%;
+}
+
+.sr-scn-dc-l,
+.sr-scn-dc-n {
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.sr-scn-dc-n {
+  justify-content: flex-end;
+}
+
+.sr-scn-dc-h {
+  padding-bottom: 2px;
+}
+
+/* 합계 세 줄이 시작하는 자리. 칸마다 그으므로 열 간격을 건너뛰지 않는다 —
+   한 줄로 그으면 격자의 column-gap 위를 지나며 숫자와 어긋난다. */
+.sr-scn-dc-l[data-rule='1'],
+.sr-scn-dc-n[data-rule='1'] {
+  border-top: 1px solid var(--color-bgLine);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+/* 열 자리. **요일 머리와 날짜 격자가 이것만 공유한다** — 아래 `.sr-cal-grid` 의
+ * 「높이를 채운다」 규칙까지 머리가 물려받으면 머리 줄도 같이 늘어나 바닥에 빈
+ * 자리가 남는다(실측 2026-08-20: 머리가 50px, 바닥에 90px 이 떴다). */
+.sr-cal-cols {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 2px;
   width: 100%;
 }
 
+.sr-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  /* **모든 주가 같은 높이**이고, 격자가 **남는 높이를 전부 먹는다**.
+     [OWNER, 2026-08-20 — "스크롤 최대한 안 하는 방향으로, 한눈에 들어오는 게
+     제일 좋아"]
+
+     `auto` 로 두면 일정이 셋인 날이 낀 주만 109px 로 부풀어(실측 92/109) 달력이
+     층층이 어긋나고, 게다가 한 달이 650px 짜리 자리에 80px 넘쳐 스크롤이 났다.
+
+     답은 픽셀을 깎는 게 아니라 **채우는 것**이다. 부모가 높이를 주고(`flex: 1`),
+     행은 `1fr` 이라 그 높이를 균등하게 나눈다. 창이 높으면 칸이 넉넉해지고 낮으면
+     빠듯해지되, **어느 쪽이든 안 넘친다**. 폰트는 안 건드린다 — 13px 전창 규칙이
+     오너 결정이고 가드가 걸려 있다.
+
+     `minmax` 의 최소는 72px 다. 날짜(16) + 금액(18) + 일정 두 줄(36) 이 들어가는
+     최소치이고, 그 아래로 눌릴 만큼 낮은 창이면 그때는 스크롤이 맞다. */
+  grid-auto-rows: minmax(72px, 1fr);
+  gap: 2px;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* 요일 머리. **칸의 왼쪽 패딩과 같은 6px** 이라 «월» 이 그 열의 날짜 숫자 바로
+ * 위에 선다. 첫 판은 오른쪽 정렬이었는데, 날짜는 왼쪽이라 머리와 몸이 열의 반대
+ * 끝에 서 있었다 [OWNER 지적 «얼라인 개판», 2026-08-20]. */
 .sr-cal-dow {
-  padding: 0 6px 4px;
-  text-align: right;
+  /* 7px = 칸의 패딩 6px + 투명 테두리 1px. 6px 으로 두면 실측에서 정확히 1px 이
+     어긋난다(머리 443 · 날짜 444). */
+  padding: 0 7px 4px;
+  text-align: left;
 }
 
 .sr-cal-cell {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-height: 78px;
+  min-height: 0;
   padding: 6px;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -2221,11 +2324,16 @@ thead th {
   border-color: var(--color-bgLine);
 }
 
-/* 주말·공휴일은 **눌러 둔다**. 첫 판은 반대로 평일에 바탕을 깔았는데, 그러면
- * 평일이 한 덩어리 슬래브가 되고 주말이 거기 뚫린 구멍처럼 읽혔다(실측
- * 2026-08-20). 달력의 관례는 주말을 죽이는 쪽이다. */
+/* 공휴일은 **눌러 둔다**(토·일은 이제 애초에 안 온다). 첫 판은 반대로 평일에
+ * 바탕을 깔았는데, 그러면 평일이 한 덩어리 슬래브가 되고 휴일이 거기 뚫린
+ * 구멍처럼 읽혔다. 달력의 관례는 쉬는 날을 죽이는 쪽이다.
+ *
+ * 바탕은 `--sr-page` 다. `bgAlternate` 였는데 다크에서 **카드 바탕과 정확히 같은
+ * 색**이라(둘 다 rgb(20,21,25) — 실측 2026-08-20) 8/17 대체공휴일이 아무 표시도
+ * 없었다. `--sr-page` 는 두 테마 모두에서 카드보다 한 칸 내려간 면이다:
+ * 라이트 = 회색 vs 흰 카드, 다크 = rgb(10,11,13) vs rgb(20,21,25). */
 .sr-cal-cell[data-off='1'] {
-  background: var(--color-bgAlternate);
+  background: var(--sr-page);
 }
 
 .sr-cal-cell[data-today='1'] {
@@ -2238,30 +2346,48 @@ thead th {
 }
 
 /* 그날 발행액의 크기. 숫자 옆의 막대가 아니라 **칸 바닥의 띠**다 — 칸이 작아
- * 막대를 옆에 두면 숫자가 밀린다. */
-.sr-cal-bar {
+ * 막대를 옆에 두면 숫자가 밀린다.
+ *
+ * 홈(track)이 있어야 게이지로 읽힌다. 홈 없이 칠한 띠만 두었더니 287px 짜리 칸에서
+ * 거의 폭 전체를 채운 날이 나오고, 그게 **행을 가르는 구분선**처럼 보였다(실측
+ * 2026-08-20). 홈은 이 화면이 이미 쓰는 칸 경계선과 같은 잉크다. */
+.sr-cal-track {
+  width: 100%;
   height: 4px;
   border-radius: 2px;
-  background: var(--color-fgMuted);
-  min-width: 2px;
+  background: var(--color-bgLine);
+  overflow: hidden;
 }
 
-/* 일정 점. 레인마다 다른 글리프가 아니라 같은 점이고, 무엇인지는 상세가 말한다 —
- * 칸 안에서 레인을 색으로 구분하면 방향색과 싸운다(색은 방향만 나른다). */
-.sr-cal-dots {
+.sr-cal-bar {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--color-fgMuted);
+}
+
+/* 그날의 일정 — **이름을 적는다**.
+ *
+ * 첫 판은 익명의 점 세 개였다. 토·일을 빼면서 열이 다섯이 되고 칸이 287px 로
+ * 넓어졌는데(실측 2026-08-20), 그 폭을 두고도 «국고채 입찰» 을 점으로 두는 건
+ * 낭비다. 그리고 그게 오너가 지적한 병의 칸 단위 판본이다 — 판정만 남고 그게
+ * 무엇인지가 사라지는 것.
+ *
+ * 레인은 **잉크의 세기**로만 가른다(색은 방향만 나른다는 규칙). 금통위만
+ * `--color-fg`, 나머지는 muted. */
+.sr-cal-evs {
   display: flex;
+  flex-direction: column;
   gap: 2px;
-  flex-wrap: wrap;
+  min-width: 0;
 }
 
-.sr-cal-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--color-fgMuted);
+.sr-cal-ev {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 앞달·뒷달로 넘어가는 자리를 메우는 빈 칸. 배경도 테두리도 없다. */
 .sr-cal-blank {
-  min-height: 78px;
+  min-height: 0;
 }
