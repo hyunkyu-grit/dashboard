@@ -2145,3 +2145,32 @@ thead th {
 .sr-scn-pinned {
   box-shadow: inset 0 -2px 0 var(--color-fgMuted);
 }
+
+/* 다섯째 칸의 방향 틴트 — Main 의 변화 칸, Strategy 의 Score 칸과 같은 문법.
+ *
+ * 이 화면의 결론이 표 맨 오른쪽 13px 글자에 숨어 있었다(실측 2026-08-20, 다른
+ * 화면들과 나란히 놓고 본 뒤). 잉크 색만으로는 «여기가 답» 이라고 말하기에
+ * 모자란다 — 이 앱은 판정이 실린 칸을 칠한다.
+ *
+ * 10% 틴트는 `.sr-spans` 가 방향에 쓰는 것과 같은 농도다. */
+.sr-scn-vs {
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+.sr-scn-vs[data-dir='up'] {
+  background: color-mix(in srgb, var(--sr-up) 10%, transparent);
+}
+
+.sr-scn-vs[data-dir='down'] {
+  background: color-mix(in srgb, var(--sr-down) 10%, transparent);
+}
+
+/* 「모형」 탭의 정의 목록 — 행 사이 헤어라인.
+ *
+ * CDS `Table` 은 셀당 좌우 32px 이라 «용어 : 설명» 두 칸에는 너무 벌어진다
+ * (RV 랭킹표가 손 표로 간 것과 같은 이유). 여기는 표가 아니라 **목록**이고,
+ * 필요한 것은 행 구분선 하나뿐이다. */
+.sr-scn-deftable > * + * {
+  border-top: 1px solid var(--color-bgLine);
+}
