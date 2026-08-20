@@ -103,6 +103,24 @@ export type Basis = {
   caveats: string[];
 };
 
+/* ⚠ **미국 기저 셋(`us_2q`·`us_4q`·`us_6q`)은 못 쓴다** [실측 2026-08-20].
+ *
+ * 「모형」 탭이 응답을 그리기 시작하자마자 드러났다. 같은 충격(미국 +100bp × 4분기)
+ * 에 대해 BIGFOOT 자신의 조건부 산출물(`output/hfl_conditional.json`)은 이렇게 적는다:
+ *
+ *     기준금리 12개월 이동   −1.3bp        기저가 담은 값   +537.0bp
+ *     GDP 갭 정점           −0.5093pp                     +5.744pp
+ *
+ * 400배와 11배, 그리고 갭은 부호까지 반대다. `us_6q` 는 `us_2q` 와도 부호가 뒤집혀
+ * 있다. 나머지 기저는 정합한다 — `policy_q1` 이 정확히 +25bp 를 내고, 유가 +10% 가
+ * +15.6bp 를 낸다. 문제는 미국 셋뿐이다.
+ *
+ * 그래서 화면에서 Fed 손잡이를 내렸다. 400배 틀린 숫자를 내는 손잡이는 없는 것보다
+ * 나쁘다. 되살리려면 `scenario_basis.build` 의 미국 기저 조립을 고쳐 기저를 다시
+ * 굽고, 위 두 값이 맞는지부터 대조해야 한다.
+ */
+export const US_BASES_USABLE = false;
+
 /** 미국 충격의 지속 분기. 기저가 셋만 갖고 있어 다른 값은 못 쓴다. */
 export type UsDurationQ = 2 | 4 | 6;
 
@@ -274,6 +292,31 @@ export function frameDiffs(basis: Basis, knobs: Knobs): FrameDiff[] {
     }
     return { day, dyBp };
   });
+}
+
+/**
+ * 기저 하나의 **단위 응답**을 그대로 읽는다 — 「모형」 탭이 그리는 것.
+ *
+ * `combine()` 과 다른 점이 하나뿐인데 그게 결정적이다: **정책 핀이 없다.**
+ * `combine` 은 8분기를 내가 놓은 자리에 고정하려고 정책 계수를 푸는데, 충격반응을
+ * 그릴 때 그러면 «Fed 가 100bp 올리는데 한은은 2년간 꿈쩍도 안 한다» 를 푸는 셈이
+ * 된다. 그 답은 모형의 응답이 아니라 기괴한 시나리오다(실측 2026-08-20: 기준금리
+ * +520bp, GDP 갭 +5.6pp).
+ *
+ * 기저에 저장된 것은 애초에 «그 충격 하나에 준칙이 반응한 결과» 이므로, 읽기만
+ * 하면 된다. 정책 기저(`policy_q1`)도 마찬가지다 — 그 분기에만 +25bp 를 얹고
+ * 나머지는 준칙이 정한 것이 이미 들어 있다.
+ */
+export function impulse(basis: Basis, name: string): Diffs {
+  const b = basis.bases[name];
+  if (!b) throw new Error(`시나리오 기저: ${name} 이 없어요`);
+  const out = {} as Diffs;
+  for (const v of QUARTERLY_VARS) out[v] = [...b[v]];
+  const irs = {} as Record<IrsTenor, number[]>;
+  for (const t of IRS_TENORS) irs[t] = [...b.irs[t]];
+  out.irs = irs;
+  out.coefs = { [name]: 1 };
+  return out;
 }
 
 /**

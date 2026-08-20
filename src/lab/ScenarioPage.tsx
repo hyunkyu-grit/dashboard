@@ -88,8 +88,6 @@ const STEP_BP = [50, 25, 0, -25, -50];
 const CPI_PP = [1, 0.75, 0.5, 0.25, 0, -0.25, -0.5, -0.75, -1];
 const GAP_PP = CPI_PP;
 const EXPORTS_PCT = [0, -2.5, -5, -7.5, -10];
-const US_BP = [0, 25, 50, 75, 100, 125, 150];
-const US_DUR_Q = [2, 4, 6];
 const OIL_PCT = [20, 15, 10, 5, 0, -5, -10, -15, -20];
 
 /** 부호 있는 값의 방향 클래스. `format.dirClass` 는 CSS 에 없는 `text-*` 를
@@ -242,7 +240,7 @@ export function ScenarioPage({ policy }: { policy?: PolicyStep }) {
   const quarters = buildQuarters(anchors.asof, policy?.upcoming ?? []);
   const pathSummary = knobs.policyBp.map((v) => (v === 0 ? '0' : bpLabel(v))).join('·');
   const domesticOn = knobs.cpiPp !== 0 || knobs.gapPp !== 0 || knobs.exportsPct !== 0;
-  const foreignOn = knobs.usBp !== 0 || knobs.oilPct !== 0;
+  const foreignOn = knobs.oilPct !== 0;
 
   return (
     <HStack gap={2} width="100%" alignItems="stretch" flexGrow={1} minHeight={0}>
@@ -366,42 +364,18 @@ export function ScenarioPage({ policy }: { policy?: PolicyStep }) {
           title="대외"
           summary={
             foreignOn
-              ? [
-                  knobs.usBp !== 0 ? `Fed +${knobs.usBp}bp × ${knobs.usDurQ}분기` : '',
-                  knobs.oilPct !== 0 ? `유가 ${pctLabel(knobs.oilPct)}` : '',
-                ]
-                  .filter(Boolean)
-                  .join(' · ')
+              ? `유가 ${pctLabel(knobs.oilPct)}`
               : '없음'
           }
         >
+          {/* Fed 손잡이는 내려 두었다 — 미국 기저가 400배 어긋나 있다
+              (`scenario/combine.ts` 의 `US_BASES_USABLE`). 400배 틀린 숫자를 내는
+              손잡이는 없는 것보다 나쁘다. */}
           <Text as="p" font="legal" color="fgMuted">
-            미국 기간프리미엄 커널은 100bp × 4분기까지 맞춰졌어요. 그 밖은 선형
-            외삽이고 화면이 그렇게 말해요.
+            Fed 손잡이는 지금 내려 뒀어요. 미국 쪽 기저가 엔진의 다른 산출물과 크게
+            어긋나 있어서, 고치고 다시 구운 뒤에 올릴게요.
           </Text>
           <HStack gap={1.5} alignItems="flex-end" flexWrap="wrap">
-            <Box width={104}>
-              <Field label="Fed 크기">
-                <StepSelect
-                  label="Fed 충격 크기"
-                  value={knobs.usBp}
-                  options={US_BP}
-                  format={(v) => (v === 0 ? '0' : `+${v}bp`)}
-                  onChange={(v) => patch({ usBp: v })}
-                />
-              </Field>
-            </Box>
-            <Box width={104}>
-              <Field label="Fed 기간">
-                <StepSelect
-                  label="Fed 충격 기간"
-                  value={knobs.usDurQ}
-                  options={US_DUR_Q}
-                  format={(v) => `${v}분기`}
-                  onChange={(v) => patch({ usDurQ: v as Knobs['usDurQ'] })}
-                />
-              </Field>
-            </Box>
             <Box width={104}>
               <Field label="유가">
                 <StepSelect
