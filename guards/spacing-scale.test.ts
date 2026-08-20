@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
+import { stripComments } from './_source';
 
 /**
  * 간격은 **한 계단** 위에 선다.
@@ -66,9 +67,6 @@ const ALLOW: Record<number, string> = {
   20: '.sr-waterfall padding-top — 워터폴 막대 위 라벨이 앉는 자리. 16/24 중 어느 쪽도 라벨과 막대의 광학 간격을 그대로 두지 못한다.',
 };
 
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-}
 
 function walk(dir: string, exts: string[], out: string[] = []): string[] {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {

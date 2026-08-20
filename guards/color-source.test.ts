@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
+import { stripComments } from './_source';
 
 /**
  * Every colour literal in v2 lives in ONE file. A hex pasted into a component is
@@ -48,9 +49,6 @@ function walk(dir: string, out: string[] = []): string[] {
 
 /** Block and line comments, in both CSS and TS. Not a parser — it does not need
  * to be: it only has to remove text that can never paint a pixel. */
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-}
 
 describe('colour lives in one file', () => {
   const files = SEARCH_DIRS.flatMap((d) => {

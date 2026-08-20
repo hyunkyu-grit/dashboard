@@ -21,6 +21,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
+import { stripComments } from './_source';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), 'utf8');
@@ -70,9 +71,6 @@ export function findDevOrigins(text: string): string[] {
 }
 
 /** 주석은 번들에 안 실린다 — 문서에 적힌 예시 주소까지 금지하면 설명을 못 쓴다. */
-function stripComments(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
-}
 
 function walk(dir: string, ext: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {

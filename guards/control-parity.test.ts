@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
+import { stripComments } from './_source';
 
 /**
  * 한 행의 컨트롤은 **한 높이**다.
@@ -52,9 +53,6 @@ export const CONTROL_H = 32;
  */
 const ROW_HEIGHTS = new Set([32, 36]);
 
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-}
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {

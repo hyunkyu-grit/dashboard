@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
+import { stripComments } from './_source';
 
 /**
  * 타이포 shorthand 는 **늘어날 수 없다** — 래칫.
@@ -34,9 +35,6 @@ const SHORTHAND =
 /** 현재 수. **오직 내려갈 수만 있다.** */
 const CEILING = 251;
 
-function stripComments(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-}
 
 function tsxFiles(dir: string, out: string[] = []): string[] {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {

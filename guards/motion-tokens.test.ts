@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { EASE_OUT, MOTION } from '@/theme/motion';
+import { stripComments } from './_source';
 
 /**
  * 시간은 한 곳에 산다 — 그리고 그 한 곳이 **두 파일**이라서 이 가드가 있다.
@@ -37,9 +38,6 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-}
 
 const css = fs.readFileSync(path.join(ROOT, CSS_FILE), 'utf8');
 
