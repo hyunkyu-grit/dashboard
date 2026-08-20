@@ -24,10 +24,11 @@
  */
 
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
-import { TextLabel2 } from '@coinbase/cds-web/typography';
+import { Text, TextLabel2 } from '@coinbase/cds-web/typography';
 
 import type { Unit } from '@/lib/api';
 import { fmtDelta, fmtLevel } from '@/lib/format';
+import { fmtKrw } from '@/lib/krw';
 
 /** 카드의 고정 폭. 호출자가 `left` 를 이 값으로 클램프해서 카드가 그림 밖으로
  * 나가지 않게 한다 — 복사본이 아니라 진짜 숫자로 재도록 내보낸다. */
@@ -57,6 +58,20 @@ export const READOUT_LABEL = {
  * `pointer-events: none` 이 중요하다. 카드는 차트 위에 떠 있으므로, 이게 없으면
  * 카드가 커서를 가로채 스크러버가 멈추고 카드 자신이 얼어붙는다.
  */
+/** 카드가 그림 밖으로 나가지 않게 하는 클램프.
+ *
+ * v1 은 노드의 x 로 스냅했지만(`x(hIdx) + 10`), 그건 v1 이 자기 SVG 를 직접
+ * 그려서 그 좌표를 알고 있었기 때문이다. CDS 는 그리는 쪽이라 축 라벨 폭까지
+ * 포함한 내부 기하를 우리에게 주지 않는다 — 그 계산을 여기서 다시 하면 두 벌이
+ * 되고, 두 벌은 CDS 가 눈금 폭을 바꾸는 날 어긋난다. 그래서 **커서의 x 를
+ * 그대로** 쓴다. 카드가 읽는 값은 CDS 가 준 인덱스라 여전히 노드에 스냅돼 있다.
+ *
+ * 2026-08-20: 미리보기 pane 안에만 있던 것을 여기로 옮겼다 — 시뮬 차트도 같은
+ * 카드를 띄우게 되면서 두 화면이 각자 클램프하면 언젠가 갈린다. */
+export function readoutLeft(x: number, boxW: number, width = READOUT_CARD_W): number {
+  return Math.min(Math.max(boxW - width - 8, 0), Math.max(0, x + 12));
+}
+
 export function ReadoutCard({
   title,
   left,
@@ -100,6 +115,24 @@ export function ReadoutLevel({
       <TextLabel2 as="span" tabularNumbers noWrap>
         {fmtLevel(v, unit)}
       </TextLabel2>
+    </HStack>
+  );
+}
+
+/** 돈 한 줄. 레벨 줄과 같은 문법이고 형식만 억/만이다 — 시뮬의 성분 경로가
+ * 쓴다. 색은 안 가진다(변화 줄만 색을 갖는다, 아래 참조). */
+export function ReadoutMoney({ k, v }: { k: string; v: number | null | undefined }) {
+  /* 위의 레벨 줄들은 `TextLabel2` shorthand 를 쓰지만 그건 기존 코드다. 새로
+     쓰는 것은 `Text font="label2"` — 시각은 같고, CLAUDE.md 가 새 코드의
+     shorthand 사용을 금지한다(타이포 래칫이 그걸 센다). */
+  return (
+    <HStack justifyContent="space-between" gap={1}>
+      <Text as="span" font="label2" color="fgMuted" noWrap>
+        {k}
+      </Text>
+      <Text as="span" font="label2" tabularNumbers noWrap>
+        {v == null ? '—' : fmtKrw(v)}
+      </Text>
     </HStack>
   );
 }

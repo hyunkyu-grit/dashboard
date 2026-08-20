@@ -34,11 +34,11 @@ import type { Row } from '@/table/rows';
 import { useFillHeight } from './useFillHeight';
 
 import {
-  READOUT_CARD_W,
   READOUT_LABEL,
   ReadoutCard,
   ReadoutChange,
   ReadoutLevel,
+  readoutLeft,
 } from './ReadoutCard';
 
 /** `d` = 그날의 전일 대비 변화. **백엔드가 낸다**(`derive.py::series_history`) —
@@ -51,16 +51,6 @@ type Point = { t: string; v: number; d?: number | null };
  * 표의 52주 열과 다른 말을 하게 된다. */
 type SeriesStats = { min: number | null; max: number | null; avg: number | null };
 
-/** 카드가 그림 밖으로 나가지 않게 하는 클램프.
- *
- * v1 은 노드의 x 로 스냅했지만(`x(hIdx) + 10`), 그건 v1 이 자기 SVG 를 직접 그려서
- * 그 좌표를 알고 있었기 때문이다. CDS 는 그리는 쪽이라 축 라벨 폭까지 포함한
- * 내부 기하를 우리에게 주지 않는다 — 그 계산을 여기서 다시 하면 두 벌이 되고,
- * 두 벌은 CDS 가 눈금 폭을 바꾸는 날 어긋난다. 그래서 **커서의 x 를 그대로** 쓴다.
- * 카드가 읽는 값은 CDS 가 준 인덱스라 여전히 노드에 스냅돼 있다. */
-function clampLeft(x: number, boxW: number): number {
-  return Math.min(Math.max(boxW - READOUT_CARD_W - 8, 0), Math.max(0, x + 12));
-}
 
 /**
  * The instrument detail pane, rebuilt against coinbase.com/price/* [OWNER
@@ -382,7 +372,7 @@ export function PreviewPane({
 
   const onPlotMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
-    setHoverX(clampLeft(e.clientX - r.left, r.width));
+    setHoverX(readoutLeft(e.clientX - r.left, r.width));
   }, []);
   const onPlotLeave = useCallback(() => setHoverIdx(undefined), []);
 

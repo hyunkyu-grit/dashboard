@@ -17,19 +17,26 @@
  *  6. **일별 대사** — 트레이딩 시스템과 줄 단위로 맞춰 보는 표.
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@coinbase/cds-web/buttons';
 import { Chip } from '@coinbase/cds-web/chips';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@coinbase/cds-web/tables';
 import { TextLabel1, TextLabel2, TextLegal } from '@coinbase/cds-web/typography';
-import { CartesianChart, Line, XAxis, YAxis } from '@coinbase/cds-web/visualizations/chart';
+import {
+  CartesianChart,
+  Line,
+  Scrubber,
+  XAxis,
+  YAxis,
+} from '@coinbase/cds-web/visualizations/chart';
 
 import { fmtKrw, fmtKrwFromMan, manUnits } from '@/lib/krw';
 import { directionVar } from '@/theme/tint';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { ReconStack, type ReconStackDay } from '@/ui/window/ReconStack';
+import { ReadoutCard, ReadoutMoney, readoutLeft } from '@/ui/ReadoutCard';
 
 import type { CaseRuns } from './SimulationPage';
 import {
@@ -59,6 +66,16 @@ const BOND_PARTS = [
   { key: 'bondCarry', label: '채권캐리' },
   { key: 'fund', label: '조달비용' },
 ] as const;
+
+/** 커서 카드가 그리는 줄들 — 워터폴·표와 **같은 순서, 같은 이름**이다.
+ * 세 곳이 각자 목록을 들면 하나만 고쳐지는 날이 온다. */
+const PATH_ROWS = [...SWAP_PARTS, ...BOND_PARTS] as readonly {
+  key: 'val' | 'carry' | 'roll' | 'bondMtm' | 'bondCarry' | 'fund';
+  label: string;
+}[];
+const PATH_SERIES: string[] = PATH_ROWS.map((r) => r.key);
+/** 북에 채권이 없으면 서지 않는 셋. */
+const BOND_SERIES = new Set<string>(BOND_PARTS.map((r) => r.key));
 
 /** 케이스 선의 색.
  *
@@ -153,6 +170,15 @@ export function ResultsWindow({
   asOf: string;
   onClose: () => void;
 }) {
+  /* 성분 경로 차트의 커서. 백테스트와 같은 문법(`LinkedCharts`). */
+  const [pathIdx, setPathIdx] = useState<number>();
+  const [pathX, setPathX] = useState(0);
+  const pathBoxRef = useRef<HTMLDivElement>(null);
+  const onPathMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const box = pathBoxRef.current?.getBoundingClientRect();
+    if (box) setPathX(readoutLeft(e.clientX - box.left, box.width));
+  }, []);
+
   const [shown, setShown] = useState<CaseId>(scenario.activeCase);
   const run = runs[shown];
   const cur = activeCase(scenario);
@@ -189,6 +215,17 @@ export function ResultsWindow({
       ),
     };
   }, [run]);
+
+  /** 스크러버가 스크린리더에 읽어 줄 한 줄. 카드는 눈, 이건 귀 — 둘 다 있어야 한다. */
+  const pathScrubLabel = useCallback(
+    (i: number) => {
+      if (!paths || paths.days[i] == null) return '';
+      const rows = PATH_ROWS.filter((r) => paths.hasBond || !BOND_SERIES.has(r.key))
+        .map((r) => `${r.label} ${fmtKrw((paths[r.key] as (number | null)[])[i] ?? 0)}`);
+      return [paths.days[i], ...rows].join(', ');
+    },
+    [paths],
+  );
 
   const p = run ? partsOf(run) : null;
   const recon = run?.irsDailyReconciliation ?? [];
@@ -332,9 +369,12 @@ export function ResultsWindow({
               생기는 몫, 캐리는 실제 주고받는 이자의 몫, 롤다운은 커브가 멈춰도 잔존만기가
               줄어 생기는 몫이에요.
             </TextLegal>
-            <Box width="100%">
+            {/* 카드가 기준으로 삼는 상자(`.sr-plot` = position:relative). */}
+            <Box className="sr-plot" width="100%" ref={pathBoxRef} onMouseMove={onPathMove}>
               <CartesianChart
                 animate={false}
+                enableScrubbing
+                onScrubberPositionChange={setPathIdx}
                 height={260}
                 accessibilityLabel="성분 누적 경로"
                 inset={{ top: 12, right: 8, bottom: 0, left: 8 }}
@@ -370,7 +410,24 @@ export function ResultsWindow({
                     <Line seriesId="fund" curve="linear" connectNulls={false} />
                   </>
                 ) : null}
+                <Scrubber
+                  accessibilityLabel={pathScrubLabel}
+                  seriesIds={PATH_SERIES.filter((k) => paths.hasBond || !BOND_SERIES.has(k))}
+                />
               </CartesianChart>
+              {/* 커서가 짚은 날의 성분 — 레인 P1-2. 이 화면은 손익이 어떻게
+                  쌓이는지를 보는 자리인데, 특정 날의 숫자를 읽을 길이 없었다. */}
+              {pathIdx != null && pathIdx >= 0 && paths.days[pathIdx] != null ? (
+                <ReadoutCard title={`D+${paths.days[pathIdx]}`} left={pathX}>
+                  {PATH_ROWS.filter((r) => paths.hasBond || !BOND_SERIES.has(r.key)).map((r) => (
+                    <ReadoutMoney
+                      key={r.key}
+                      k={r.label}
+                      v={(paths[r.key] as (number | null)[])[pathIdx] ?? null}
+                    />
+                  ))}
+                </ReadoutCard>
+              ) : null}
             </Box>
             {p ? (
               <HStack gap={1.5} flexWrap="wrap">

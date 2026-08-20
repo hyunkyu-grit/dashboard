@@ -20,15 +20,13 @@
 
 import { describe, expect, it } from 'vitest';
 
-import type {
-  CashBondInstruments,
-  ForwardsPayload,
-  UniversePayload,
-  WallSummary,
-} from '../src/lib/api';
+import type { CashBondInstruments, ForwardsPayload, WallSummary } from '../src/lib/api';
 import { toCashBondRows } from '../src/table/cashbondRows';
 import { ROW_FIELD_SOURCE, buildRows, type Row } from '../src/table/rows';
-import { toRows as toUniverseRows } from '../src/table/universeRows';
+import {
+  toRows as toUniverseRows,
+  type UniversePayload,
+} from '../src/table/universeRows';
 
 /* ── 페이로드 ───────────────────────────────────────────────────────────────
  * 값은 **서로 구별되는 숫자**로 고른다. 4번 검사가 "페이로드 값과 같은가" 를

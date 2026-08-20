@@ -17,16 +17,23 @@
  * 보여줄 뿐이다 — 시장에 대한 새 주장이 아니다.
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { Chip } from '@coinbase/cds-web/chips';
 import { HStack, VStack } from '@coinbase/cds-web/layout';
 import { SegmentedTabs } from '@coinbase/cds-web/tabs';
 import { TextLegal } from '@coinbase/cds-web/typography';
-import { CartesianChart, Line, XAxis, YAxis } from '@coinbase/cds-web/visualizations/chart';
+import {
+  CartesianChart,
+  Line,
+  Scrubber,
+  XAxis,
+  YAxis,
+} from '@coinbase/cds-web/visualizations/chart';
 
 import type { SeriesSummary } from '@/lib/api';
 import { fmtLevel } from '@/lib/format';
+import { ReadoutCard, ReadoutLevel, readoutLeft } from '@/ui/ReadoutCard';
 
 import {
   buildWaypoints,
@@ -64,6 +71,12 @@ const VIEW_TABS = [
  * 한계를 적어 둔다: 사용자가 Bull 의 목표를 +100 으로 고치면 색이 이름과 어긋난다.
  * 색은 **씨앗의 뜻**을 말하고, 실제 방향은 칩 옆의 숫자가 말한다. 그리고 회색조에서
  * 넷을 구별할 수 없으므로 칩이 항상 이름을 같이 싣는다(DESIGN §5 의 단서). */
+/** 케이스 id → 사람이 읽는 이름. 칩과 리드아웃이 **같은 이름**을 써야
+ * 커서가 짚은 선이 어느 칩인지 눈으로 이어진다. `SIM_CASES` 가 원천이다. */
+const CASE_LABEL: Record<string, string> = Object.fromEntries(
+  SIM_CASES.map((c) => [c.id, c.label]),
+);
+
 const CASE_COLOR: Record<CaseId, string> = {
   base: 'var(--color-fg)',
   bull: 'var(--sr-down)',
@@ -93,6 +106,20 @@ export function CurvePreview({
 
   /** 기둥은 **서버가 준 아웃라이트**다 — 프론트가 목록을 들면 화면의 커브와 표의
    * 커브가 갈릴 수 있다. 만기를 못 읽는 id 는 빠진다(지어내지 않는다). */
+
+  /* 커서가 짚은 자리. 백테스트의 `LinkedCharts` 와 **같은 문법**이다 —
+     `enableScrubbing` + `onScrubberPositionChange` 로 인덱스를 받고, 카드를
+     그 x 에 띄운다. 시뮬은 경로를 설계하는 화면인데 "D+37 에 얼마" 를 읽을
+     길이 없었다(v1 `sim/ui/HoverPanel.tsx` 84줄이 하던 일). */
+  const [hoverIdx, setHoverIdx] = useState<number>();
+  const [hoverX, setHoverX] = useState(0);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const onMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const box = boxRef.current?.getBoundingClientRect();
+    if (box) setHoverX(readoutLeft(e.clientX - box.left, box.width));
+  }, []);
+
+
   const pillars = useMemo(
     () =>
       outrights
@@ -155,6 +182,30 @@ export function CurvePreview({
     };
   }, [shown, scenario]);
 
+  /** 스크러버가 스크린리더에 읽어 줄 한 줄. 카드는 눈으로 보는 쪽이고 이건
+      귀로 듣는 쪽이라 **둘 다** 있어야 한다(백테스트와 같은 규율). */
+  const curveScrubLabel = useCallback(
+    (i: number) => {
+      const t = pillars[i]?.id;
+      if (t == null) return '';
+      const parts = caseLines.map((l) => `${CASE_LABEL[l.id] ?? l.id} ${fmtLevel(l.data[i], '%')}%`);
+      return [`${t} 기준 ${fmtLevel(base[i], '%')}%`, ...parts].join(', ');
+    },
+    [pillars, caseLines, base],
+  );
+
+  const timeScrubLabel = useCallback(
+    (i: number) => {
+      const d = timeLines.days[i];
+      if (d == null) return '';
+      const parts = timeLines.lines.map(
+        (l) => `${CASE_LABEL[l.id] ?? l.id} ${l.data[i] == null ? '—' : `${l.data[i]!.toFixed(1)}bp`}`,
+      );
+      return [`D+${d}`, ...parts].join(', ');
+    },
+    [timeLines],
+  );
+
   return (
     <VStack gap={1} width="100%" height="100%">
       <HStack gap={1} alignItems="center" flexWrap="wrap" width="100%">
@@ -188,9 +239,15 @@ export function CurvePreview({
         </TextLegal>
       </HStack>
 
+      {/* 차트 둘을 감싸는 상자 — 카드가 이 안에서 절대 위치로 뜬다(백테스트의
+          `.sr-plot` 과 같은 구조). `onMouseMove` 가 x 를 재고, 인덱스는 CDS
+          가 준다. */}
+      <VStack ref={boxRef} className="sr-plot" onMouseMove={onMove} width="100%">
       {view === 'curve' ? (
         <CartesianChart
           animate={false}
+          enableScrubbing
+          onScrubberPositionChange={setHoverIdx}
           height={height}
           accessibilityLabel="시나리오 커브 미리보기"
           inset={{ top: 12, right: 8, bottom: 0, left: 8 }}
@@ -225,10 +282,16 @@ export function CurvePreview({
           {caseLines.map((l) => (
             <Line key={l.id} seriesId={`case:${l.id}`} curve="linear" connectNulls={false} />
           ))}
+          <Scrubber
+            accessibilityLabel={curveScrubLabel}
+            seriesIds={['now', ...caseLines.map((l) => `case:${l.id}`)]}
+          />
         </CartesianChart>
       ) : (
         <CartesianChart
           animate={false}
+          enableScrubbing
+          onScrubberPositionChange={setHoverIdx}
           height={height}
           accessibilityLabel="시나리오 경로 미리보기"
           inset={{ top: 12, right: 8, bottom: 0, left: 8 }}
@@ -251,8 +314,44 @@ export function CurvePreview({
           {timeLines.lines.map((l) => (
             <Line key={l.id} seriesId={`case:${l.id}`} curve="linear" connectNulls={false} />
           ))}
+          <Scrubber
+            accessibilityLabel={timeScrubLabel}
+            seriesIds={timeLines.lines.map((l) => `case:${l.id}`)}
+          />
         </CartesianChart>
       )}
+      {/* 커서가 짚은 자리의 값 — 시뮬 차트에는 이게 없었다. 경로를 설계하는
+          화면인데 "D+37 에 얼마" 를 읽을 길이 없었다(v1 `HoverPanel` 이 하던
+          일, 레인 P1-2). 백테스트와 **같은 카드**를 쓴다. */}
+      {hoverIdx != null && hoverIdx >= 0 ? (
+        view === 'curve' ? (
+          pillars[hoverIdx] ? (
+            <ReadoutCard title={pillars[hoverIdx].id} left={hoverX}>
+              <ReadoutLevel k="기준" v={base[hoverIdx] ?? null} unit="%" />
+              {caseLines.map((l) => (
+                <ReadoutLevel
+                  key={l.id}
+                  k={CASE_LABEL[l.id] ?? l.id}
+                  v={l.data[hoverIdx] ?? null}
+                  unit="%"
+                />
+              ))}
+            </ReadoutCard>
+          ) : null
+        ) : timeLines.days[hoverIdx] != null ? (
+          <ReadoutCard title={`D+${timeLines.days[hoverIdx]}`} left={hoverX}>
+            {timeLines.lines.map((l) => (
+              <ReadoutLevel
+                key={l.id}
+                k={CASE_LABEL[l.id] ?? l.id}
+                v={l.data[hoverIdx] ?? null}
+                unit="bp"
+              />
+            ))}
+          </ReadoutCard>
+        ) : null
+      ) : null}
+      </VStack>
 
       <TextLegal as="span" color="fgMuted">
         {view === 'curve' ? (
