@@ -83,6 +83,7 @@ from .theta import theta_table
 from .dv01 import build_dv01_table
 from .events import detect_event_clusters
 from .forwards import forwards_payload
+from .labscenario import build_anchors
 from .policy import load_base_rate, policy_step
 from .staleness import dataset_freshness
 from .surface import surface_payload
@@ -423,6 +424,19 @@ def surface3d() -> dict:
     # 돌려줬다). 전역 SCHEMA 범프는 forwards 등 남의 캐시까지 태우므로 국소로 적는다.
     key = f"{_dataset.data_key}|{surface3d_watermark()}|p5-tenors"
     return cached("surface3d", key, lambda: build_surface3d(_dataset))
+
+
+@router.get("/api/scenario/anchors")
+def scenario_anchors() -> dict:
+    """V2-LOCAL. Lab 시나리오가 오늘의 시장에 닿는 자리 (labscenario.py).
+
+    캐시하지 않는다 — 포워드 par 금리 여덟 번이라 커브가 이미 서 있는 이 시점엔
+    공짜다. 손잡이는 프런트가 돌리고 여기는 **앵커만** 답한다.
+
+    기준금리는 `_policy` 에서 넘긴다. 이 모듈이 두 번째 사본을 만들면 `MPC_DATES`
+    가 이미 겪은 «조용히 갈리는 사본» 이 하나 더 생긴다.
+    """
+    return build_anchors(_dataset, _curves, _policy.get("latest"))
 
 
 @router.get("/api/dv01/{series_id}")
