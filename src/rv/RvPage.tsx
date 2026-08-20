@@ -37,6 +37,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Select } from '@coinbase/cds-web/alpha/select';
 import { Collapsible as CdsCollapsible } from '@coinbase/cds-web/collapsible';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
+import { Divider } from '@coinbase/cds-web/layout/Divider';
 import { TextInput } from '@coinbase/cds-web/controls';
 import { Button } from '@coinbase/cds-web/buttons';
 import {
@@ -132,6 +133,74 @@ function BpField({
         }}
       />
     </Box>
+  );
+}
+
+/* ── 설정 패널의 배치 상수 ────────────────────────────────────────────────
+ * 레이블 열이 **고정폭**이어야 컨트롤이 한 줄에 선다. 글자 수만큼 자리를 먹게
+ * 두면 시작점이 줄마다 밀린다(재정돈 전 실측: 53·58·73·92px). 88 은 가장 긴
+ * 레이블("커브 경로") + 여유다. */
+const SET_LABEL_W = 88;
+/** 격자 칸 폭 — 금통위·커브 경로가 같은 자를 쓴다(캡션과 칸이 같은 폭). */
+const SET_FIELD_W = 76;
+/** 경로 이름("경로 1") 칸 — 공유 캡션 줄의 왼쪽 빈 자리와 같은 폭. */
+const SET_PATH_W = 56;
+
+/** 설정 패널의 한 그룹 — 제목 + 줄들. 그룹 사이에만 Divider 를 긋는다. */
+function SetGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <VStack gap={1} width="100%">
+      <Text font="label2" as="span" color="fgMuted" noWrap>
+        {title}
+      </Text>
+      <VStack gap={1} width="100%">
+        {children}
+      </VStack>
+    </VStack>
+  );
+}
+
+/** 설정 패널의 한 줄 — [고정폭 레이블][컨트롤들][우측 액션] + 아래 설명.
+ *
+ * `align` 은 컨트롤이 여러 줄일 때 레이블이 붙는 자리다: 금통위처럼 캡션+칸
+ * 두 줄이면 `flex-end`(칸에 맞춤), 커브 경로처럼 블록이면 `flex-start`.
+ * 설명(`note`)은 **레이블 열만큼 들여쓴** 아래 줄에 선다 — 컨트롤 뒤에 붙이면
+ * 줄이 길어지고, 레이블 옆에 붙이면 컨트롤과 소속이 헷갈린다. */
+function SetRow({
+  label,
+  note,
+  action,
+  align = 'center',
+  children,
+}: {
+  label: string;
+  note?: string;
+  action?: React.ReactNode;
+  align?: 'center' | 'flex-start' | 'flex-end';
+  children: React.ReactNode;
+}) {
+  return (
+    <VStack gap={0.5} width="100%">
+      <HStack gap={1} alignItems={align} width="100%">
+        <Box width={SET_LABEL_W} flexShrink={0}>
+          <Text font="caption" as="span" color="fgMuted" noWrap>
+            {label}
+          </Text>
+        </Box>
+        <HStack gap={0.5} alignItems={align} flexWrap="wrap" flexGrow={1}>
+          {children}
+        </HStack>
+        {action ? <Box flexShrink={0}>{action}</Box> : null}
+      </HStack>
+      {note ? (
+        <HStack gap={1}>
+          <Box width={SET_LABEL_W} flexShrink={0} />
+          <Text font="legal" as="span" color="fgMuted">
+            {note}
+          </Text>
+        </HStack>
+      ) : null}
+    </VStack>
   );
 }
 
@@ -570,169 +639,194 @@ export function RvPage() {
         ) : null}
         {/* 설정 펼침 — 이력 창·금통위·가중이 여기 산다 [OWNER — "우측 맨 끝
             Setting 하나로"]. 몸통은 CDS Collapsible. */}
+        {/* 설정 펼침 — 조작 컨트롤 전부가 여기 산다 [OWNER — "우측 맨 끝
+            Setting 하나로"]. 몸통은 CDS Collapsible.
+
+            ## 배치 규칙 셋 [2026-08-20 재정돈 — 다섯 줄이 잡동사니가 됐던 것]
+
+            1. **레이블은 고정폭 열**(`SET_LABEL_W`). 글자 수만큼 자리를 먹게
+               두면 컨트롤 시작점이 줄마다 53·58·73·92px 로 계단이 진다(실측).
+            2. **그룹 셋**(보는 방식 / 계산 조건 / 시나리오)으로 나누고 그 사이
+               에만 Divider 를 긋는다. 다섯 항목을 평평하게 쌓으면 무엇이 무엇과
+               한 벌인지가 사라진다.
+            3. **설명 문구는 컨트롤 아래 줄**, 레이블 열만큼 들여쓴다. 전에는
+               보유기간·재투자는 컨트롤 뒤, 커브 경로는 레이블 옆이라 같은
+               위계의 문장이 두 자리에 흩어져 있었다. */}
         <CdsCollapsible collapsed={!mpcOpen}>
-          <VStack gap={1} paddingY={0.5}>
-            <HStack gap={0.5} alignItems="center" flexWrap="wrap">
-              <TextCaption as="span" color="fgMuted" noWrap>
-                이력 창
-              </TextCaption>
-              <button
-                type="button"
-                className="sr-rv-pillbtn"
-                data-on={window === '52w' || undefined}
-                aria-pressed={window === '52w'}
-                onClick={() => setWindowParam(undefined)}
-              >
-                52주
-              </button>
-              <button
-                type="button"
-                className="sr-rv-pillbtn"
-                data-on={window === 'all' || undefined}
-                aria-pressed={window === 'all'}
-                onClick={() => setWindowParam('all')}
-              >
-                전체
-              </button>
-              {/* 상대 RV 가중 — 서버 노출값 그대로(출발값). */}
-              <Cond
-                k="가중"
-                v={`절대 ${Math.round(data.credit.weights.abs * 100)} / 섹터 ${Math.round(
-                  data.credit.weights.sector * 100,
-                )} / 커브 ${Math.round(data.credit.weights.curve * 100)}`}
-              />
-            </HStack>
-            <HStack gap={1.5} flexWrap="wrap" alignItems="flex-end">
-              <TextCaption as="span" color="fgMuted" noWrap>
-                금통위
-              </TextCaption>
-              {data.meetings.map((m) => (
-                /* 캡션과 입력칸이 같은 폭(76)이어야 쌍으로 읽힌다. */
-                <VStack key={m.date} gap={0.25} width={76}>
-                  <TextCaption as="span" color="fgMuted" noWrap>
-                    {m.date}
-                  </TextCaption>
-                  <BpField
-                    value={mpc[m.date] ?? 0}
-                    onCommit={(v) =>
-                      setMpc((prev) => ({ ...prev, [m.date]: Math.max(-100, Math.min(100, v)) }))
-                    }
+          {/* width 100% — Divider 가 부모 폭을 못 받으면 컨트롤 오른쪽 끝에서
+              끊겨, 바로 아래 전폭 구분선과 어긋난다(실측). */}
+          <VStack gap={1.5} paddingY={1} width="100%">
+            {/* ── 보는 방식 ─────────────────────────────────────────────── */}
+            <SetGroup title="보는 방식">
+              <SetRow label="이력 창">
+                <button
+                  type="button"
+                  className="sr-rv-pillbtn"
+                  data-on={window === '52w' || undefined}
+                  aria-pressed={window === '52w'}
+                  onClick={() => setWindowParam(undefined)}
+                >
+                  52주
+                </button>
+                <button
+                  type="button"
+                  className="sr-rv-pillbtn"
+                  data-on={window === 'all' || undefined}
+                  aria-pressed={window === 'all'}
+                  onClick={() => setWindowParam('all')}
+                >
+                  전체
+                </button>
+                {/* 가중은 **읽기 전용 사실**이라 알약 뒤로 밀어 띄운다 — 같은
+                    줄에 붙여 두면 눌리는 것처럼 보인다(재정돈 전 상태). */}
+                <Box style={{ marginLeft: 'auto' }}>
+                  <Cond
+                    k="가중"
+                    v={`절대 ${Math.round(data.credit.weights.abs * 100)} / 섹터 ${Math.round(
+                      data.credit.weights.sector * 100,
+                    )} / 커브 ${Math.round(data.credit.weights.curve * 100)}`}
                   />
-                </VStack>
-              ))}
-              {/* 되돌리기 한 방 — 회의 셋을 하나씩 0 으로 치게 하지 않는다. */}
-              {mpcEncoded ? (
-                <Button size="s" variant="secondary" onClick={() => setMpc({})}>
-                  전부 0으로
-                </Button>
-              ) : null}
-            </HStack>
+                </Box>
+              </SetRow>
+            </SetGroup>
 
-            {/* ── 보유기간 H [OWNER 2026-08-20 — 워크북 만기선택!B7] ────────
-                두 레인이 같은 값을 쓴다. 알약인 이유는 값이 몇 개뿐이고, 옆의
-                재투자·이력 창과 같은 컨트롤 문법이어야 하기 때문이다. */}
-            <HStack gap={0.5} alignItems="center" flexWrap="wrap">
-              <Text font="caption" as="span" color="fgMuted" noWrap>
-                보유기간
-              </Text>
-              {[3, 6, 12].map((mo) => (
-                <button
-                  key={mo}
-                  type="button"
-                  className="sr-rv-pillbtn"
-                  data-on={hMonths === mo || undefined}
-                  aria-pressed={hMonths === mo}
-                  onClick={() => setHMonths(mo)}
-                >
-                  {mo}개월
-                </button>
-              ))}
-              <Text font="legal" as="span" color="fgMuted">
-                같은 섹터끼리와 크레딧 RV 가 같은 기간을 써요
-              </Text>
-            </HStack>
+            <Divider direction="horizontal" />
 
-            {/* ── 재투자 [OWNER 2026-08-20 — 워크북 만기선택!B11] ──────────
-                만기가 H 안에 드는 후보(6M 이면 3M 하나)의 남은 기간을 어떻게
-                굴리나. 기본 "안 함"이 앵커 8행의 세계다. */}
-            <HStack gap={0.5} alignItems="center" flexWrap="wrap">
-              <Text font="caption" as="span" color="fgMuted" noWrap>
-                재투자
-              </Text>
-              {(['none', 'residual', 'manual'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  className="sr-rv-pillbtn"
-                  data-on={reinvest === mode || undefined}
-                  aria-pressed={reinvest === mode}
-                  onClick={() => setReinvest(mode)}
-                >
-                  {REINVEST_LABEL[mode]}
-                </button>
-              ))}
-              {reinvest === 'manual' ? (
-                <BpField
-                  value={reinvestRate}
-                  label="재투자 금리(연 %)"
-                  suffix="%"
-                  onCommit={(v) => setReinvestRate(Math.max(-10, Math.min(30, v)))}
-                />
-              ) : null}
-              <Text font="legal" as="span" color="fgMuted">
-                만기가 보유기간 안에 드는 후보에만 붙어요
-              </Text>
-            </HStack>
+            {/* ── 계산 조건 ─────────────────────────────────────────────── */}
+            <SetGroup title="계산 조건">
+              {/* 보유기간 H [OWNER 2026-08-20 — 워크북 만기선택!B7]. 알약인
+                  이유는 값이 몇 개뿐이고 옆 줄들과 같은 컨트롤 문법이어야
+                  하기 때문이다. */}
+              <SetRow label="보유기간" note="같은 섹터끼리와 크레딧 RV 가 같은 기간을 써요">
+                {[3, 6, 12].map((mo) => (
+                  <button
+                    key={mo}
+                    type="button"
+                    className="sr-rv-pillbtn"
+                    data-on={hMonths === mo || undefined}
+                    aria-pressed={hMonths === mo}
+                    onClick={() => setHMonths(mo)}
+                  >
+                    {mo}개월
+                  </button>
+                ))}
+              </SetRow>
 
-            {/* ── 비평행 커브 경로 [OWNER 2026-08-20 — 워크북 케이스 C/C-2] ─
-                평행이동 격자가 Δy 하나를 전 테너에 똑같이 얹는다면, 여기는
-                테너마다 다른 Δ 를 넣는다. 후보가 맞는 크기는 **자기 잔존만기
-                지점의 보간값**이라(워크북 E열) 같은 경로가 후보마다 다르게
-                닿는다 — 레인 A 표의 `Δ@잔존` 열이 그 값을 말한다. */}
-            <VStack gap={0.5}>
-              <HStack gap={1} alignItems="baseline" flexWrap="wrap">
-                <Text font="caption" as="span" color="fgMuted" noWrap>
-                  커브 경로
-                </Text>
-                <Text font="legal" as="span" color="fgMuted">
-                  테너마다 다르게 움직이는 경우예요 · 비워 두면 열이 안 생겨요
-                </Text>
-                {pathsEncoded ? (
-                  <Button size="s" variant="secondary" onClick={() => setPaths([{}, {}])}>
-                    전부 0으로
-                  </Button>
+              {/* 재투자 [OWNER 2026-08-20 — 워크북 만기선택!B11]. 만기가 H 안에
+                  드는 후보의 남은 기간을 어떻게 굴리나. */}
+              <SetRow label="재투자" note="만기가 보유기간 안에 드는 후보에만 붙어요">
+                {(['none', 'residual', 'manual'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className="sr-rv-pillbtn"
+                    data-on={reinvest === mode || undefined}
+                    aria-pressed={reinvest === mode}
+                    onClick={() => setReinvest(mode)}
+                  >
+                    {REINVEST_LABEL[mode]}
+                  </button>
+                ))}
+                {reinvest === 'manual' ? (
+                  <BpField
+                    value={reinvestRate}
+                    label="재투자 금리(연 %)"
+                    suffix="%"
+                    onCommit={(v) => setReinvestRate(Math.max(-10, Math.min(30, v)))}
+                  />
                 ) : null}
-              </HStack>
-              {paths.map((row, pi) => (
-                <HStack key={pi} gap={1} alignItems="flex-end" flexWrap="wrap">
-                  <VStack gap={0.25} width={76} justifyContent="flex-end">
-                    <Text font="legal" as="span" color="fgMuted" noWrap>
-                      경로 {pi + 1}
+              </SetRow>
+            </SetGroup>
+
+            <Divider direction="horizontal" />
+
+            {/* ── 시나리오 ──────────────────────────────────────────────── */}
+            <SetGroup title="시나리오">
+              {/* 금통위와 커브 경로는 **같은 격자 문법**이다 — 캡션 한 줄 위에
+                  같은 폭의 칸들. 전에는 금통위 캡션이 위 줄에 떠서 이력 창의
+                  부속처럼 읽혔다(실측). */}
+              <SetRow
+                label="금통위"
+                align="flex-end"
+                note="분석 시작일 이후 회의만 일할로 반영해요"
+                action={
+                  mpcEncoded ? (
+                    <Button size="s" variant="secondary" onClick={() => setMpc({})}>
+                      전부 0으로
+                    </Button>
+                  ) : null
+                }
+              >
+                {data.meetings.map((m) => (
+                  <VStack key={m.date} gap={0.25} width={SET_FIELD_W}>
+                    <Text font="caption" as="span" color="fgMuted" noWrap>
+                      {m.date.slice(5)}
                     </Text>
+                    <BpField
+                      value={mpc[m.date] ?? 0}
+                      label={`금통위 ${m.date} 변동(bp)`}
+                      onCommit={(v) =>
+                        setMpc((prev) => ({ ...prev, [m.date]: Math.max(-100, Math.min(100, v)) }))
+                      }
+                    />
                   </VStack>
-                  {tenorList.map((t) => (
-                    <VStack key={t} gap={0.25} width={76}>
-                      <Text font="caption" as="span" color="fgMuted" noWrap>
-                        {t}
-                      </Text>
-                      <BpField
-                        value={row[t] ?? 0}
-                        label={`경로 ${pi + 1} ${t} 변동(bp)`}
-                        onCommit={(v) =>
-                          setPaths((prev) =>
-                            prev.map((r, i) =>
-                              i === pi
-                                ? { ...r, [t]: Math.max(-200, Math.min(200, v)) }
-                                : r,
-                            ),
-                          )
-                        }
-                      />
-                    </VStack>
+                ))}
+              </SetRow>
+
+              {/* 비평행 커브 경로 [OWNER 2026-08-20 — 워크북 케이스 C/C-2].
+                  테너 캡션은 **두 경로가 공유**한다 — 같은 격자를 두 번 적으면
+                  줄이 여섯이 되고 무엇이 머리인지 사라진다. */}
+              <SetRow
+                label="커브 경로"
+                align="flex-start"
+                note="테너마다 다르게 움직이는 경우예요 · 비워 두면 열이 안 생겨요"
+                action={
+                  pathsEncoded ? (
+                    <Button size="s" variant="secondary" onClick={() => setPaths([{}, {}])}>
+                      전부 0으로
+                    </Button>
+                  ) : null
+                }
+              >
+                <VStack gap={0.5}>
+                  {/* 공유 캡션 — 왼쪽에 경로 이름 자리만큼 빈 칸을 둔다. */}
+                  <HStack gap={1} alignItems="baseline">
+                    <Box width={SET_PATH_W} />
+                    {tenorList.map((t) => (
+                      <Box key={t} width={SET_FIELD_W}>
+                        <Text font="caption" as="span" color="fgMuted" noWrap>
+                          {t}
+                        </Text>
+                      </Box>
+                    ))}
+                  </HStack>
+                  {paths.map((row, pi) => (
+                    <HStack key={pi} gap={1} alignItems="center">
+                      <Box width={SET_PATH_W}>
+                        <Text font="legal" as="span" color="fgMuted" noWrap>
+                          경로 {pi + 1}
+                        </Text>
+                      </Box>
+                      {tenorList.map((t) => (
+                        <BpField
+                          key={t}
+                          value={row[t] ?? 0}
+                          width={SET_FIELD_W}
+                          label={`경로 ${pi + 1} ${t} 변동(bp)`}
+                          onCommit={(v) =>
+                            setPaths((prev) =>
+                              prev.map((r, i) =>
+                                i === pi ? { ...r, [t]: Math.max(-200, Math.min(200, v)) } : r,
+                              ),
+                            )
+                          }
+                        />
+                      ))}
+                    </HStack>
                   ))}
-                </HStack>
-              ))}
-            </VStack>
+                </VStack>
+              </SetRow>
+            </SetGroup>
           </VStack>
         </CdsCollapsible>
       </VStack>
