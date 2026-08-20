@@ -37,7 +37,7 @@ import { TextLegal } from '@coinbase/cds-web/typography';
 
 import { tintFor } from '@/theme/tint';
 
-import type { RvCreditItem } from './api';
+import type { RvCreditItem, RvWindow } from './api';
 import { bp1, sig } from './fmt';
 
 /** 전 영업일 대비 랭크 변화 표기 — 0 은 "·"(변동 없음), 어제 없던 항목은 공란.
@@ -99,6 +99,7 @@ export function RankingTable({
   highlightId,
   exclusions,
   hMonths,
+  window,
 }: {
   items: RvCreditItem[];
   onSelect: (p: RvCreditItem) => void;
@@ -112,6 +113,11 @@ export function RankingTable({
    * 이라 여기에 상수를 적으면 화면이 거짓말을 한다(기본 6개월인데 "3개월"이라고
    * 적혀 있었다 — Setting 탭의 같은 종류였던 거짓 문구와 한 짝). */
   hMonths: number;
+  /** 이력 창 — 「지난주 백분위」가 무엇 대비인지를 말한다. H 와 같은 이유로
+   * 상수를 적으면 안 된다: 창은 52주/전체 토글이라 "과거 52주"라고 박아 두면
+   * 전체 이력을 골랐을 때 화면이 틀린 모집단을 말한다. 나머지 여섯 자리는
+   * 이미 `window` 를 따라간다(RvPage·TenorHeat). */
+  window: RvWindow;
 }) {
   /* 역방향 연동의 스크롤 — 강조된 행이 화면 밖이면 nearest 로만 데려온다
      (표가 제멋대로 크게 움직이면 손이 놀란다). */
@@ -159,7 +165,7 @@ export function RankingTable({
               <th className="sr-rv-th">
                 <ThHelp
                   label="지난주 백분위"
-                  help="지난주 스프레드가 과거 52주 중 몇 %쯤 넓었는지예요. 종목마다 무엇 대비인지는 이름 아래에 적혀 있어요."
+                  help={`지난주 스프레드가 ${window === '52w' ? '과거 52주' : '전체 이력'} 중 몇 %쯤 넓었는지예요. 종목마다 무엇 대비인지는 이름 아래에 적혀 있어요.`}
                 />
               </th>
               <th className="sr-rv-th">

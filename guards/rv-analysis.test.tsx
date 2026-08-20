@@ -8,7 +8,7 @@
  * 소스 하나 ⑦ §16 — 프런트는 z·백분위·σ 를 재계산하지 않는다(서버 값 통과).
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -95,7 +95,7 @@ function rtl(ui: React.ReactElement) {
 
 describe('명구 — 랭킹이지 투자판단이 아니다', () => {
   it('랭킹 표가 명구를 단다', () => {
-    const { container } = rtl(<RankingTable hMonths={6} items={ITEMS} onSelect={noop} />);
+    const { container } = rtl(<RankingTable hMonths={6} window="52w" items={ITEMS} onSelect={noop} />);
     expect(container.textContent).toContain('투자판단이 아니라 RV 랭킹이에요');
   });
 
@@ -106,7 +106,7 @@ describe('명구 — 랭킹이지 투자판단이 아니다', () => {
 
   it('별·메달·추천 문구는 어디에도 없다', () => {
     for (const el of [
-      rtl(<RankingTable hMonths={6} items={ITEMS} onSelect={noop} />),
+      rtl(<RankingTable hMonths={6} window="52w" items={ITEMS} onSelect={noop} />),
       render(<ScoreHeat items={ITEMS} onSelect={noop} />),
       render(<RvScatter items={ITEMS} onSelect={noop} />),
     ]) {
@@ -167,7 +167,7 @@ describe('사분면 — 서술형, 명령형 금지', () => {
   });
 
   it('열 머리 넷은 뜻 설명 표식을 단다 — 사분면 두 축이 앞에 [OWNER 2026-08-20]', () => {
-    const { container } = rtl(<RankingTable hMonths={6} items={ITEMS} onSelect={noop} />);
+    const { container } = rtl(<RankingTable hMonths={6} window="52w" items={ITEMS} onSelect={noop} />);
     const helps = [...container.querySelectorAll('.sr-rv-thhelp')].map((e) => e.textContent);
     expect(helps).toEqual(['한 달 수익', '지난주 백분위', '버퍼', '상대 RV']);
     // 헤지수단 표기는 표에서도 은퇴했다.
@@ -186,9 +186,52 @@ describe('사분면 — 서술형, 명령형 금지', () => {
   });
 });
 
+/* ── 컨트롤을 따라가지 않는 문구 [2026-08-21 실측 둘] ──────────────────────
+   H(3/6/12)와 이력 창(52주/전체)은 화면 컨트롤이 됐는데 열 머리 풀이는 상수로
+   남아, 기본 화면이 자기 숫자의 기간과 모집단을 틀리게 말하고 있었다:
+
+       「버퍼」      "3개월 캐리와 롤" — 기본 H 는 6개월
+       「지난주 백분위」 "과거 52주 중" — 전체 이력을 골라도 그대로
+
+   둘 다 눈으로는 안 잡힌다(문장이 멀쩡하다). 그래서 **렌더해서 읽는** 검사로
+   건다 — 컨트롤 값을 바꿔 렌더하고 문구가 따라오는지 본다. */
+describe('풀이는 컨트롤을 따라간다 [2026-08-21]', () => {
+  /* 풀이는 CDS Tooltip 안이라 **열기 전에는 DOM 에 없다** — 이 사실이 두 거짓말이
+     여태 안 잡힌 이유다(container.textContent 로는 영영 안 보인다). 열쇠를 열고
+     포털까지 읽는다: 트리거는 tabIndex=0 인 `.sr-rv-thhelp` 이고 툴팁은 hover 와
+     키보드 포커스 둘 다에 열린다. */
+  function openHelp(label: string): string {
+    const trigger = [...document.querySelectorAll('.sr-rv-thhelp')].find(
+      (el) => el.textContent === label,
+    );
+    if (!trigger) throw new Error(`열 머리를 못 찾았어요: ${label}`);
+    fireEvent.focus(trigger);
+    fireEvent.mouseEnter(trigger);
+    return document.body.textContent ?? '';
+  }
+
+  it('버퍼 풀이가 H 를 말한다 — 상수 "3개월" 아님', () => {
+    for (const h of [3, 6, 12]) {
+      rtl(<RankingTable hMonths={h} window="52w" items={ITEMS} onSelect={noop} />);
+      expect(openHelp('버퍼')).toContain(`${h}개월 캐리와 롤`);
+      cleanup();
+    }
+  });
+
+  it('지난주 백분위 풀이가 이력 창을 말한다 — 상수 "52주" 아님', () => {
+    rtl(<RankingTable hMonths={6} window="52w" items={ITEMS} onSelect={noop} />);
+    expect(openHelp('지난주 백분위')).toContain('과거 52주 중');
+    cleanup();
+    rtl(<RankingTable hMonths={6} window="all" items={ITEMS} onSelect={noop} />);
+    const all = openHelp('지난주 백분위');
+    expect(all).toContain('전체 이력 중');
+    expect(all).not.toContain('과거 52주');
+  });
+});
+
 describe('랭크와 Δ — 서버 값 통과 [OWNER 2026-08-19]', () => {
   it('순서는 서버 rank 그대로이고 Δ 는 ▲▼로, 어제 없던 항목은 공란이다', () => {
-    const { container } = rtl(<RankingTable hMonths={6} items={ITEMS} onSelect={noop} />);
+    const { container } = rtl(<RankingTable hMonths={6} window="52w" items={ITEMS} onSelect={noop} />);
     const firstCells = [...container.querySelectorAll('tbody tr')].map(
       (tr) => tr.querySelector('td')?.textContent,
     );
@@ -211,7 +254,7 @@ describe('랭크와 Δ — 서버 값 통과 [OWNER 2026-08-19]', () => {
 
 describe('표 의미론 — 여는 것은 버튼, 행은 행', () => {
   it('랭킹 표: tr 에 role 이 없고, 종목 칸의 실제 <button> 이 키보드 경로다', () => {
-    const { container } = rtl(<RankingTable hMonths={6} items={ITEMS} onSelect={noop} />);
+    const { container } = rtl(<RankingTable hMonths={6} window="52w" items={ITEMS} onSelect={noop} />);
     for (const tr of container.querySelectorAll('tbody tr')) {
       expect(tr.getAttribute('role')).toBeNull(); // role="button" 은 표 탐색을 부순다
       expect(tr.getAttribute('tabindex')).toBeNull();
