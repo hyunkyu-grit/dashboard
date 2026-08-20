@@ -38,6 +38,11 @@ if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyCon
   exit 0
 }
 
+# 로그가 영원히 자라지 않게. v1 launcher 와 같은 규칙(5MB 넘으면 새로 시작).
+# 예약 태스크로 돌면 이 파일에 몇 달치가 쌓인다.
+if ((Test-Path $log) -and ((Get-Item $log).Length -gt 5MB)) { Remove-Item $log -Force }
+Add-Content $log "`n===== start $(Get-Date -Format o) port=$Port local=$($Local.IsPresent) ====="
+
 $env:PYTHONUTF8 = "1"
 if ($Local) {
   $env:SAURON_DEV_LOCAL = "1"
