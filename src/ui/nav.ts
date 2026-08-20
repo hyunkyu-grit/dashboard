@@ -159,6 +159,34 @@ export function tabForSection(s: SectionId, lastGroup: Group): TabId {
   return sec?.tab ?? lastGroup;
 }
 
+/* ── Lab 의 세입자들 [2026-08-20] ─────────────────────────────────────────────
+ *
+ * 세입자가 둘이 되면서 Lab 도 메가 패널을 연다. 이 파일의 위 주석이 이미 그
+ * 규칙을 적어 두었다 — "목적지가 하나면 버튼이지 메뉴가 아니다". 반대도 참이다.
+ *
+ * **위계는 셋이 같다** [OWNER, 2026-08-20]. 세입자끼리 서로를 읽지 않고, 셋을
+ * 잇는 화면도 만들지 않는다. 각자 들어와서 각자 졸업하기 때문이다 — 시나리오가
+ * Simulation 으로 올라가는 날 표면이 딸려 올라가면 안 된다. 그래서 목록에 순서
+ * 말고는 아무 강조도 없다.
+ *
+ * 세입자는 **탭이 아니라 URL 상태**다(`?g=lab&lab=scenario`). 탭을 늘리면
+ * `sectionOf()` 가 드는 «섹션은 유도값» 규칙에 두 번째 상태가 끼어든다. */
+export type LabId = 'surface' | 'scenario';
+
+export const DEFAULT_LAB: LabId = 'surface';
+
+export const LAB_ITEMS: { id: LabId; label: string; desc: string; glyph: string }[] = [
+  { id: 'surface', label: '커브 표면', desc: '풀별 커브가 지난 몇 해 어떻게 움직였나', glyph: '◇' },
+  { id: 'scenario', label: '시나리오', desc: '이 금통위 경로가 프라이싱되면 커브는 어디가 정합인가', glyph: '◆' },
+];
+
+export function isLabId(v: string | undefined): v is LabId {
+  return v === 'surface' || v === 'scenario';
+}
+
+/** 메가 패널을 여는 섹션. 나머지는 목적지가 하나뿐이라 버튼이다. */
+export const PANELED: SectionId[] = ['backtest', 'lab'];
+
 /** 그 그룹이 속한 카테고리. 메가 패널에서 지금 자리를 표시할 때 쓴다. */
 export function categoryOf(g: Group): CategoryId | undefined {
   return BACKTEST_CATEGORIES.find((c) => c.groups.includes(g))?.id;

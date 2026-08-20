@@ -2072,3 +2072,76 @@ thead th {
 .sr-rv-dot {
   cursor: pointer;
 }
+
+/* ── Lab 시나리오 — 정책 경로 스트립 (`lab/ScenarioPage.tsx`) ────────────────
+ *
+ * 24분기 i_kr 편차를 0선 위아래 막대로 그린다. 차트가 아니라 **읽는 줄**이라
+ * 축도 눈금도 없다 — 이 줄이 답하는 질문은 하나다: 내가 고정한 8분기가 끝난 뒤
+ * 준칙이 되받아치는가.
+ *
+ * 그 되받아침이 이 화면에서 가장 오해받는 자리다(실측: 지속 −25bp 인하 경로가
+ * IRS 3y 12개월 이동 **+13.2bp** 를 낸다). 표만 보면 도구가 고장 난 것으로
+ * 읽히므로, 표 옆에 원인을 같이 둔다.
+ *
+ * 높이는 인라인 `--h` 로 온다 — 값마다 다르므로 클래스로 못 적는다(CLAUDE.md
+ * §4 의 "동적 값은 CSS 변수"). 색은 방향뿐이다. */
+.sr-scn-strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+  height: 36px;
+}
+
+.sr-scn-col {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  height: 100%;
+}
+
+/* 두 칸은 **격자 행을 채운다**. `align-self` 로 붙이면 칸이 내용 높이로 줄고,
+ * 그러면 막대의 `height: var(--h)`(%)가 높이 없는 부모를 기준으로 풀려 0 이 된다
+ * (실측 2026-08-20: 44px 스트립이 2px 선으로 그려졌다). 채운 다음 **안에서**
+ * 붙인다. */
+.sr-scn-col > * {
+  display: flex;
+  height: 100%;
+}
+
+/* 0선. 위 칸의 바닥이자 아래 칸의 천장이라 한 번만 긋는다. */
+.sr-scn-col > :first-child {
+  align-items: flex-end;
+  border-bottom: 1px solid var(--color-bgLine);
+}
+
+.sr-scn-col > :last-child {
+  align-items: flex-start;
+}
+
+.sr-scn-bar {
+  width: 100%;
+  height: var(--h);
+  min-height: 1px;
+  border-radius: 1px;
+}
+
+.sr-scn-bar[data-dir='up'] {
+  background: var(--sr-up);
+}
+
+.sr-scn-bar[data-dir='down'] {
+  background: var(--sr-down);
+}
+
+/* 편차가 0 인 분기도 자리를 지킨다 — 빈칸이면 24개 격자가 어긋나 보인다. */
+.sr-scn-bar[data-dir='flat'] {
+  background: var(--color-bgLine);
+}
+
+/* 내가 고정한 8분기와 준칙이 도로 가져가는 16분기의 경계. 스트립 위에 얹는
+ * 채운 상자였다가 **바닥 눈금**으로 바꿨다(실측 2026-08-20): 경로가 전부 0 인
+ * 기본 상태에서 회색 상자 여덟 개가 «화면이 깨졌다» 로 읽혔다. 눈금은 값이
+ * 없을 때 조용하고, 값이 있을 때는 막대가 이미 그 구간을 말한다. */
+.sr-scn-pinned {
+  box-shadow: inset 0 -2px 0 var(--color-fgMuted);
+}

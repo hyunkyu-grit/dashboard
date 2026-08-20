@@ -13,10 +13,13 @@ import type { Group } from '@/table/rows';
 
 import {
   BACKTEST_CATEGORIES,
+  LAB_ITEMS,
+  PANELED,
   itemsOf,
   SECTIONS,
   sectionOf,
   tabForSection,
+  type LabId,
   type SectionId,
   type TabId,
 } from './nav';
@@ -54,13 +57,16 @@ import {
  */
 export function TopNav({
   tab,
+  lab,
   lastGroup,
   onNavigate,
   right,
 }: {
   tab: TabId;
+  /** Lab 안에서 지금 보고 있는 세입자. Lab 이 아닐 때는 의미가 없다. */
+  lab: LabId;
   lastGroup: Group;
-  onNavigate: (t: TabId) => void;
+  onNavigate: (t: TabId, lab?: LabId) => void;
   /** 오른쪽에 서는 것 — 지금은 신선도 칩. 참조의 Sign in / Sign up 자리다. */
   right?: React.ReactNode;
 }) {
@@ -91,8 +97,8 @@ export function TopNav({
   }, [open, close]);
 
   const go = useCallback(
-    (t: TabId) => {
-      onNavigate(t);
+    (t: TabId, labId?: LabId) => {
+      onNavigate(t, labId);
       close();
     },
     [onNavigate, close],
@@ -108,6 +114,7 @@ export function TopNav({
     desc: string,
     target: TabId,
     on: boolean,
+    labId?: LabId,
   ) => (
     <ListCell
       key={key}
@@ -125,7 +132,7 @@ export function TopNav({
           {desc}
         </TextLabel2>
       }
-      onClick={() => go(target)}
+      onClick={() => go(target, labId)}
     />
   );
 
@@ -148,11 +155,11 @@ export function TopNav({
               className="sr-navitem"
               data-on={s.id === current}
               data-open={s.id === open}
-              aria-expanded={s.id === 'backtest' ? s.id === open : undefined}
+              aria-expanded={PANELED.includes(s.id) ? s.id === open : undefined}
               aria-current={s.id === current ? 'page' : undefined}
               accessibilityLabel={s.label}
-              onMouseEnter={() => setOpen(s.id === 'backtest' ? 'backtest' : null)}
-              onFocus={() => setOpen(s.id === 'backtest' ? 'backtest' : null)}
+              onMouseEnter={() => setOpen(PANELED.includes(s.id) ? s.id : null)}
+              onFocus={() => setOpen(PANELED.includes(s.id) ? s.id : null)}
               onClick={() => go(tabForSection(s.id, lastGroup))}
             >
               <TextHeadline as="span" noWrap>
@@ -198,16 +205,35 @@ export function TopNav({
             {/* 여기는 이제 Backtest 뿐이다 — 1항목 섹션의 패널은 은퇴했다
                 (위 섹션 버튼 주석). 항목 하나짜리 패널 렌더 분기도 함께 걷어냈다. */}
             <HStack className="sr-mega-cols" gap={4} flexWrap="wrap" flexGrow={1}>
-              {BACKTEST_CATEGORIES.map((c) => (
-                <VStack key={c.id} className="sr-mega-col" gap={0.25}>
-                  <TextLabel2 as="h3" color="fgMuted" className="sr-mega-coltitle">
-                    {c.label}
-                  </TextLabel2>
-                  {itemsOf(c.id).map((it) =>
-                    item(it.id, it.glyph, it.label, it.desc, it.id, it.id === tab),
+              {open === 'lab' ? (
+                /* 세입자 셋은 **위계가 같다** [OWNER, 2026-08-20] — 열 제목도
+                   강조도 없이 한 줄로 선다. 그룹을 지으면 그 순간 어느 하나가
+                   상위가 되고, 셋이 각자 졸업한다는 규칙과 어긋난다. */
+                <VStack className="sr-mega-col" gap={0.25}>
+                  {LAB_ITEMS.map((it) =>
+                    item(
+                      it.id,
+                      it.glyph,
+                      it.label,
+                      it.desc,
+                      'lab',
+                      tab === 'lab' && it.id === lab,
+                      it.id,
+                    ),
                   )}
                 </VStack>
-              ))}
+              ) : (
+                BACKTEST_CATEGORIES.map((c) => (
+                  <VStack key={c.id} className="sr-mega-col" gap={0.25}>
+                    <TextLabel2 as="h3" color="fgMuted" className="sr-mega-coltitle">
+                      {c.label}
+                    </TextLabel2>
+                    {itemsOf(c.id).map((it) =>
+                      item(it.id, it.glyph, it.label, it.desc, it.id, it.id === tab),
+                    )}
+                  </VStack>
+                ))
+              )}
             </HStack>
 
             {/* 참조의 오른쪽 카드 자리. 그림 대신 이 섹션이 무엇인지 한 줄. */}

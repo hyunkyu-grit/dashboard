@@ -53,7 +53,9 @@ import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { StartFilter } from '@/ui/StartFilter';
 import { TopNav } from '@/ui/TopNav';
 import { useUrlState } from '@/ui/useUrlState';
+import { DEFAULT_LAB, isLabId, type LabId } from '@/ui/nav';
 import { Surface3D } from '@/ui/Surface3D';
+import { ScenarioPage } from '@/lab/ScenarioPage';
 
 /** Swap groups first (v1's), then the Cash Bond pair (2026-08-18).
  *
@@ -346,6 +348,13 @@ const BANNER_H = 34;
 
   /* 시뮬레이션 **결과 창** — 설정은 페이지에 있고 결과만 뜬다(v1 형태).
      URL 에 존재만 싣는다(`?sim=1`): 입력이 페이지에 있어서 값을 실을 자리가 아니다. */
+  /* Lab 안에서 지금 보고 있는 세입자 [2026-08-20]. **탭이 아니라 URL 상태**다 —
+     탭을 늘리면 `sectionOf()` 가 드는 «섹션은 유도값» 규칙에 두 번째 상태가
+     끼어든다. 모르는 값은 기본 세입자로 떨어진다(딥링크 게이트, GROUPS 와 같은
+     규율). */
+  const [labParam, setLabParam] = useUrlState('lab');
+  const lab: LabId = isLabId(labParam) ? labParam : DEFAULT_LAB;
+
   const [simParam, setSim] = useUrlState('sim');
   const simOpen = simParam != null;
 
@@ -403,9 +412,13 @@ const BANNER_H = 34;
     <VStack className="sr-page" height="100vh" overflow="hidden" gap={0}>
       <TopNav
         tab={tab}
+        lab={lab}
         lastGroup={group}
-        onNavigate={(t) => {
+        onNavigate={(t, labId) => {
           setGroupParam(t);
+          /* Lab 을 떠나면 세입자 키를 URL 에서 걷는다 — 안 걷으면 Backtest 를
+             보는 주소에 `lab=scenario` 가 남아 공유한 링크가 거짓을 말한다. */
+          setLabParam(t === 'lab' ? (labId ?? lab) : undefined);
           setSelectedId(undefined);
           // a pending hover from the tab being left must not land on the new one
           clearTimeout(hoverTimer.current);
@@ -545,8 +558,17 @@ const BANNER_H = 34;
           /* Lab 의 세입자 = **커브 표면** [v1 2026-08-14]. v1 의 첫 세입자
              (라고 할 때 살걸)는 거기서 내려갔으므로 옮겨오지 않는다 — 백엔드의
              `/api/regret` 은 v2 에도 있지만 그 화면은 v1 에서 지워진 화면이다. */
-          <ErrorBoundary region="연구실" fallback="커브 표면을 그리지 못했어요.">
-            <Surface3D policy={data?.summary.policy} />
+          <ErrorBoundary
+            region="연구실"
+            fallback={
+              lab === 'scenario' ? '시나리오 화면을 그리지 못했어요.' : '커브 표면을 그리지 못했어요.'
+            }
+          >
+            {lab === 'scenario' ? (
+              <ScenarioPage policy={data?.summary.policy} />
+            ) : (
+              <Surface3D policy={data?.summary.policy} />
+            )}
           </ErrorBoundary>
         ) : !isGroupTab && NOT_BUILT[section] ? (
           <VStack gap={0.5} paddingY={2} maxWidth={620}>

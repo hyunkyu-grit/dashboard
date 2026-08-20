@@ -107,6 +107,11 @@ function liveUrl(path: string, query?: string): string {
   return IS_STATIC ? `${path}${q}` : `${API_BASE}${path}${q}`;
 }
 
+/* ── Lab 시나리오 [2026-08-20] ────────────────────────────────────────────────
+ * 앵커(오늘의 스팟 호가 + 12개월 시장 캐리)뿐이다. 손잡이는 프런트가 돌리므로
+ * 이 요청은 화면당 **한 번**이고, 서버가 없으면 화면이 그 사실을 말한다. */
+export const scenarioAnchorsUrl = () => liveUrl("/api/scenario/anchors");
+
 export const cashbondInstrumentsUrl = () => liveUrl("/api/cashbond/instruments");
 
 export const cashbondSeriesUrl = (id: string) =>
