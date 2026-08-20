@@ -232,6 +232,15 @@ def peers_of(bt: str, sectors: list[str]) -> list[str]:
     return [o for o in sectors if base_of(o) == b]
 
 
+#: 사람이 넣는 bp 값의 한도. **판정의 주인은 서버다** — 화면도 같은 값으로
+#: 막지만(RvPage), URL·API 로 우회하면 화면 클램프는 없는 것과 같다.
+#: 넘으면 자르지 않고 **거절한다**: 조용히 잘린 값으로 계산해 주면 읽는 사람은
+#: 자기가 넣은 숫자가 쓰인 줄 안다(`parse_meetings` 의 "반쯤 해석" 규칙과 같은
+#: 판단). 2026-08-20 감사에서 둘 다 무방비였다 — 금통위 9999bp 가 200 으로
+#: 통과했고 조달이 102% 인 화면이 아무 말 없이 그려졌다.
+MPC_LIMIT_BP = 100.0
+PATH_LIMIT_BP = 200.0
+
 #: 재투자 방식 — 워크북 `만기선택!B11` 의 세 갈래 그대로.
 #:   none      재투자X (기본 — 앵커 8행이 이 갈래다)
 #:   manual    재투자(수기입력) — `reinvest_rate` 를 그대로 쓴다
@@ -263,6 +272,26 @@ def avg_funding(
     base·반환은 decimal. 후보별 유효기간(만기 보유는 자기 만기까지) 안의 회의만
     친다 — 조달 3.091% 역산(시작 2026-08-14, +25bp 회의 08-27·11-26, 오차
     0.003bp)이 이 식의 앵커다.
+
+    ## 회의 **당일**은 안 센다 — 워크북과 일부러 다르다 [2026-08-20 실측]
+
+        여기      start <  md <= sale
+        워크북    start <= md <  sale        (만기선택!F열)
+
+    `md == sale` 은 가중치가 0 이라 어느 쪽이든 같다. 갈리는 것은 **회의가 분석
+    시작일 당일인 경우**(연 8일)이고, 그때 워크북은 인상분을 전 구간에 얹고
+    여기는 통째로 뺀다 — 앵커 조건에서 25bp 차이다.
+
+    이유는 **base 의 출처가 다르기 때문**이다. 워크북 B6 은 사람이 손으로 적는
+    기준금리라 회의 당일 아침에는 아직 옛 값이고, 그래서 그날 회의를 세야 맞다.
+    여기 base 는 `funding.rate_on` 의 피드이고 **그 피드는 회의 당일에 이미 새
+    값을 싣는다**(2026-07-16 실측: 전일 2.60% → 당일 2.85%). 같은 날 회의를 또
+    더하면 25bp 를 두 번 센다.
+
+    두 규약 다 각자 맞다. **워크북에 맞춘다고 이 부등호를 바꾸면 이중계상이
+    된다** — `test_rv.py::TestMeetingDayBoundary` 가 그 자리를 지킨다.
+    같은 규약이 `path_rate` 와 페이로드의 `meetings` 목록(`d > start`)에도 있고,
+    셋은 같이 움직여야 한다.
     """
     extra = 0.0
     for md, dbp in meetings:
@@ -282,6 +311,7 @@ def path_rate(
     수익이 6.3bp 부풀었다(실측). 캐리 쪽(`avg_funding`)은 같은 워크북이 제대로
     적어 두었으므로, **그 규약을 재투자 구간에도 그대로 적용한 것**이 이 함수다.
     """
+    # 부등호는 `avg_funding` 과 같아야 한다 — 회의 당일 규약(그 독스트링).
     return base + sum(bp for md, bp in meetings if start < md <= d) / 10000.0
 
 
@@ -692,14 +722,21 @@ def z_score(series: list[float], now: float) -> float | None:
 
 def parse_meetings(raw: str) -> list[tuple[dt.date, float]]:
     """`2026-08-27:-25;2026-10-22:0` → [(date, bp)]. 모양이 안 맞는 조각은
-    **거절한다**(422 로) — 반쯤 해석한 경로로 계산하면 조용히 틀린다."""
+    **거절한다**(422 로) — 반쯤 해석한 경로로 계산하면 조용히 틀린다.
+
+    크기도 거절한다(±`MPC_LIMIT_BP`) — 그 상수의 독스트링에 근거가 있다."""
     out: list[tuple[dt.date, float]] = []
     for part in raw.split(";"):
         part = part.strip()
         if not part:
             continue
-        d, _, bp = part.partition(":")
-        out.append((dt.date.fromisoformat(d), float(bp)))
+        d, sep, bp = part.partition(":")
+        if not sep:
+            raise ValueError(f"날짜:bp 모양이 아니에요: {part!r}")
+        v = float(bp)
+        if abs(v) > MPC_LIMIT_BP:
+            raise ValueError(f"금통위 변동이 범위를 벗어나요: {v:g}bp (±{MPC_LIMIT_BP:g})")
+        out.append((dt.date.fromisoformat(d), v))
     return out
 
 
@@ -741,7 +778,10 @@ def parse_paths(raw: str) -> list[list[tuple[float, float]]]:
             years = cm.TENOR_YEARS[lab]
             if years > MAX_YEARS:
                 raise ValueError(f"{lab} 은 이 화면의 만기 상한({MAX_YEARS:g}년) 밖이에요.")
-            pts.append((years, float(bp)))
+            v = float(bp)
+            if abs(v) > PATH_LIMIT_BP:
+                raise ValueError(f"{lab} 변동이 범위를 벗어나요: {v:g}bp (±{PATH_LIMIT_BP:g})")
+            pts.append((years, v))
         if not pts:
             raise ValueError("경로가 비어 있어요.")
         pts.sort(key=lambda p: p[0])
@@ -917,6 +957,9 @@ def build_rv(
         "funding": fd.provenance(spec),
         "hMonths": h_months,
         "windowBp": WINDOW_BP,
+        # 남은 회의만 — **당일 회의는 안 싣는다**(`d > start`). 조달 피드가 그날
+        # 이미 새 값을 싣기 때문이고, 칸을 열어 두면 사용자가 이중계상을 입력할
+        # 수 있게 된다. 부등호의 근거는 `avg_funding` 독스트링.
         "meetings": [
             {"date": d.isoformat(), "bp": next((bp for md, bp in meetings if md == d), 0.0)}
             for d in MPC_DATES if d > start

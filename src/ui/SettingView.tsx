@@ -120,7 +120,8 @@ export function SettingView() {
         <TextTitle3 as="h2">조달금리</TextTitle3>
         <TextBody as="p" color="fgMuted">
           현금채권은 원금을 빌려서 사요. 그 이자를 빼야 손익이 실제로 번 돈이
-          돼요. 여기서 정한 값은 Cash Bond 백테스트에만 쓰여요.
+          돼요. 여기서 정한 값은 <b>Cash Bond 백테스트</b>와 <b>Strategy</b>가
+          같이 써요. IRS 백테스트는 안 써요.
         </TextBody>
 
         <HStack gap={2} alignItems="flex-end" flexWrap="wrap">

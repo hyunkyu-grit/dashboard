@@ -637,6 +637,93 @@ class TestSpreadAnchor:
             assert it["baseLabel"] == cm.BOND_TYPES[it["base"]]
 
 
+class TestMeetingDayBoundary:
+    """회의가 **분석 시작일 당일**일 때 — 워크북과 일부러 다른 자리.
+
+    워크북 F열은 `md >= start` 라 그날 인상을 전 구간에 얹는다. 여기는
+    `md > start` 라 안 센다. 워크북 B6 은 손으로 적는 값이라 당일 아침에 옛
+    값이고, 여기 base 는 회의 당일에 이미 새 값을 싣는 피드이기 때문이다
+    (2026-07-16 실측: 전일 2.60% → 당일 2.85%).
+
+    **워크북에 맞춘다고 부등호를 바꾸면 25bp 를 두 번 센다.** 이 클래스가 그
+    자리를 지킨다.
+    """
+
+    def test_a_meeting_on_the_start_date_is_not_counted(self):
+        d = dt.date(2026, 8, 27)
+        f = rv.avg_funding(0.0275, [(d, 25.0)], d, rv.add_months(d, 6), 184)
+        assert f == pytest.approx(0.0275, abs=1e-12)
+
+    def test_a_meeting_after_the_start_date_is_counted(self):
+        start = dt.date(2026, 8, 14)
+        d = dt.date(2026, 8, 27)
+        sale = rv.add_months(start, 6)
+        eff = (sale - start).days
+        f = rv.avg_funding(0.0275, [(d, 25.0)], start, sale, eff)
+        assert f > 0.0275
+        assert f == pytest.approx(0.0275 + 25 / 1e4 * (sale - d).days / eff, abs=1e-15)
+
+    def test_a_meeting_on_the_sale_date_has_zero_weight(self):
+        """`md == sale` 은 어느 부등호든 같다 — 남은 날이 0 이라서."""
+        start = dt.date(2026, 8, 14)
+        sale = rv.add_months(start, 6)
+        f = rv.avg_funding(0.0275, [(sale, 25.0)], start, sale, (sale - start).days)
+        assert f == pytest.approx(0.0275, abs=1e-15)
+
+    def test_path_rate_uses_the_same_inequality(self):
+        """재투자 스텁의 base 도 같은 규약이어야 한다 — 셋이 같이 움직인다."""
+        start = dt.date(2026, 8, 14)
+        d = dt.date(2026, 8, 27)
+        # 시작일 **뒤** 회의는 그 시점 레벨에 얹힌다.
+        assert rv.path_rate(0.0275, [(d, 25.0)], start, d) == pytest.approx(0.03, abs=1e-12)
+        assert rv.path_rate(0.0275, [(d, 25.0)], start, d - dt.timedelta(days=1)) == (
+            pytest.approx(0.0275, abs=1e-12)
+        )
+        # 시작일 **당일** 회의는 안 얹힌다 — 이미 피드에 들어 있다.
+        assert rv.path_rate(0.0275, [(d, 25.0)], d, d + dt.timedelta(days=90)) == (
+            pytest.approx(0.0275, abs=1e-12)
+        )
+
+
+class TestInputLimits:
+    """사람이 넣는 bp 값의 한도 — **서버가 판정의 주인**이다.
+
+    화면(RvPage)도 같은 값으로 막지만 URL·API 로 우회하면 화면 클램프는 없는
+    것과 같다. 2026-08-20 감사에서 둘 다 무방비였고, 금통위 9999bp 가 200 으로
+    통과해 조달 102% 짜리 화면이 아무 말 없이 그려졌다.
+    """
+
+    def test_mpc_beyond_the_limit_is_refused(self):
+        assert rv.parse_meetings("2026-08-27:100") == [(dt.date(2026, 8, 27), 100.0)]
+        assert rv.parse_meetings("2026-08-27:-100") == [(dt.date(2026, 8, 27), -100.0)]
+        for bad in ("2026-08-27:101", "2026-08-27:-101", "2026-08-27:9999"):
+            with pytest.raises(ValueError):
+                rv.parse_meetings(bad)
+
+    def test_a_meeting_without_a_colon_is_refused(self):
+        """전에는 `partition` 이 빈 문자열을 주고 float("") 가 터졌다 — 메시지가
+        "could not convert string to float" 였다. 이제 우리 말로 거절한다."""
+        with pytest.raises(ValueError, match="모양"):
+            rv.parse_meetings("2026-08-27")
+
+    def test_path_delta_beyond_the_limit_is_refused(self):
+        assert rv.parse_paths("3M:200") == [[(0.25, 200.0)]]
+        for bad in ("3M:201", "3M:-201", "3M:9999"):
+            with pytest.raises(ValueError):
+                rv.parse_paths(bad)
+
+    def test_the_screen_and_the_server_use_the_same_numbers(self):
+        """화면 클램프가 서버 한도와 갈리면 사용자가 못 넣는 값이 생기거나
+        (너무 빡빡) 넣었는데 422 가 돌아온다(너무 헐렁)."""
+        import io as _io
+        import pathlib
+
+        page = pathlib.Path(__file__).parents[2] / "src" / "rv" / "RvPage.tsx"
+        src = _io.open(page, encoding="utf-8").read()
+        assert f"Math.max(-{rv.MPC_LIMIT_BP:g}, Math.min({rv.MPC_LIMIT_BP:g}, v))" in src
+        assert f"Math.max(-{rv.PATH_LIMIT_BP:g}, Math.min({rv.PATH_LIMIT_BP:g}, v))" in src
+
+
 @pytest.fixture(scope="module")
 def client():
     from fastapi.testclient import TestClient

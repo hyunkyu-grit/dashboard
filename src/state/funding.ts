@@ -1,6 +1,7 @@
 'use client';
 
-/* 조달금리 — Setting 탭이 정하고 Cash Bond 백테스트가 읽는 값 [OWNER, 2026-08-14].
+/* 조달금리 — Setting 탭이 정하고 **Cash Bond 백테스트와 Strategy(RV)** 가 읽는
+ * 값 [OWNER, 2026-08-14; RV 는 그 뒤에 합류].
  *
  * v1 `state/funding.ts`(zustand + localStorage)의 이식. v2 는 상태 라이브러리가
  * 없으므로 [세션 규칙] `BottomStrip.useStripCollapsed` 와 같은 관례로 간다 —
@@ -8,8 +9,18 @@
  * 인 것도 그쪽과 같은 이유다: 좌표가 아니라 취향(계산 규약)이고 어느 화면에서도
  * 같은 뜻이라, 창 자리의 "다른 모니터" 문제가 없다.
  *
- * 적용 범위는 Cash Bond 뿐이다 [OWNER, 2026-08-14 — "Cash Bond 전용"]. IRS
- * 백테스트는 이 값을 읽지 않고, 그 숫자는 이 기능이 생기기 전과 같아야 한다.
+ * ## 적용 범위 — 둘이다 (한때 하나였다)
+ *
+ * 처음 규약은 "Cash Bond 전용" 이었다 [OWNER, 2026-08-14]. 그 뒤 RV 가 조달을
+ * 경유하게 되면서 소비처가 둘이 됐고, **IRS 백테스트만 여전히 안 읽는다**
+ * (그 숫자는 이 기능이 생기기 전과 같아야 한다는 규약 그대로다).
+ *
+ * 소비처: `/api/settings/funding` · `/api/cashbond/backtest` · `/api/rv/analysis`.
+ *
+ * **2026-08-20 부터 RV 쪽 민감도가 커졌다.** 전에는 크레딧 RV 의 버퍼가
+ * 국고 헤지 페어(스프레드축)라 조달이 두 다리에서 소거됐는데, 축이 아웃라이트로
+ * 옮겨 가면서 조달이 캐리에 그대로 남는다 — 여기서 10bp 를 움직이면 RV 의 모든
+ * 캐리·버퍼·Score 가 따라 움직인다. Setting 화면의 안내 문구가 그 사실을 적는다.
  */
 
 import { useSyncExternalStore } from 'react';
