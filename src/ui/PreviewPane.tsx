@@ -22,6 +22,7 @@ import {
 
 import { CD_SERIES_ID, type PolicyStep } from '@/lib/api';
 import { fmtDelta, fmtLevel, unitSuffix } from '@/lib/format';
+import { rangePosition } from '@/lib/range';
 import { cashbondSeriesUrl, seriesUrl, universeSeriesUrl } from '@/lib/staticPaths';
 import { type IdleCurve } from '@/chart/curve';
 import { alignByDate, policyByDate, referenceMode } from '@/chart/references';
@@ -256,7 +257,17 @@ function StatColumns({
         <Stat label="고점" value={fmtLevel(row.rangeHigh, row.unit) + u} />
         <Stat label="저점" value={fmtLevel(row.rangeLow, row.unit) + u} />
         <Stat label="평균" value={fmtLevel(row.rangeAvg, row.unit) + u} />
-        <Stat label="위치" value={row.pct == null ? '—' : `${Math.round(row.pct)}%`} />
+        {/* 트랙의 마커와 **같은 함수**가 낸다(`lib/range.ts`). 2026-08-19 까지
+            이 칸은 서버의 `pct`(순위 백분위)를 찍고 있었는데, 바로 위 세 줄이
+            고점·저점·평균이라 "위치" 는 그 둘 사이의 자리로 읽힌다. 다른 양을
+            그 이름으로 찍고 있었다 — 표의 트랙과 같은 병이었다. */}
+        <Stat
+          label="위치"
+          value={(() => {
+            const pos = rangePosition(row.now, row.rangeLow, row.rangeHigh);
+            return pos == null ? '—' : `${Math.round(pos)}%`;
+          })()}
+        />
       </StatColumn>
     </HStack>
   );

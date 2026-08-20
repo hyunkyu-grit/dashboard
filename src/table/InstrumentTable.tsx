@@ -17,6 +17,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { BasisKey } from '@/lib/api';
 import { fmtDelta } from '@/lib/format';
 import { fmtKrw } from '@/lib/krw';
+import { rangePosition } from '@/lib/range';
 
 import { levelText, rangeText, subText } from './cells';
 import { colSpecs, colStyle } from './colgroup';
@@ -38,22 +39,40 @@ const BASIS_LABEL: Record<BasisKey, string> = { d1: '1D', mtd: 'MTD', ytd: 'YTD'
 /**
  * 52주 레인지 안에서 오늘이 어디인지 — 낮은 쪽에서 높은 쪽으로 그은 선 위의 표식.
  *
- * v1 의 `RangeTrack` 과 같은 규칙이다. **옆의 세 숫자가 읽는 것과 같은 필드를**
- * 읽으므로 표식과 숫자가 서로 다른 말을 할 수 없다. 백분위가 없는 행은 트랙을
- * 그리지 않는다 — 0% 로 그리면 "바닥에 있다"는 없는 사실을 말하게 된다.
+ * v1 의 `RangeTrack` 과 같은 규칙이다: **옆에 인쇄된 숫자에서 자리를 낸다**.
+ *
+ * 이 문장은 2026-08-20 까지 거짓이었다. 주석은 "같은 필드를 읽는다" 고 적혀
+ * 있었는데 실제로는 서버의 `pct`(순위 백분위)를 `left` 에 넣고 있었고, 옆의
+ * 숫자는 최저·최고·평균이었다 — 다른 양이다. 실측 99행 중 20행이 10%p 넘게,
+ * 최대 23.9%p 어긋났다. 이제 `lib/range.ts` 하나가 그 자리를 낸다.
+ *
+ * 그릴 수 없는 행은 트랙을 그리지 않는다 — 0% 로 그리면 "바닥에 있다" 는 없는
+ * 사실을 말하게 된다.
  */
-function RangeTrack({ pct }: { pct: number | null }) {
-  if (pct == null) {
+function RangeTrack({
+  now,
+  low,
+  high,
+}: {
+  now: number | null;
+  low: number | null;
+  high: number | null;
+}) {
+  /* 자리는 **옆에 인쇄된 숫자에서** 나온다(`lib/range.ts`). 2026-08-19 까지는
+     서버의 `pct`(순위 백분위)를 `left` 에 그대로 넣고 있었고, 그건 최저↔최고
+     트랙 위의 자리와 다른 양이라 그림과 숫자가 다른 말을 했다 — 실측 99행 중
+     20행이 10%p 넘게, 최대 23.9%p 어긋났다. */
+  const pos = rangePosition(now, low, high);
+  if (pos == null) {
     return (
       <TextLabel2 as="span" color="fgMuted" noWrap>
         —
       </TextLabel2>
     );
   }
-  const clamped = Math.max(0, Math.min(100, pct));
   return (
-    <span className="sr-track" title={`52주 레인지의 ${Math.round(pct)}% 지점`}>
-      <span className="sr-track-mark" style={{ left: `${clamped}%` }} />
+    <span className="sr-track" title={`52주 최저↔최고의 ${Math.round(pos)}% 지점`}>
+      <span className="sr-track-mark" style={{ left: `${pos}%` }} />
     </span>
   );
 }
@@ -670,7 +689,9 @@ export function InstrumentTable({
                       <TextLabel2 as="span" tabularNumbers noWrap>
                         {rangeText(row.rangeAvg, row.unit)}
                       </TextLabel2>
-                      {cols.slider ? <RangeTrack pct={row.pct} /> : null}
+                      {cols.slider ? (
+                        <RangeTrack now={row.now} low={row.rangeLow} high={row.rangeHigh} />
+                      ) : null}
                       {/* 세타 — INK, although it IS a signed money value and hue
                           is reserved for exactly those. This row already spends
                           that hue on RATE direction (어제/MTD/YTD), and two

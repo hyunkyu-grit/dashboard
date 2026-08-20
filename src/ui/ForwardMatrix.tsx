@@ -4,6 +4,7 @@ import { TextCaption, TextLabel2 } from '@coinbase/cds-web/typography';
 
 import type { ForwardsPayload } from '@/lib/api';
 import { fmtLevel, levelHeadText, levelHeadTitle } from '@/lib/format';
+import { rangePosition } from '@/lib/range';
 import { matrixTint } from '@/table/tint';
 
 import { TintLegend } from './TintLegend';
@@ -147,10 +148,15 @@ export function KeyForwardBlock({ payload }: { payload: ForwardsPayload }) {
         {payload.keyForwards.map((kf) => {
           const { min, max, avg, pct } = kf.range1y;
           const now = kf.values.now;
-          const hasGauge = min != null && max != null && pct != null && max > min;
-          const frac = hasGauge ? Math.min(1, Math.max(0, (now - min) / (max - min))) : 0;
-          const avgFrac =
-            hasGauge && avg != null ? Math.min(1, Math.max(0, (avg - min) / (max - min))) : null;
+          /* 자리는 `lib/range.ts` 가 낸다 — 표의 트랙과 **같은 함수**다.
+             둘이 각자 계산하던 시절에 하나가 순위 백분위로 새어 나갔다
+             (2026-08-20 수리). 여기 게이지는 처음부터 선형이었고, 그 산술이
+             옮겨 간 것뿐이다. */
+          const posPct = rangePosition(now, min, max);
+          const hasGauge = posPct != null && pct != null;
+          const frac = hasGauge ? posPct / 100 : 0;
+          const avgPct = rangePosition(avg, min, max);
+          const avgFrac = hasGauge && avgPct != null ? avgPct / 100 : null;
           const extreme = hasGauge && isExtreme(pct);
           return (
             <tr key={kf.label}>
