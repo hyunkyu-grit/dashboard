@@ -266,8 +266,8 @@ def test_the_payload_carries_it(dataset):
     from app.derive import basis_dates
     from app.payloads import wall_summary
 
-    # V2-LOCAL: v2 의 wall_summary 는 regret(라고 할 때 살걸)을 한 인자 더 받는다.
-    body = wall_summary(dataset, basis_dates(dataset), [], {}, [])
+    # 2026-08-20: regret 인자가 빠졌다 — v1 을 따라 v2 도 은퇴 [OWNER].
+    body = wall_summary(dataset, basis_dates(dataset), [], {})
     assert body["thetaBasis"]["side"] == "pay"
     by_id = {o["id"]: o for o in body["outrights"]}
     assert by_id["5Y"]["theta"]["perDv01"] != 0

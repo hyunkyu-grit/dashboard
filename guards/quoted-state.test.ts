@@ -45,7 +45,6 @@ const SUMMARY: WallSummary = {
   outrights: [summaryRow('3Y', true), summaryRow('4Y', false)],
   derived: [summaryRow('3Y-5Y', null)],
   events: [],
-  regret: [],
   policy: { unit: '%', asof: '', through: '', steps: [], latest: null, warnings: [] },
 };
 

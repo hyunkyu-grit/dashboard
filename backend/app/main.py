@@ -84,7 +84,6 @@ from .dv01 import build_dv01_table
 from .events import detect_event_clusters
 from .forwards import forwards_payload
 from .policy import load_base_rate, policy_step
-from .regret import regret_payload
 from .staleness import dataset_freshness
 from .surface import surface_payload
 from .surface3d import build_surface3d, surface3d_watermark
@@ -109,7 +108,7 @@ async def lifespan(app: FastAPI):
     # for byte-identity evidence against the frozen engine.
     #
     # This is the SIMULATION's cache and is unrelated to app/cache.py, which
-    # persists this module's own forwards/regret payloads to disk. Two caches,
+    # persists this module's own forwards payload to disk. Two caches,
     # two lifetimes, no shared state — the name is the only thing they share.
     if os.environ.get(curve_cache.ENV_FLAG, "1") == "0":
         logging.getLogger("irs_pricer").warning(
@@ -303,7 +302,9 @@ _forwards = cached("forwards", _data_hash, lambda: forwards_payload(_dataset, _c
 # 라고 할 때 살걸: a 20-day event replay plus ~2 valuations per line — a
 # couple of seconds over a file that changes once a day, so it caches the
 # same way forwards does.
-_regret = cached("regret", _data_hash, lambda: regret_payload(_dataset))
+# `_regret` 이 여기 있었다 — 은퇴 [OWNER, 2026-08-20]. 디스크에 남은 v7
+# `regret` 캐시 파일은 이제 아무도 열지 않는다. 모양이 바뀐 게 아니라
+# 사라진 것이라 SCHEMA_VERSION 은 그대로다.
 # 커브 표면(Lab). 주별로 솎은 격자 하나라 굽는 값이 싸지만, 캐시에 태우는
 # 것은 값 때문이 아니라 **굽기와 서버가 같은 페이로드를 내도록** 하기
 # 위해서다 — forwards 와 같은 자리, 같은 키.
@@ -353,7 +354,7 @@ def health() -> dict:
 
 @router.get("/api/wall/summary")
 def wall_summary() -> dict:
-    return payloads.wall_summary(_dataset, _bases, _events, _policy, _regret)
+    return payloads.wall_summary(_dataset, _bases, _events, _policy)
 
 
 @router.get("/api/series/{series_id}")

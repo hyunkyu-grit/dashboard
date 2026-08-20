@@ -64,7 +64,6 @@ from app.engine_port import (  # noqa: E402
 from app.events import detect_event_clusters  # noqa: E402
 from app.forwards import FWD_TENORS, START_POINTS, forwards_payload  # noqa: E402
 from app.policy import load_base_rate, policy_step  # noqa: E402
-from app.regret import regret_payload  # noqa: E402
 from app.static_paths import (  # noqa: E402
     FORWARDS_PATH,
     MANIFEST_PATH,
@@ -334,7 +333,6 @@ def build(out_root: Path, quiet: bool = False) -> dict:
 
     hash_ = dataset.data_key  # 병합 로더가 만든 키 — 엑셀이 섞이면 지문이 붙는다
     fwd = cached("forwards", hash_, lambda: forwards_payload(dataset, curves))
-    regret = cached("regret", hash_, lambda: regret_payload(dataset))
     # 커브 표면(Lab) — 서버와 **같은 캐시 키, 같은 함수**로 굽는다.
     surface = cached("surface", hash_, lambda: surface_payload(dataset))
 
@@ -346,7 +344,7 @@ def build(out_root: Path, quiet: bool = False) -> dict:
     policy = policy_step(load_base_rate(POLICY), dataset.asof)
     for msg in policy["warnings"]:
         say(f"  {msg}")
-    w.write(SUMMARY_PATH, payloads.wall_summary(dataset, bases, events, policy, regret))
+    w.write(SUMMARY_PATH, payloads.wall_summary(dataset, bases, events, policy))
     w.write(FORWARDS_PATH, fwd)
     w.write(VOLATILITY_PATH, payloads.volatility(dataset, bases, vol))
     w.write(SURFACE_PATH, surface)
