@@ -119,6 +119,27 @@ export function RvScatter({
     (p) => p.trMonthBp >= xMid && p.pctLastWeek >= PCT_LINE,
   ).length;
 
+  /* ── 두 축이 왜 다른 규칙인가, 그리고 그 대가 [OWNER 2026-08-21] ──────────
+     x 는 중앙값, y 는 절대선 50 이다. 일부러 다르다: y(52주 백분위)는 이미 자기
+     이력으로 정규화된 값이라 50 이 뜻을 갖지만, x(bp/월)는 정규화 안 된 생
+     크기라 0 이 뜻을 갖지 못한다(실측 2026-08-19: 후보 **100%** 가 0 보다 크다.
+     0 선은 이분면도 못 만든다).
+
+     그 대가로 y 는 자주 안 가른다 — 최근 252영업일에서 "50 위" 비율이 2%~93%
+     로 흔들리고, 35~65% 로 갈린 날은 21% 뿐이다. 하지만 **그 진폭 자체가
+     정보다**: 2025-09 엔 거의 전부가 자기 1년 대비 좁았고 지금은 거의 전부
+     넓다. 중앙값으로 바꾸면 날마다 반씩 갈라 그 사실을 지운다 — 그래서 안
+     바꾼다.
+
+     대신 쏠린 날은 칸이 빈다(252일 중 14%). 빈 칸을 설명 없이 두면 2×2 를
+     기대한 독자가 오독하므로 아래 한 줄이 개수로 말한다 — "38/42 가 넓다"를
+     읽으면 아래 칸이 왜 비었는지가 따라온다.
+
+     한 줄은 **늘 선다**. 임계를 두고 쏠린 날만 띄우려 했다가 접었다: 임계가
+     임의인 데다("칸이 비면"으로 잡아도 x 쪽 사정으로 빈 칸을 y 탓으로 말하게
+     된다), 균형인 날의 "21/42" 도 국면이 중립이라는 같은 크기의 사실이다. */
+  const wide = pts.filter((p) => p.pctLastWeek >= PCT_LINE).length;
+
   /* x 도메인은 실측 범위 + 8% — 대칭으로 잡을 이유가 없다(0 이 경계가 아니다).
      한 점뿐이면 폭이 0 이 되므로 최소 폭을 준다. */
   const xLo = Math.min(...pts.map((p) => p.trMonthBp), xMid);
@@ -156,7 +177,7 @@ export function RvScatter({
           height={H}
           viewBox={`0 0 ${W} ${H}`}
           role="img"
-          aria-label={`크레딧 RV 사분면 — ${pts.length}개 중 ${favorable}개가 중앙값보다 많이 벌고 평소보다 넓은 구역이에요`}
+          aria-label={`크레딧 RV 사분면 — ${pts.length}개 중 ${favorable}개가 중앙값보다 많이 벌고 평소보다 넓은 구역이에요. 평소보다 넓은 종목은 ${wide}개예요`}
         >
           {/* 유망 사분면(오른쪽·위)만 옅은 스크림. */}
           <rect
@@ -298,6 +319,14 @@ export function RvScatter({
         <TextLegal as="span" color="fgMuted">
           오른쪽 위가 많이 벌면서 평소보다 넓은 자리예요 · 누르면 이력이 열려요
         </TextLegal>
+        {/* 국면 한 줄 — 세로선은 늘 반씩 가르지만 가로선은 그러지 않는다.
+            이 줄이 오늘 어느 쪽으로 쏠렸는지를 개수로 말한다. */}
+        {pts.length > 0 ? (
+          <TextLegal as="span" color="fgMuted">
+            오늘은 {pts.length}개 중 {wide}개가 평소보다 넓어요
+          </TextLegal>
+        ) : null}
+
         {unplaced > 0 ? (
           <TextLegal as="span" color="fgMuted">
             백분위 미확정 {unplaced}개는 좌표가 없어 못 섰어요

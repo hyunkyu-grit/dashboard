@@ -128,6 +128,26 @@ describe('사분면 — 서술형, 명령형 금지', () => {
     }
   });
 
+  /* 세로선(x)은 중앙값이라 늘 반씩 가르지만, 가로선(y)은 절대선 50 이라
+     그러지 않는다 — 최근 252영업일 실측에서 "50 위" 비율이 2%~93% 로 흔들리고
+     35~65% 로 갈린 날은 21% 뿐이다. 그 진폭이 곧 국면이라 축은 안 바꾸기로
+     했고(중앙값으로 옮기면 그 사실이 지워진다), 대신 이 한 줄이 개수로 말한다
+     [OWNER 2026-08-21]. 픽스처는 3개 중 2개가 50 위다. */
+  it('국면 한 줄이 y 경계 위 개수를 말한다 [OWNER 2026-08-21]', () => {
+    const { container } = render(<RvScatter items={ITEMS} onSelect={noop} />);
+    expect(container.textContent).toContain('오늘은 3개 중 2개가 평소보다 넓어요');
+  });
+
+  it('국면 한 줄은 쏠리지 않은 날에도 선다 — 임계가 없다', () => {
+    /* 넷 중 둘만 50 위로 내려 균형을 만든다. 임계를 두면 이 날 줄이 사라지고,
+       "중립"이라는 같은 크기의 사실을 화면이 잃는다. */
+    const balanced = ITEMS.map((p) =>
+      p.seriesId === 'CRD-OFB-1Y' ? { ...p, pctLastWeek: 12.0 } : p,
+    );
+    const { container } = render(<RvScatter items={balanced} onSelect={noop} />);
+    expect(container.textContent).toContain('오늘은 3개 중 1개가 평소보다 넓어요');
+  });
+
   it('매수·명령형 문구가 없다', () => {
     const { container } = render(<RvScatter items={ITEMS} onSelect={noop} />);
     expect(container.textContent).not.toMatch(/매수|매도하세요|사세요|파세요/);
