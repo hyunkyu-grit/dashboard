@@ -38,7 +38,7 @@ import {
   ReadoutCard,
   ReadoutChange,
   ReadoutLevel,
-  readoutLeft,
+  placeReadout,
 } from './ReadoutCard';
 
 /** `d` = 그날의 전일 대비 변화. **백엔드가 낸다**(`derive.py::series_history`) —
@@ -362,7 +362,6 @@ export function PreviewPane({
    * 축 스케일을 가진 쪽이라, 우리가 픽셀에서 인덱스를 되계산하면 두 벌이 된다.
    * x 는 카드를 놓을 자리일 뿐이라 커서에서 바로 읽는다. */
   const [hoverIdx, setHoverIdx] = useState<number>();
-  const [hoverX, setHoverX] = useState(0);
 
   /* 그림에 남은 세로. `fill` 일 때만 쓴다 — 아닐 때는 `height` 가 답이고, 이 값은
    * 재도 무해하다(콜백 ref 는 붙는 그 순간 재므로 데이터보다 늦게 생기는 요소도
@@ -370,9 +369,10 @@ export function PreviewPane({
   const [plotRef, plotH] = useFillHeight(height);
   const chartH = fill ? plotH : height;
 
+  /* 자리는 상자의 CSS 변수에 적는다 — 상태가 아니다(`placeReadout` 머리글).
+     픽셀마다 이 pane 전체를 다시 그리지 않는다. */
   const onPlotMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    setHoverX(readoutLeft(e.clientX - r.left, r.width));
+    placeReadout(e.currentTarget, e.clientX);
   }, []);
   const onPlotLeave = useCallback(() => setHoverIdx(undefined), []);
 
@@ -678,7 +678,7 @@ export function PreviewPane({
           {/* 노드의 리드아웃 — 히스토리 차트와 **같은 카드**다. 만기가 날짜
               자리에 오고 나머지 다섯 줄은 같다(v1 `ui/CurveView.tsx` 와 동일). */}
           {curveIdx != null ? (
-            <ReadoutCard title={curve.tenors[curveIdx]} left={hoverX}>
+            <ReadoutCard title={curve.tenors[curveIdx]}>
               <ReadoutLevel k={READOUT_LABEL.level} v={curve.now[curveIdx]} unit="%" />
               <ReadoutLevel k={READOUT_LABEL.rangeHigh} v={curve.high[curveIdx]} unit="%" />
               <ReadoutLevel k={READOUT_LABEL.rangeLow} v={curve.low[curveIdx]} unit="%" />
@@ -974,7 +974,7 @@ export function PreviewPane({
             CD 91일은 **그려진 선이 있을 때만** 나온다 — 없는 선의 값을 카드가
             읽는 일은 없다(범례가 지는 규칙과 같다). */}
         {hoverPoint ? (
-          <ReadoutCard title={hoverPoint.t} left={hoverX}>
+          <ReadoutCard title={hoverPoint.t}>
             <ReadoutLevel k={READOUT_LABEL.level} v={hoverPoint.v} unit={row.unit} />
             <ReadoutLevel k={READOUT_LABEL.rangeHigh} v={stats52.max} unit={row.unit} />
             <ReadoutLevel k={READOUT_LABEL.rangeLow} v={stats52.min} unit={row.unit} />

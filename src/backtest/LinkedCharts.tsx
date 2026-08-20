@@ -40,7 +40,7 @@ import type { PolicyStep, Unit } from '@/lib/api';
 import { fmtLevel, unitSuffix } from '@/lib/format';
 import { fmtKrw } from '@/lib/krw';
 import { loadCd, RefKey } from '@/ui/PreviewPane';
-import { readoutLeft } from '@/ui/ReadoutCard';
+import { placeReadout } from '@/ui/ReadoutCard';
 
 /** `PnlSeries` — v1 과 같은 구조 프롭. IRS 북(`BacktestResult`)과 현금채권
  * (`CashBondBacktest`)이 둘 다 이 모양을 만족하고, 차트는 그 둘의 차이를 알
@@ -120,7 +120,6 @@ export function LinkedCharts({
 }) {
   /* 커서가 짚은 점 — 어느 차트가 짚었는지도 함께. 십자선은 반대쪽에만 선다. */
   const [hover, setHover] = useState<{ i: number; src: 'top' | 'bottom' }>();
-  const [hoverX, setHoverX] = useState(0);
 
   /* CD 91일 — `PreviewPane.loadCd` 의 모듈 캐시를 그대로 쓴다(한 페이지에서 두
    * 번 받지 않는다). 실패는 null: 기준선이 없다고 백테스트가 안 보일 이유는
@@ -161,9 +160,10 @@ export function LinkedCharts({
     [marks, points],
   );
 
+  /* 자리는 상자의 CSS 변수 — 상태가 아니다(`placeReadout` 머리글). 이 창은
+     차트 둘과 표를 함께 들고 있어 픽셀마다 다시 그리면 값이 실하다. */
   const onMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    setHoverX(readoutLeft(e.clientX - r.left, r.width));
+    placeReadout(e.currentTarget, e.clientX);
   }, []);
   const leave = useCallback(() => setHover(undefined), []);
 
@@ -312,7 +312,7 @@ export function LinkedCharts({
         {/* 돈 카드 — 날짜 · 레벨 · 누적 · 당일. `당일` 은 늘 1영업일이다(서버가
             발행점마다 전영업일을 따로 평가한다) — 점이 며칠씩 떨어져 그려져도. */}
         {hp ? (
-          <VStack className="sr-readout" style={{ left: hoverX }} aria-hidden="true">
+          <VStack className="sr-readout" aria-hidden="true">
             <TextLabel2 as="span" noWrap>
               {hp.t}
             </TextLabel2>

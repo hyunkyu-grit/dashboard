@@ -17,7 +17,7 @@
  *  6. **일별 대사** — 트레이딩 시스템과 줄 단위로 맞춰 보는 표.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { Button } from '@coinbase/cds-web/buttons';
 import { Chip } from '@coinbase/cds-web/chips';
@@ -36,7 +36,7 @@ import { fmtKrw, fmtKrwFromMan, manUnits } from '@/lib/krw';
 import { directionVar } from '@/theme/tint';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { ReconStack, type ReconStackDay } from '@/ui/window/ReconStack';
-import { ReadoutCard, ReadoutMoney, readoutLeft } from '@/ui/ReadoutCard';
+import { ReadoutCard, ReadoutMoney, placeReadout } from '@/ui/ReadoutCard';
 
 import type { CaseRuns } from './SimulationPage';
 import {
@@ -172,11 +172,9 @@ export function ResultsWindow({
 }) {
   /* 성분 경로 차트의 커서. 백테스트와 같은 문법(`LinkedCharts`). */
   const [pathIdx, setPathIdx] = useState<number>();
-  const [pathX, setPathX] = useState(0);
-  const pathBoxRef = useRef<HTMLDivElement>(null);
+  /* 자리는 상자의 CSS 변수 — 상태가 아니다(`placeReadout` 머리글). */
   const onPathMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const box = pathBoxRef.current?.getBoundingClientRect();
-    if (box) setPathX(readoutLeft(e.clientX - box.left, box.width));
+    placeReadout(e.currentTarget, e.clientX);
   }, []);
 
   const [shown, setShown] = useState<CaseId>(scenario.activeCase);
@@ -370,7 +368,7 @@ export function ResultsWindow({
               줄어 생기는 몫이에요.
             </TextLegal>
             {/* 카드가 기준으로 삼는 상자(`.sr-plot` = position:relative). */}
-            <Box className="sr-plot" width="100%" ref={pathBoxRef} onMouseMove={onPathMove}>
+            <Box className="sr-plot" width="100%" onMouseMove={onPathMove}>
               <CartesianChart
                 animate={false}
                 enableScrubbing
@@ -418,7 +416,7 @@ export function ResultsWindow({
               {/* 커서가 짚은 날의 성분 — 레인 P1-2. 이 화면은 손익이 어떻게
                   쌓이는지를 보는 자리인데, 특정 날의 숫자를 읽을 길이 없었다. */}
               {pathIdx != null && pathIdx >= 0 && paths.days[pathIdx] != null ? (
-                <ReadoutCard title={`D+${paths.days[pathIdx]}`} left={pathX}>
+                <ReadoutCard title={`D+${paths.days[pathIdx]}`}>
                   {PATH_ROWS.filter((r) => paths.hasBond || !BOND_SERIES.has(r.key)).map((r) => (
                     <ReadoutMoney
                       key={r.key}

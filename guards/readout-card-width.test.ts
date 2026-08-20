@@ -28,7 +28,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { READOUT_CARD_MAX, readoutLeft } from '../src/ui/ReadoutCard';
+import { READOUT_CARD_MAX, READOUT_X_VAR, readoutLeft } from '../src/ui/ReadoutCard';
 
 import { stripComments } from './_source';
 
@@ -70,11 +70,20 @@ describe('폭은 내용이 정한다 — 호출부가 세지 않는다', () => {
 });
 
 describe('클램프는 한 벌이다', () => {
-  it('모든 표면이 readoutLeft 를 지난다 — 자기 산술을 쓰지 않는다', () => {
+  it('모든 표면이 공용 클램프를 지난다 — 자기 산술을 쓰지 않는다', () => {
     /* 2026-08-20 이전에는 셋(LinkedCharts · RvPage · RvScatter)이 각자 같은
-     * 식을 복제하고 있었다. 복제는 언젠가 갈린다. */
-    const missing = SURFACES.filter((f) => !read(f).includes('readoutLeft('));
+     * 식을 복제하고 있었다. 복제는 언젠가 갈린다.
+     *
+     * 표면은 둘 중 하나를 지난다: 커서를 따라가면 `placeReadout`(상자에 적는다),
+     * 데이터 좌표에 붙으면 `readoutLeft`(직접 클램프). 어느 쪽이든 식은 한 벌이다. */
+    const missing = SURFACES.filter(
+      (f) => !read(f).includes('placeReadout(') && !read(f).includes('readoutLeft('),
+    );
     expect(missing).toEqual([]);
+  });
+
+  it('그 한 벌이 실제로 같은 식이다 — placeReadout 이 readoutLeft 를 부른다', () => {
+    expect(read('src/ui/ReadoutCard.tsx')).toMatch(/setProperty\(READOUT_X_VAR[\s\S]{0,60}readoutLeft\(/);
   });
 
   it('손으로 쓴 클램프 식이 남아 있지 않다', () => {
@@ -104,6 +113,53 @@ describe('클램프는 한 벌이다', () => {
 
   it('커서 오른쪽 12px 에 선다 — 커서를 덮지 않는다', () => {
     expect(readoutLeft(40, 1000)).toBe(52);
+  });
+});
+
+describe('자리는 상태가 아니다 — 픽셀마다 리렌더하지 않는다', () => {
+  /* `rerender-use-ref-transient-values` (2026-08-20 검증 라운드). 자리는
+   * 픽셀마다 바뀌는데 CSS 속성 하나만 먹인다 — 상태로 두면 마우스가 움직일
+   * 때마다 컴포넌트 전체가 다시 그려진다. 인덱스는 상태가 맞다(카드의 **내용**이
+   * 그걸 읽는다). 둘을 갈라 두는 것이 이 절의 전부다. */
+
+  /** 커서를 따라다니는 표면들. RvScatter 는 예외다 — 아래 참조. */
+  const CURSOR_SURFACES = [
+    'src/ui/PreviewPane.tsx',
+    'src/backtest/LinkedCharts.tsx',
+    'src/sim/CurvePreview.tsx',
+    'src/sim/ResultsWindow.tsx',
+    'src/rv/RvPage.tsx',
+  ];
+
+  it('커서 자리를 상태로 들고 있는 표면이 없다', () => {
+    const offenders = CURSOR_SURFACES.filter((f) =>
+      /const \[(hoverX|pathX)[\s\S]{0,40}useState/.test(stripComments(read(f))),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('다섯 표면이 모두 placeReadout 을 지난다', () => {
+    const missing = CURSOR_SURFACES.filter((f) => !read(f).includes('placeReadout('));
+    expect(missing).toEqual([]);
+  });
+
+  it('CSS 가 그 변수를 읽는다', () => {
+    const css = read('src/theme/type.css');
+    const block = css.slice(css.indexOf('.sr-readout {'), css.indexOf('.sr-readout-rows'));
+    expect(block).toMatch(/left: var\(--sr-readout-x/);
+  });
+
+  it('변수 이름이 한 곳에서 나온다 — 문자열을 두 벌 적지 않는다', () => {
+    expect(READOUT_X_VAR).toBe('--sr-readout-x');
+    const helper = read('src/ui/ReadoutCard.tsx');
+    expect(helper).toMatch(/setProperty\(READOUT_X_VAR/);
+  });
+
+  it('RvScatter 만 left 를 넘긴다 — 커서가 아니라 데이터 좌표에 붙기 때문', () => {
+    /* 강조된 점의 카드는 hover 가 없어도 서야 하므로 x 가 진짜 상태다.
+     * 예외를 목록으로 고정해 둔다 — 다른 표면이 슬그머니 따라 하는 것을 막는다. */
+    const passers = SURFACES.filter((f) => /<ReadoutCard[\s\S]{0,200}?left=\{/.test(read(f)));
+    expect(passers).toEqual(['src/rv/RvScatter.tsx']);
   });
 });
 

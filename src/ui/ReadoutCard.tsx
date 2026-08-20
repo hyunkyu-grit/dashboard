@@ -88,6 +88,30 @@ export function readoutLeft(x: number, boxW: number, width = READOUT_CARD_MAX): 
   return Math.min(Math.max(boxW - width - 8, 0), Math.max(0, x + 12));
 }
 
+/** 커서 자리를 **상자에 적는다**. 카드는 CSS 로 그 값을 읽는다
+ * (`.sr-readout { left: var(--sr-readout-x) }`).
+ *
+ * ## 왜 상태가 아니라 CSS 변수인가
+ *
+ * 자리는 픽셀마다 바뀌는데 그 값이 먹이는 것은 **CSS 속성 하나**뿐이다. 상태로
+ * 두면 마우스가 움직일 때마다 컴포넌트 전체가 다시 그려진다 — 표 넷과 차트
+ * 둘을 든 시뮬 결과 창에서는 그게 공짜가 아니다
+ * (`rerender-use-ref-transient-values`, 2026-08-20 검증 라운드).
+ *
+ * 카드가 아니라 **상자**에 적는 이유: 카드는 커서가 값 위에 있을 때만 마운트돼
+ * 있어서, 카드 노드에 직접 쓰면 없는 노드에 쓰는 순간이 생긴다. 상자는 늘
+ * 있고, CSS 변수는 아래로 상속된다 — 카드가 언제 서든 마지막 자리를 안다.
+ *
+ * 클램프는 여기서 한 번만 일어난다. 2026-08-20 이전에는 네 표면이 같은 식을
+ * 각자 복제하고 있었다. */
+export const READOUT_X_VAR = '--sr-readout-x';
+
+export function placeReadout(el: HTMLElement | null, clientX: number): void {
+  if (!el) return;
+  const box = el.getBoundingClientRect();
+  el.style.setProperty(READOUT_X_VAR, `${readoutLeft(clientX - box.left, box.width)}px`);
+}
+
 export function ReadoutCard({
   title,
   left,

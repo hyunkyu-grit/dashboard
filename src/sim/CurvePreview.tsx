@@ -17,7 +17,7 @@
  * 보여줄 뿐이다 — 시장에 대한 새 주장이 아니다.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { Chip } from '@coinbase/cds-web/chips';
 import { HStack, VStack } from '@coinbase/cds-web/layout';
@@ -33,7 +33,7 @@ import {
 
 import type { SeriesSummary } from '@/lib/api';
 import { fmtLevel } from '@/lib/format';
-import { ReadoutCard, ReadoutLevel, readoutLeft } from '@/ui/ReadoutCard';
+import { ReadoutCard, ReadoutLevel, placeReadout } from '@/ui/ReadoutCard';
 
 import {
   buildWaypoints,
@@ -112,11 +112,10 @@ export function CurvePreview({
      그 x 에 띄운다. 시뮬은 경로를 설계하는 화면인데 "D+37 에 얼마" 를 읽을
      길이 없었다(v1 `sim/ui/HoverPanel.tsx` 84줄이 하던 일). */
   const [hoverIdx, setHoverIdx] = useState<number>();
-  const [hoverX, setHoverX] = useState(0);
-  const boxRef = useRef<HTMLDivElement>(null);
+  /* 자리는 상태가 아니라 상자의 CSS 변수다 — 픽셀마다 리렌더하지 않는다
+     (`placeReadout` 머리글). 인덱스만 상태다: 카드의 **내용**이 그걸 읽는다. */
   const onMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const box = boxRef.current?.getBoundingClientRect();
-    if (box) setHoverX(readoutLeft(e.clientX - box.left, box.width));
+    placeReadout(e.currentTarget, e.clientX);
   }, []);
 
 
@@ -242,7 +241,7 @@ export function CurvePreview({
       {/* 차트 둘을 감싸는 상자 — 카드가 이 안에서 절대 위치로 뜬다(백테스트의
           `.sr-plot` 과 같은 구조). `onMouseMove` 가 x 를 재고, 인덱스는 CDS
           가 준다. */}
-      <VStack ref={boxRef} className="sr-plot" onMouseMove={onMove} width="100%">
+      <VStack className="sr-plot" onMouseMove={onMove} width="100%">
       {view === 'curve' ? (
         <CartesianChart
           animate={false}
@@ -326,7 +325,7 @@ export function CurvePreview({
       {hoverIdx != null && hoverIdx >= 0 ? (
         view === 'curve' ? (
           pillars[hoverIdx] ? (
-            <ReadoutCard title={pillars[hoverIdx].id} left={hoverX}>
+            <ReadoutCard title={pillars[hoverIdx].id}>
               <ReadoutLevel k="기준" v={base[hoverIdx] ?? null} unit="%" />
               {caseLines.map((l) => (
                 <ReadoutLevel
@@ -339,7 +338,7 @@ export function CurvePreview({
             </ReadoutCard>
           ) : null
         ) : timeLines.days[hoverIdx] != null ? (
-          <ReadoutCard title={`D+${timeLines.days[hoverIdx]}`} left={hoverX}>
+          <ReadoutCard title={`D+${timeLines.days[hoverIdx]}`}>
             {timeLines.lines.map((l) => (
               <ReadoutLevel
                 key={l.id}

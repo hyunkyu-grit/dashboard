@@ -61,9 +61,14 @@ describe('눈으로 읽는 카드', () => {
   });
 
   it('카드가 그림 밖으로 나가지 않게 같은 클램프를 지난다', () => {
-    /* 두 화면이 각자 클램프하면 CDS 가 눈금 폭을 바꾸는 날 갈린다. */
+    /* 두 화면이 각자 클램프하면 CDS 가 눈금 폭을 바꾸는 날 갈린다.
+     *
+     * 2026-08-20 에 경로가 한 겹 깊어졌다: 표면이 `readoutLeft` 를 직접 부르는
+     * 대신 `placeReadout`(상자의 CSS 변수에 이미 클램프된 값을 적는다)을
+     * 지난다 — 커서를 따라가는 데 리렌더가 필요 없게 만든 변경이다. 명제는
+     * 그대로이고 핀만 갱신했다(`readout-card-width` 가 그 둘이 같은 식임을 본다). */
     for (const f of [PREVIEW, RESULTS]) {
-      expect(read(f), f).toMatch(/readoutLeft\(/);
+      expect(read(f), f).toMatch(/placeReadout\(/);
     }
   });
 

@@ -60,7 +60,7 @@ import {
 import { BacktestUnavailable } from '@/lib/api';
 import { useFunding } from '@/state/funding';
 import { ErrorState, LoadingState } from '@/ui/DataState';
-import { ReadoutCard, ReadoutLevel, readoutLeft } from '@/ui/ReadoutCard';
+import { ReadoutCard, ReadoutLevel, placeReadout } from '@/ui/ReadoutCard';
 import { DROPDOWN_STYLES } from '@/ui/window/popup';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { useUrlState } from '@/ui/useUrlState';
@@ -151,17 +151,15 @@ function BandChart({
   stats: { now: number | null; mean: number | null; sd: number | null };
 }) {
   const [idx, setIdx] = useState<number | null>(null);
-  const [hoverX, setHoverX] = useState(0);
   return (
     <VStack gap={0.25} width="100%">
       <TextLabel2 as="span">{title}</TextLabel2>
       <Box
         className="sr-plot"
         width="100%"
+        /* 자리는 상자의 CSS 변수 — 상태가 아니다(`placeReadout` 머리글). */
         onMouseMove={(e: React.MouseEvent<HTMLDivElement>) => {
-          const r = e.currentTarget.getBoundingClientRect();
-          const x = e.clientX - r.left;
-          setHoverX(readoutLeft(x, r.width));
+          placeReadout(e.currentTarget, e.clientX);
         }}
         onMouseLeave={() => setIdx(null)}
       >
@@ -191,7 +189,7 @@ function BandChart({
           <Scrubber accessibilityLabel={`${title} 스크러버`} />
         </CartesianChart>
         {idx != null && values[idx] != null ? (
-          <ReadoutCard title={dates[idx]} left={hoverX}>
+          <ReadoutCard title={dates[idx]}>
             <ReadoutLevel k="값" v={values[idx]} unit="bp" />
             <ReadoutLevel k="창 평균" v={stats.mean} unit="bp" />
             <ReadoutLevel k="σ" v={stats.sd} unit="bp" />
