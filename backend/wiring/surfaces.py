@@ -78,8 +78,7 @@ EQUATIONS = [
      "배선된 것은 오차수정·AR·Δŷ 셋이고, 오차수정이 이제 **전분기 목표**를 "
      "읽어요(인쇄된 대로). 기대항 없음(PAC_EXPECTATION_OMITTED — 목표가 0 이 "
      "아니게 됐으니 이제 근사예요), 투자디플레이터는 외생이라 편차에서 0 "
-     "(GAMMA_I2_EXOG_ZERO), DRAM 지수는 Gartner 유료라 없음. **코드가 이 식을 "
-     "eq 10 이라고 부르는데 인쇄 번호는 11 이에요**(PDF 인쇄 p.18)."),
+     "(GAMMA_I2_EXOG_ZERO), DRAM 지수는 Gartner 유료라 없음."),
     ("12", "건설투자 목표", "expenditure",
      "IH* = β_IH0 + β_IH1·잠재산출 + β_IH2·건축착공 − UC_IH", None),
     ("13", "건설투자 사용자비용", "expenditure",

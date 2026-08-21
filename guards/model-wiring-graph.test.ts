@@ -164,6 +164,14 @@ describe('논문에만 있는 화살표 (배선 대 인쇄)', () => {
     expect(new Set(into.map((e) => e.from))).toEqual(new Set(['i_fi_star', 'y_gap']));
   });
 
+  /* D.3 — 코드가 스스로 적은 `eq_no` 와 인쇄 번호가 갈리는 자리가 없다.
+     `investment_growth` 가 자기를 eq 10 이라 부르던 것을 2026-08-21 에 고쳤고,
+     `EQ_NO_CORRECTIONS` 로 우회하던 표를 은퇴시켰다. 다시 갈리면 여기가
+     빨개진다 — 정정표가 조용히 다시 생기는 것이 이 시험이 막는 것이다. */
+  it('식 번호 정정표가 비어 있다 — 엔진이 인쇄 번호를 쓴다', () => {
+    expect(G.eq_no_corrections).toEqual([]);
+    expect(G.edges.filter((e) => e.equation === '10')).toEqual([]);
+  });
 });
 
 describe('자리 계산', () => {

@@ -512,13 +512,20 @@ def import_growth() -> ECMGrowth:
 
 
 def investment_growth() -> ECMGrowth:
-    """Eq. 10: α_I0 EC, α_I1 AR, γ_I1 gap, γ_I2 deflator, γ_I3 semiconductor
+    """Eq. 11: α_I0 EC, α_I1 AR, γ_I1 gap, γ_I2 deflator, γ_I3 semiconductor
     (SIGN_NOTE: negative as printed). NO constant in the T3 growth row —
-    a0 is a structural zero; the AR term rides in extras (dy_lag)."""
+    a0 is a structural zero; the AR term rides in extras (dy_lag).
+
+    NUMBER CORRECTED 2026-08-21 (P4): this said `eq_no = "10"`. Rendering
+    paper p.18 shows (10) is the USER-COST DEFINITION and the FI investment
+    PAC growth equation is (11). `wiring/edges.py::EQ_NO_CORRECTIONS` was
+    carrying the correction in a side table because the engine was frozen;
+    that table is retired with this change.
+    """
     zero = Coefficient(0.0, "none", RESOLVED,
                        "structural: no constant in T3 growth row "
                        "(owner mapping)", "structure")
-    return ECMGrowth("investment_growth", "10",
+    return ECMGrowth("investment_growth", "11",
                      zero,
                      C("investment_fi.growth.slots", 0),   # α_I0 = EC loading
                      {"dy_lag": C("investment_fi.growth.slots", 1),  # α_I1 AR

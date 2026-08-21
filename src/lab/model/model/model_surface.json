@@ -97,7 +97,7 @@
    "block": "expenditure",
    "page": "p.18",
    "printed": "오차수정 + AR + **기대 할인합** + γ_I1 Δŷ + γ_I2 Δln P_I + γ_I3 ln DRAM",
-   "differs": "배선된 것은 오차수정·AR·Δŷ 셋이고, 오차수정이 이제 **전분기 목표**를 읽어요(인쇄된 대로). 기대항 없음(PAC_EXPECTATION_OMITTED — 목표가 0 이 아니게 됐으니 이제 근사예요), 투자디플레이터는 외생이라 편차에서 0 (GAMMA_I2_EXOG_ZERO), DRAM 지수는 Gartner 유료라 없음. **코드가 이 식을 eq 10 이라고 부르는데 인쇄 번호는 11 이에요**(PDF 인쇄 p.18).",
+   "differs": "배선된 것은 오차수정·AR·Δŷ 셋이고, 오차수정이 이제 **전분기 목표**를 읽어요(인쇄된 대로). 기대항 없음(PAC_EXPECTATION_OMITTED — 목표가 0 이 아니게 됐으니 이제 근사예요), 투자디플레이터는 외생이라 편차에서 0 (GAMMA_I2_EXOG_ZERO), DRAM 지수는 Gartner 유료라 없음.",
    "wired": true
   },
   {
@@ -1982,12 +1982,5 @@
    }
   ]
  },
- "eq_no_corrections": [
-  {
-   "where": "investment_growth",
-   "code": "10",
-   "paper": "11",
-   "why": "PDF 인쇄 p.18 에서 (10) 은 자본 사용자비용 정의이고 설비투자 성장식은 (11) 이에요."
-  }
- ]
+ "eq_no_corrections": []
 }

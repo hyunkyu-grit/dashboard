@@ -1358,14 +1358,7 @@
    "into": "i_con"
   }
  ],
- "eq_no_corrections": [
-  {
-   "where": "investment_growth",
-   "code": "10",
-   "paper": "11",
-   "why": "PDF 인쇄 p.18 에서 (10) 은 자본 사용자비용 정의이고 설비투자 성장식은 (11) 이에요."
-  }
- ],
+ "eq_no_corrections": [],
  "non_paper_equations": {
   "항등식": "WIRING_SHARES_DATA"
  }
