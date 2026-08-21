@@ -72,7 +72,13 @@ import {
 } from './note';
 import { BASIS, PINNED_Q, TENORS, outOfDomain, solvePath, type Tenor } from './path';
 import { riskLines } from './risk';
-import { candidates, gapVector, headlineGap, type StrategyAnchors } from './trades';
+import {
+  HEADLINE_TENOR,
+  candidates,
+  gapVector,
+  headlineGap,
+  type StrategyAnchors,
+} from './trades';
 
 /** 점 눈금. 전부 기저의 검증 영역(`domain.policy_bp_per_q`) 안이다 — 밖을 고를
  *  수 있게 두면 화면이 «여기부터 외삽» 이라고 말하기 전에 이미 밖에 나가 있다. */
@@ -150,9 +156,9 @@ export function StrategySurface() {
     [anchors, sol, h],
   );
   const head = gaps ? headlineGap(gaps) : null;
-  const headDecomp = head
-    ? (decomp.find((d) => d.tenor === head.tenor) ?? null)
-    : (decomp[2] ?? null);
+  /* 커브가 없거나 12개월 자리가 아니어도 **논거·리스크는 3년으로 선다** —
+     그 둘은 구운 기저만으로 나오니까. 자리 번호가 아니라 이름으로 찾는다. */
+  const headDecomp = decomp.find((d) => d.tenor === HEADLINE_TENOR) ?? null;
   const cands = useMemo(() => (gaps ? candidates(gaps) : []), [gaps]);
   const risks = useMemo(() => riskLines(sol, headDecomp), [sol, headDecomp]);
   const note = useMemo(

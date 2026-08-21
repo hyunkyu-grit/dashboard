@@ -248,8 +248,16 @@ export function candidates(v: GapVector): Candidate[] {
   return [bestOutright(v), bestCurve(v), bestFly(v)].filter((c): c is Candidate => c !== null);
 }
 
-/** 헤드라인 — |모형 − 시장| 이 가장 큰 한 칸. 「함의」 줄이 이걸 말한다. */
+/** 「함의」 줄이 말하는 테너. **고정이다** [OWNER 2026-08-21].
+ *
+ * 처음엔 `|모형 − 시장|` 이 가장 큰 칸을 자동으로 골랐다. 그런데 동결 경로에서는
+ * 캐리가 제일 큰 1Y 가 **매번** 뽑혀서, 헤드라인이 «오늘 뭐가 제일 싼가» 가
+ * 아니라 «어디 캐리가 제일 센가» 가 됐다. 매일 같은 칸을 읽는 화면이라 고정이
+ * 맞고, 가장 큰 기회는 아래 트레이드 줄이 이미 말한다. */
+export const HEADLINE_TENOR: Tenor = '3y';
+
+/** 헤드라인 한 칸. 그 테너가 시장 대비를 못 재는 자리면 `null` 이다 — 다른
+ *  테너로 몰래 갈아타지 않는다. 갈아타면 화면이 매일 다른 것을 말한다. */
 export function headlineGap(v: GapVector): TenorGap | null {
-  const sorted = [...v.tradable].sort((a, b) => Math.abs(b.vsMarketBp!) - Math.abs(a.vsMarketBp!));
-  return sorted[0] ?? null;
+  return v.tradable.find((g) => g.tenor === HEADLINE_TENOR) ?? null;
 }

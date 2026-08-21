@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 import { solvePath } from '@/lab/model/strategy/path';
 import {
   H_12M,
+  HEADLINE_TENOR,
   LAST_H,
   bestCurve,
   bestFly,
@@ -152,13 +153,23 @@ describe('후보는 벡터의 뺄셈이다 — 손으로 다시 계산해 맞춘
   });
 });
 
-describe('헤드라인', () => {
-  it('|모형 − 시장| 이 가장 큰 칸을 고른다', () => {
-    const v = gapVector(CUT, ANCHORS, H_12M);
-    const g = headlineGap(v)!;
-    for (const other of v.tradable) {
-      expect(Math.abs(g.vsMarketBp!)).toBeGreaterThanOrEqual(Math.abs(other.vsMarketBp!));
+describe('헤드라인 — 3년 고정 [OWNER 2026-08-21]', () => {
+  /* 자동 선택이면 동결 경로에서 캐리가 제일 큰 1Y 가 매번 뽑힌다. 그러면
+     헤드라인이 «오늘 뭐가 제일 싼가» 가 아니라 «어디 캐리가 제일 센가» 가
+     되고, 매일 같은 칸을 읽는 화면이 매일 다른 것을 말한다. */
+  it('경로가 무엇이든 3년을 말한다', () => {
+    for (const sol of [HOLD, CUT, solvePath([25, 25, 50, 50, 50, 50, 50, 50])]) {
+      expect(headlineGap(gapVector(sol, ANCHORS, H_12M))!.tenor).toBe(HEADLINE_TENOR);
     }
+  });
+
+  it('가장 큰 칸이 다른 테너여도 갈아타지 않는다', () => {
+    const v = gapVector(HOLD, ANCHORS, H_12M);
+    const biggest = [...v.tradable].sort(
+      (a, b) => Math.abs(b.vsMarketBp!) - Math.abs(a.vsMarketBp!),
+    )[0];
+    expect(biggest.tenor, '동결이면 캐리 최대인 1Y 가 최대여야 이 가드가 뜻이 있다').toBe('1y');
+    expect(headlineGap(v)!.tenor).toBe('3y');
   });
 
   it('커브가 없으면 헤드라인도 없다 — 0 을 만들지 않는다', () => {
