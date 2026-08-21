@@ -1,0 +1,80 @@
+{
+  "module": "wiring_graph",
+  "_fixture": "PLACEHOLDER — 세션 3 이 생성기를 만들면 이 파일은 실물로 대체돼요. 값은 모양을 보여주려고 넣은 것이고 실제 계수가 아니에요. 픽스처인 이유는 세션 2·3 이 동시에 도는 동안 서로를 기다리지 않고 이 모양에 맞춰 짤 수 있어야 해서예요.",
+  "generated_from": "backend/bigfoot/solve/system.py (AST) + backend/config/appendix_d_resolved.yaml",
+  "uncovered": [
+    { "var": "kr10y", "why": "상태벡터를 거쳐요 — `x_t = np.array([...])` 뒤 `w40 @ x_t`. 생성기가 이 패턴을 따로 다뤄야 해요." },
+    { "var": "kr3y", "why": "같은 패턴이에요(`w12`)." },
+    { "var": "r_hh", "why": "변수 키 루프예요 — `for key, ekey, eq, rname in [...]: new[key] = …`." },
+    { "var": "r_firm", "why": "같은 루프예요." },
+    { "var": "m", "why": "중간 지역변수 `d_m` 을 거쳐 들어와요." },
+    { "var": "i_con", "why": "중간 지역변수 `uc` · `ih_star` 를 거쳐요." },
+    { "var": "dhpi", "why": "중간 지역변수 `hpi_star_lag` 를 거쳐요." },
+    { "var": "ddebt", "why": "생성기 시제품이 못 잡았어요." }
+  ],
+  "nodes": [
+    { "id": "i_kr", "label": "기준금리", "block": "financial" },
+    { "id": "kr10y", "label": "국고 10년", "block": "financial" },
+    { "id": "r_hh", "label": "가계 대출금리", "block": "financial" },
+    { "id": "hpi", "label": "주택가격", "block": "financial" },
+    { "id": "debt", "label": "가계부채/GDP", "block": "financial" },
+    { "id": "c", "label": "민간소비", "block": "expenditure" },
+    { "id": "y_gap", "label": "GDP 갭", "block": "expenditure" },
+    { "id": "cpi_yoy", "label": "소비자물가", "block": "price" },
+    { "id": "us_y", "label": "미국 성장", "block": "external" }
+  ],
+  "edges": [
+    {
+      "from": "i_kr",
+      "to": "r_hh",
+      "block": "financial",
+      "horizon": "SR",
+      "sign": "+",
+      "coefficient_slot": "loan_hh.named.nu",
+      "equation": "40-41",
+      "paper_page": "p.32"
+    },
+    {
+      "from": "r_hh",
+      "to": "hpi",
+      "block": "financial",
+      "horizon": "LR",
+      "sign": "-",
+      "coefficient_slot": "housing.target.slots.1",
+      "equation": "27-28",
+      "paper_page": "p.28"
+    },
+    {
+      "from": "debt",
+      "to": "c",
+      "block": "expenditure",
+      "horizon": "LR",
+      "sign": "-",
+      "coefficient_slot": "consumption.target.slots.1",
+      "equation": "7",
+      "paper_page": "p.16",
+      "_note": "이 쌍은 **엣지가 둘**이에요 — 장기는 음, 단기는 양. 화면이 실선/점선으로 그 둘을 다 보여줘야 논문의 설계가 보여요."
+    },
+    {
+      "from": "debt",
+      "to": "c",
+      "block": "expenditure",
+      "horizon": "SR",
+      "sign": "+",
+      "coefficient_slot": "consumption.growth.slots.4",
+      "equation": "8",
+      "paper_page": "p.17"
+    },
+    {
+      "from": "us_y",
+      "to": "y_gap",
+      "block": "external",
+      "horizon": "SR",
+      "sign": "+",
+      "coefficient_slot": null,
+      "equation": "17-19",
+      "paper_page": "p.23",
+      "_note": "해외 블록으로 **들어가는** 엣지는 0 이어야 해요 — 논문이 해외 GDP 를 외생으로 두거든요(각주 9). 그 0 이 화면에서 보이는 게 이 그래프의 요점 하나예요."
+    }
+  ]
+}

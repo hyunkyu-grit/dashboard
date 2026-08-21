@@ -1,0 +1,68 @@
+{
+  "module": "paper_anchors",
+  "paper": {
+    "id": "BOK WP 2025-3",
+    "title": "BOK-LOOK: A Semi-Structural Model for Korea's Open Economy and Monetary Policy Analysis",
+    "authors": "Seungryul Jeong, Seokil Kang, Hyungbae Cho, Jinwoon Yoon, Dongjae Lee",
+    "published": "2025-02",
+    "pdf": "Downloads/BOK 경제연구 제2025-3호 본문.pdf"
+  },
+  "why_text_only": "논문의 Figure 18~20 은 인쇄 해상도에서 디지타이즈가 안 돼요. 그래서 기준선으로 쓸 수 있는 건 본문이 문장으로 적어 둔 최대 반응값뿐이고, 그림에서 눈으로 읽은 값은 여기 넣지 않아요.",
+  "shocks": [
+    {
+      "id": "kr_policy_25bp",
+      "label": "한국 정책금리 +25bp",
+      "basis": "policy_q1",
+      "page": "pp.37-38",
+      "anchors": [
+        { "id": "kr_policy_25bp.gap", "panel": "GDP 갭", "var": "y_gap", "value": -0.07, "unit": "%p", "kind": "peak" },
+        { "id": "kr_policy_25bp.cpi", "panel": "소비자물가", "var": "cpi_yoy", "value": -0.05, "unit": "%p", "kind": "peak", "note": "시차를 두고 나타나요" },
+        { "id": "kr_policy_25bp.hpi", "panel": "주택가격", "var": "hpi", "value": -0.4, "unit": "%", "kind": "peak" },
+        { "id": "kr_policy_25bp.debt_krw", "panel": "명목 가계부채", "var": null, "value": -5.1, "unit": "조원", "kind": "peak", "note": "이 모형은 부채를 **비율**(eq 44)로 풀어서 명목 잔액이 편차 공간에 없어요. 대조할 수가 없어요." },
+        { "id": "kr_policy_25bp.debt_ratio", "panel": "가계부채/GDP", "var": "debt", "value": -0.3, "unit": "%p", "kind": "peak" }
+      ]
+    },
+    {
+      "id": "us_policy_25bp",
+      "label": "미국 정책금리 +25bp",
+      "basis": "us_2q",
+      "page": "pp.39-40",
+      "anchors": [
+        { "id": "us_policy_25bp.kr10y", "panel": "한국 장기금리", "var": "kr10y", "value": 0.06, "unit": "%p", "kind": "peak", "note": "β_sync 1.05 를 이 앵커에 핀으로 맞췄어요 — 논문이 계수를 안 실었거든요(각주 25)." },
+        { "id": "us_policy_25bp.gdp", "panel": "GDP", "var": "y_gap", "value": -0.04, "unit": "%p", "kind": "peak" },
+        { "id": "us_policy_25bp.fi", "panel": "설비투자", "var": "i_fi", "value": -0.02, "unit": "%", "kind": "peak" },
+        { "id": "us_policy_25bp.cpi", "panel": "소비자물가", "var": "cpi_yoy", "value": null, "unit": "%p", "kind": "shape", "note": "올랐다가 내려가요 — 논문이 숫자를 안 적었어요." }
+      ]
+    },
+    {
+      "id": "oil_10pct",
+      "label": "유가 +10%",
+      "basis": "oil",
+      "page": "pp.41-42",
+      "anchors": [
+        { "id": "oil_10pct.cpi", "panel": "소비자물가", "var": "cpi_yoy", "value": 0.16, "unit": "%p", "kind": "peak" },
+        { "id": "oil_10pct.consumption", "panel": "소비", "var": "c", "value": -0.08, "unit": "%", "kind": "peak" },
+        { "id": "oil_10pct.gdp", "panel": "GDP", "var": "y_gap", "value": -0.05, "unit": "%p", "kind": "peak" },
+        { "id": "oil_10pct.imports", "panel": "수입", "var": "m", "value": -0.07, "unit": "%", "kind": "peak" }
+      ]
+    }
+  ],
+  "scorecard": {
+    "passed": 9,
+    "total": 13,
+    "note": "예전 12/13 은 Table 8 값의 **순열을 이 밴드에 맞춰 고른 결과**라 기준선이 아니에요. 2026-08-21 에 44개 인쇄식을 전수 대조하면서 그 순열 탐색을 은퇴시켰어요.",
+    "misses": [
+      { "anchor_id": "kr_policy_25bp.hpi", "measured": -0.94, "why": "금리→주택 진폭이에요. 논문이 금리 단위 규약을 안 박았어요." },
+      { "anchor_id": "kr_policy_25bp.debt_ratio", "measured": -0.766, "why": "주택을 타고 오는 같은 사슬이에요." },
+      { "anchor_id": "oil_10pct.consumption", "measured": null, "why": "부채→소비로 이어지는 같은 사슬이에요." },
+      { "anchor_id": "oil_10pct.imports", "measured": null, "why": "같은 사슬의 수요 쪽이에요." }
+    ],
+    "measured_but_not_scored": [
+      { "anchor_id": "kr_policy_25bp.gap", "measured": -0.0881 },
+      { "anchor_id": "kr_policy_25bp.cpi", "measured": -0.0396 }
+    ],
+    "outside_the_scorecard": [
+      { "what": "정책충격에서의 수출", "measured": -0.0023, "unit": "%", "why": "논문 본문이 정책충격의 수출 최대치를 숫자로 안 적었어요. 그래서 13개 밴드에는 안 들어가요. 다만 정책충격에서 수출을 미는 항이 eq (19) 의 환율 하나인데 그 계수가 0.0033 이라 사실상 안 움직여요 — 2026-08-21 에 관측했고 별개 레인으로 둬요." }
+    ]
+  }
+}

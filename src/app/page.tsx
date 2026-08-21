@@ -54,6 +54,7 @@ import { useUrlState } from '@/ui/useUrlState';
 import { DEFAULT_LAB, isLabId, LAB_ITEMS, type LabId } from '@/ui/nav';
 import { Surface3D } from '@/ui/Surface3D';
 import { IssuancePage } from '@/lab/IssuancePage';
+import { ModelSpace } from '@/lab/model/ModelSpace';
 import { ScenarioPage } from '@/lab/ScenarioPage';
 
 /** Swap groups first (v1's), then the Cash Bond pair (2026-08-18).
@@ -553,13 +554,19 @@ const BANNER_H = 34;
                 ? '시나리오 화면을 그리지 못했어요.'
                 : lab === 'issuance'
                   ? '발행 캘린더를 그리지 못했어요.'
-                  : '커브 표면을 그리지 못했어요.'
+                  : lab === 'model'
+                    ? '모형 화면을 그리지 못했어요.'
+                    : '커브 표면을 그리지 못했어요.'
             }
           >
             {lab === 'scenario' ? (
               <ScenarioPage policy={data?.summary.policy} />
             ) : lab === 'issuance' ? (
               <IssuancePage />
+            ) : lab === 'model' ? (
+              /* 세션 1 이 세운 껍데기. 세 면의 내용은 다음 두 세션이 각자
+                 자기 슬롯 안에만 넣는다 — 이 분기와 셸은 안 건드린다. */
+              <ModelSpace />
             ) : (
               <Surface3D policy={data?.summary.policy} />
             )}

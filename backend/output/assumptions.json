@@ -1,0 +1,64 @@
+{
+  "module": "assumptions",
+  "basis_as_of": "2026-08-21",
+  "data_edge_q": "2026Q2",
+  "written_at": "2026-08-21T14:45:36",
+  "headline": "이 화면의 bp 는 **정책금리 경로 하나**가 만들어요. 아래 값들은 모형이 딛고 선 가정이고, 그중 기저에 실제로 들어간 건 상수 둘뿐이에요.",
+  "items": [
+    {
+      "key": "r_star",
+      "label": "중립금리 r*",
+      "value": 2.0,
+      "unit": "%",
+      "source": "논문 각주 24 — Laubach-Williams 한국 추정치의 평균 (config/appendix_d_resolved.yaml · CALIBRATED_LW)",
+      "as_of": "논문 2025-02 · 상수",
+      "fetched": false,
+      "effect": "level_only",
+      "effect_note": "이 값을 1.5%·2.5% 로 바꿔 기저를 다시 풀어 봤더니 10년 IRS 반응이 0.000000bp 달라졌어요. 편차 공간에서 상수는 소거되거든요. 레벨 전망에만 쓰여요."
+    },
+    {
+      "key": "pi_star",
+      "label": "물가목표 π*",
+      "value": 2.0,
+      "unit": "%",
+      "source": "논문 Table 14 (eq 35) · config/appendix_d_resolved.yaml",
+      "as_of": "논문 2025-02 · 상수",
+      "fetched": false,
+      "effect": "level_only",
+      "effect_note": "r* 와 같은 이유로 편차에는 영향이 없어요. 다만 필립스 어트랙터(eq 24)를 통해 **물가 손잡이를 놓았을 때**의 경로 모양에는 들어가요."
+    },
+    {
+      "key": "us_policy",
+      "label": "미 정책금리",
+      "value": null,
+      "unit": "%",
+      "source": "받지 못했어요 — 오프라인 빌드예요",
+      "as_of": null,
+      "fetched": false,
+      "effect": "not_in_basis",
+      "effect_note": "**수준**이에요. 기저가 담은 건 «미국이 +100bp 가면» 이라는 충격이라, 이 값은 화면 숫자에 안 들어가요. 선도 경로(SEP 닷·SOFR 선물)는 받을 데가 없어요."
+    },
+    {
+      "key": "oil",
+      "label": "유가 (브렌트)",
+      "value": null,
+      "unit": "달러",
+      "source": "받지 못했어요 — 오프라인 빌드예요",
+      "as_of": null,
+      "fetched": false,
+      "effect": "not_in_basis",
+      "effect_note": "**현물**이에요. 기저가 담은 건 «유가가 +10% 가면» 이라는 충격이고요. 선물 커브는 FRED 에 없어요."
+    },
+    {
+      "key": "foreign_growth",
+      "label": "해외 성장",
+      "value": null,
+      "unit": null,
+      "source": "받지 못했어요 — 컨센서스는 유료예요. 엔진은 HP 추세를 써요",
+      "as_of": null,
+      "fetched": false,
+      "effect": "not_in_basis",
+      "effect_note": "해외 블록은 논문도 외생으로 둬요(각주 9 — 국제국 성장 전망을 그대로 받아 써요)."
+    }
+  ]
+}
