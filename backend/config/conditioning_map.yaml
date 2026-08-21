@@ -1,0 +1,30 @@
+# Residual-selection map for conditional forecasting (Appendix B).
+#
+# Which residuals MAY move for each conditionable variable group — the
+# paper's footnote-31 manual-selection discipline, made mechanical. Any
+# conditioning request touching residuals outside the requested group
+# raises ConditioningMapError; extending a channel means editing THIS file,
+# never a silent code path.
+#
+# conditions: model variables a request may impose paths on
+# residuals:  equation residuals the inversion may adjust
+groups:
+  us_block:
+    conditions: [us_y, us_pi, us_i]
+    residuals: [us_is, us_pc, us_rule]
+  kr_exports:
+    conditions: [x]
+    residuals: [export]
+  kr_cpi:
+    conditions: [cpi_yoy]
+    residuals: [phillips]
+  # needed by the Phase-4 round-trip validation (ii): conditioning on the
+  # model's own IRF-A policy-rate path must recover the 25bp rule shock
+  kr_policy:
+    conditions: [i_kr]
+    residuals: [policy_rule]
+  # Phase 6b: domestic demand channel (exact mode 1:1, consumption
+  # residual); round-trip locked in tests/test_scenario_basis.py
+  kr_demand:
+    conditions: [y_gap]
+    residuals: [consumption]

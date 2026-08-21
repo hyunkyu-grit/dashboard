@@ -63,3 +63,23 @@ tzdata>=2026.3
 # 폴백에서만, 그것도 함수 안에서 import 한다 — import 단계에서는 필요 없고,
 # 이 리포가 읽는 워크북은 전부 `.xlsx` 다. `.xls` 를 읽어야 하는 날 `pip
 # install xlrd` 한 줄이면 되고, 그날까지 배포 이미지에 지고 다닐 이유가 없다.
+
+# ── 이관된 거시 엔진, 2026-08-21 ────────────────────────────────────────────
+# `backend/bigfoot/**` — BOK-LOOK 구현(BIGFOOT `f888201` 에서 이관). 아래 넷은
+# **import 추적으로 실측한 것**이지 눈으로 고른 것이 아니다:
+#   python -c "import sys,importlib; b=set(sys.modules);
+#              importlib.import_module('bigfoot.scenario_basis.build'); ..."
+#   → numpy pandas scipy statsmodels plotly requests yaml
+# numpy·scipy 는 위에 이미 있다.
+pandas>=2.0          # 전 데이터 계층 · 분기 리샘플 · HP 필터 입력
+statsmodels>=0.14    # hpfilter(잠재산출·추세) · AutoReg(위성 VAR 보조)
+requests>=2.31       # ECOS·FRED 로더 (bigfoot/data/)
+pyyaml>=6.0          # config/appendix_d*.yaml — 논문 부록 D 계수
+
+# plotly 는 **런타임 의존이 아니어야 하는데 지금은 맞다.** `scenario_basis/
+# build.py` 가 최종 옵션 상수(FINAL_OPTIONS·FINAL_EQ24·BETA_SYNC_ADOPTED)를
+# `solve/phase3.py` 에서 가져오는데, 그 모듈이 **차트를 그리는 모듈**이라
+# 모듈 스코프에서 plotly 를 import 한다. 상수를 별도 모듈로 빼면 사라진다.
+# 이관 커밋에서 손대지 않은 이유는 D.3 게이트(기저 바이트 동일)가 그 커밋의
+# 유일한 증거이기 때문이다 — 리팩터링은 별도 커밋으로. [2026-08-21 기록]
+plotly>=5.0

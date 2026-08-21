@@ -1,0 +1,766 @@
+calibration.r_star.named:
+  r_star:
+    basis: 'CALIBRATED_LW: Laubach–Williams mean, footnote 24 — calibrated outside
+      Appendix D'
+    status: RESOLVED
+    symbol: r_star
+    value: 0.02
+construction.growth.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2'
+    status: EXOG_V1
+    symbol: alpha_IH0_ec
+    value: 0.0267
+  '1':
+    basis: 'owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2'
+    status: EXOG_V1
+    symbol: alpha_IH1_ar
+    value: -0.2605
+  '2':
+    basis: 'owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2'
+    status: EXOG_V1
+    symbol: gamma_IH1_gap
+    value: 0.2851
+  '3':
+    basis: 'owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2'
+    status: EXOG_V1
+    symbol: gamma_IH2_deflator
+    value: -0.1
+  '4':
+    basis: 'owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2'
+    status: EXOG_V1
+    symbol: gamma_IH3_housing
+    value: 0.1671
+  '5':
+    basis: 'owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2'
+    status: EXOG_V1
+    symbol: gamma_IH4_bci
+    value: 0.0629
+construction.target.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: symbols read (const/potential-analog/dummy);
+      construction held at trend in Phase 2'
+    status: EXOG_V1
+    symbol: beta_IH0
+    value: 4.853
+  '1':
+    basis: 'owner PDF reading 2026-08-05: symbols read (const/potential-analog/dummy);
+      construction held at trend in Phase 2'
+    status: EXOG_V1
+    symbol: beta_IH1
+    value: 0.4187
+  '2':
+    basis: 'owner PDF reading 2026-08-05: symbols read (const/potential-analog/dummy);
+      construction held at trend in Phase 2'
+    status: EXOG_V1
+    symbol: beta_IH2
+    value: 0.0539
+consumption.growth.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: EC loading (eq 8)'
+    status: RESOLVED
+    symbol: alpha_C0
+    value: 0.0234
+  '1':
+    basis: 'owner PDF reading 2026-08-05: AR'
+    status: RESOLVED
+    symbol: alpha_C1
+    value: -0.1079
+  '2':
+    basis: 'owner PDF reading 2026-08-05: output gap'
+    status: RESOLVED
+    symbol: gamma_C1
+    value: 0.2005
+  '3':
+    basis: 'owner PDF reading 2026-08-05: household rate'
+    status: RESOLVED
+    symbol: gamma_C2
+    value: -0.6
+  '4':
+    basis: 'owner PDF reading 2026-08-05: debt growth'
+    status: RESOLVED
+    symbol: gamma_C3
+    value: 0.0193
+  '5':
+    basis: 'owner PDF reading 2026-08-05: purchasing power'
+    status: RESOLVED
+    symbol: gamma_C4
+    value: 0.02
+consumption.target.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: const'
+    status: RESOLVED
+    symbol: beta_c0
+    value: 0.0038
+  '1':
+    basis: 'owner PDF reading 2026-08-05: debt'
+    status: RESOLVED
+    symbol: beta_c1
+    value: -0.1
+  '2':
+    basis: 'owner PDF reading 2026-08-05: GFC dummy'
+    status: RESOLVED
+    symbol: beta_c2
+    value: -0.0384
+  '3':
+    basis: 'owner PDF reading 2026-08-05: Covid dummy'
+    status: RESOLVED
+    symbol: beta_c3
+    value: -0.1017
+core_cpi.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: eq (23) coefficient; term = lagged core
+      inflation per owner fallback — PROVISIONAL_PHILLIPS (P2)'
+    candidates:
+    - lagged core inflation
+    - other eq (23) term order
+    status: PROVISIONAL
+    symbol: phi1
+    value: 0.25
+  '1':
+    basis: 'owner PDF reading 2026-08-05: eq (23); term = attractor π∞ per owner fallback
+      — PROVISIONAL_PHILLIPS (P2)'
+    candidates:
+    - attractor pi_inf
+    - other eq (23) term order
+    status: PROVISIONAL
+    symbol: phi2
+    value: 0.15
+  '2':
+    basis: 'owner PDF reading 2026-08-05: eq (23); term = output gap per owner fallback
+      — PROVISIONAL_PHILLIPS (P2)'
+    candidates:
+    - output gap
+    - other eq (23) term order
+    status: PROVISIONAL
+    symbol: phi3
+    value: 0.1
+  '3':
+    basis: 'owner PDF reading 2026-08-05: inflation target'
+    status: RESOLVED
+    symbol: pi_star
+    value: 0.02
+  '4':
+    basis: 'owner PDF reading 2026-08-05: eq (24) adaptive-expectation coefficient
+      1; OBSERVED: δ1+δ2=1.0396>1, recorded, not renormalized'
+    status: RESOLVED
+    symbol: delta1
+    value: 0.7232
+  '5':
+    basis: 'owner PDF reading 2026-08-05: eq (24) adaptive-expectation coefficient
+      2'
+    status: RESOLVED
+    symbol: delta2
+    value: 0.3164
+corp_bond.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: AR'
+    status: RESOLVED
+    symbol: rho_CB
+    value: 0.5626
+  '1':
+    basis: 'owner PDF reading 2026-08-05: MEAN spread (mean-reversion parameterization;
+      prior ''intercept'' reading corrected)'
+    status: RESOLVED
+    symbol: eta_bar_CB
+    value: 0.0003
+  '2':
+    basis: 'owner PDF reading 2026-08-05: gap'
+    status: RESOLVED
+    symbol: alpha_CB
+    value: -0.0487
+cpi.growth.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: const'
+    status: RESOLVED
+    symbol: c_cpi
+    value: 0.0011
+  '1':
+    basis: 'owner PDF reading 2026-08-05: EC loading'
+    status: RESOLVED
+    symbol: alpha_cpi0
+    value: 0.0586
+  '2':
+    basis: 'owner PDF reading 2026-08-05: Δcore'
+    status: RESOLVED
+    symbol: alpha_cpi1
+    value: 0.804
+  '3':
+    basis: 'owner PDF reading 2026-08-05: Δimport price'
+    status: RESOLVED
+    symbol: alpha_cpi2
+    value: 0.0597
+cpi.target.named:
+  w_core:
+    basis: 'owner PDF reading 2026-08-05: weight of core in headline'
+    status: RESOLVED
+    symbol: nu_cpi
+    value: 0.979
+debt_gdp.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: const'
+    status: RESOLVED
+    symbol: c_debt
+    value: 0.0208
+  '1':
+    basis: 'owner PDF reading 2026-08-05: gap (prior candidates income/housing were
+      wrong)'
+    status: RESOLVED
+    symbol: alpha_debt1
+    value: 0.0118
+  '2':
+    basis: 'owner PDF reading 2026-08-05: housing YoY'
+    status: RESOLVED
+    symbol: alpha_debt2
+    value: 0.1204
+  '3':
+    basis: 'owner PDF reading 2026-08-05: household rate'
+    status: RESOLVED
+    symbol: alpha_debt3
+    value: -0.8556
+export.demand_weights.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: CORRECTED order US·EU·CH·EA·JP·RW (prior
+      candidate order US·CH·JP·EU·EA·RW was wrong)'
+    status: RESOLVED
+    symbol: zeta_X_us
+    value: 0.18
+  '1':
+    basis: 'owner PDF reading 2026-08-05: CORRECTED order US·EU·CH·EA·JP·RW (prior
+      candidate order US·CH·JP·EU·EA·RW was wrong)'
+    status: RESOLVED
+    symbol: zeta_X_eu
+    value: 0.07
+  '2':
+    basis: 'owner PDF reading 2026-08-05: CORRECTED order US·EU·CH·EA·JP·RW (prior
+      candidate order US·CH·JP·EU·EA·RW was wrong)'
+    status: RESOLVED
+    symbol: zeta_X_cn
+    value: 0.2
+  '3':
+    basis: 'owner PDF reading 2026-08-05: CORRECTED order US·EU·CH·EA·JP·RW (prior
+      candidate order US·CH·JP·EU·EA·RW was wrong)'
+    status: RESOLVED
+    symbol: zeta_X_ea
+    value: 0.19
+  '4':
+    basis: 'owner PDF reading 2026-08-05: CORRECTED order US·EU·CH·EA·JP·RW (prior
+      candidate order US·CH·JP·EU·EA·RW was wrong)'
+    status: RESOLVED
+    symbol: zeta_X_jp
+    value: 0.05
+  '5':
+    basis: 'owner PDF reading 2026-08-05: CORRECTED order US·EU·CH·EA·JP·RW (prior
+      candidate order US·CH·JP·EU·EA·RW was wrong)'
+    status: RESOLVED
+    symbol: zeta_X_rw
+    value: 0.31
+export.growth.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: const'
+    status: RESOLVED
+    symbol: c_X
+    value: 0.0085
+  '1':
+    basis: 'owner PDF reading 2026-08-05: EC loading'
+    status: RESOLVED
+    symbol: alpha_X0
+    value: 0.0619
+  '2':
+    basis: 'owner PDF reading 2026-08-05: demand growth'
+    status: RESOLVED
+    symbol: alpha_X1
+    value: 0.8192
+  '3':
+    basis: 'owner PDF reading 2026-08-05: exchange rate'
+    status: RESOLVED
+    symbol: alpha_X2
+    value: 0.0033
+export.target.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: const'
+    status: RESOLVED
+    symbol: beta_X0
+    value: 4.14
+  '1':
+    basis: 'owner PDF reading 2026-08-05: world demand'
+    status: RESOLVED
+    symbol: beta_X1
+    value: 1.6452
+export_price.growth.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: const'
+    status: RESOLVED
+    symbol: c_px
+    value: 0.0016
+  '1':
+    basis: 'owner PDF reading 2026-08-05: EC loading'
+    status: RESOLVED
+    symbol: alpha_px0
+    value: 0.0982
+  '2':
+    basis: 'owner PDF reading 2026-08-05: symbol fixed; term per eq (30) printed order
+      not transcribed (P3)'
+    candidates:
+    - fx-change pass-through
+    - world-price growth pass-through
+    status: PROVISIONAL
+    symbol: alpha_px1
+    value: 0.3487
+  '3':
+    basis: 'owner PDF reading 2026-08-05: symbol fixed; term per eq (30) printed order
+      not transcribed (P3)'
+    candidates:
+    - world-price growth pass-through
+    - fx-change pass-through
+    status: PROVISIONAL
+    symbol: alpha_px2
+    value: 0.1381
+export_price.target.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: const'
+    status: RESOLVED
+    symbol: beta_px0
+    value: 0.189
+  '1':
+    basis: 'owner PDF reading 2026-08-05: world price, unit constraint'
+    status: RESOLVED
+    symbol: beta_px1
+    value: 1.0
+foreign.china.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: c/τ_Y pair belongs to eq (4) import-gap
+      equation; assigned c_j = own-lag on symbol-notation grounds (P1) — owner: pair
+      stays PROVISIONAL'
+    candidates: &id001
+    - eq (4) own-lag
+    - eq (4) output-gap loading
+    status: PROVISIONAL
+    symbol: c_j
+    value: 0.02
+  '1':
+    basis: 'owner PDF reading 2026-08-05: assigned τ_Y = eq (4) output-gap loading
+      (τ indexed by Y); pair stays PROVISIONAL (P1)'
+    candidates: &id002
+    - eq (4) output-gap loading
+    - eq (4) own-lag
+    status: PROVISIONAL
+    symbol: tau_Y
+    value: 0.05
+  '2':
+    basis: 'owner PDF reading 2026-08-05: eq (5) own-lag'
+    status: RESOLVED
+    symbol: rho_Y
+    value: 0.5943
+  '3':
+    basis: 'owner PDF reading 2026-08-05: eq (5) spillover loading'
+    status: RESOLVED
+    symbol: beta_Y
+    value: 0.1673
+  '4':
+    basis: 'owner PDF reading 2026-08-05: eq (5) oil-gap coefficient'
+    status: RESOLVED
+    symbol: gamma_Y
+    value: 0.0049
+foreign.ea.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: c/τ_Y pair belongs to eq (4) import-gap
+      equation; assigned c_j = own-lag on symbol-notation grounds (P1) — owner: pair
+      stays PROVISIONAL'
+    candidates: *id001
+    status: PROVISIONAL
+    symbol: c_j
+    value: 0.02
+  '1':
+    basis: 'owner PDF reading 2026-08-05: assigned τ_Y = eq (4) output-gap loading
+      (τ indexed by Y); pair stays PROVISIONAL (P1)'
+    candidates: *id002
+    status: PROVISIONAL
+    symbol: tau_Y
+    value: 0.05
+  '2':
+    basis: 'owner PDF reading 2026-08-05: eq (5) own-lag'
+    status: RESOLVED
+    symbol: rho_Y
+    value: 0.6151
+  '3':
+    basis: 'owner PDF reading 2026-08-05: eq (5) spillover loading'
+    status: RESOLVED
+    symbol: beta_Y
+    value: 0.2706
+  '4':
+    basis: 'owner PDF reading 2026-08-05: eq (5) oil-gap coefficient'
+    status: RESOLVED
+    symbol: gamma_Y
+    value: 0.005
+foreign.eu.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: c/τ_Y pair belongs to eq (4) import-gap
+      equation; assigned c_j = own-lag on symbol-notation grounds (P1) — owner: pair
+      stays PROVISIONAL'
+    candidates: *id001
+    status: PROVISIONAL
+    symbol: c_j
+    value: 0.02
+  '1':
+    basis: 'owner PDF reading 2026-08-05: assigned τ_Y = eq (4) output-gap loading
+      (τ indexed by Y); pair stays PROVISIONAL (P1)'
+    candidates: *id002
+    status: PROVISIONAL
+    symbol: tau_Y
+    value: 0.05
+  '2':
+    basis: 'owner PDF reading 2026-08-05: eq (5) own-lag'
+    status: RESOLVED
+    symbol: rho_Y
+    value: 0.6011
+  '3':
+    basis: 'owner PDF reading 2026-08-05: eq (5) spillover loading'
+    status: RESOLVED
+    symbol: beta_Y
+    value: 0.3111
+  '4':
+    basis: 'owner PDF reading 2026-08-05: eq (5) oil-gap coefficient'
+    status: RESOLVED
+    symbol: gamma_Y
+    value: 0.0049
+foreign.japan.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: c/τ_Y pair belongs to eq (4) import-gap
+      equation; assigned c_j = own-lag on symbol-notation grounds (P1) — owner: pair
+      stays PROVISIONAL'
+    candidates: *id001
+    status: PROVISIONAL
+    symbol: c_j
+    value: 0.02
+  '1':
+    basis: 'owner PDF reading 2026-08-05: assigned τ_Y = eq (4) output-gap loading
+      (τ indexed by Y); pair stays PROVISIONAL (P1)'
+    candidates: *id002
+    status: PROVISIONAL
+    symbol: tau_Y
+    value: 0.05
+  '2':
+    basis: 'owner PDF reading 2026-08-05: eq (5) own-lag'
+    status: RESOLVED
+    symbol: rho_Y
+    value: 0.5819
+  '3':
+    basis: 'owner PDF reading 2026-08-05: eq (5) spillover loading'
+    status: RESOLVED
+    symbol: beta_Y
+    value: 0.3054
+  '4':
+    basis: 'owner PDF reading 2026-08-05: eq (5) oil-gap coefficient'
+    status: RESOLVED
+    symbol: gamma_Y
+    value: 0.0049
+fx.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: UIP weight'
+    status: RESOLVED
+    symbol: alpha_EXR0
+    value: 0.8814
+  '1':
+    basis: 'owner PDF reading 2026-08-05: ln steady-state (≈1110원)'
+    status: RESOLVED
+    symbol: alpha_EXR1
+    value: 7.0142
+  '2':
+    basis: 'owner PDF reading 2026-08-05: risk-premium scale'
+    status: RESOLVED
+    symbol: alpha_EXR2
+    value: 4.0
+  '3':
+    basis: 'owner PDF reading 2026-08-05: eq (34) constant'
+    status: RESOLVED
+    symbol: c_UIP
+    value: 0.0812
+government.growth.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2'
+    status: EXOG_V1
+    symbol: c_G
+    value: 0.0041
+  '1':
+    basis: 'owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2'
+    status: EXOG_V1
+    symbol: alpha_G0_ec
+    value: 0.1697
+  '2':
+    basis: 'owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2'
+    status: EXOG_V1
+    symbol: alpha_G1_gap
+    value: -0.044
+government.target.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2'
+    status: EXOG_V1
+    symbol: beta_G0_const
+    value: -0.0974
+  '1':
+    basis: 'owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2'
+    status: EXOG_V1
+    symbol: beta_G1_potential
+    value: 0.7913
+  '2':
+    basis: 'owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2'
+    status: EXOG_V1
+    symbol: beta_G2_elderly
+    value: 0.6582
+housing.growth.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: const'
+    status: RESOLVED
+    symbol: c_hpi
+    value: 0.0167
+  '1':
+    basis: 'owner PDF reading 2026-08-05: EC loading'
+    status: RESOLVED
+    symbol: alpha_hpi0
+    value: 0.0405
+  '2':
+    basis: 'owner PDF reading 2026-08-05: AR'
+    status: RESOLVED
+    symbol: alpha_hpi1
+    value: 0.5029
+  '3':
+    basis: 'owner PDF reading 2026-08-05: rate'
+    status: RESOLVED
+    symbol: alpha_hpi2
+    value: -1.4996
+housing.target.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: const'
+    status: RESOLVED
+    symbol: beta_hpi0
+    value: 0.1693
+  '1':
+    basis: 'owner PDF reading 2026-08-05: CPI (prior provisional ''income'' was wrong)'
+    status: RESOLVED
+    symbol: beta_hpi1
+    value: 0.9539
+  '2':
+    basis: 'owner PDF reading 2026-08-05: household rate'
+    status: RESOLVED
+    symbol: beta_hpi2
+    value: -4.5095
+import_.demand_weights.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: order C·FI·IH·G·X confirmed'
+    status: RESOLVED
+    symbol: zeta_M_c
+    value: 0.21
+  '1':
+    basis: 'owner PDF reading 2026-08-05: order C·FI·IH·G·X confirmed'
+    status: RESOLVED
+    symbol: zeta_M_fi
+    value: 0.22
+  '2':
+    basis: 'owner PDF reading 2026-08-05: order C·FI·IH·G·X confirmed'
+    status: RESOLVED
+    symbol: zeta_M_ih
+    value: 0.22
+  '3':
+    basis: 'owner PDF reading 2026-08-05: order C·FI·IH·G·X confirmed'
+    status: RESOLVED
+    symbol: zeta_M_g
+    value: 0.08
+  '4':
+    basis: 'owner PDF reading 2026-08-05: order C·FI·IH·G·X confirmed'
+    status: RESOLVED
+    symbol: zeta_M_x
+    value: 0.29
+import_.growth.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: const'
+    status: RESOLVED
+    symbol: c_M
+    value: 0.0028
+  '1':
+    basis: 'owner PDF reading 2026-08-05: EC loading'
+    status: RESOLVED
+    symbol: alpha_M0
+    value: 0.1477
+  '2':
+    basis: 'owner PDF reading 2026-08-05: demand growth'
+    status: RESOLVED
+    symbol: alpha_M1
+    value: 1.0108
+  '3':
+    basis: 'owner PDF reading 2026-08-05: exchange rate'
+    status: RESOLVED
+    symbol: alpha_M2
+    value: -0.0062
+import_.target.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: const'
+    status: RESOLVED
+    symbol: beta_M0
+    value: -4.5009
+  '1':
+    basis: 'owner PDF reading 2026-08-05: absorption demand'
+    status: RESOLVED
+    symbol: beta_M1
+    value: 1.3916
+import_price.growth.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: const'
+    status: RESOLVED
+    symbol: c_pm
+    value: 0.0013
+  '1':
+    basis: 'owner PDF reading 2026-08-05: EC loading'
+    status: RESOLVED
+    symbol: alpha_pm0
+    value: 0.1813
+  '2':
+    basis: 'owner PDF reading 2026-08-05: symbol fixed; term per eq (32) printed order
+      not transcribed (P3)'
+    candidates:
+    - world-price+fx growth
+    - oil growth
+    status: PROVISIONAL
+    symbol: alpha_pm1
+    value: 0.8794
+  '3':
+    basis: 'owner PDF reading 2026-08-05: symbol fixed; term per eq (32) printed order
+      not transcribed (P3)'
+    candidates:
+    - oil growth
+    - world-price+fx growth
+    status: PROVISIONAL
+    symbol: alpha_pm2
+    value: 0.2883
+import_price.target.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: const'
+    status: RESOLVED
+    symbol: beta_pm0
+    value: -4.6222
+  '1':
+    basis: 'owner PDF reading 2026-08-05: world import price'
+    status: RESOLVED
+    symbol: beta_pm1
+    value: 1.0651
+  '2':
+    basis: 'owner PDF reading 2026-08-05: oil'
+    status: RESOLVED
+    symbol: beta_pm2
+    value: 0.4391
+investment_fi.growth.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: EC loading'
+    status: RESOLVED
+    symbol: alpha_I0
+    value: 0.1983
+  '1':
+    basis: 'owner PDF reading 2026-08-05: AR'
+    status: RESOLVED
+    symbol: alpha_I1
+    value: 0.0248
+  '2':
+    basis: 'owner PDF reading 2026-08-05: output gap'
+    status: RESOLVED
+    symbol: gamma_I1
+    value: 0.6182
+  '3':
+    basis: 'owner PDF reading 2026-08-05: deflator'
+    status: RESOLVED
+    symbol: gamma_I2
+    value: -0.1
+  '4':
+    basis: 'owner PDF reading 2026-08-05: semiconductor — SIGN_NOTE: negative as printed,
+      kept'
+    status: RESOLVED
+    symbol: gamma_I3
+    value: -0.0066
+investment_fi.target.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: const'
+    status: RESOLVED
+    symbol: beta_I0
+    value: -4.624
+  '1':
+    basis: 'owner PDF reading 2026-08-05: potential'
+    status: RESOLVED
+    symbol: beta_I1
+    value: 1.2121
+  '2':
+    basis: 'owner PDF reading 2026-08-05: Covid dummy'
+    status: RESOLVED
+    symbol: beta_I2
+    value: 0.0274
+loan_rates.firm.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: CORRECTION — ν_Firm=0.64 group is the FIRM
+      equation'
+    status: RESOLVED
+    symbol: nu_Firm
+    value: 0.64
+  '1':
+    basis: 'owner PDF reading 2026-08-05: smoothing'
+    status: RESOLVED
+    symbol: rho_Firm
+    value: 0.7025
+  '2':
+    basis: 'owner PDF reading 2026-08-05: mean spread'
+    status: RESOLVED
+    symbol: eta_bar_Firm
+    value: 0.0013
+  '3':
+    basis: 'owner PDF reading 2026-08-05: pass-through'
+    status: RESOLVED
+    symbol: alpha_Firm
+    value: 0.1607
+loan_rates.household.slots:
+  '0':
+    basis: 'owner PDF reading 2026-08-05: CORRECTION — groups were swapped; ν_HH=0.36
+      group is the HOUSEHOLD equation (households closer to long rates)'
+    status: RESOLVED
+    symbol: nu_HH
+    value: 0.36
+  '1':
+    basis: 'owner PDF reading 2026-08-05: smoothing'
+    status: RESOLVED
+    symbol: rho_HH
+    value: 0.6066
+  '2':
+    basis: 'owner PDF reading 2026-08-05: mean spread'
+    status: RESOLVED
+    symbol: eta_bar_HH
+    value: 0.0038
+  '3':
+    basis: 'owner PDF reading 2026-08-05: pass-through'
+    status: RESOLVED
+    symbol: alpha_HH
+    value: 0.2114
+loan_rates.shared.named:
+  eta_cb:
+    basis: 'owner PDF reading 2026-08-05: corp-bond spread reference in eqs 42-43
+      (shared; moved out of the old ''corporate'' slot list)'
+    status: RESOLVED
+    symbol: eta_bar_CB_ref
+    value: 0.0003
+policy_rule.named:
+  phi_i:
+    basis: 'owner PDF reading 2026-08-05: smoothing (was ''rho'')'
+    status: RESOLVED
+    symbol: phi_i
+    value: 0.85
+  phi_pi:
+    basis: owner PDF reading 2026-08-05
+    status: RESOLVED
+    symbol: phi_pi
+    value: 1.5
+  phi_y:
+    basis: owner PDF reading 2026-08-05
+    status: RESOLVED
+    symbol: phi_y
+    value: 0.5
+  pi_star:
+    basis: 'owner PDF reading 2026-08-05: CORRECTION — 4th value is the inflation
+      target π*, not r*; labels only, no numeric change'
+    status: RESOLVED
+    symbol: pi_star
+    value: 0.02

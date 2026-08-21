@@ -1,0 +1,30 @@
+{
+  "module": "taylor_gap",
+  "as_of": "2026-08-05",
+  "data_through": "2026Q2",
+  "headline": {
+    "spread_target_minus_actual_bp": 221.9,
+    "spread_vs_current_rate_bp": 196.9,
+    "one_step_vs_current_bp": 29.5,
+    "direction": "rule_tighter"
+  },
+  "inputs": {
+    "core_cpi_yoy_pct": 2.4,
+    "output_gap_pp": -0.54,
+    "r_star_pct": 2.0
+  },
+  "rates": {
+    "target_pct": 4.72,
+    "rule_path_pct": 4.28,
+    "actual_pct": 2.5,
+    "actual_current_pct": 2.75,
+    "one_step_pct": 3.05,
+    "market_1y_pct": 3.02,
+    "market_series": "MSB_1Y"
+  },
+  "caveats": [
+    "hp_endpoint_bias",
+    "constant_r_star",
+    "msb_proxy_for_irs"
+  ]
+}

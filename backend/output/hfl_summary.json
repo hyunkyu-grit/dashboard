@@ -1,0 +1,19 @@
+{
+  "module": "us_hfl_scenario",
+  "as_of": "2026-08-05",
+  "horizon_quarters": 12,
+  "headline": {
+    "peak_passthrough_10y_bp_per_100bp": 42.5,
+    "peak_10y_diff_bp": 42.5,
+    "peak_quarter": "2026Q3"
+  },
+  "inputs": {
+    "shock_bp": 100.0,
+    "shock_quarters": 4,
+    "expectations": "var"
+  },
+  "caveats": [
+    "sep_extrapolated_baseline",
+    "var_expectations"
+  ]
+}

@@ -1,0 +1,431 @@
+{
+  "module": "irs_curve_forecast",
+  "as_of": "2026-08-05",
+  "quotes_as_of": "2026-08-05",
+  "base_rate_now": 2.75,
+  "tenors": [
+    "1y",
+    "2y",
+    "3y",
+    "5y",
+    "10y"
+  ],
+  "horizons_quarters": {
+    "f3m": 1,
+    "f6m": 2,
+    "f12m": 4
+  },
+  "scenarios": {
+    "baseline": {
+      "1y": {
+        "current": 3.3475,
+        "f3m": 3.3893,
+        "f3m_band": [
+          3.277,
+          3.5213
+        ],
+        "f3m_engine_bp": 0.0,
+        "f3m_spread_bp": 4.2,
+        "f6m": 3.4125,
+        "f6m_band": [
+          3.2825,
+          3.5621
+        ],
+        "f6m_engine_bp": 0.0,
+        "f6m_spread_bp": 6.5,
+        "f12m": 3.4326,
+        "f12m_band": [
+          3.2896,
+          3.6491
+        ],
+        "f12m_engine_bp": 0.0,
+        "f12m_spread_bp": 8.5,
+        "model_minus_market_bp": 9.4
+      },
+      "2y": {
+        "current": 3.59,
+        "f3m": 3.5698,
+        "f3m_band": [
+          3.4748,
+          3.6715
+        ],
+        "f3m_engine_bp": 0.0,
+        "f3m_spread_bp": -2.0,
+        "f6m": 3.5677,
+        "f6m_band": [
+          3.464,
+          3.6814
+        ],
+        "f6m_engine_bp": 0.0,
+        "f6m_spread_bp": -2.2,
+        "f12m": 3.5675,
+        "f12m_band": [
+          3.4384,
+          3.73
+        ],
+        "f12m_engine_bp": 0.0,
+        "f12m_spread_bp": -2.2,
+        "model_minus_market_bp": -2.2
+      },
+      "3y": {
+        "current": 3.695,
+        "f3m": 3.6401,
+        "f3m_band": [
+          3.5751,
+          3.716
+        ],
+        "f3m_engine_bp": 0.0,
+        "f3m_spread_bp": -5.5,
+        "f6m": 3.6298,
+        "f6m_band": [
+          3.5588,
+          3.7233
+        ],
+        "f6m_engine_bp": 0.0,
+        "f6m_spread_bp": -6.5,
+        "f12m": 3.6276,
+        "f12m_band": [
+          3.5521,
+          3.732
+        ],
+        "f12m_engine_bp": 0.0,
+        "f12m_spread_bp": -6.7,
+        "model_minus_market_bp": -6.7
+      },
+      "5y": {
+        "current": 3.8025,
+        "f3m": 3.7712,
+        "f3m_band": [
+          3.7042,
+          3.8381
+        ],
+        "f3m_engine_bp": 0.0,
+        "f3m_spread_bp": -3.1,
+        "f6m": 3.7644,
+        "f6m_band": [
+          3.6804,
+          3.8529
+        ],
+        "f6m_engine_bp": 0.0,
+        "f6m_spread_bp": -3.8,
+        "f12m": 3.7626,
+        "f12m_band": [
+          3.6599,
+          3.8806
+        ],
+        "f12m_engine_bp": 0.0,
+        "f12m_spread_bp": -4.0,
+        "model_minus_market_bp": -4.0
+      },
+      "10y": {
+        "current": 3.9225,
+        "f3m": 3.9084,
+        "f3m_band": [
+          3.827,
+          3.9913
+        ],
+        "f3m_engine_bp": 0.0,
+        "f3m_spread_bp": -1.4,
+        "f6m": 3.9007,
+        "f6m_band": [
+          3.7851,
+          4.0087
+        ],
+        "f6m_engine_bp": 0.0,
+        "f6m_spread_bp": -2.2,
+        "f12m": 3.8942,
+        "f12m_band": [
+          3.7217,
+          4.0397
+        ],
+        "f12m_engine_bp": 0.0,
+        "f12m_spread_bp": -2.8,
+        "model_minus_market_bp": -3.1
+      }
+    },
+    "us_hfl": {
+      "1y": {
+        "current": 3.3475,
+        "f3m": 3.3861,
+        "f3m_band": [
+          3.2738,
+          3.5181
+        ],
+        "f3m_engine_bp": -0.3,
+        "f3m_spread_bp": 4.2,
+        "f6m": 3.3983,
+        "f6m_band": [
+          3.2683,
+          3.5479
+        ],
+        "f6m_engine_bp": -1.4,
+        "f6m_spread_bp": 6.5,
+        "f12m": 3.3622,
+        "f12m_band": [
+          3.2192,
+          3.5787
+        ],
+        "f12m_engine_bp": -7.0,
+        "f12m_spread_bp": 8.5,
+        "model_minus_market_bp": 9.4
+      },
+      "2y": {
+        "current": 3.59,
+        "f3m": 3.5454,
+        "f3m_band": [
+          3.4504,
+          3.6471
+        ],
+        "f3m_engine_bp": -2.4,
+        "f3m_spread_bp": -2.0,
+        "f6m": 3.5108,
+        "f6m_band": [
+          3.4071,
+          3.6245
+        ],
+        "f6m_engine_bp": -5.7,
+        "f6m_spread_bp": -2.2,
+        "f12m": 3.4232,
+        "f12m_band": [
+          3.2941,
+          3.5857
+        ],
+        "f12m_engine_bp": -14.4,
+        "f12m_spread_bp": -2.2,
+        "model_minus_market_bp": -2.2
+      },
+      "3y": {
+        "current": 3.695,
+        "f3m": 3.6049,
+        "f3m_band": [
+          3.5399,
+          3.6808
+        ],
+        "f3m_engine_bp": -3.5,
+        "f3m_spread_bp": -5.5,
+        "f6m": 3.5558,
+        "f6m_band": [
+          3.4848,
+          3.6493
+        ],
+        "f6m_engine_bp": -7.4,
+        "f6m_spread_bp": -6.5,
+        "f12m": 3.4689,
+        "f12m_band": [
+          3.3934,
+          3.5733
+        ],
+        "f12m_engine_bp": -15.9,
+        "f12m_spread_bp": -6.7,
+        "model_minus_market_bp": -6.7
+      },
+      "5y": {
+        "current": 3.8025,
+        "f3m": 3.7497,
+        "f3m_band": [
+          3.6827,
+          3.8166
+        ],
+        "f3m_engine_bp": -2.1,
+        "f3m_spread_bp": -3.1,
+        "f6m": 3.724,
+        "f6m_band": [
+          3.64,
+          3.8125
+        ],
+        "f6m_engine_bp": -4.0,
+        "f6m_spread_bp": -3.8,
+        "f12m": 3.6932,
+        "f12m_band": [
+          3.5905,
+          3.8112
+        ],
+        "f12m_engine_bp": -6.9,
+        "f12m_spread_bp": -4.0,
+        "model_minus_market_bp": -4.0
+      },
+      "10y": {
+        "current": 3.9225,
+        "f3m": 3.9079,
+        "f3m_band": [
+          3.8265,
+          3.9908
+        ],
+        "f3m_engine_bp": -0.0,
+        "f3m_spread_bp": -1.4,
+        "f6m": 3.8997,
+        "f6m_band": [
+          3.7841,
+          4.0077
+        ],
+        "f6m_engine_bp": -0.1,
+        "f6m_spread_bp": -2.2,
+        "f12m": 3.8924,
+        "f12m_band": [
+          3.7199,
+          4.0379
+        ],
+        "f12m_engine_bp": -0.2,
+        "f12m_spread_bp": -2.8,
+        "model_minus_market_bp": -3.1
+      }
+    }
+  },
+  "spread_satellite": {
+    "ou": {
+      "1y": {
+        "mu_bp": 11.2,
+        "mu_full_bp": 12.0,
+        "mu_trim_effect_bp": -0.8,
+        "phi_daily": 0.9907,
+        "phi_quarterly": 0.5539,
+        "half_life_bd": 73.9,
+        "latest_date": "2026-08-04"
+      },
+      "2y": {
+        "mu_bp": 4.2,
+        "mu_full_bp": 4.3,
+        "mu_trim_effect_bp": -0.1,
+        "phi_daily": 0.9644,
+        "phi_quarterly": 0.1016,
+        "half_life_bd": 19.1,
+        "latest_date": "2026-08-04"
+      },
+      "3y": {
+        "mu_bp": -2.0,
+        "mu_full_bp": -2.2,
+        "mu_trim_effect_bp": 0.1,
+        "phi_daily": 0.9737,
+        "phi_quarterly": 0.1868,
+        "half_life_bd": 26.0,
+        "latest_date": "2026-08-04"
+      },
+      "5y": {
+        "mu_bp": -12.9,
+        "mu_full_bp": -13.4,
+        "mu_trim_effect_bp": 0.5,
+        "phi_daily": 0.976,
+        "phi_quarterly": 0.2164,
+        "half_life_bd": 28.5,
+        "latest_date": "2026-08-04"
+      },
+      "10y": {
+        "mu_bp": -24.1,
+        "mu_full_bp": -24.9,
+        "mu_trim_effect_bp": 0.8,
+        "phi_daily": 0.9904,
+        "phi_quarterly": 0.5451,
+        "half_life_bd": 72.0,
+        "latest_date": "2026-08-04"
+      }
+    },
+    "moments": {
+      "1y": {
+        "n": 2606,
+        "mean_bp": 12.0,
+        "sd_bp": 14.1,
+        "ar1_daily": 0.9907,
+        "latest_bp": 1.8
+      },
+      "2y": {
+        "n": 1330,
+        "mean_bp": 4.3,
+        "sd_bp": 7.9,
+        "ar1_daily": 0.9643,
+        "latest_bp": 6.4
+      },
+      "3y": {
+        "n": 2606,
+        "mean_bp": -2.2,
+        "sd_bp": 6.0,
+        "ar1_daily": 0.9735,
+        "latest_bp": 4.7
+      },
+      "5y": {
+        "n": 2606,
+        "mean_bp": -13.4,
+        "sd_bp": 6.4,
+        "ar1_daily": 0.9761,
+        "latest_bp": -8.9
+      },
+      "10y": {
+        "n": 2606,
+        "mean_bp": -24.9,
+        "sd_bp": 10.3,
+        "ar1_daily": 0.9905,
+        "latest_bp": -21.0
+      }
+    },
+    "stress_excursions": {
+      "covid_2020": {
+        "1y": {
+          "pre_bp": 6.7,
+          "extreme_bp": -10.8,
+          "excursion_bp": -17.5
+        },
+        "2y": {
+          "insufficient": true
+        },
+        "3y": {
+          "pre_bp": -3.0,
+          "extreme_bp": -12.9,
+          "excursion_bp": -9.9
+        },
+        "5y": {
+          "pre_bp": -14.4,
+          "extreme_bp": -35.0,
+          "excursion_bp": -20.6
+        },
+        "10y": {
+          "pre_bp": -29.6,
+          "extreme_bp": -55.2,
+          "excursion_bp": -25.6
+        }
+      },
+      "legoland_2022": {
+        "1y": {
+          "pre_bp": 55.2,
+          "extreme_bp": 6.6,
+          "excursion_bp": -48.6
+        },
+        "2y": {
+          "pre_bp": 14.0,
+          "extreme_bp": -10.0,
+          "excursion_bp": -24.1
+        },
+        "3y": {
+          "pre_bp": 2.2,
+          "extreme_bp": -16.4,
+          "excursion_bp": -18.7
+        },
+        "5y": {
+          "pre_bp": -7.8,
+          "extreme_bp": -26.9,
+          "excursion_bp": -19.1
+        },
+        "10y": {
+          "pre_bp": -25.3,
+          "extreme_bp": -37.0,
+          "excursion_bp": -11.6
+        }
+      }
+    }
+  },
+  "ktb_legs": {
+    "1y": "KTB 1y",
+    "2y": "KTB 2y (from 2021-03 only)",
+    "3y": "KTB 3y",
+    "5y": "KTB 5y",
+    "10y": "KTB 10y"
+  },
+  "caveats": [
+    "SPREAD_V1_OU: swap spread = per-tenor OU mean reversion, no structural drivers (supply/hedging flows out of scope in v1); uncertainty band = empirical 10/90 quantiles of h-step spread changes (stress episodes included, non-Gaussian)",
+    "CD_STALENESS: cd_layer estimates ride quotes with ~82% zero-change days; anticipation/jump timing is coarse at the day level",
+    "KERNEL_DOMAIN: the engine's US-side tp kernel is fitted on shocks up to 100bp x 4q (imposed paths); extrapolation beyond unvalidated",
+    "BETA_SYNC_SCALE: KR 10y sync loading 1.05 pinned on the imposed-shock IRF-B anchor; one-off 10y sits ~31% below the pyfrbus family (QPM rule-resumption dynamics, untouchable)",
+    "KTB_2Y_SHORT_SAMPLE: 2y spread history starts 2021-03",
+    "ENGINE_QUARTERLY: policy paths are quarterly; changes placed on the first business day of each quarter (cd_layer convention)",
+    "POLICY_TAIL_DECAY_085: HFL deviations beyond the engine's T=24 decay at the rule smoothing 0.85/quarter (long-tenor averages only)",
+    "V1_NO_TERM_PREMIUM_IN_IRS: the assembler prices IRS as expected-CD average + OU spread only; the engine's tp/sync channel (KTB 10y +43bp peak under HFL) is NOT passed into the IRS leg in v1, so long-tenor HFL forecasts are conservative and the implied IRS-KTB spread tightens mechanically under US shocks"
+  ]
+}

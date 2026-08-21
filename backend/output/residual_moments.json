@@ -1,0 +1,219 @@
+{
+  "module": "residual_moments",
+  "as_of": "2026-08-05",
+  "method_flags": [
+    "RESID_DEV_FORM",
+    "RESID_PF_EXPECTATIONS",
+    "RESID_PROXY_DEMAND",
+    "LOOKAHEAD"
+  ],
+  "sigma_form": "diagonal",
+  "equations": {
+    "export": {
+      "status": "OK",
+      "n": 105,
+      "sample": "2000Q1-2026Q1",
+      "mean": -0.0346,
+      "std": 2.63,
+      "skew": -0.11,
+      "excess_kurtosis": 0.38,
+      "ar1": -0.033,
+      "trend_per_decade": 0.1232
+    },
+    "import_": {
+      "status": "OK",
+      "n": 106,
+      "sample": "2000Q1-2026Q2",
+      "mean": 0.0073,
+      "std": 2.4475,
+      "skew": -1.26,
+      "excess_kurtosis": 5.74,
+      "ar1": -0.16,
+      "trend_per_decade": 0.0045
+    },
+    "phillips": {
+      "status": "OK",
+      "n": 104,
+      "sample": "2000Q3-2026Q2",
+      "mean": 0.105,
+      "std": 0.6385,
+      "skew": 0.73,
+      "excess_kurtosis": 1.35,
+      "ar1": 0.779,
+      "trend_per_decade": -0.1059
+    },
+    "cpi": {
+      "status": "OK",
+      "n": 106,
+      "sample": "2000Q1-2026Q2",
+      "mean": -0.0375,
+      "std": 0.3894,
+      "skew": -0.07,
+      "excess_kurtosis": -0.22,
+      "ar1": -0.27,
+      "trend_per_decade": 0.0591
+    },
+    "import_price": {
+      "status": "OK",
+      "n": 106,
+      "sample": "2000Q1-2026Q2",
+      "mean": -0.0497,
+      "std": 1.9977,
+      "skew": -0.24,
+      "excess_kurtosis": 1.28,
+      "ar1": 0.052,
+      "trend_per_decade": 0.1078
+    },
+    "policy_rule": {
+      "status": "OK",
+      "n": 106,
+      "sample": "2000Q1-2026Q2",
+      "mean": -0.1851,
+      "std": 0.498,
+      "skew": -0.73,
+      "excess_kurtosis": 0.82,
+      "ar1": 0.801,
+      "trend_per_decade": 0.1835
+    },
+    "uip": {
+      "status": "OK",
+      "n": 107,
+      "sample": "2000Q1-2026Q3",
+      "mean": 0.0249,
+      "std": 3.9698,
+      "skew": 1.89,
+      "excess_kurtosis": 11.36,
+      "ar1": 0.211,
+      "trend_per_decade": -0.0136
+    },
+    "corp_spread": {
+      "status": "OK",
+      "n": 106,
+      "sample": "2000Q1-2026Q2",
+      "mean": -0.009,
+      "std": 0.3178,
+      "skew": 4.07,
+      "excess_kurtosis": 27.81,
+      "ar1": 0.388,
+      "trend_per_decade": -0.0717
+    },
+    "loan_hh": {
+      "status": "OK",
+      "n": 103,
+      "sample": "2000Q4-2026Q2",
+      "mean": -0.0092,
+      "std": 0.2644,
+      "skew": -1.48,
+      "excess_kurtosis": 6.12,
+      "ar1": 0.402,
+      "trend_per_decade": 0.0678
+    },
+    "loan_firm": {
+      "status": "OK",
+      "n": 103,
+      "sample": "2000Q4-2026Q2",
+      "mean": -0.0002,
+      "std": 0.2163,
+      "skew": -1.55,
+      "excess_kurtosis": 15.93,
+      "ar1": 0.292,
+      "trend_per_decade": 0.0228
+    },
+    "housing": {
+      "status": "OK",
+      "n": 106,
+      "sample": "2000Q1-2026Q2",
+      "mean": -0.0456,
+      "std": 0.941,
+      "skew": 0.36,
+      "excess_kurtosis": 0.67,
+      "ar1": 0.301,
+      "trend_per_decade": 0.1577
+    },
+    "debt": {
+      "status": "OK",
+      "n": 93,
+      "sample": "2003Q1-2026Q1",
+      "mean": -0.0226,
+      "std": 1.1678,
+      "skew": -0.89,
+      "excess_kurtosis": 3.02,
+      "ar1": 0.275,
+      "trend_per_decade": 0.0436
+    },
+    "consumption": {
+      "status": "OK",
+      "n": 93,
+      "sample": "2003Q1-2026Q1",
+      "mean": -0.0341,
+      "std": 1.038,
+      "skew": -2.47,
+      "excess_kurtosis": 14.81,
+      "ar1": 0.155,
+      "trend_per_decade": 0.171
+    },
+    "investment": {
+      "status": "OK",
+      "n": 106,
+      "sample": "2000Q1-2026Q2",
+      "mean": 0.077,
+      "std": 3.4526,
+      "skew": 0.26,
+      "excess_kurtosis": 1.07,
+      "ar1": 0.009,
+      "trend_per_decade": -0.1077
+    },
+    "us_is": {
+      "status": "OK",
+      "n": 103,
+      "sample": "2000Q1-2025Q3",
+      "mean": -0.0217,
+      "std": 1.0967,
+      "skew": -3.24,
+      "excess_kurtosis": 37.03,
+      "ar1": -0.359,
+      "trend_per_decade": -0.0344
+    },
+    "us_pc": {
+      "status": "OK",
+      "n": 102,
+      "sample": "2000Q1-2025Q2",
+      "mean": -0.0219,
+      "std": 0.7753,
+      "skew": -1.01,
+      "excess_kurtosis": 4.33,
+      "ar1": -0.013,
+      "trend_per_decade": -0.0197
+    },
+    "us_rule": {
+      "status": "OK",
+      "n": 103,
+      "sample": "2000Q1-2025Q3",
+      "mean": -0.0824,
+      "std": 0.8007,
+      "skew": -2.1,
+      "excess_kurtosis": 4.5,
+      "ar1": 0.915,
+      "trend_per_decade": -0.3894
+    }
+  },
+  "sigma_diagonal_std": {
+    "export": 2.63,
+    "import_": 2.4475,
+    "phillips": 0.6385,
+    "cpi": 0.3894,
+    "import_price": 1.9977,
+    "policy_rule": 0.498,
+    "uip": 3.9698,
+    "corp_spread": 0.3178,
+    "loan_hh": 0.2644,
+    "loan_firm": 0.2163,
+    "housing": 0.941,
+    "debt": 1.1678,
+    "consumption": 1.038,
+    "investment": 3.4526,
+    "us_is": 1.0967,
+    "us_pc": 0.7753,
+    "us_rule": 0.8007
+  }
+}

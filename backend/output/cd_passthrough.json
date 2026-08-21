@@ -1,0 +1,131 @@
+{
+  "module": "cd_transmission",
+  "as_of": "2026-08-05",
+  "headline": {
+    "pre_reflection_ratio": 0.113,
+    "jump_ratio": 0.558,
+    "half_life_days": null,
+    "half_life_censored": true,
+    "half_life_detail": {
+      "at_risk": 30,
+      "halved_within_window": 11,
+      "censored_beyond_window": 19,
+      "median_days": null,
+      "censored": true,
+      "note": "> 15bd (right-censored)"
+    },
+    "cum_at_D": 0.672,
+    "cum_at_D_plus_15": 0.728,
+    "exp_tau_days_from_terminal": 78.8
+  },
+  "sample": {
+    "events": 33,
+    "period": "2010-07-09..2025-05-29",
+    "n_clean_pre": 33,
+    "steps_pp": [
+      -0.5,
+      -0.25,
+      0.25,
+      0.5
+    ],
+    "msb_surprise_median_bp": 3.9
+  },
+  "splits": {
+    "hikes": {
+      "n": 17,
+      "n_clean_pre": 17,
+      "pre_reflection_ratio": 0.124,
+      "jump_ratio": 0.532,
+      "half_life": {
+        "at_risk": 15,
+        "halved_within_window": 5,
+        "censored_beyond_window": 10,
+        "median_days": null,
+        "censored": true,
+        "note": "> 15bd (right-censored)"
+      }
+    },
+    "cuts": {
+      "n": 16,
+      "n_clean_pre": 16,
+      "pre_reflection_ratio": 0.103,
+      "jump_ratio": 0.586,
+      "half_life": {
+        "at_risk": 15,
+        "halved_within_window": 6,
+        "censored_beyond_window": 9,
+        "median_days": null,
+        "censored": true,
+        "note": "> 15bd (right-censored)"
+      }
+    },
+    "expected": {
+      "n": 17,
+      "n_clean_pre": 17,
+      "pre_reflection_ratio": 0.144,
+      "jump_ratio": 0.526,
+      "half_life": {
+        "at_risk": 16,
+        "halved_within_window": 6,
+        "censored_beyond_window": 10,
+        "median_days": null,
+        "censored": true,
+        "note": "> 15bd (right-censored)"
+      }
+    },
+    "surprise": {
+      "n": 16,
+      "n_clean_pre": 16,
+      "pre_reflection_ratio": 0.081,
+      "jump_ratio": 0.593,
+      "half_life": {
+        "at_risk": 14,
+        "halved_within_window": 5,
+        "censored_beyond_window": 9,
+        "median_days": null,
+        "censored": true,
+        "note": "> 15bd (right-censored)"
+      }
+    },
+    "pre2020": {
+      "n": 17,
+      "n_clean_pre": 17,
+      "pre_reflection_ratio": 0.092,
+      "jump_ratio": 0.624,
+      "half_life": {
+        "at_risk": 16,
+        "halved_within_window": 6,
+        "censored_beyond_window": 10,
+        "median_days": null,
+        "censored": true,
+        "note": "> 15bd (right-censored)"
+      }
+    },
+    "post2020": {
+      "n": 16,
+      "n_clean_pre": 16,
+      "pre_reflection_ratio": 0.136,
+      "jump_ratio": 0.489,
+      "half_life": {
+        "at_risk": 14,
+        "halved_within_window": 5,
+        "censored_beyond_window": 9,
+        "median_days": null,
+        "censored": true,
+        "note": "> 15bd (right-censored)"
+      }
+    }
+  },
+  "cd_base_spread_mean_pp": 0.2147,
+  "staleness": {
+    "zero_change_share_all": 0.817,
+    "zero_change_share_in_windows": 0.713
+  },
+  "caveats": [
+    "CALENDAR_CHANGES_ONLY: hold meetings not compiled; anticipation baseline uses change events only",
+    "EFFECTIVE_DATE_CONVENTION: event date = base-rate effective date (equals announcement day for scheduled MPC decisions; the 2020-03 emergency cut was announced the prior day)",
+    "OVERLAP_EXCLUSION: metrics drop events whose window contains a neighboring change (per-metric, counts reported)",
+    "HALF_LIFE_RIGHT_CENSORED: most events do not halve their residual gap within D+15 (mean path plateaus ~0.73); medians are reported only when identified under censoring, and the adapter tau comes from the two-point D->D+15 gap decay (extrapolation beyond the window rests on base-CD cointegration, not on within-window data)",
+    "CD_STALENESS: ~82% of CD trading days show zero change — quotes move in steps; day-level dynamics are coarse"
+  ]
+}

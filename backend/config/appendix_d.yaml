@@ -1,0 +1,111 @@
+# config/appendix_d.yaml — BOK WP 2025-3 Appendix D (Tables 1-17)
+# 값 출처: PDF 텍스트 추출 2벌 교차 대조(전 표 일치, 2026-08-05).
+# named = 방정식 구조상 자리 확정 / slots = 표 행 순서 그대로(이름은 Phase 2 확정)
+meta:
+  source: "BOK WP 2025-3 Appendix D, pp.57-64"
+  method: "dual text-extraction cross-check; symbols lost in extraction"
+  date_built: "2026-08-05"
+  verified_by_owner: true
+
+foreign:            # Table 1 (eq. 4-6). 0.02/0.05 전 블록 동일 = 캘리브레이션
+  china: {slots: [0.0200, 0.0500, 0.5943, 0.1673, 0.0049]}
+  japan: {slots: [0.0200, 0.0500, 0.5819, 0.3054, 0.0049]}
+  eu:    {slots: [0.0200, 0.0500, 0.6011, 0.3111, 0.0049]}
+  ea:    {slots: [0.0200, 0.0500, 0.6151, 0.2706, 0.0050]}
+
+consumption:        # Table 2 (eq. 7-8)
+  target:
+    slots: [0.0038, -0.1000, -0.0384, -0.1017]
+    note: "-0.1000 = 부채 계수 추정(장기 음의 영향)"
+  growth:
+    slots: [0.0234, -0.1079, 0.2005, -0.6000, 0.0193, 0.0200]
+
+investment_fi:      # Table 3 (eq. 9-11)
+  target:
+    slots: [-4.6240, 1.2121, 0.0274]
+    note: "1.2121 = 잠재산출 계수(>1: FI가 산출보다 빠른 성장 반영)"
+  growth:
+    slots: [0.1983, 0.0248, 0.6182, -0.1000, -0.0066]
+
+construction:       # Table 4 (eq. 12-14) — Phase 2에서는 외생 경로(아래 참조)
+  target: {slots: [4.8530, 0.4187, 0.0539]}
+  growth: {slots: [0.0267, -0.2605, 0.2851, -0.1000, 0.1671, 0.0629]}
+
+government:         # Table 5 (eq. 15-16) — Phase 2에서는 외생 경로
+  target: {slots: [-0.0974, 0.7913, 0.6582]}
+  growth:
+    slots: [0.0041, 0.1697, -0.0440]
+    note: "확정 (owner PDF 판독): c_G, α_G,0=EC, α_G,1=갭 -0.0440"
+
+export:             # Table 6 (eq. 17-19)
+  target: {slots: [4.1400, 1.6452]}
+  growth: {slots: [0.0085, 0.0619, 0.8192, 0.0033]}
+  demand_weights:
+    slots: [0.1800, 0.0700, 0.2000, 0.1900, 0.0500, 0.3100]
+    note: "합=1.0000. 순서 확정 US·EU·CH·EA·JP·RW (owner PDF 판독 2026-08-05, eq. 18; 이전 후보 순서 US·CH·JP·EU·EA·RW는 오류)"
+
+import_:            # Table 7 (eq. 20-22)
+  target: {slots: [-4.5009, 1.3916]}
+  growth: {slots: [0.0028, 0.1477, 1.0108, -0.0062]}
+  demand_weights:
+    slots: [0.2100, 0.2200, 0.2200, 0.0800, 0.2900]
+    note: "순서 확정 C·FI·건설·G·X (owner PDF 판독 2026-08-05, eq. 21). 합=1.02 — 수입유발계수 타깃 캘리브레이션이라 정상"
+
+core_cpi:           # Table 8 (eq. 23-24)
+  slots: [0.2500, 0.1500, 0.1000, 0.0200, 0.7232, 0.3164]
+  note: "0.0200 = 인플레 목표 π̄ 추정"
+
+cpi:                # Table 9 (eq. 25-26)
+  target: {named: {w_core: 0.9790}}
+  growth: {slots: [0.0011, 0.0586, 0.8040, 0.0597]}
+
+housing:            # Table 10 (eq. 27-28)
+  target: {slots: [0.1693, 0.9539, -4.5095]}
+  growth:
+    slots: [0.0167, 0.0405, 0.5029, -1.4996]
+    note: "확정 (owner PDF 판독): c_hpi, α_hpi,0=EC, α_hpi,1=AR, α_hpi,2=금리 -1.4996"
+
+export_price:       # Table 11 (eq. 29-30)
+  target:
+    slots: [0.1890, 1.0000]
+    note: "1.0000 = 세계수출물가 계수 제약(가격수용자)"
+  growth: {slots: [0.0016, 0.0982, 0.3487, 0.1381]}
+
+import_price:       # Table 12 (eq. 31-32)
+  target: {slots: [-4.6222, 1.0651, 0.4391]}
+  growth: {slots: [0.0013, 0.1813, 0.8794, 0.2883]}
+
+fx:                 # Table 13 (eq. 33-34)
+  slots: [0.8814, 7.0142, 4.0000, 0.0812]
+  note: "확정 (owner PDF 판독): α_EXR,0=UIP 가중, α_EXR,1=ln환율 정상상태(≈1110원),
+    α_EXR,2=리스크프리미엄 스케일, c_UIP=0.0812 (eq 34 상수)"
+
+policy_rule:        # Table 14 (eq. 35) — 자리 확정
+  named: {phi_i: 0.85, phi_pi: 1.5, phi_y: 0.5, pi_star: 0.02}
+  note: "CORRECTION (owner PDF 판독 2026-08-05): 4번째 값은 π*(인플레 목표),
+    r* 아님. r*는 Appendix D 밖 캘리브레이션 → calibration.r_star 참조.
+    수치 변경 없음(둘 다 2%), 라벨만 교정"
+
+calibration:        # Appendix D 밖 캘리브레이션 (본문 각주)
+  r_star:
+    named: {r_star: 0.02}
+    note: "CALIBRATED_LW: Laubach–Williams mean, footnote 24"
+
+corp_bond:          # Table 15 (eq. 38-39)
+  slots: [0.5626, 0.0003, -0.0487]
+  note: "확정 (owner PDF 판독): ρ_CB=AR, η̄_CB=평균 스프레드, α_CB=갭 -0.0487"
+
+loan_rates:         # Table 16 (eq. 40-43)
+  household:
+    slots: [0.36, 0.6066, 0.0038, 0.2114]
+  firm:
+    slots: [0.64, 0.7025, 0.0013, 0.1607]
+  shared:
+    named: {eta_cb: 0.0003}
+  note: "CORRECTION (owner PDF 판독 2026-08-05): 그룹 귀속이 뒤바뀌어 있었음 —
+    ν_HH=0.36 그룹이 가계(가계=장기금리 비중↑), ν_Firm=0.64 그룹이 기업.
+    η̄_CB 0.0003은 eq 42-43의 회사채 스프레드 참조(공유). 값 집합 동일, 키만 재구성"
+
+debt_gdp:           # Table 17 (eq. 44)
+  slots: [0.0208, 0.0118, 0.1204, -0.8556]
+  note: "확정 (owner PDF 판독): c_debt, α_debt,1=갭, α_debt,2=주택가격 YoY, α_debt,3=가계금리"

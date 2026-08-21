@@ -1,0 +1,13 @@
+{
+  "module": "expectations_engine",
+  "as_of": "2026-08-05",
+  "spectral_radius": 0.8341,
+  "var_lags": 2,
+  "sample": "2000Q1-2026Q2",
+  "endpoints": {
+    "inflation_pct": 2.0,
+    "output_gap_pct": 0.0,
+    "rate_pct": 2.7293
+  },
+  "tests_passed": 6
+}

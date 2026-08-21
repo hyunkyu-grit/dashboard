@@ -1,0 +1,91 @@
+{
+  "module": "tpus_calibration",
+  "as_of": "2026-08-05",
+  "target_peak_pp_per_25bp": 0.106,
+  "source": "SOURCE_PYFRBUS_PASSTHROUGH (hfl_summary.json 42.5bp/100bp)",
+  "pyfrbus_half_life_q": 4.31,
+  "half_life_note": "pyfrbus half-life measured on the 4q-sustained HFL rg10 path (only decay info available) — conflates shock persistence with the 10y process; model half-life capped ~1.9q by the QPM rule's endogenous easing",
+  "grid": [
+    {
+      "rho": 0.5,
+      "theta": 0.642,
+      "peak_q": 1,
+      "peak_pp": 0.106,
+      "half_life_q": 1.46
+    },
+    {
+      "rho": 0.55,
+      "theta": 0.642,
+      "peak_q": 1,
+      "peak_pp": 0.106,
+      "half_life_q": 1.57
+    },
+    {
+      "rho": 0.6,
+      "theta": 0.642,
+      "peak_q": 1,
+      "peak_pp": 0.106,
+      "half_life_q": 1.7
+    },
+    {
+      "rho": 0.65,
+      "theta": 0.642,
+      "peak_q": 1,
+      "peak_pp": 0.106,
+      "half_life_q": 1.85
+    },
+    {
+      "rho": 0.7,
+      "theta": 0.6262,
+      "peak_q": 2,
+      "peak_pp": 0.106,
+      "half_life_q": 1.0
+    },
+    {
+      "rho": 0.75,
+      "theta": 0.5981,
+      "peak_q": 2,
+      "peak_pp": 0.106,
+      "half_life_q": 1.1
+    },
+    {
+      "rho": 0.8,
+      "theta": 0.5724,
+      "peak_q": 2,
+      "peak_pp": 0.106,
+      "half_life_q": 1.21
+    },
+    {
+      "rho": 0.85,
+      "theta": 0.5489,
+      "peak_q": 2,
+      "peak_pp": 0.106,
+      "half_life_q": 1.34
+    },
+    {
+      "rho": 0.9,
+      "theta": 0.5272,
+      "peak_q": 2,
+      "peak_pp": 0.106,
+      "half_life_q": 1.51
+    },
+    {
+      "rho": 0.95,
+      "theta": 0.5072,
+      "peak_q": 2,
+      "peak_pp": 0.106,
+      "half_life_q": 1.72
+    }
+  ],
+  "chosen": {
+    "rho": 0.65,
+    "theta": 0.642,
+    "peak_q": 1,
+    "peak_pp": 0.106,
+    "half_life_q": 1.85
+  },
+  "pinned_in_code": {
+    "TP_RHO": 0.65,
+    "TP_THETA": 0.642
+  }
+}

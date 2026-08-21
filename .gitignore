@@ -62,3 +62,13 @@ __pycache__/
 
 # 개발 서버 로그 (재기동 시 만들어짐)
 .dev.log
+
+# ── 이관된 엔진의 데이터 (backend/bigfoot, 2026-08-21) ──────────────────────
+# 공개 API 캐시(`backend/data/raw/*.csv`)는 **추적한다** — ECOS·FRED 응답이라
+# 재현에 필요하고 위생 가드의 면제 대상이다. 아래 셋은 회사·터미널 자료라
+# 절대 안 들어간다. BIGFOOT 의 .gitignore 에서 그대로 옮겨 온 규칙이다.
+backend/data/krwswapdata/raw/
+backend/data/krwswapdata/clean.parquet
+backend/data/krd_ladder.json
+# 엔진이 굽는 HTML 리포트 — 산출물이지 소스가 아니다. JSON 계약만 추적한다.
+backend/output/*.html
