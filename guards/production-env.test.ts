@@ -244,6 +244,12 @@ describe('API base 의 모양', () => {
   });
 });
 
+/** 청크 목록에서 **앱이 만든 것**만 — polyfills 는 빌드가 늘 두는 것이라
+ * 그것 하나만 남은 상태는 "검사할 게 없다"이지 "깨끗하다"가 아니다. */
+function appChunksOf(files: string[]): string[] {
+  return files.filter((f) => !path.basename(f).startsWith('polyfills'));
+}
+
 describe('빌드 산출물', () => {
   const chunks = path.join(ROOT, '.next', 'static', 'chunks');
   const built = existsSync(chunks);
@@ -262,5 +268,35 @@ describe('빌드 산출물', () => {
      * 배포 전에는 `pnpm build` **뒤에** `pnpm vitest run` 을 한 번 더 돌린다.
      * 청크는 빌드가 만들고, vitest 는 만들지 않는다. */
     expect(typeof built).toBe('boolean');
+  });
+
+  /* ── 초록이 거짓말한 실측 [2026-08-21] ──────────────────────────────────
+     위 `skipIf(!built)` 는 **디렉터리 유무**만 본다. 그런데 그날 `.next/static/
+     chunks` 는 있는데 안에 `polyfills.js` 하나뿐이었다(동시 세션이 빌드 중간에
+     비운 상태). 그래서 검사는 **건너뛰지도 않고 돌아서, 아무것도 못 보고
+     통과했다** — 직전 실행에서 layout.js·page.js 로 3건 빨강이던 것이 초록이
+     됐고, 그 초록은 "고쳐졌다"로 읽힐 뻔했다.
+
+     "검사할 게 없었다"와 "검사했더니 깨끗하다"는 다른 사실이다. 앱 청크가
+     없으면 그렇다고 말한다 — 조용한 통과를 남기지 않는다. */
+  it('앱 청크가 없으면 위 초록은 "깨끗함"이 아니다 — 조용히 통과하지 않는다', () => {
+    if (!built) return; // .next 자체가 없는 경우는 위 테스트가 기록한다
+    const js = walk(chunks, '.js');
+    expect(
+      appChunksOf(js).length > 0,
+      `.next/static/chunks 에 앱 청크가 없어요(파일 ${js.length}개). 위 검사는 ` +
+        '아무것도 못 봤으니 초록을 "번들이 깨끗하다"로 읽으면 안 돼요 — ' +
+        '`pnpm build` 뒤에 다시 도세요.',
+    ).toBe(true);
+  });
+
+  /* 위 판정을 **음성 쪽으로도** 확인한다. 진짜 `.next` 를 비워서 재보는 것은
+     동시 세션의 빌드를 깨뜨리므로(인계서가 두 번 깨졌다고 적은 그 레이스),
+     판정기만 떼어 내 가짜 목록에 건다. */
+  it('판정기는 polyfills 만 있는 목록을 "앱 청크 없음"으로 읽는다', () => {
+    expect(appChunksOf(['/x/polyfills.js'])).toEqual([]);
+    expect(appChunksOf(['/x/polyfills-abc123.js'])).toEqual([]);
+    expect(appChunksOf([])).toEqual([]);
+    expect(appChunksOf(['/x/polyfills.js', '/x/app/page.js'])).toEqual(['/x/app/page.js']);
   });
 });
