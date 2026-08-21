@@ -38,6 +38,13 @@ import { Text } from '@coinbase/cds-web/typography';
 import { ErrorBoundary } from '@/ui/ErrorBoundary';
 
 import { SURFACES, SURFACE_BLURB, SURFACE_LABEL, type Surface } from './anchors';
+/* 세션 3 이 자기 두 면을 여기에 꽂는다. 셸·라우팅·탭은 안 건드린다 —
+   바뀐 것은 아래 분기의 두 줄뿐이다. */
+import { MethodSurface } from './method/MethodSurface';
+import { ModelSurface } from './model/ModelSurface';
+/* 세션 2 가 자기 슬롯을 꽂는 **한 줄**. 셸·라우팅·레이아웃은 안 건드렸다 —
+   세션 3 의 두 줄(model·method)은 아래 다른 자리라 병합이 안 부딪힌다. */
+import { StrategySurface } from './strategy/StrategySurface';
 
 /** `SegmentedTabs` 는 `activeTab` 을 **객체 신원**으로 비교한다 — 렌더마다 새
  *  배열을 만들면 활성 표시가 흔들린다(`ScenarioPage` 가 같은 자리에 같은 주석을
@@ -50,29 +57,9 @@ function readView(): Surface {
   return (SURFACES as readonly string[]).includes(v ?? '') ? (v as Surface) : 'strategy';
 }
 
-/** 세션 2·3 이 자기 슬롯을 채우기 전까지 서 있는 자리.
- *
- * 빈 화면이 아니라 **누가 채울 자리인지**를 말한다. 아무것도 없는 면은 «고장»
- * 으로 읽히고, 그러면 다음 사람이 원인을 찾느라 시간을 쓴다. */
-function Slot({ surface, owner }: { surface: Surface; owner: string }) {
-  return (
-    <VStack gap={1} paddingY={4} maxWidth={620}>
-      <Text as="h2" font="title3">
-        {SURFACE_LABEL[surface]}
-      </Text>
-      {/* 설명은 **머리에 한 번만** 선다. 처음엔 여기에도 뒀는데 탭 옆의 것과
-          나란히 두 번 찍혔다(실측 2026-08-21). 슬롯이 할 말은 «누가 채우나»
-          하나다. */}
-      <Text as="p" font="body" color="fgMuted">
-        아직 비어 있어요 — {owner}이 채워요.
-      </Text>
-      <Text as="p" font="legal" color="fgMuted">
-        껍데기·계약·앵커는 서 있고 엔진 산출물도 준비돼 있어요. 읽을 것은
-        <b> docs/MODEL_LANE_CONTEXT.md</b> 예요.
-      </Text>
-    </VStack>
-  );
-}
+/* 세션 1 이 세워 둔 `Slot` 자리표는 **여기서 내려갔다** [세션 3, 2026-08-21].
+ * 세 면이 다 채워졌으므로 「아직 비어 있어요」 라고 말하는 컴포넌트가 남아 있으면
+ * 그것이 곧 죽은 쌍둥이다 — 이 레인이 시나리오를 내리면서 지킨 규칙과 같다. */
 
 export function ModelSpace() {
   const [view, setView] = useState<Surface>('strategy');
@@ -117,11 +104,11 @@ export function ModelSpace() {
         fallback={`${SURFACE_LABEL[view]} 면을 그리지 못했어요.`}
       >
         {view === 'strategy' ? (
-          <Slot surface="strategy" owner="다음 세션" />
+          <StrategySurface />
         ) : view === 'model' ? (
-          <Slot surface="model" owner="다음 세션" />
+          <ModelSurface />
         ) : (
-          <Slot surface="method" owner="다음 세션" />
+          <MethodSurface />
         )}
       </ErrorBoundary>
     </VStack>

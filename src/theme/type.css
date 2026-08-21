@@ -2495,3 +2495,249 @@ thead th {
   border-style: dashed;
   background: transparent;
 }
+
+/* ── Lab 「모형」 · 전략 면 [소유: 세션 2, 2026-08-21] ───────────────────────
+ * 이 파일은 분할 금지라 각자 끝에 자기 블록을 붙인다. 여기부터 아래는 전략 면
+ * 것이고, 다른 세션은 이 블록을 안 건드린다.
+ *
+ * 규칙 셋만 진다 — 설정 열의 폭, 노트가 줄어드는 자리, 내보내기 평문 상자.
+ * 그 밖의 치수는 CDS 와 기존 토큰이 이미 진다. */
+.sr-strat-controls {
+  /* 점 여덟 개가 세 줄로 접히는 폭. 260 은 설정 열(ControlCard)이 이미 쓰는
+     폭이고, 여기서 새 폭을 만들면 Lab 안에 설정 열이 두 종류가 된다. */
+  width: 260px;
+  flex-shrink: 0;
+  min-width: 0;
+  /* 한국어는 낱말 중간에서 접히면 안 된다 — 실측 2026-08-21: 「인하하고」가
+     「인 / 하하고」로 갈려 있었다. */
+  word-break: keep-all;
+}
+
+.sr-strat-note {
+  /* 표가 좁아질 때 부모를 밀지 않게. flex 자식의 기본 min-width 는 auto 라
+     내용이 컨테이너를 넘겨 가로 스크롤을 만든다(이 리포가 이미 세 번 겪었다). */
+  flex-basis: 420px;
+  word-break: keep-all;
+}
+
+/* 노트는 **카드 안에서** 구른다. 페이지가 스크롤하지 않는 100vh 기둥이라
+   (`PRODUCT.md`), 카드가 자기 스크롤을 안 지면 리스크 세 줄과 가정 띠가 아예
+   닿지 않는다 — 실측 2026-08-21 에 그 상태로 한 번 떴다.
+   `min-height: 0` 이 없으면 flex 자식이 내용 높이로 부풀어 스크롤이 안 생긴다. */
+.sr-strat-scroll {
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+/* 일곱 열짜리 표는 자기 상자 안에서만 가로로 구른다. */
+.sr-strat-table {
+  overflow-x: auto;
+  min-width: 0;
+}
+
+/* 붙여 넣을 평문. 줄바꿈을 그대로 보이되 가로로 넘치지 않게 감싼다 —
+   `pre` 의 기본값은 안 감싸고, 안 감싸면 노트 한 줄이 화면을 밀어낸다. */
+.sr-strat-export {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--sr-control);
+  white-space: pre-wrap;
+  word-break: keep-all;
+  overflow-x: auto;
+}
+
+/* ── Lab 「모형」 — 모형 면 · 방법 면 [세션 3, 2026-08-21] ─────────────────────
+ *
+ * 이 파일은 분할 금지라 각자 끝에 자기 블록을 붙인다. 여기부터 아래는 세션 3
+ * 것이고, 다른 세션은 이 블록을 안 건드린다.
+ *
+ * 진 규칙은 넷 — 배선 그래프의 잉크, 원장의 행 구분, 판정 알약, 그리고 표가
+ * 가로로만 흐르는 것. 나머지 치수는 CDS 와 기존 토큰이 이미 진다. */
+
+/* 배선 그래프. **가로만 흐른다** — 세로로 흐르게 두면 카드가 페이지를 밀고,
+   이 앱은 페이지가 안 흐른다는 전제 위에 서 있다. */
+.sr-wire-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: 10px;
+  background: var(--sr-control);
+}
+
+.sr-wire-svg {
+  display: block;
+  /* **줄어들면 안 된다.** `.sr-wire-scroll` 은 CDS `Box` 라 런타임에
+     `display:flex` 가 붙는데, 그러면 flex 아이템의 기본값이 svg 를 컨테이너 폭에
+     맞춰 눌러 버린다(실측 2026-08-21: width 2302 인데 scrollWidth 가 1872 였다 —
+     즉 오른쪽 절반이 통째로 안 보였고 가로 스크롤도 안 생겼다). */
+  flex-shrink: 0;
+}
+
+/* ── 면은 **자기 스크롤러를 스스로 진다** ──────────────────────────────────
+ *
+ * 이 앱은 페이지가 안 흐른다(`.sr-page` 가 `height:100vh; overflow:hidden`).
+ * 그래서 긴 면이 자기 스크롤러를 안 가지면 아래가 **그냥 잘린다** — 실측
+ * 2026-08-21: 모형 면 높이 5,510px 이 911 창에서 720px 만 보였고 나머지는
+ * 스크롤로도 못 갔다. 커브 표면 레인이 855 에서 겪은 그 클립과 같은 병이다. */
+.sr-model-surface,
+.sr-method-surface {
+  min-height: 0;
+  flex-grow: 1;
+  overflow-y: auto;
+  /* `overflow-x` 는 **손대지 않는다.** `hidden` 으로 잘라 두면 이 리포의 규칙을
+     어긴다(`guards/p2-parity.test.ts` — «잘린 채로 스크롤도 안 되면 그 뒤의
+     내용은 존재하지 않는 것이 된다»). 가로로 넘치는 것은 안쪽이 각자 진다
+     (`.sr-wire-scroll` · 표의 스크롤 상자). */
+}
+
+.sr-wire-edge {
+  fill: none;
+  stroke-width: 1.4;
+  stroke-opacity: 0.75;
+}
+
+/* 장기는 실선, 단기는 점선. 논문의 설계가 여기 실린다 — 가계부채→소비가 같은
+   쌍에 두 화살표로 서고 부호가 반대인 것이 한눈에 보여야 한다. */
+.sr-wire-edge[data-horizon='SR'] {
+  stroke-dasharray: 4 3;
+}
+
+.sr-wire-hot {
+  stroke-opacity: 1;
+  stroke-width: 2.2;
+}
+
+.sr-wire-dim {
+  opacity: 0.12;
+}
+
+/* 논문이 인쇄했는데 배선이 없는 자리. 잉크로 그리되 **없다는 것이 보이게**
+   흐리고 성기게. */
+.sr-wire-ghost {
+  fill: none;
+  stroke: var(--color-fgMuted, currentColor);
+  stroke-width: 1.2;
+  stroke-dasharray: 1 5;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
+
+.sr-wire-node rect {
+  fill: var(--sr-card);
+  stroke: var(--color-lineHeavy);
+  stroke-width: 1;
+}
+
+.sr-wire-node text {
+  fill: var(--color-fg);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.sr-wire-node {
+  cursor: pointer;
+}
+
+.sr-wire-node:focus-visible rect,
+.sr-wire-picked rect {
+  stroke: var(--color-fg);
+  stroke-width: 2;
+}
+
+/* 블록은 **칠하지 않는다.** 색은 이 그림에서 부호 하나만 뜻한다 — 노드까지
+   칠하면 같은 팔레트가 두 가지를 말하게 되고, 그러면 둘 다 안 읽힌다.
+   블록은 노드를 눌렀을 때 상세와 스크린리더 라벨이 말한다. */
+
+.sr-wire-detail {
+  border-radius: 10px;
+  background: var(--sr-control);
+}
+
+.sr-wire-key {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  border-top: 2px solid var(--color-fgMuted, currentColor);
+  flex-shrink: 0;
+}
+
+.sr-wire-key[data-kind='sr'] {
+  border-top-style: dashed;
+}
+
+.sr-wire-key[data-kind='ghost'] {
+  border-top-style: dotted;
+  opacity: 0.6;
+}
+
+.sr-wire-key[data-kind='plus'] {
+  border-top-color: var(--color-fg);
+}
+
+.sr-wire-key[data-kind='minus'] {
+  border-top-color: var(--sr-down);
+}
+
+/* 등록부·원장의 행 구분. 카드 안이라 테두리가 아니라 헤어라인 하나다. */
+.sr-eqreg > * + *,
+.sr-ledger > * + * {
+  border-top: 2px solid var(--color-line);
+}
+
+.sr-eqreg-diff {
+  padding-left: 10px;
+  border-left: 2px solid var(--sr-down);
+}
+
+.sr-ledger-tag {
+  display: inline-block;
+  min-width: 92px;
+  color: var(--color-fg);
+}
+
+.sr-ledger-risk {
+  padding-left: 10px;
+  border-left: 2px solid var(--sr-down);
+}
+
+.sr-freeparams {
+  border-radius: 10px;
+  background: var(--sr-control);
+}
+
+/* 판정 알약. 검정/회색 두 벌 규칙 그대로 — 통과는 잉크, 나머지는 회색이고,
+   벗어남만 방향색을 쓴다. */
+.sr-verdict {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--sr-control);
+  white-space: nowrap;
+}
+
+.sr-verdict[data-v='miss'],
+.sr-verdict[data-v='shape_miss'] {
+  color: var(--sr-down);
+}
+
+.sr-verdict[data-v='pinned'] {
+  border: 1px solid var(--sr-down);
+}
+
+.sr-coef-scroll {
+  max-height: 420px;
+}
+
+/* 켜고 끄는 알약. 이 리포의 CDS 판에는 `selected` prop 이 없어서(실측
+   2026-08-21) 상태를 `aria-pressed` 로 말하고 채움을 여기서 준다. 라벨을
+   바꿔서 상태를 말하는 기존 방식(`IssuancePage` 의 «끔»)은 라벨이 길어지고
+   스크린리더에도 눌림 상태가 안 간다. */
+.sr-chip-toggle[aria-pressed='true'] {
+  background: var(--color-fg);
+  color: var(--color-bg);
+}
+
+.sr-chip-toggle[aria-pressed='true'] * {
+  color: inherit;
+}

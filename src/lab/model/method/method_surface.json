@@ -1,0 +1,700 @@
+{
+ "module": "method_surface",
+ "ledger": [
+  {
+   "key": "deviation-space",
+   "title": "이 제품은 커브 델타예요 — 레벨 전망이 아니에요",
+   "paper_says": "논문은 용도를 둘로 적어요 — 전망(Figure 15~17·Table 1)과 반사실 분석(Figure 18~20). r* 는 상수로 두고요(각주 24).",
+   "we_do": "**둘째만** 해요. 모형을 편차 공간에서 풀고, 베이스라인을 0 으로 둬요. 그래서 화면이 파는 것은 «정책 경로에 대한 커브 델타» 지 «절대 레벨 전망» 이 아니에요.",
+   "why": "실측했어요. r* 를 1.5%·2.5% 로 바꿔 기저를 다시 풀었더니 15개 기저 전부의 10년 IRS 반응 최대 절대차가 **0.000000bp** 였어요. eq (35) 에서 r* 와 −φ_π·π* 는 가법 상수고, 베이스라인 0 인 편차 공간에서 상수는 소거돼요. 모형이 선형이라 상태의존성도 없어요(선형 게이트 1e-4). 같은 이유로 Layer 2 의 나머지도 델타를 안 움직여요 — 미 정책금리·유가·해외성장은 기저가 **단위 충격**으로 담아서, 오늘 수준을 새로 받아와도 기저의 숫자는 하나도 안 바뀌어요.",
+   "could_be_wrong": "레벨 전망을 원하는 사람에게 이 화면은 답을 안 줘요. 그리고 Part B 의 외생 대체분(가처분소득·Gartner·세계 수출물가·건축착공·중국)이 전부 **레벨에만** 물리는데, 레벨 제품을 세우는 날 그게 한꺼번에 청구돼요.",
+   "paper": "각주 24 · Figure 18~20",
+   "code": "backend/rebake/layer2.py::AssumptionEffect · backend/bigfoot/solve/system.py 모듈 주석",
+   "node": "i_kr",
+   "equation": "35"
+  },
+  {
+   "key": "policy-conditioning",
+   "title": "정책금리에 조건을 거는 것",
+   "paper_says": "부록 B 는 내생변수를 고정하고 잔차를 푸는 방법을 적어요. 각주 31 은 조건 변수마다 **조정할 충격을 수동으로 고른다**고 해요 — 수입에 조건을 걸면 수입 충격만 조정하는 식이에요.",
+   "we_do": "정책금리에 조건을 걸고, eq (35) 준칙 잔차 `u_{i,t}` 를 움직여요.",
+   "why": "오너가 타이핑하는 유일한 입력이 정책 경로라서요. 부록 B 의 기계를 그대로 쓰되, 조건 변수만 논문이 안 든 것으로 골랐어요.",
+   "could_be_wrong": "**논문은 정책금리 예를 들지 않아요.** 준칙 잔차를 움직인다는 것은 «한은이 준칙에서 벗어난다» 는 뜻인데, 그 해석이 논문의 의도인지는 알 수 없어요.",
+   "paper": "부록 B · 각주 31",
+   "code": "backend/config/conditioning_map.yaml::kr_policy · backend/bigfoot/conditional/invert.py",
+   "node": "i_kr",
+   "equation": "35"
+  },
+  {
+   "key": "beta-sync",
+   "title": "β_sync 1.05 — 앵커에 **맞춘** 값이에요",
+   "paper_says": "각주 25 는 동조화가 **같은 만기의 미–한 금리 격차**를 잇는다고 하고, 계수는 안 실어요.",
+   "we_do": "자유모수로 두고 격자탐색으로 1.05 에 핀했어요.",
+   "why": "핀의 표적이 논문 본문의 «미 정책금리 +25bp → 한국 장기금리 +0.06%p» 예요. 격자 최소가 1.05 에서 +0.0592 를 내요.",
+   "could_be_wrong": "**그래서 그 앵커는 시험이 아니라 핀이에요.** 스코어카드에서 이 칸을 «맞았다» 로 읽으면 안 돼요. 그리고 우리 배선은 격차가 아니라 미국 10년 편차에 비례해요(WIRING_SYNC_US10Y) — 논문의 문장과 달라요.",
+   "paper": "각주 25 · pp.39-40",
+   "code": "backend/bigfoot/solve/phase3.py::BETA_SYNC_ADOPTED · backend/bigfoot/solve/irf.py::pin_beta_sync",
+   "node": "kr10y",
+   "equation": "36"
+  },
+  {
+   "key": "rate-units",
+   "title": "금리 단위 규약 — 논문이 안 박았어요",
+   "paper_says": "금리를 %p 로 넣는지 소수로 넣는지 어디에도 안 적혀 있어요.",
+   "we_do": "흐름식(소비 증가율·부채 축적)에는 분기 환산 r/4 로, 수준·목표식(주택)에는 그대로 넣어요. 배율은 **안 지어냈어요**.",
+   "why": "eq (27)(28) 을 %p 로 읽으면 주택 장기탄력성이 %p 당 **−41.5** 가 되는데 믿기 어려워요. 그렇다고 소수로 읽으면 다른 식이 깨져요.",
+   "could_be_wrong": "**남은 스코어카드 실패 넷이 전부 이 사슬**이에요 — 금리→주택→부채→소비 진폭. 밴드를 맞추려고 배율을 지어내면 애초에 고치러 온 잘못을 다시 하는 거예요.",
+   "paper": "eq (27)(28), 인쇄 p.27",
+   "code": "backend/bigfoot/solve/system.py::WIRING_QRATE_FLOWS",
+   "node": "hpi",
+   "equation": "27"
+  },
+  {
+   "key": "no-term-premium-irs",
+   "title": "IRS 다리에 기간프리미엄이 안 와요",
+   "paper_says": "eq (36)(37) 은 기간구조를 기대가설 + 기간프리미엄으로 써요.",
+   "we_do": "국고 10년에는 붙이고, **IRS 는 기대 CD 평균 + OU 스프레드로만** 값을 매겨요. 국고 3년은 기대가설 12분기 평균만이에요.",
+   "why": "v1 조립기의 경계예요. 스왑 스프레드 위성이 시나리오 차분에서 상쇄된다는 가정 위에 서 있어요.",
+   "could_be_wrong": "미국 장기금리가 움직이는 시나리오에서 **IRS 반응이 체계적으로 작게 나와요.** 국고와 IRS 를 나란히 보면 그 격차가 보여요.",
+   "paper": "eq (36)(37), 인쇄 p.31",
+   "code": "backend/bigfoot/irs_curve/assembler.py::V1_NO_TERM_PREMIUM_IN_IRS · KR3Y_EH_ONLY",
+   "node": "kr10y",
+   "equation": "37"
+  },
+  {
+   "key": "ou-spread",
+   "title": "비구조 테너는 OU 스프레드로 채워요",
+   "paper_says": "논문에는 스왑 커브가 없어요. 국고 3년·10년까지예요.",
+   "we_do": "테너별 스왑 스프레드를 일별 OU(평균회귀)로 세우고, 엔진의 기대 CD 평균 위에 얹어요.",
+   "why": "데스크가 보는 것은 IRS 커브라서요. 논문이 안 준 층이에요.",
+   "could_be_wrong": "**논문에 없는 층이에요.** 스프레드가 평균회귀한다는 것은 우리 가정이고, 국면이 바뀌면 틀려요. 시나리오 차분에서 상쇄된다고 봤지만 검증 안 했어요.",
+   "paper": "해당 없음 — 논문 밖",
+   "code": "backend/bigfoot/irs_curve/satellite.py::SPREAD_V1_OU",
+   "node": "kr10y",
+   "equation": "37"
+  },
+  {
+   "key": "pac-asymmetry",
+   "title": "PAC 기대항이 소비에만 있어요",
+   "paper_says": "eq (11)(14)(19)(22)(30)(32) 이 전부 기대 목표변화의 할인합 `E_t[Σ d_k Δ y*_{t+k}]` 를 인쇄해요.",
+   "we_do": "**소비(eq 8)에만** 배선했어요. 나머지는 평범한 오차수정으로 돌아요.",
+   "why": "부록 A.11~A.16 의 정확한 d-가중을 소비에 대해 먼저 풀었고, 다른 식은 각자의 목표 과정을 위성 VAR 에 태워야 하는데 안 했어요.",
+   "could_be_wrong": "기대가 빠진 식은 **앞을 안 봐요.** 정책이 미리 알려진 경로일 때 투자·무역·물가가 늦게 반응해요. 배선 그래프에서 「PAC 기대항」 통로를 켜 보면 소비 말고는 화살표가 하나도 없어요.",
+   "paper": "eq (3), 인쇄 p.10",
+   "code": "backend/bigfoot/solve/phase3.py::PLAIN_ECM_NON_CONSUMPTION",
+   "node": "c",
+   "equation": "3"
+  },
+  {
+   "key": "fi-usercost",
+   "title": "설비투자에 금리가 안 들어가요 — eq (9) 의 `− UC_I` 미배선",
+   "paper_says": "eq (9) 는 설비투자 목표에 자본 사용자비용을 **계수 −1 로** 넣고, eq (10) 이 그 사용자비용을 기업대출금리·회사채금리·물가·감가상각으로 정의해요.",
+   "we_do": "목표에 상수·잠재산출·코로나더미만 넣고, 솔버는 목표 편차를 **문자 그대로 0** 으로 둬요.",
+   "why": "이관 시점에 그렇게 배선돼 있었어요. 2026-08-21 배선 대조에서 찾았어요.",
+   "could_be_wrong": "**정책금리가 설비투자에 닿는 통로가 산출갭 하나뿐**이에요. 건설투자는 같은 사용자비용이 제대로 배선돼 있어서 두 블록이 비대칭이고, 논문의 미국 +25bp 패널에 있는 설비투자 −0.02% 를 우리 방식으로는 재현할 근거가 약해요.",
+   "paper": "eq (9)(10), 인쇄 p.18",
+   "code": "backend/bigfoot/equations/korea.py::investment_fi_target · backend/bigfoot/solve/system.py (`0.0 - lag(\"i_fi\", t)`)",
+   "node": "i_fi",
+   "equation": "9"
+  },
+  {
+   "key": "demand-outputgap",
+   "title": "수출수요를 수입갭 아닌 산출갭으로 세웠어요",
+   "paper_says": "eq (4) 가 블록별 수입갭을 정의하고, eq (18) 의 세계 수출수요 지수가 그 수입갭들을 ζ^X 로 가중해요.",
+   "we_do": "수입갭 대신 **산출갭**을 ζ^X 가중해서 세계 수출수요 지수를 만들어요. eq (18) 의 자리에 eq (4) 의 산물이 아니라 각 블록의 산출갭이 그대로 들어가요.",
+   "why": "Table 1 의 c 와 τ 를 읽은 대로 쓰면 무역탄력성이 믿기 어려울 만큼 작아져요. 그 배치가 확정이 안 돼서(논문 미공표) 우회했어요.",
+   "could_be_wrong": "2차 스필오버(미국 → 제3국 수입 → 한국 수출)가 **한 겹 얕아져요.** 논문 Figure 2 가 그리는 구조의 바깥쪽 고리예요.",
+   "paper": "eq (4)(18) · Table 1",
+   "code": "backend/bigfoot/solve/system.py::WIRING_DEMAND_OUTPUTGAP",
+   "node": "x",
+   "equation": "18"
+  },
+  {
+   "key": "oil-sign",
+   "title": "유가 부호를 뒤집었어요",
+   "paper_says": "eq (5) 는 유가가 해외 산출갭에 들어간다고 하고, 부록 D 의 계수는 **+0.0049** 예요.",
+   "we_do": "`oil_sign = −1` 로 배선해서, 유가 상승이 해외 갭을 **내려요**.",
+   "why": "인쇄된 부호 그대로면 유가 상승이 해외 수요를 올리는데, 그건 논문 자신의 IRF C 밴드와 어긋나요. 논문의 유가 «갭» 부호 규약이 안 적혀 있어요.",
+   "could_be_wrong": "**밴드에 맞춰 고른 부호예요**(디버그 로그 W1). 유가 패널 셋이 이 선택 위에 서 있어요.",
+   "paper": "eq (5) · 부록 D",
+   "code": "backend/bigfoot/solve/system.py::DEFAULT_OPTIONS['oil_sign'] · output/phase3_debug_log.md W1",
+   "node": "oil",
+   "equation": "5"
+  },
+  {
+   "key": "shares-data",
+   "title": "GDP 갭을 실측 지출비중으로 조립해요",
+   "paper_says": "지출 항목이 GDP 로 합쳐지는 항등식.",
+   "we_do": "ECOS 국민계정에서 잰 비중(z_C·z_I·z_IH·z_G·z_X)으로 가중해요. 리베이크가 갱신하는 두 가지 중 하나예요.",
+   "why": "논문은 이 항등식의 가중치를 안 실어요. 그래서 ECOS 국민계정에서 직접 재요 — 리베이크가 실제로 갱신하는 두 가지 중 하나가 이 비중이에요.",
+   "could_be_wrong": "비중이 분기마다 조금씩 움직여서, 굽는 날에 따라 갭 조립이 미세하게 달라져요.",
+   "paper": "항등식 — 인쇄 번호 없음",
+   "code": "backend/bigfoot/solve/system.py::WIRING_SHARES_DATA · backend/bigfoot/data/ecos.py::gdp_shares",
+   "node": "y_gap",
+   "equation": "항등식"
+  },
+  {
+   "key": "qpm-rule",
+   "title": "준칙 지속성은 IMF QPM 계열이에요",
+   "paper_says": "eq (35) 준칙. 지속성 계수 φ_i 의 출처를 안 밝혀요.",
+   "we_do": "IMF QPM(2008) 계열 값을 써요. **안 건드려요.**",
+   "why": "논문 미공표 자리이고, 이 값을 흔들면 스코어카드 전체가 흔들려요.",
+   "could_be_wrong": "미국 충격에서 한국 정책 되돌림이 QPM 의 성질을 따라가요 — β_sync 핀이 오너의 사전 예측 구간을 벗어난 이유가 여기예요.",
+   "paper": "eq (35), 인쇄 p.30",
+   "code": "backend/bigfoot/solve/phase3.py::ACTIVE_FLAGS (`SOURCE_QPM2008`)",
+   "node": "i_kr",
+   "equation": "35"
+  },
+  {
+   "key": "self-bands",
+   "title": "스코어카드 밴드는 우리가 그린 거예요",
+   "paper_says": "논문은 점추정만 적어요 — «최대 0.05%p 까지» 같은 식으로요.",
+   "we_do": "그 점추정 둘레에 `[lo, hi]` 밴드를 그려서 통과/실패를 판정해요.",
+   "why": "점추정 하나로는 «맞았다» 를 정의할 수 없어서요.",
+   "could_be_wrong": "**밴드 폭이 우리 선택이라 통과 개수도 우리 선택에 달려 있어요.** `phase3.py::WAIVER_CAVEAT` 이 스스로 «self-constructed band floor» 라고 적어 뒀어요.",
+   "paper": "pp.37-42 본문 점추정",
+   "code": "backend/bigfoot/solve/irf.py::SCORECARD",
+   "node": null,
+   "equation": null
+  }
+ ],
+ "limitations": {
+  "ships": "이 화면이 파는 것은 **정책 경로에 대한 커브 델타**예요. 절대 레벨 전망이 아니에요.",
+  "ships_why": "모형을 편차 공간에서 풀고 베이스라인을 0 으로 둬요. r* 를 1.5%·2.5% 로 바꿔 기저를 다시 풀어 봤더니 15개 기저 전부의 10년 IRS 반응 최대 절대차가 **0.000000bp** 였어요 — eq (35) 에서 상수는 소거되고, Layer 2 의 나머지도 기저가 단위 충격으로 담아서 델타를 안 움직여요.",
+  "ledger_row": "deviation-space",
+  "no_effect": [],
+  "level_only": [
+   {
+    "equation": "8",
+    "what": "실질 구매력",
+    "why": "논문 자신이 판단기반 외생이라고 불러요"
+   },
+   {
+    "equation": "11",
+    "what": "Gartner 반도체 초과수요 지수",
+    "why": "유료예요. ECOS 의 「DRAM」 계열은 **수출물가지수**라 다른 변수예요 — 2026-08-21 에 잘못 배선했다가 되돌렸어요"
+   },
+   {
+    "equation": "29",
+    "what": "세계 수출물가 (수출물가 목표식)",
+    "why": "쓸 만한 분기 계열이 없어서 환율이 그 자리에 서 있어요(WIRING_PX_EXOG)"
+   },
+   {
+    "equation": "30",
+    "what": "세계 수출물가 (수출물가 성장식)",
+    "why": "eq (29) 와 같은 계열이 필요해요. 없어서 수출물가 블록이 통째로 외생이에요"
+   },
+   {
+    "equation": "7",
+    "what": "가처분소득 2010Q1 이전",
+    "why": "ECOS 가 거기부터예요"
+   },
+   {
+    "equation": "12",
+    "what": "건축착공 2013 이전",
+    "why": "ECOS 가 2013Q1 부터예요"
+   },
+   {
+    "equation": "14",
+    "what": "건축착공 2013 이전 (건설 성장식)",
+    "why": "eq (12) 와 같은 계열이라 같이 비어요"
+   },
+   {
+    "equation": "4",
+    "what": "중국 2011 이전",
+    "why": "분기 실질 GDP 를 FRED 로 못 가져와요 — ECOS 해외통계나 IMF 가 필요해요"
+   },
+   {
+    "equation": "5",
+    "what": "신흥아시아 6국 중 4국",
+    "why": "분기 계열이 없어요. 인도·인도네시아 둘로 바스켓을 세웠어요"
+   },
+   {
+    "equation": "6",
+    "what": "기타국(RW) 블록 전체",
+    "why": "논문이 계수를 안 실어요(PLACEHOLDER_RW)"
+   }
+  ],
+  "note": "위 목록은 전부 **외생**이라 편차 공간에서 0 이에요. 오너의 경로에 대한 응답은 안 바뀌고, **레벨 전망만** 못 하게 만들어요."
+ },
+ "scorecard": {
+  "engine_total": 13,
+  "engine_passed": 9,
+  "engine_rows": [
+   {
+    "irf": "A",
+    "metric": "gdp_gap_trough_pp",
+    "value": -0.0867,
+    "band": [
+     -0.09,
+     -0.05
+    ],
+    "pass": true
+   },
+   {
+    "irf": "A",
+    "metric": "cpi_yoy_trough_pp",
+    "value": -0.039,
+    "band": [
+     -0.07,
+     -0.03
+    ],
+    "pass": true
+   },
+   {
+    "irf": "A",
+    "metric": "housing_trough_pct",
+    "value": -0.929,
+    "band": [
+     -0.5,
+     -0.3
+    ],
+    "pass": false
+   },
+   {
+    "irf": "A",
+    "metric": "debt_gdp_change_pp",
+    "value": -0.7539,
+    "band": [
+     -0.4,
+     -0.2
+    ],
+    "pass": false
+   },
+   {
+    "irf": "B",
+    "metric": "gdp_gap_trough_pp",
+    "value": -0.0254,
+    "band": [
+     -0.06,
+     -0.02
+    ],
+    "pass": true
+   },
+   {
+    "irf": "C",
+    "metric": "cpi_yoy_peak_pp",
+    "value": 0.1711,
+    "band": [
+     0.12,
+     0.2
+    ],
+    "pass": true
+   },
+   {
+    "irf": "C",
+    "metric": "gdp_gap_trough_pp",
+    "value": -0.0836,
+    "band": [
+     -0.07,
+     -0.03
+    ],
+    "pass": false
+   },
+   {
+    "irf": "C",
+    "metric": "consumption_trough_pct",
+    "value": -0.1473,
+    "band": [
+     -0.11,
+     -0.05
+    ],
+    "pass": false
+   },
+   {
+    "irf": "A",
+    "metric": "shape:fx_appreciation",
+    "value": null,
+    "band": null,
+    "pass": true
+   },
+   {
+    "irf": "B",
+    "metric": "shape:fx_depreciation",
+    "value": null,
+    "band": null,
+    "pass": true
+   },
+   {
+    "irf": "B",
+    "metric": "shape:inflation_up_then_down",
+    "value": null,
+    "band": null,
+    "pass": true
+   },
+   {
+    "irf": "A",
+    "metric": "shape:gdp_hump",
+    "value": null,
+    "band": null,
+    "pass": true
+   },
+   {
+    "irf": "C",
+    "metric": "shape:gdp_hump",
+    "value": null,
+    "band": null,
+    "pass": true
+   }
+  ],
+  "shape_rows": [
+   {
+    "irf": "A",
+    "metric": "shape:fx_appreciation",
+    "value": null,
+    "band": null,
+    "pass": true
+   },
+   {
+    "irf": "B",
+    "metric": "shape:fx_depreciation",
+    "value": null,
+    "band": null,
+    "pass": true
+   },
+   {
+    "irf": "B",
+    "metric": "shape:inflation_up_then_down",
+    "value": null,
+    "band": null,
+    "pass": true
+   },
+   {
+    "irf": "A",
+    "metric": "shape:gdp_hump",
+    "value": null,
+    "band": null,
+    "pass": true
+   },
+   {
+    "irf": "C",
+    "metric": "shape:gdp_hump",
+    "value": null,
+    "band": null,
+    "pass": true
+   }
+  ],
+  "anchor_rows": [
+   {
+    "anchor_id": "kr_policy_25bp.gap",
+    "shock": "한국 정책금리 +25bp",
+    "panel": "GDP 갭",
+    "page": "pp.37-38",
+    "paper": -0.07,
+    "unit": "%p",
+    "kind": "peak",
+    "measured": -0.0867,
+    "measured_q": 5,
+    "measured_12q": -0.0867,
+    "tail": false,
+    "band": [
+     -0.09,
+     -0.05
+    ],
+    "verdict": "pass",
+    "note": null
+   },
+   {
+    "anchor_id": "kr_policy_25bp.cpi",
+    "shock": "한국 정책금리 +25bp",
+    "panel": "소비자물가",
+    "page": "pp.37-38",
+    "paper": -0.05,
+    "unit": "%p",
+    "kind": "peak",
+    "measured": -0.039,
+    "measured_q": 8,
+    "measured_12q": -0.039,
+    "tail": false,
+    "band": [
+     -0.07,
+     -0.03
+    ],
+    "verdict": "pass",
+    "note": "시차를 두고 나타나요"
+   },
+   {
+    "anchor_id": "kr_policy_25bp.hpi",
+    "shock": "한국 정책금리 +25bp",
+    "panel": "주택가격",
+    "page": "pp.37-38",
+    "paper": -0.4,
+    "unit": "%",
+    "kind": "peak",
+    "measured": -0.929,
+    "measured_q": 6,
+    "measured_12q": -0.929,
+    "tail": false,
+    "band": [
+     -0.5,
+     -0.3
+    ],
+    "verdict": "miss",
+    "note": null
+   },
+   {
+    "anchor_id": "kr_policy_25bp.debt_krw",
+    "shock": "한국 정책금리 +25bp",
+    "panel": "명목 가계부채",
+    "page": "pp.37-38",
+    "paper": -5.1,
+    "unit": "조원",
+    "kind": "peak",
+    "measured": null,
+    "measured_q": null,
+    "measured_12q": null,
+    "tail": false,
+    "band": null,
+    "verdict": "not_comparable",
+    "note": "이 모형은 부채를 **비율**(eq 44)로 풀어서 명목 잔액이 편차 공간에 없어요. 대조할 수가 없어요."
+   },
+   {
+    "anchor_id": "kr_policy_25bp.debt_ratio",
+    "shock": "한국 정책금리 +25bp",
+    "panel": "가계부채/GDP",
+    "page": "pp.37-38",
+    "paper": -0.3,
+    "unit": "%p",
+    "kind": "peak",
+    "measured": -0.7539,
+    "measured_q": 7,
+    "measured_12q": -0.7539,
+    "tail": false,
+    "band": [
+     -0.4,
+     -0.2
+    ],
+    "verdict": "miss",
+    "note": null
+   },
+   {
+    "anchor_id": "us_policy_25bp.kr10y",
+    "shock": "미국 정책금리 +25bp",
+    "panel": "한국 장기금리",
+    "page": "pp.39-40",
+    "paper": 0.06,
+    "unit": "%p",
+    "kind": "peak",
+    "measured": 0.0592,
+    "measured_q": 0,
+    "measured_12q": 0.0592,
+    "tail": false,
+    "band": null,
+    "verdict": "pinned",
+    "note": "β_sync 1.05 를 이 앵커에 핀으로 맞췄어요 — 논문이 계수를 안 실었거든요(각주 25)."
+   },
+   {
+    "anchor_id": "us_policy_25bp.gdp",
+    "shock": "미국 정책금리 +25bp",
+    "panel": "GDP",
+    "page": "pp.39-40",
+    "paper": -0.04,
+    "unit": "%p",
+    "kind": "peak",
+    "measured": -0.0254,
+    "measured_q": 2,
+    "measured_12q": -0.0254,
+    "tail": false,
+    "band": [
+     -0.06,
+     -0.02
+    ],
+    "verdict": "pass",
+    "note": null
+   },
+   {
+    "anchor_id": "us_policy_25bp.fi",
+    "shock": "미국 정책금리 +25bp",
+    "panel": "설비투자",
+    "page": "pp.39-40",
+    "paper": -0.02,
+    "unit": "%",
+    "kind": "peak",
+    "measured": -0.0324,
+    "measured_q": 23,
+    "measured_12q": -0.0121,
+    "tail": true,
+    "band": null,
+    "verdict": "no_band",
+    "note": null
+   },
+   {
+    "anchor_id": "us_policy_25bp.cpi",
+    "shock": "미국 정책금리 +25bp",
+    "panel": "소비자물가",
+    "page": "pp.39-40",
+    "paper": null,
+    "unit": "%p",
+    "kind": "shape",
+    "measured": null,
+    "measured_q": null,
+    "measured_12q": null,
+    "tail": false,
+    "band": null,
+    "verdict": "shape_pass",
+    "note": "올랐다가 내려가요 — 논문이 숫자를 안 적었어요."
+   },
+   {
+    "anchor_id": "oil_10pct.cpi",
+    "shock": "유가 +10%",
+    "panel": "소비자물가",
+    "page": "pp.41-42",
+    "paper": 0.16,
+    "unit": "%p",
+    "kind": "peak",
+    "measured": 0.1711,
+    "measured_q": 0,
+    "measured_12q": 0.1711,
+    "tail": false,
+    "band": [
+     0.12,
+     0.2
+    ],
+    "verdict": "pass",
+    "note": null
+   },
+   {
+    "anchor_id": "oil_10pct.consumption",
+    "shock": "유가 +10%",
+    "panel": "소비",
+    "page": "pp.41-42",
+    "paper": -0.08,
+    "unit": "%",
+    "kind": "peak",
+    "measured": -0.1473,
+    "measured_q": 5,
+    "measured_12q": -0.1473,
+    "tail": false,
+    "band": [
+     -0.11,
+     -0.05
+    ],
+    "verdict": "miss",
+    "note": null
+   },
+   {
+    "anchor_id": "oil_10pct.gdp",
+    "shock": "유가 +10%",
+    "panel": "GDP",
+    "page": "pp.41-42",
+    "paper": -0.05,
+    "unit": "%p",
+    "kind": "peak",
+    "measured": -0.0836,
+    "measured_q": 5,
+    "measured_12q": -0.0836,
+    "tail": false,
+    "band": [
+     -0.07,
+     -0.03
+    ],
+    "verdict": "miss",
+    "note": null
+   },
+   {
+    "anchor_id": "oil_10pct.imports",
+    "shock": "유가 +10%",
+    "panel": "수입",
+    "page": "pp.41-42",
+    "paper": -0.07,
+    "unit": "%",
+    "kind": "peak",
+    "measured": -0.0905,
+    "measured_q": 5,
+    "measured_12q": -0.0905,
+    "tail": false,
+    "band": null,
+    "verdict": "no_band",
+    "note": null
+   }
+  ],
+  "chain": "금리 → 주택 → 부채 → 소비 **진폭**",
+  "root": "논문이 안 박은 금리 단위 규약이에요. 밴드를 맞추려고 배율을 지어내지 않았어요 — 그 자제가 결과의 일부예요.",
+  "not_a_baseline": "예전 12/13 은 Table 8 값의 **순열을 이 밴드에 맞춰 고른 결과**예요. 기준선이 아니에요. 정직한 순서는 인쇄된 형태에서 9/13 이에요.",
+  "horizon_rule": "규약은 하나예요 — **논문 부호와 같은 쪽의 극값, 24분기 전 구간**. 극값이 나온 분기를 같이 실어요. q16 이후에서 나온 칸에는 표시를 달고 12분기 안의 값을 나란히 놓아요. 지평을 안 맞추고 견주면 부호까지 뒤집힌 진단이 나와요 — 2026-08-21 에 한 번 그랬어요.",
+  "two_thirteens": "「13」이 둘이에요. 엔진 스코어카드는 수치 8 + 모양 5 이고, 논문 앵커는 충격 셋의 패널 5+4+4 예요. 우연히 같은 수예요."
+ },
+ "free_params": [
+  {
+   "name": "beta_sync",
+   "value": "1.05",
+   "chosen_by": "미 +25bp → 한국 장기금리 +0.06%p 앵커에 격자 핀",
+   "kind": "fit",
+   "contaminates": "us_policy_25bp.kr10y",
+   "code": "backend/bigfoot/solve/phase3.py::BETA_SYNC_ADOPTED"
+  },
+  {
+   "name": "oil_sign",
+   "value": "−1.0",
+   "chosen_by": "부호를 뒤집어야 IRF C 밴드와 맞아서 뒤집었어요(디버그 로그 W1)",
+   "kind": "fit",
+   "contaminates": "oil_10pct.*",
+   "code": "backend/bigfoot/solve/system.py::DEFAULT_OPTIONS"
+  },
+  {
+   "name": "qrate_cons",
+   "value": "False",
+   "chosen_by": "64-config 스윕의 통과 개수로 골랐어요",
+   "kind": "fit",
+   "contaminates": "kr_policy_25bp.* · oil_10pct.consumption",
+   "code": "output/phase3_debug_log.md sweep"
+  },
+  {
+   "name": "qrate_debt",
+   "value": "False",
+   "chosen_by": "〃",
+   "kind": "fit",
+   "contaminates": "kr_policy_25bp.debt_ratio",
+   "code": "output/phase3_debug_log.md sweep"
+  },
+  {
+   "name": "pac_beta",
+   "value": "0.99",
+   "chosen_by": "미시 스윕 {0.97, 0.975, 0.995} 을 돌려 봤어요",
+   "kind": "fit",
+   "contaminates": "us_policy_25bp.gdp",
+   "code": "output/phase3_debug_log.md micro"
+  },
+  {
+   "name": "core_form",
+   "value": "dev",
+   "chosen_by": "A.1 EC 형을 구현해 돌렸더니 **유일한 실패가 더 나빠져서**(−0.0788 → −0.0866) 기각했어요",
+   "kind": "fit",
+   "contaminates": "kr_policy_25bp.cpi",
+   "code": "backend/bigfoot/solve/phase3.py::A1_EC_RESULT"
+  },
+  {
+   "name": "us_shock_impl",
+   "value": "imposed",
+   "chosen_by": "오너 판정이에요. 다만 근거 문장이 «25bp 앵커가 실제 25bp 움직임을 보게» 예요",
+   "kind": "mixed",
+   "contaminates": "us_policy_25bp.*",
+   "code": "backend/bigfoot/solve/phase3.py (Phase 4.8)"
+  },
+  {
+   "name": "스코어카드 밴드",
+   "value": "[lo, hi] 8쌍",
+   "chosen_by": "논문은 점추정만 적어요. 밴드는 우리가 그렸어요",
+   "kind": "fit",
+   "contaminates": "밴드가 붙은 앵커 8개 전부",
+   "code": "backend/bigfoot/solve/irf.py::SCORECARD"
+  },
+  {
+   "name": "OIL_RHO",
+   "value": "0.90",
+   "chosen_by": "논문 미공표. 유가 AR(1) 지속성이에요",
+   "kind": "unpublished",
+   "contaminates": "oil_10pct.*",
+   "code": "backend/bigfoot/solve/system.py::OIL_RHO"
+  },
+  {
+   "name": "tp_us FIR 커널",
+   "value": "K=12",
+   "chosen_by": "pyfrbus 에 맞춰 적합했어요(보류 홀드아웃 평균 |gap| 0.4bp)",
+   "kind": "external",
+   "contaminates": "us_policy_25bp.kr10y",
+   "code": "backend/bigfoot/solve/tpus3.py"
+  }
+ ],
+ "free_params_headline": "**9/13 은 독립적인 시험이 아니에요.** 순열 탐색은 2026-08-21 에 은퇴했지만, 레버는 다시 안 스윕했어요. 아래 레버가 전부 이 13개 밴드에 대고 고른 것이에요(`output/phase3_debug_log.md`)."
+}

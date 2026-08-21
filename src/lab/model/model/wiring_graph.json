@@ -1,0 +1,1307 @@
+{
+ "module": "wiring_graph",
+ "generated_from": "backend/bigfoot/solve/system.py (AST + 수치미분) + backend/config/appendix_d_resolved.yaml",
+ "uncovered": [
+  {
+   "var": "us_y·us_pi·us_i",
+   "why": "미국 블록은 완전예견 **적층 선형해**라 기간별 대입문이 없어요. 그 안쪽 배선(IS·필립스·준칙)은 이 그래프에 안 서고, 미국이 한국으로 나오는 통로만 서요."
+  },
+  {
+   "var": "x·m 의 세계 수출물가",
+   "why": "eq (29)(30) 의 세계 수출물가가 외생이라 환율이 그 자리에 서 있어요(WIRING_PX_EXOG). 화살표는 `s → pm` 으로 보여요."
+  }
+ ],
+ "unsupported_expressions": [],
+ "missing_labels": [],
+ "nodes": [
+  {
+   "id": "c",
+   "label": "민간소비",
+   "block": "expenditure"
+  },
+  {
+   "id": "cb",
+   "label": "회사채 스프레드",
+   "block": "financial"
+  },
+  {
+   "id": "cpi_yoy",
+   "label": "소비자물가 상승률",
+   "block": "price"
+  },
+  {
+   "id": "debt",
+   "label": "가계부채/GDP",
+   "block": "financial"
+  },
+  {
+   "id": "eta_firm",
+   "label": "기업대출 스프레드",
+   "block": "financial"
+  },
+  {
+   "id": "eta_hh",
+   "label": "가계대출 스프레드",
+   "block": "financial"
+  },
+  {
+   "id": "f_china",
+   "label": "중국 GDP 갭",
+   "block": "external"
+  },
+  {
+   "id": "f_ea",
+   "label": "신흥아시아 GDP 갭",
+   "block": "external"
+  },
+  {
+   "id": "f_eu",
+   "label": "EU GDP 갭",
+   "block": "external"
+  },
+  {
+   "id": "f_japan",
+   "label": "일본 GDP 갭",
+   "block": "external"
+  },
+  {
+   "id": "f_rw",
+   "label": "기타국 GDP 갭",
+   "block": "external"
+  },
+  {
+   "id": "g",
+   "label": "정부소비",
+   "block": "expenditure"
+  },
+  {
+   "id": "hpi",
+   "label": "주택가격",
+   "block": "financial"
+  },
+  {
+   "id": "hpi_yoy",
+   "label": "주택가격 전년비",
+   "block": "financial"
+  },
+  {
+   "id": "i_con",
+   "label": "건설투자",
+   "block": "expenditure"
+  },
+  {
+   "id": "i_fi",
+   "label": "설비투자",
+   "block": "expenditure"
+  },
+  {
+   "id": "i_kr",
+   "label": "기준금리",
+   "block": "financial"
+  },
+  {
+   "id": "ih_star",
+   "label": "건설투자 목표",
+   "block": "expenditure"
+  },
+  {
+   "id": "kr10y",
+   "label": "국고 10년",
+   "block": "financial"
+  },
+  {
+   "id": "m",
+   "label": "수입",
+   "block": "expenditure"
+  },
+  {
+   "id": "oil",
+   "label": "유가 갭",
+   "block": "external"
+  },
+  {
+   "id": "p_core",
+   "label": "근원물가 수준",
+   "block": "price"
+  },
+  {
+   "id": "p_cpi",
+   "label": "소비자물가 수준",
+   "block": "price"
+  },
+  {
+   "id": "pi_core",
+   "label": "근원물가 상승률",
+   "block": "price"
+  },
+  {
+   "id": "pi_inf",
+   "label": "물가 어트랙터",
+   "block": "price"
+  },
+  {
+   "id": "pm",
+   "label": "수입물가",
+   "block": "price"
+  },
+  {
+   "id": "r_firm",
+   "label": "기업 대출금리",
+   "block": "financial"
+  },
+  {
+   "id": "r_hh",
+   "label": "가계 대출금리",
+   "block": "financial"
+  },
+  {
+   "id": "s",
+   "label": "원달러(로그, +=절하)",
+   "block": "financial"
+  },
+  {
+   "id": "us10y",
+   "label": "미국 10년",
+   "block": "external"
+  },
+  {
+   "id": "us_i",
+   "label": "미국 정책금리",
+   "block": "external"
+  },
+  {
+   "id": "us_y",
+   "label": "미국 GDP 갭",
+   "block": "external"
+  },
+  {
+   "id": "x",
+   "label": "수출",
+   "block": "expenditure"
+  },
+  {
+   "id": "y_gap",
+   "label": "GDP 갭",
+   "block": "expenditure"
+  }
+ ],
+ "edges": [
+  {
+   "from": "debt",
+   "to": "c",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "-",
+   "coefficient_slot": "consumption.target.slots[1]",
+   "equation": "7",
+   "paper_page": "p.16",
+   "via": null,
+   "lagged": true
+  },
+  {
+   "from": "cpi_yoy",
+   "to": "c",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": "consumption.growth.slots[5]",
+   "equation": "8",
+   "paper_page": "p.17",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "debt",
+   "to": "c",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "consumption.growth.slots[4]",
+   "equation": "8",
+   "paper_page": "p.17",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "i_kr",
+   "to": "c",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": null,
+   "equation": "8",
+   "paper_page": "p.17",
+   "via": "PAC 기대항 (부록 A.11~A.16)",
+   "lagged": true
+  },
+  {
+   "from": "pi_core",
+   "to": "c",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": null,
+   "equation": "8",
+   "paper_page": "p.17",
+   "via": "PAC 기대항 (부록 A.11~A.16)",
+   "lagged": true
+  },
+  {
+   "from": "r_hh",
+   "to": "c",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": "consumption.growth.slots[3]",
+   "equation": "8",
+   "paper_page": "p.17",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "y_gap",
+   "to": "c",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "consumption.growth.slots[2]",
+   "equation": "8",
+   "paper_page": "p.17",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "y_gap",
+   "to": "cb",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": null,
+   "equation": "38",
+   "paper_page": "p.31",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "p_cpi",
+   "to": "cpi_yoy",
+   "block": "price",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "25",
+   "paper_page": "p.26",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "hpi_yoy",
+   "to": "debt",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "44",
+   "paper_page": "p.33",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "r_hh",
+   "to": "debt",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": null,
+   "equation": "44",
+   "paper_page": "p.33",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "y_gap",
+   "to": "debt",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "44",
+   "paper_page": "p.33",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "cb",
+   "to": "eta_firm",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "loan_rates.*.slots",
+   "equation": "40",
+   "paper_page": "p.32",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "cb",
+   "to": "eta_hh",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "loan_rates.*.slots",
+   "equation": "40",
+   "paper_page": "p.32",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "oil",
+   "to": "f_china",
+   "block": "external",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": "foreign.china.slots[4]",
+   "equation": "5",
+   "paper_page": "p.15",
+   "via": "WIRING_OIL_SIGN",
+   "lagged": true
+  },
+  {
+   "from": "us_y",
+   "to": "f_china",
+   "block": "external",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "foreign.china.slots[3]",
+   "equation": "6",
+   "paper_page": "p.15",
+   "via": "WIRING_SPILLOVER",
+   "lagged": false
+  },
+  {
+   "from": "oil",
+   "to": "f_ea",
+   "block": "external",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": "foreign.ea.slots[4]",
+   "equation": "5",
+   "paper_page": "p.15",
+   "via": "WIRING_OIL_SIGN",
+   "lagged": true
+  },
+  {
+   "from": "us_y",
+   "to": "f_ea",
+   "block": "external",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "foreign.ea.slots[3]",
+   "equation": "6",
+   "paper_page": "p.15",
+   "via": "WIRING_SPILLOVER",
+   "lagged": false
+  },
+  {
+   "from": "oil",
+   "to": "f_eu",
+   "block": "external",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": "foreign.eu.slots[4]",
+   "equation": "5",
+   "paper_page": "p.15",
+   "via": "WIRING_OIL_SIGN",
+   "lagged": true
+  },
+  {
+   "from": "us_y",
+   "to": "f_eu",
+   "block": "external",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "foreign.eu.slots[3]",
+   "equation": "6",
+   "paper_page": "p.15",
+   "via": "WIRING_SPILLOVER",
+   "lagged": false
+  },
+  {
+   "from": "oil",
+   "to": "f_japan",
+   "block": "external",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": "foreign.japan.slots[4]",
+   "equation": "5",
+   "paper_page": "p.15",
+   "via": "WIRING_OIL_SIGN",
+   "lagged": true
+  },
+  {
+   "from": "us_y",
+   "to": "f_japan",
+   "block": "external",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "foreign.japan.slots[3]",
+   "equation": "6",
+   "paper_page": "p.15",
+   "via": "WIRING_SPILLOVER",
+   "lagged": false
+  },
+  {
+   "from": "oil",
+   "to": "f_rw",
+   "block": "external",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": "foreign.rw.slots[4]",
+   "equation": "5",
+   "paper_page": "p.15",
+   "via": "WIRING_OIL_SIGN",
+   "lagged": true
+  },
+  {
+   "from": "us_y",
+   "to": "f_rw",
+   "block": "external",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "foreign.rw.slots[3]",
+   "equation": "6",
+   "paper_page": "p.15",
+   "via": "WIRING_SPILLOVER",
+   "lagged": false
+  },
+  {
+   "from": "y_gap",
+   "to": "g",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": "government.growth.slots[2]",
+   "equation": "16",
+   "paper_page": "p.21",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "p_cpi",
+   "to": "hpi",
+   "block": "financial",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "housing.target.slots[1]",
+   "equation": "27",
+   "paper_page": "p.27",
+   "via": null,
+   "lagged": true
+  },
+  {
+   "from": "r_hh",
+   "to": "hpi",
+   "block": "financial",
+   "horizon": "LR",
+   "sign": "-",
+   "coefficient_slot": "housing.target.slots[2]",
+   "equation": "27",
+   "paper_page": "p.27",
+   "via": null,
+   "lagged": true
+  },
+  {
+   "from": "r_hh",
+   "to": "hpi",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": "housing.growth.slots[3]",
+   "equation": "28",
+   "paper_page": "p.27",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "hpi",
+   "to": "hpi_yoy",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "28",
+   "paper_page": "p.27",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "hpi",
+   "to": "i_con",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "14",
+   "paper_page": "p.21",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "ih_star",
+   "to": "i_con",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "14",
+   "paper_page": "p.21",
+   "via": null,
+   "lagged": true
+  },
+  {
+   "from": "y_gap",
+   "to": "i_con",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "14",
+   "paper_page": "p.21",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "y_gap",
+   "to": "i_fi",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "investment_fi.growth.slots[2]",
+   "equation": "11",
+   "paper_page": "p.18",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "cpi_yoy",
+   "to": "i_kr",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "35",
+   "paper_page": "p.30",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "y_gap",
+   "to": "i_kr",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "35",
+   "paper_page": "p.30",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "cb",
+   "to": "ih_star",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "-",
+   "coefficient_slot": "construction.target.slots[2]",
+   "equation": "12",
+   "paper_page": "p.19",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "cpi_yoy",
+   "to": "ih_star",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "-",
+   "coefficient_slot": "construction.target.slots[2]",
+   "equation": "12",
+   "paper_page": "p.19",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "kr10y",
+   "to": "ih_star",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "-",
+   "coefficient_slot": "construction.target.slots[2]",
+   "equation": "12",
+   "paper_page": "p.19",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "r_firm",
+   "to": "ih_star",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "-",
+   "coefficient_slot": "construction.target.slots[2]",
+   "equation": "12",
+   "paper_page": "p.19",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "i_kr",
+   "to": "kr10y",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "36",
+   "paper_page": "p.31",
+   "via": "기대가설 40분기 평균",
+   "lagged": false
+  },
+  {
+   "from": "pi_core",
+   "to": "kr10y",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "36",
+   "paper_page": "p.31",
+   "via": "기대가설 40분기 평균",
+   "lagged": false
+  },
+  {
+   "from": "us10y",
+   "to": "kr10y",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "36",
+   "paper_page": "p.31",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "y_gap",
+   "to": "kr10y",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "36",
+   "paper_page": "p.31",
+   "via": "기대가설 40분기 평균",
+   "lagged": false
+  },
+  {
+   "from": "c",
+   "to": "m",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "import_.target.slots[1]",
+   "equation": "20",
+   "paper_page": "p.24",
+   "via": null,
+   "lagged": true
+  },
+  {
+   "from": "g",
+   "to": "m",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "import_.target.slots[1]",
+   "equation": "20",
+   "paper_page": "p.24",
+   "via": null,
+   "lagged": true
+  },
+  {
+   "from": "i_con",
+   "to": "m",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "import_.target.slots[1]",
+   "equation": "20",
+   "paper_page": "p.24",
+   "via": null,
+   "lagged": true
+  },
+  {
+   "from": "i_fi",
+   "to": "m",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "import_.target.slots[1]",
+   "equation": "20",
+   "paper_page": "p.24",
+   "via": null,
+   "lagged": true
+  },
+  {
+   "from": "x",
+   "to": "m",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "import_.target.slots[1]",
+   "equation": "20",
+   "paper_page": "p.24",
+   "via": null,
+   "lagged": true
+  },
+  {
+   "from": "c",
+   "to": "m",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "import_.growth.slots[2]",
+   "equation": "22",
+   "paper_page": "p.24",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "g",
+   "to": "m",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "import_.growth.slots[2]",
+   "equation": "22",
+   "paper_page": "p.24",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "i_con",
+   "to": "m",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "import_.growth.slots[2]",
+   "equation": "22",
+   "paper_page": "p.24",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "i_fi",
+   "to": "m",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "import_.growth.slots[2]",
+   "equation": "22",
+   "paper_page": "p.24",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "s",
+   "to": "m",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": "import_.growth.slots[3]",
+   "equation": "22",
+   "paper_page": "p.24",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "x",
+   "to": "m",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "import_.growth.slots[2]",
+   "equation": "22",
+   "paper_page": "p.24",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "pi_core",
+   "to": "p_core",
+   "block": "price",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "23",
+   "paper_page": "p.25",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "oil",
+   "to": "p_cpi",
+   "block": "price",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "import_price.target.slots[2]",
+   "equation": "31",
+   "paper_page": "p.29",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "p_core",
+   "to": "p_cpi",
+   "block": "price",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "cpi.target.named[w_core]",
+   "equation": "25",
+   "paper_page": "p.26",
+   "via": null,
+   "lagged": true
+  },
+  {
+   "from": "s",
+   "to": "p_cpi",
+   "block": "price",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "import_price.target.slots[1]",
+   "equation": "31",
+   "paper_page": "p.29",
+   "via": null,
+   "lagged": true
+  },
+  {
+   "from": "pi_core",
+   "to": "p_cpi",
+   "block": "price",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "cpi.growth.slots[2]",
+   "equation": "26",
+   "paper_page": "p.26",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "pm",
+   "to": "p_cpi",
+   "block": "price",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": "cpi.growth.slots[3]",
+   "equation": "26",
+   "paper_page": "p.26",
+   "via": null,
+   "lagged": true
+  },
+  {
+   "from": "s",
+   "to": "p_cpi",
+   "block": "price",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "cpi.growth.slots[3]",
+   "equation": "26",
+   "paper_page": "p.26",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "i_kr",
+   "to": "pi_core",
+   "block": "price",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": "core_cpi.slots[1]",
+   "equation": "23",
+   "paper_page": "p.25",
+   "via": "기대 근원물가 (위성 VAR)",
+   "lagged": true
+  },
+  {
+   "from": "pi_inf",
+   "to": "pi_core",
+   "block": "price",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "core_cpi.slots[attractor]",
+   "equation": "23",
+   "paper_page": "p.25",
+   "via": null,
+   "lagged": true
+  },
+  {
+   "from": "y_gap",
+   "to": "pi_core",
+   "block": "price",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "core_cpi.slots[2]",
+   "equation": "23",
+   "paper_page": "p.25",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "pi_core",
+   "to": "pi_inf",
+   "block": "price",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "eq24.delta2",
+   "equation": "24",
+   "paper_page": "p.26",
+   "via": null,
+   "lagged": true
+  },
+  {
+   "from": "oil",
+   "to": "pm",
+   "block": "price",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "import_price.target.slots[2]",
+   "equation": "31",
+   "paper_page": "p.29",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "s",
+   "to": "pm",
+   "block": "price",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "import_price.target.slots[1]",
+   "equation": "31",
+   "paper_page": "p.29",
+   "via": null,
+   "lagged": true
+  },
+  {
+   "from": "s",
+   "to": "pm",
+   "block": "price",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "import_price.growth.slots[2]",
+   "equation": "32",
+   "paper_page": "p.29",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "eta_firm",
+   "to": "r_firm",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "loan_rates.*.slots",
+   "equation": "40",
+   "paper_page": "p.32",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "i_kr",
+   "to": "r_firm",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "loan_rates.*.slots",
+   "equation": "40",
+   "paper_page": "p.32",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "kr10y",
+   "to": "r_firm",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "loan_rates.*.slots",
+   "equation": "40",
+   "paper_page": "p.32",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "eta_hh",
+   "to": "r_hh",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "loan_rates.*.slots",
+   "equation": "40",
+   "paper_page": "p.32",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "i_kr",
+   "to": "r_hh",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "loan_rates.*.slots",
+   "equation": "40",
+   "paper_page": "p.32",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "kr10y",
+   "to": "r_hh",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "loan_rates.*.slots",
+   "equation": "40",
+   "paper_page": "p.32",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "i_kr",
+   "to": "s",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": null,
+   "equation": "33",
+   "paper_page": "p.29",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "us_i",
+   "to": "s",
+   "block": "financial",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "33",
+   "paper_page": "p.29",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "us_i",
+   "to": "us10y",
+   "block": "external",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "36",
+   "paper_page": "p.31",
+   "via": "기대가설 40분기 평균 + tp_us FIR 커널 (K=12)",
+   "lagged": false
+  },
+  {
+   "from": "f_china",
+   "to": "x",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "export.target.slots[1]",
+   "equation": "17",
+   "paper_page": "p.23",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "f_ea",
+   "to": "x",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "export.target.slots[1]",
+   "equation": "17",
+   "paper_page": "p.23",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "f_eu",
+   "to": "x",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "export.target.slots[1]",
+   "equation": "17",
+   "paper_page": "p.23",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "f_japan",
+   "to": "x",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "export.target.slots[1]",
+   "equation": "17",
+   "paper_page": "p.23",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "f_rw",
+   "to": "x",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "export.target.slots[1]",
+   "equation": "17",
+   "paper_page": "p.23",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "us_y",
+   "to": "x",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "export.target.slots[1]",
+   "equation": "17",
+   "paper_page": "p.23",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "s",
+   "to": "x",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "export.growth.slots[3]",
+   "equation": "19",
+   "paper_page": "p.24",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "c",
+   "to": "y_gap",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "항등식",
+   "paper_page": null,
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "g",
+   "to": "y_gap",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "항등식",
+   "paper_page": null,
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "i_con",
+   "to": "y_gap",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "항등식",
+   "paper_page": null,
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "i_fi",
+   "to": "y_gap",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "항등식",
+   "paper_page": null,
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "m",
+   "to": "y_gap",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "-",
+   "coefficient_slot": null,
+   "equation": "항등식",
+   "paper_page": null,
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "x",
+   "to": "y_gap",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": null,
+   "equation": "항등식",
+   "paper_page": null,
+   "via": null,
+   "lagged": false
+  }
+ ],
+ "flow_merges": [
+  {
+   "folded": "dc",
+   "into": "c"
+  },
+  {
+   "folded": "ddebt",
+   "into": "debt"
+  },
+  {
+   "folded": "dg",
+   "into": "g"
+  },
+  {
+   "folded": "dhpi",
+   "into": "hpi"
+  },
+  {
+   "folded": "di",
+   "into": "i_fi"
+  },
+  {
+   "folded": "di_con",
+   "into": "i_con"
+  }
+ ],
+ "eq_no_corrections": [
+  {
+   "where": "investment_growth",
+   "code": "10",
+   "paper": "11",
+   "why": "PDF 인쇄 p.18 에서 (10) 은 자본 사용자비용 정의이고 설비투자 성장식은 (11) 이에요."
+  }
+ ],
+ "non_paper_equations": {
+  "항등식": "WIRING_SHARES_DATA"
+ }
+}

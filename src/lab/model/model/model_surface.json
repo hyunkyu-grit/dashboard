@@ -1,0 +1,1993 @@
+{
+ "module": "model_surface",
+ "equations": [
+  {
+   "no": "1",
+   "name": "국내 블록 개요",
+   "block": "expenditure",
+   "page": "p.8",
+   "printed": "블록 구성",
+   "differs": null,
+   "wired": false
+  },
+  {
+   "no": "2",
+   "name": "PAC 목적함수",
+   "block": "framework",
+   "page": "p.9",
+   "printed": "다항조정비용 문제의 목적함수",
+   "differs": null,
+   "wired": false
+  },
+  {
+   "no": "3",
+   "name": "PAC 1계조건",
+   "block": "framework",
+   "page": "p.10",
+   "printed": "오차수정 + AR + 기대 목표변화의 할인합",
+   "differs": null,
+   "wired": false
+  },
+  {
+   "no": "4",
+   "name": "해외 블록 수입갭",
+   "block": "external",
+   "page": "p.14",
+   "printed": "블록 j 의 수입갭 = λ_j × 산출갭",
+   "differs": "eq (4) 의 c·τ 를 읽은 대로 쓰면 무역탄력성이 믿기 어려울 만큼 작아져요. 그래서 수출수요 지수를 **수입갭이 아니라 산출갭**으로 세웠어요(WIRING_DEMAND_OUTPUTGAP).",
+   "wired": false
+  },
+  {
+   "no": "5",
+   "name": "해외 블록 산출갭 — 유가",
+   "block": "external",
+   "page": "p.15",
+   "printed": "유가가 블록마다 산출갭에 **음으로** 들어가요",
+   "differs": null,
+   "wired": true
+  },
+  {
+   "no": "6",
+   "name": "해외 블록 산출갭 — 스필오버",
+   "block": "external",
+   "page": "p.15",
+   "printed": "스필오버 항. 논문이 계수를 안 실었어요",
+   "differs": "스필오버 대상을 미국 갭 하나로 뒀어요(WIRING_SPILLOVER).",
+   "wired": true
+  },
+  {
+   "no": "7",
+   "name": "민간소비 목표",
+   "block": "expenditure",
+   "page": "p.16",
+   "printed": "c* = β_c0 + β_c1·부채 + 더미 둘",
+   "differs": null,
+   "wired": true
+  },
+  {
+   "no": "8",
+   "name": "민간소비 PAC",
+   "block": "expenditure",
+   "page": "p.17",
+   "printed": "오차수정 + AR + **기대 목표변화 할인합** + Δŷ + 가계금리 + Δ부채 + 실질구매력",
+   "differs": "실질구매력 항은 꺼져 있어요(WIRING_PURCH_OFF) — 논문 자신이 판단기반 외생이라 부르는 자리예요. 기대항은 **여기에만** 배선돼 있어요.",
+   "wired": true
+  },
+  {
+   "no": "9",
+   "name": "설비투자 목표",
+   "block": "expenditure",
+   "page": "p.18",
+   "printed": "I* = β_I0 + β_I1·잠재산출 + β_I2·코로나더미 **− UC_I**",
+   "differs": "**`− UC_I` 가 안 배선돼 있어요.** 목표 편차를 문자 그대로 0 으로 둬서, 설비투자로 들어오는 화살표가 산출갭 하나뿐이에요.",
+   "wired": false
+  },
+  {
+   "no": "10",
+   "name": "설비투자 자본 사용자비용",
+   "block": "expenditure",
+   "page": "p.18",
+   "printed": "UC_I = (기업대출금리 + 회사채금리)/2 − CPI상승률/4 + 감가상각률",
+   "differs": "안 배선돼 있어요 — eq (9) 가 이걸 안 받으니 계산할 자리가 없어요. 건설투자(eq 13)는 같은 것을 제대로 씁니다.",
+   "wired": false
+  },
+  {
+   "no": "11",
+   "name": "설비투자 PAC",
+   "block": "expenditure",
+   "page": "p.18",
+   "printed": "오차수정 + AR + **기대 할인합** + γ_I1 Δŷ + γ_I2 Δln P_I + γ_I3 ln DRAM",
+   "differs": "배선된 것은 오차수정·AR·Δŷ 셋뿐이에요. 기대항 없음, 투자디플레이터 없음, DRAM 지수는 Gartner 유료라 없음. **코드가 이 식을 eq 10 이라고 부르는데 인쇄 번호는 11 이에요**(PDF 인쇄 p.18).",
+   "wired": true
+  },
+  {
+   "no": "12",
+   "name": "건설투자 목표",
+   "block": "expenditure",
+   "page": "p.19",
+   "printed": "IH* = β_IH0 + β_IH1·잠재산출 + β_IH2·건축착공 − UC_IH",
+   "differs": null,
+   "wired": true
+  },
+  {
+   "no": "13",
+   "name": "건설투자 사용자비용",
+   "block": "expenditure",
+   "page": "p.20",
+   "printed": "UC_IH — eq (10) 과 같은 꼴이되 물가항의 부호가 반대예요",
+   "differs": null,
+   "wired": false
+  },
+  {
+   "no": "14",
+   "name": "건설투자 PAC",
+   "block": "expenditure",
+   "page": "p.21",
+   "printed": "오차수정 + AR + 기대 할인합 + 갭 + 주택가격",
+   "differs": "기대항이 없어요.",
+   "wired": true
+  },
+  {
+   "no": "15",
+   "name": "정부소비 목표",
+   "block": "expenditure",
+   "page": "p.21",
+   "printed": "G* = β_G0 + β_G1·잠재산출 + β_G2·고령화율",
+   "differs": "고령화율은 외생이라 편차 공간에서 0 이에요 — 화살표가 안 서는 것이 정상이에요.",
+   "wired": false
+  },
+  {
+   "no": "16",
+   "name": "정부소비 성장",
+   "block": "expenditure",
+   "page": "p.21",
+   "printed": "오차수정 + 갭",
+   "differs": null,
+   "wired": true
+  },
+  {
+   "no": "17",
+   "name": "수출 목표",
+   "block": "expenditure",
+   "page": "p.23",
+   "printed": "X* = β_X0 + β_X1·세계수요",
+   "differs": null,
+   "wired": true
+  },
+  {
+   "no": "18",
+   "name": "세계 수출수요 지수",
+   "block": "external",
+   "page": "p.23",
+   "printed": "ζ^X 가중 해외 수요",
+   "differs": "가중치로 **산출갭**을 씁니다 — eq (4) 참조.",
+   "wired": false
+  },
+  {
+   "no": "19",
+   "name": "수출 성장",
+   "block": "expenditure",
+   "page": "p.24",
+   "printed": "오차수정 + 수요증가 + **Δ₄ ln 환율** + 기대 할인합",
+   "differs": "8/21 에 Δ 를 Δ₄ 로 고쳤어요. 기대항은 없어요.",
+   "wired": true
+  },
+  {
+   "no": "20",
+   "name": "수입 목표",
+   "block": "expenditure",
+   "page": "p.24",
+   "printed": "M* = β_M0 + β_M1·총흡수",
+   "differs": null,
+   "wired": true
+  },
+  {
+   "no": "21",
+   "name": "수입 수요 지수",
+   "block": "expenditure",
+   "page": "p.24",
+   "printed": "z_C·C + z_I·I + **z_IH·IH** + **z_G·G** + z_X·X",
+   "differs": "8/21 에 건설(IH)과 정부(G)가 들어왔어요. 빠져 있던 자리예요.",
+   "wired": false
+  },
+  {
+   "no": "22",
+   "name": "수입 성장",
+   "block": "expenditure",
+   "page": "p.24",
+   "printed": "오차수정 + 수요증가 + **Δ ln 환율** + 기대 할인합",
+   "differs": "수출은 Δ₄, 수입은 Δ — 비대칭은 논문의 것이에요(인쇄 p.24).",
+   "wired": true
+  },
+  {
+   "no": "23",
+   "name": "근원물가 필립스",
+   "block": "price",
+   "page": "p.25",
+   "printed": "φ1·직전 + φ2·기대 + (1−φ1−φ2)·어트랙터 + φ3·갭",
+   "differs": "8/21 에 인쇄된 배치로 되돌렸어요. 어트랙터 가중이 1−φ1−φ2 = 0.60 이라야 (탈)앵커링을 말할 수 있어요.",
+   "wired": true
+  },
+  {
+   "no": "24",
+   "name": "물가 어트랙터",
+   "block": "price",
+   "page": "p.26",
+   "printed": "δ1·직전 어트랙터 + δ2·(직전 근원 − 직전 어트랙터)",
+   "differs": "괄호가 **차**예요. 예전 두 판(raw·nested)은 둘 다 옮겨 적기 오류였어요.",
+   "wired": true
+  },
+  {
+   "no": "25",
+   "name": "소비자물가 목표",
+   "block": "price",
+   "page": "p.26",
+   "printed": "ν·근원 + (1−ν)·비근원",
+   "differs": null,
+   "wired": true
+  },
+  {
+   "no": "26",
+   "name": "소비자물가 성장",
+   "block": "price",
+   "page": "p.26",
+   "printed": "오차수정 + Δ근원 + Δ수입물가",
+   "differs": null,
+   "wired": true
+  },
+  {
+   "no": "27",
+   "name": "주택가격 목표",
+   "block": "price",
+   "page": "p.27",
+   "printed": "HPI* = β_h0 + β_h1·CPI + β_h2·가계대출금리",
+   "differs": "금리 계수가 **%p 당 −41.5** 라는 뜻이 되는데 믿기 어려워요. 논문이 금리 단위 규약을 안 박았고, 스코어카드 실패 넷이 전부 여기서 나와요.",
+   "wired": true
+  },
+  {
+   "no": "28",
+   "name": "주택가격 성장",
+   "block": "price",
+   "page": "p.27",
+   "printed": "오차수정 + AR + 가계대출금리",
+   "differs": null,
+   "wired": true
+  },
+  {
+   "no": "29",
+   "name": "수출물가 목표",
+   "block": "price",
+   "page": "p.29",
+   "printed": "PX* = 세계 수출물가",
+   "differs": "세계 수출물가 계열이 없어서 **환율이 그 자리에 서 있어요**(WIRING_PX_EXOG).",
+   "wired": false
+  },
+  {
+   "no": "30",
+   "name": "수출물가 성장",
+   "block": "price",
+   "page": "p.29",
+   "printed": "오차수정 + 기대 할인합",
+   "differs": "안 배선.",
+   "wired": false
+  },
+  {
+   "no": "31",
+   "name": "수입물가 목표",
+   "block": "price",
+   "page": "p.29",
+   "printed": "PM* = 세계 수출물가 + 유가",
+   "differs": "〃",
+   "wired": true
+  },
+  {
+   "no": "32",
+   "name": "수입물가 성장",
+   "block": "price",
+   "page": "p.29",
+   "printed": "오차수정 + Δ환율 + Δ유가",
+   "differs": null,
+   "wired": true
+  },
+  {
+   "no": "33",
+   "name": "UIP",
+   "block": "financial",
+   "page": "p.29",
+   "printed": "환율 = 직전 − (국내 − 해외)/4",
+   "differs": "기대환율을 랜덤워크로 뒀어요(WIRING_SEXP_RW).",
+   "wired": true
+  },
+  {
+   "no": "34",
+   "name": "UIP 기대항",
+   "block": "financial",
+   "page": "p.29",
+   "printed": "기대환율",
+   "differs": "〃",
+   "wired": false
+  },
+  {
+   "no": "35",
+   "name": "정책준칙",
+   "block": "financial",
+   "page": "p.30",
+   "printed": "φ_i·직전 + (1−φ_i)·[r* + π* + (1+φ_π)(π−π*) + φ_y·갭]",
+   "differs": "지속성 계수는 IMF QPM 2008 계열이에요(SOURCE_QPM2008 — 안 건드려요). 준칙이 **헤드라인 CPI 전년비**에 반응하게 뒀어요(WIRING_RULE_CPI). r*·π* 는 편차 공간에서 소거돼요.",
+   "wired": true
+  },
+  {
+   "no": "36",
+   "name": "기간구조 — 기대가설",
+   "block": "financial",
+   "page": "p.31",
+   "printed": "장기금리 = 기대 단기금리 평균",
+   "differs": "40분기 평균이에요. 여기에 **β_sync × 미국 10년**을 더해요(각주 25, 계수 미공표).",
+   "wired": true
+  },
+  {
+   "no": "37",
+   "name": "기간구조 — 기간프리미엄",
+   "block": "financial",
+   "page": "p.31",
+   "printed": "기간프리미엄",
+   "differs": "국고 10년에만 있고 **IRS 다리까지 안 와요**(V1_NO_TERM_PREMIUM_IN_IRS). 국고 3년은 기대가설 12분기 평균만이에요(KR3Y_EH_ONLY).",
+   "wired": false
+  },
+  {
+   "no": "38",
+   "name": "회사채 스프레드",
+   "block": "financial",
+   "page": "p.31",
+   "printed": "AR + 갭",
+   "differs": null,
+   "wired": true
+  },
+  {
+   "no": "39",
+   "name": "회사채 금리",
+   "block": "financial",
+   "page": "p.31",
+   "printed": "국고 + 스프레드",
+   "differs": null,
+   "wired": false
+  },
+  {
+   "no": "40",
+   "name": "가계 대출금리",
+   "block": "financial",
+   "page": "p.32",
+   "printed": "조달 혼합이 **1 대 1로** 전가돼요",
+   "differs": "8/21 에 고쳤어요. 예전 판은 장기 전가가 0.54 였어요.",
+   "wired": true
+  },
+  {
+   "no": "41",
+   "name": "기업 대출금리",
+   "block": "financial",
+   "page": "p.32",
+   "printed": "〃",
+   "differs": null,
+   "wired": false
+  },
+  {
+   "no": "42",
+   "name": "가계 대출 스프레드",
+   "block": "financial",
+   "page": "p.32",
+   "printed": "AR + 회사채 스프레드",
+   "differs": null,
+   "wired": false
+  },
+  {
+   "no": "43",
+   "name": "기업 대출 스프레드",
+   "block": "financial",
+   "page": "p.32",
+   "printed": "〃",
+   "differs": null,
+   "wired": false
+  },
+  {
+   "no": "44",
+   "name": "가계부채/GDP",
+   "block": "financial",
+   "page": "p.33",
+   "printed": "갭 + 주택가격 전년비 + 가계대출금리",
+   "differs": "**비율**이에요. 논문 패널의 «명목 가계부채(조원)» 는 편차 공간에 없어서 대조할 수가 없어요.",
+   "wired": true
+  }
+ ],
+ "coefficients": [
+  {
+   "slot": "calibration.r_star.named[r_star]",
+   "group": "calibration.r_star.named",
+   "symbol": "r_star",
+   "value": 0.02,
+   "status": "RESOLVED",
+   "basis": "CALIBRATED_LW: Laubach–Williams mean, footnote 24 — calibrated outside Appendix D",
+   "candidates": [],
+   "equation": "35",
+   "wired": false
+  },
+  {
+   "slot": "construction.growth.slots[0]",
+   "group": "construction.growth.slots",
+   "symbol": "alpha_IH0_ec",
+   "value": 0.0267,
+   "status": "EXOG_V1",
+   "basis": "owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2",
+   "candidates": [],
+   "equation": "14",
+   "wired": false
+  },
+  {
+   "slot": "construction.growth.slots[1]",
+   "group": "construction.growth.slots",
+   "symbol": "alpha_IH1_ar",
+   "value": -0.2605,
+   "status": "EXOG_V1",
+   "basis": "owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2",
+   "candidates": [],
+   "equation": "14",
+   "wired": false
+  },
+  {
+   "slot": "construction.growth.slots[2]",
+   "group": "construction.growth.slots",
+   "symbol": "gamma_IH1_gap",
+   "value": 0.2851,
+   "status": "EXOG_V1",
+   "basis": "owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2",
+   "candidates": [],
+   "equation": "14",
+   "wired": false
+  },
+  {
+   "slot": "construction.growth.slots[3]",
+   "group": "construction.growth.slots",
+   "symbol": "gamma_IH2_deflator",
+   "value": -0.1,
+   "status": "EXOG_V1",
+   "basis": "owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2",
+   "candidates": [],
+   "equation": "14",
+   "wired": false
+  },
+  {
+   "slot": "construction.growth.slots[4]",
+   "group": "construction.growth.slots",
+   "symbol": "gamma_IH3_housing",
+   "value": 0.1671,
+   "status": "EXOG_V1",
+   "basis": "owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2",
+   "candidates": [],
+   "equation": "14",
+   "wired": false
+  },
+  {
+   "slot": "construction.growth.slots[5]",
+   "group": "construction.growth.slots",
+   "symbol": "gamma_IH4_bci",
+   "value": 0.0629,
+   "status": "EXOG_V1",
+   "basis": "owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2",
+   "candidates": [],
+   "equation": "14",
+   "wired": false
+  },
+  {
+   "slot": "construction.target.slots[0]",
+   "group": "construction.target.slots",
+   "symbol": "beta_IH0",
+   "value": 4.853,
+   "status": "EXOG_V1",
+   "basis": "owner PDF reading 2026-08-05: symbols read (const/potential-analog/dummy); construction held at trend in Phase 2",
+   "candidates": [],
+   "equation": "12",
+   "wired": false
+  },
+  {
+   "slot": "construction.target.slots[1]",
+   "group": "construction.target.slots",
+   "symbol": "beta_IH1",
+   "value": 0.4187,
+   "status": "EXOG_V1",
+   "basis": "owner PDF reading 2026-08-05: symbols read (const/potential-analog/dummy); construction held at trend in Phase 2",
+   "candidates": [],
+   "equation": "12",
+   "wired": false
+  },
+  {
+   "slot": "construction.target.slots[2]",
+   "group": "construction.target.slots",
+   "symbol": "beta_IH2",
+   "value": 0.0539,
+   "status": "EXOG_V1",
+   "basis": "owner PDF reading 2026-08-05: symbols read (const/potential-analog/dummy); construction held at trend in Phase 2",
+   "candidates": [],
+   "equation": "12",
+   "wired": true
+  },
+  {
+   "slot": "consumption.growth.slots[0]",
+   "group": "consumption.growth.slots",
+   "symbol": "alpha_C0",
+   "value": 0.0234,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: EC loading (eq 8)",
+   "candidates": [],
+   "equation": "8",
+   "wired": false
+  },
+  {
+   "slot": "consumption.growth.slots[1]",
+   "group": "consumption.growth.slots",
+   "symbol": "alpha_C1",
+   "value": -0.1079,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: AR",
+   "candidates": [],
+   "equation": "8",
+   "wired": false
+  },
+  {
+   "slot": "consumption.growth.slots[2]",
+   "group": "consumption.growth.slots",
+   "symbol": "gamma_C1",
+   "value": 0.2005,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: output gap",
+   "candidates": [],
+   "equation": "8",
+   "wired": true
+  },
+  {
+   "slot": "consumption.growth.slots[3]",
+   "group": "consumption.growth.slots",
+   "symbol": "gamma_C2",
+   "value": -0.6,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: household rate",
+   "candidates": [],
+   "equation": "8",
+   "wired": true
+  },
+  {
+   "slot": "consumption.growth.slots[4]",
+   "group": "consumption.growth.slots",
+   "symbol": "gamma_C3",
+   "value": 0.0193,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: debt growth",
+   "candidates": [],
+   "equation": "8",
+   "wired": true
+  },
+  {
+   "slot": "consumption.growth.slots[5]",
+   "group": "consumption.growth.slots",
+   "symbol": "gamma_C4",
+   "value": 0.02,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: purchasing power",
+   "candidates": [],
+   "equation": "8",
+   "wired": true
+  },
+  {
+   "slot": "consumption.target.slots[0]",
+   "group": "consumption.target.slots",
+   "symbol": "beta_c0",
+   "value": 0.0038,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: const",
+   "candidates": [],
+   "equation": "7",
+   "wired": false
+  },
+  {
+   "slot": "consumption.target.slots[1]",
+   "group": "consumption.target.slots",
+   "symbol": "beta_c1",
+   "value": -0.1,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: debt",
+   "candidates": [],
+   "equation": "7",
+   "wired": true
+  },
+  {
+   "slot": "consumption.target.slots[2]",
+   "group": "consumption.target.slots",
+   "symbol": "beta_c2",
+   "value": -0.0384,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: GFC dummy",
+   "candidates": [],
+   "equation": "7",
+   "wired": false
+  },
+  {
+   "slot": "consumption.target.slots[3]",
+   "group": "consumption.target.slots",
+   "symbol": "beta_c3",
+   "value": -0.1017,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: Covid dummy",
+   "candidates": [],
+   "equation": "7",
+   "wired": false
+  },
+  {
+   "slot": "core_cpi.slots[0]",
+   "group": "core_cpi.slots",
+   "symbol": "phi1",
+   "value": 0.25,
+   "status": "PROVISIONAL",
+   "basis": "owner PDF reading 2026-08-05: eq (23) coefficient; term = lagged core inflation per owner fallback — PROVISIONAL_PHILLIPS (P2)",
+   "candidates": [
+    "lagged core inflation",
+    "other eq (23) term order"
+   ],
+   "equation": "23",
+   "wired": false
+  },
+  {
+   "slot": "core_cpi.slots[1]",
+   "group": "core_cpi.slots",
+   "symbol": "phi2",
+   "value": 0.15,
+   "status": "PROVISIONAL",
+   "basis": "owner PDF reading 2026-08-05: eq (23); term = attractor π∞ per owner fallback — PROVISIONAL_PHILLIPS (P2)",
+   "candidates": [
+    "attractor pi_inf",
+    "other eq (23) term order"
+   ],
+   "equation": "23",
+   "wired": true
+  },
+  {
+   "slot": "core_cpi.slots[2]",
+   "group": "core_cpi.slots",
+   "symbol": "phi3",
+   "value": 0.1,
+   "status": "PROVISIONAL",
+   "basis": "owner PDF reading 2026-08-05: eq (23); term = output gap per owner fallback — PROVISIONAL_PHILLIPS (P2)",
+   "candidates": [
+    "output gap",
+    "other eq (23) term order"
+   ],
+   "equation": "23",
+   "wired": true
+  },
+  {
+   "slot": "core_cpi.slots[3]",
+   "group": "core_cpi.slots",
+   "symbol": "pi_star",
+   "value": 0.02,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: inflation target",
+   "candidates": [],
+   "equation": "23",
+   "wired": false
+  },
+  {
+   "slot": "core_cpi.slots[4]",
+   "group": "core_cpi.slots",
+   "symbol": "delta1",
+   "value": 0.7232,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: eq (24) adaptive-expectation coefficient 1; OBSERVED: δ1+δ2=1.0396>1, recorded, not renormalized",
+   "candidates": [],
+   "equation": "23",
+   "wired": false
+  },
+  {
+   "slot": "core_cpi.slots[5]",
+   "group": "core_cpi.slots",
+   "symbol": "delta2",
+   "value": 0.3164,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: eq (24) adaptive-expectation coefficient 2",
+   "candidates": [],
+   "equation": "23",
+   "wired": false
+  },
+  {
+   "slot": "corp_bond.slots[0]",
+   "group": "corp_bond.slots",
+   "symbol": "rho_CB",
+   "value": 0.5626,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: AR",
+   "candidates": [],
+   "equation": "38",
+   "wired": false
+  },
+  {
+   "slot": "corp_bond.slots[1]",
+   "group": "corp_bond.slots",
+   "symbol": "eta_bar_CB",
+   "value": 0.0003,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: MEAN spread (mean-reversion parameterization; prior 'intercept' reading corrected)",
+   "candidates": [],
+   "equation": "38",
+   "wired": false
+  },
+  {
+   "slot": "corp_bond.slots[2]",
+   "group": "corp_bond.slots",
+   "symbol": "alpha_CB",
+   "value": -0.0487,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: gap",
+   "candidates": [],
+   "equation": "38",
+   "wired": false
+  },
+  {
+   "slot": "cpi.growth.slots[0]",
+   "group": "cpi.growth.slots",
+   "symbol": "c_cpi",
+   "value": 0.0011,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: const",
+   "candidates": [],
+   "equation": "26",
+   "wired": false
+  },
+  {
+   "slot": "cpi.growth.slots[1]",
+   "group": "cpi.growth.slots",
+   "symbol": "alpha_cpi0",
+   "value": 0.0586,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: EC loading",
+   "candidates": [],
+   "equation": "26",
+   "wired": false
+  },
+  {
+   "slot": "cpi.growth.slots[2]",
+   "group": "cpi.growth.slots",
+   "symbol": "alpha_cpi1",
+   "value": 0.804,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: Δcore",
+   "candidates": [],
+   "equation": "26",
+   "wired": true
+  },
+  {
+   "slot": "cpi.growth.slots[3]",
+   "group": "cpi.growth.slots",
+   "symbol": "alpha_cpi2",
+   "value": 0.0597,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: Δimport price",
+   "candidates": [],
+   "equation": "26",
+   "wired": true
+  },
+  {
+   "slot": "cpi.target.named[w_core]",
+   "group": "cpi.target.named",
+   "symbol": "nu_cpi",
+   "value": 0.979,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: weight of core in headline",
+   "candidates": [],
+   "equation": "25",
+   "wired": true
+  },
+  {
+   "slot": "debt_gdp.slots[0]",
+   "group": "debt_gdp.slots",
+   "symbol": "c_debt",
+   "value": 0.0208,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: const",
+   "candidates": [],
+   "equation": "44",
+   "wired": false
+  },
+  {
+   "slot": "debt_gdp.slots[1]",
+   "group": "debt_gdp.slots",
+   "symbol": "alpha_debt1",
+   "value": 0.0118,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: gap (prior candidates income/housing were wrong)",
+   "candidates": [],
+   "equation": "44",
+   "wired": false
+  },
+  {
+   "slot": "debt_gdp.slots[2]",
+   "group": "debt_gdp.slots",
+   "symbol": "alpha_debt2",
+   "value": 0.1204,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: housing YoY",
+   "candidates": [],
+   "equation": "44",
+   "wired": false
+  },
+  {
+   "slot": "debt_gdp.slots[3]",
+   "group": "debt_gdp.slots",
+   "symbol": "alpha_debt3",
+   "value": -0.8556,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: household rate",
+   "candidates": [],
+   "equation": "44",
+   "wired": false
+  },
+  {
+   "slot": "export.demand_weights.slots[0]",
+   "group": "export.demand_weights.slots",
+   "symbol": "zeta_X_us",
+   "value": 0.18,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: CORRECTED order US·EU·CH·EA·JP·RW (prior candidate order US·CH·JP·EU·EA·RW was wrong)",
+   "candidates": [],
+   "equation": "18",
+   "wired": false
+  },
+  {
+   "slot": "export.demand_weights.slots[1]",
+   "group": "export.demand_weights.slots",
+   "symbol": "zeta_X_eu",
+   "value": 0.07,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: CORRECTED order US·EU·CH·EA·JP·RW (prior candidate order US·CH·JP·EU·EA·RW was wrong)",
+   "candidates": [],
+   "equation": "18",
+   "wired": false
+  },
+  {
+   "slot": "export.demand_weights.slots[2]",
+   "group": "export.demand_weights.slots",
+   "symbol": "zeta_X_cn",
+   "value": 0.2,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: CORRECTED order US·EU·CH·EA·JP·RW (prior candidate order US·CH·JP·EU·EA·RW was wrong)",
+   "candidates": [],
+   "equation": "18",
+   "wired": false
+  },
+  {
+   "slot": "export.demand_weights.slots[3]",
+   "group": "export.demand_weights.slots",
+   "symbol": "zeta_X_ea",
+   "value": 0.19,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: CORRECTED order US·EU·CH·EA·JP·RW (prior candidate order US·CH·JP·EU·EA·RW was wrong)",
+   "candidates": [],
+   "equation": "18",
+   "wired": false
+  },
+  {
+   "slot": "export.demand_weights.slots[4]",
+   "group": "export.demand_weights.slots",
+   "symbol": "zeta_X_jp",
+   "value": 0.05,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: CORRECTED order US·EU·CH·EA·JP·RW (prior candidate order US·CH·JP·EU·EA·RW was wrong)",
+   "candidates": [],
+   "equation": "18",
+   "wired": false
+  },
+  {
+   "slot": "export.demand_weights.slots[5]",
+   "group": "export.demand_weights.slots",
+   "symbol": "zeta_X_rw",
+   "value": 0.31,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: CORRECTED order US·EU·CH·EA·JP·RW (prior candidate order US·CH·JP·EU·EA·RW was wrong)",
+   "candidates": [],
+   "equation": "18",
+   "wired": false
+  },
+  {
+   "slot": "export.growth.slots[0]",
+   "group": "export.growth.slots",
+   "symbol": "c_X",
+   "value": 0.0085,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: const",
+   "candidates": [],
+   "equation": "19",
+   "wired": false
+  },
+  {
+   "slot": "export.growth.slots[1]",
+   "group": "export.growth.slots",
+   "symbol": "alpha_X0",
+   "value": 0.0619,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: EC loading",
+   "candidates": [],
+   "equation": "19",
+   "wired": false
+  },
+  {
+   "slot": "export.growth.slots[2]",
+   "group": "export.growth.slots",
+   "symbol": "alpha_X1",
+   "value": 0.8192,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: demand growth",
+   "candidates": [],
+   "equation": "19",
+   "wired": false
+  },
+  {
+   "slot": "export.growth.slots[3]",
+   "group": "export.growth.slots",
+   "symbol": "alpha_X2",
+   "value": 0.0033,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: exchange rate",
+   "candidates": [],
+   "equation": "19",
+   "wired": true
+  },
+  {
+   "slot": "export.target.slots[0]",
+   "group": "export.target.slots",
+   "symbol": "beta_X0",
+   "value": 4.14,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: const",
+   "candidates": [],
+   "equation": "17",
+   "wired": false
+  },
+  {
+   "slot": "export.target.slots[1]",
+   "group": "export.target.slots",
+   "symbol": "beta_X1",
+   "value": 1.6452,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: world demand",
+   "candidates": [],
+   "equation": "17",
+   "wired": true
+  },
+  {
+   "slot": "export_price.growth.slots[0]",
+   "group": "export_price.growth.slots",
+   "symbol": "c_px",
+   "value": 0.0016,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: const",
+   "candidates": [],
+   "equation": "30",
+   "wired": false
+  },
+  {
+   "slot": "export_price.growth.slots[1]",
+   "group": "export_price.growth.slots",
+   "symbol": "alpha_px0",
+   "value": 0.0982,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: EC loading",
+   "candidates": [],
+   "equation": "30",
+   "wired": false
+  },
+  {
+   "slot": "export_price.growth.slots[2]",
+   "group": "export_price.growth.slots",
+   "symbol": "alpha_px1",
+   "value": 0.3487,
+   "status": "PROVISIONAL",
+   "basis": "owner PDF reading 2026-08-05: symbol fixed; term per eq (30) printed order not transcribed (P3)",
+   "candidates": [
+    "fx-change pass-through",
+    "world-price growth pass-through"
+   ],
+   "equation": "30",
+   "wired": false
+  },
+  {
+   "slot": "export_price.growth.slots[3]",
+   "group": "export_price.growth.slots",
+   "symbol": "alpha_px2",
+   "value": 0.1381,
+   "status": "PROVISIONAL",
+   "basis": "owner PDF reading 2026-08-05: symbol fixed; term per eq (30) printed order not transcribed (P3)",
+   "candidates": [
+    "world-price growth pass-through",
+    "fx-change pass-through"
+   ],
+   "equation": "30",
+   "wired": false
+  },
+  {
+   "slot": "export_price.target.slots[0]",
+   "group": "export_price.target.slots",
+   "symbol": "beta_px0",
+   "value": 0.189,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: const",
+   "candidates": [],
+   "equation": "29",
+   "wired": false
+  },
+  {
+   "slot": "export_price.target.slots[1]",
+   "group": "export_price.target.slots",
+   "symbol": "beta_px1",
+   "value": 1.0,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: world price, unit constraint",
+   "candidates": [],
+   "equation": "29",
+   "wired": false
+  },
+  {
+   "slot": "foreign.china.slots[0]",
+   "group": "foreign.china.slots",
+   "symbol": "c_j",
+   "value": 0.02,
+   "status": "PROVISIONAL",
+   "basis": "owner PDF reading 2026-08-05: c/τ_Y pair belongs to eq (4) import-gap equation; assigned c_j = own-lag on symbol-notation grounds (P1) — owner: pair stays PROVISIONAL",
+   "candidates": [
+    "eq (4) own-lag",
+    "eq (4) output-gap loading"
+   ],
+   "equation": "4",
+   "wired": false
+  },
+  {
+   "slot": "foreign.china.slots[1]",
+   "group": "foreign.china.slots",
+   "symbol": "tau_Y",
+   "value": 0.05,
+   "status": "PROVISIONAL",
+   "basis": "owner PDF reading 2026-08-05: assigned τ_Y = eq (4) output-gap loading (τ indexed by Y); pair stays PROVISIONAL (P1)",
+   "candidates": [
+    "eq (4) output-gap loading",
+    "eq (4) own-lag"
+   ],
+   "equation": "4",
+   "wired": false
+  },
+  {
+   "slot": "foreign.china.slots[2]",
+   "group": "foreign.china.slots",
+   "symbol": "rho_Y",
+   "value": 0.5943,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: eq (5) own-lag",
+   "candidates": [],
+   "equation": "4",
+   "wired": false
+  },
+  {
+   "slot": "foreign.china.slots[3]",
+   "group": "foreign.china.slots",
+   "symbol": "beta_Y",
+   "value": 0.1673,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: eq (5) spillover loading",
+   "candidates": [],
+   "equation": "4",
+   "wired": true
+  },
+  {
+   "slot": "foreign.china.slots[4]",
+   "group": "foreign.china.slots",
+   "symbol": "gamma_Y",
+   "value": 0.0049,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: eq (5) oil-gap coefficient",
+   "candidates": [],
+   "equation": "4",
+   "wired": true
+  },
+  {
+   "slot": "foreign.ea.slots[0]",
+   "group": "foreign.ea.slots",
+   "symbol": "c_j",
+   "value": 0.02,
+   "status": "PROVISIONAL",
+   "basis": "owner PDF reading 2026-08-05: c/τ_Y pair belongs to eq (4) import-gap equation; assigned c_j = own-lag on symbol-notation grounds (P1) — owner: pair stays PROVISIONAL",
+   "candidates": [
+    "eq (4) own-lag",
+    "eq (4) output-gap loading"
+   ],
+   "equation": "4",
+   "wired": false
+  },
+  {
+   "slot": "foreign.ea.slots[1]",
+   "group": "foreign.ea.slots",
+   "symbol": "tau_Y",
+   "value": 0.05,
+   "status": "PROVISIONAL",
+   "basis": "owner PDF reading 2026-08-05: assigned τ_Y = eq (4) output-gap loading (τ indexed by Y); pair stays PROVISIONAL (P1)",
+   "candidates": [
+    "eq (4) output-gap loading",
+    "eq (4) own-lag"
+   ],
+   "equation": "4",
+   "wired": false
+  },
+  {
+   "slot": "foreign.ea.slots[2]",
+   "group": "foreign.ea.slots",
+   "symbol": "rho_Y",
+   "value": 0.6151,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: eq (5) own-lag",
+   "candidates": [],
+   "equation": "4",
+   "wired": false
+  },
+  {
+   "slot": "foreign.ea.slots[3]",
+   "group": "foreign.ea.slots",
+   "symbol": "beta_Y",
+   "value": 0.2706,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: eq (5) spillover loading",
+   "candidates": [],
+   "equation": "4",
+   "wired": true
+  },
+  {
+   "slot": "foreign.ea.slots[4]",
+   "group": "foreign.ea.slots",
+   "symbol": "gamma_Y",
+   "value": 0.005,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: eq (5) oil-gap coefficient",
+   "candidates": [],
+   "equation": "4",
+   "wired": true
+  },
+  {
+   "slot": "foreign.eu.slots[0]",
+   "group": "foreign.eu.slots",
+   "symbol": "c_j",
+   "value": 0.02,
+   "status": "PROVISIONAL",
+   "basis": "owner PDF reading 2026-08-05: c/τ_Y pair belongs to eq (4) import-gap equation; assigned c_j = own-lag on symbol-notation grounds (P1) — owner: pair stays PROVISIONAL",
+   "candidates": [
+    "eq (4) own-lag",
+    "eq (4) output-gap loading"
+   ],
+   "equation": "4",
+   "wired": false
+  },
+  {
+   "slot": "foreign.eu.slots[1]",
+   "group": "foreign.eu.slots",
+   "symbol": "tau_Y",
+   "value": 0.05,
+   "status": "PROVISIONAL",
+   "basis": "owner PDF reading 2026-08-05: assigned τ_Y = eq (4) output-gap loading (τ indexed by Y); pair stays PROVISIONAL (P1)",
+   "candidates": [
+    "eq (4) output-gap loading",
+    "eq (4) own-lag"
+   ],
+   "equation": "4",
+   "wired": false
+  },
+  {
+   "slot": "foreign.eu.slots[2]",
+   "group": "foreign.eu.slots",
+   "symbol": "rho_Y",
+   "value": 0.6011,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: eq (5) own-lag",
+   "candidates": [],
+   "equation": "4",
+   "wired": false
+  },
+  {
+   "slot": "foreign.eu.slots[3]",
+   "group": "foreign.eu.slots",
+   "symbol": "beta_Y",
+   "value": 0.3111,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: eq (5) spillover loading",
+   "candidates": [],
+   "equation": "4",
+   "wired": true
+  },
+  {
+   "slot": "foreign.eu.slots[4]",
+   "group": "foreign.eu.slots",
+   "symbol": "gamma_Y",
+   "value": 0.0049,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: eq (5) oil-gap coefficient",
+   "candidates": [],
+   "equation": "4",
+   "wired": true
+  },
+  {
+   "slot": "foreign.japan.slots[0]",
+   "group": "foreign.japan.slots",
+   "symbol": "c_j",
+   "value": 0.02,
+   "status": "PROVISIONAL",
+   "basis": "owner PDF reading 2026-08-05: c/τ_Y pair belongs to eq (4) import-gap equation; assigned c_j = own-lag on symbol-notation grounds (P1) — owner: pair stays PROVISIONAL",
+   "candidates": [
+    "eq (4) own-lag",
+    "eq (4) output-gap loading"
+   ],
+   "equation": "4",
+   "wired": false
+  },
+  {
+   "slot": "foreign.japan.slots[1]",
+   "group": "foreign.japan.slots",
+   "symbol": "tau_Y",
+   "value": 0.05,
+   "status": "PROVISIONAL",
+   "basis": "owner PDF reading 2026-08-05: assigned τ_Y = eq (4) output-gap loading (τ indexed by Y); pair stays PROVISIONAL (P1)",
+   "candidates": [
+    "eq (4) output-gap loading",
+    "eq (4) own-lag"
+   ],
+   "equation": "4",
+   "wired": false
+  },
+  {
+   "slot": "foreign.japan.slots[2]",
+   "group": "foreign.japan.slots",
+   "symbol": "rho_Y",
+   "value": 0.5819,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: eq (5) own-lag",
+   "candidates": [],
+   "equation": "4",
+   "wired": false
+  },
+  {
+   "slot": "foreign.japan.slots[3]",
+   "group": "foreign.japan.slots",
+   "symbol": "beta_Y",
+   "value": 0.3054,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: eq (5) spillover loading",
+   "candidates": [],
+   "equation": "4",
+   "wired": true
+  },
+  {
+   "slot": "foreign.japan.slots[4]",
+   "group": "foreign.japan.slots",
+   "symbol": "gamma_Y",
+   "value": 0.0049,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: eq (5) oil-gap coefficient",
+   "candidates": [],
+   "equation": "4",
+   "wired": true
+  },
+  {
+   "slot": "fx.slots[0]",
+   "group": "fx.slots",
+   "symbol": "alpha_EXR0",
+   "value": 0.8814,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: UIP weight",
+   "candidates": [],
+   "equation": "33",
+   "wired": false
+  },
+  {
+   "slot": "fx.slots[1]",
+   "group": "fx.slots",
+   "symbol": "alpha_EXR1",
+   "value": 7.0142,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: ln steady-state (≈1110원)",
+   "candidates": [],
+   "equation": "33",
+   "wired": false
+  },
+  {
+   "slot": "fx.slots[2]",
+   "group": "fx.slots",
+   "symbol": "alpha_EXR2",
+   "value": 4.0,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: risk-premium scale",
+   "candidates": [],
+   "equation": "33",
+   "wired": false
+  },
+  {
+   "slot": "fx.slots[3]",
+   "group": "fx.slots",
+   "symbol": "c_UIP",
+   "value": 0.0812,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: eq (34) constant",
+   "candidates": [],
+   "equation": "33",
+   "wired": false
+  },
+  {
+   "slot": "government.growth.slots[0]",
+   "group": "government.growth.slots",
+   "symbol": "c_G",
+   "value": 0.0041,
+   "status": "EXOG_V1",
+   "basis": "owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2",
+   "candidates": [],
+   "equation": "16",
+   "wired": false
+  },
+  {
+   "slot": "government.growth.slots[1]",
+   "group": "government.growth.slots",
+   "symbol": "alpha_G0_ec",
+   "value": 0.1697,
+   "status": "EXOG_V1",
+   "basis": "owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2",
+   "candidates": [],
+   "equation": "16",
+   "wired": false
+  },
+  {
+   "slot": "government.growth.slots[2]",
+   "group": "government.growth.slots",
+   "symbol": "alpha_G1_gap",
+   "value": -0.044,
+   "status": "EXOG_V1",
+   "basis": "owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2",
+   "candidates": [],
+   "equation": "16",
+   "wired": true
+  },
+  {
+   "slot": "government.target.slots[0]",
+   "group": "government.target.slots",
+   "symbol": "beta_G0_const",
+   "value": -0.0974,
+   "status": "EXOG_V1",
+   "basis": "owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2",
+   "candidates": [],
+   "equation": "15",
+   "wired": false
+  },
+  {
+   "slot": "government.target.slots[1]",
+   "group": "government.target.slots",
+   "symbol": "beta_G1_potential",
+   "value": 0.7913,
+   "status": "EXOG_V1",
+   "basis": "owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2",
+   "candidates": [],
+   "equation": "15",
+   "wired": false
+  },
+  {
+   "slot": "government.target.slots[2]",
+   "group": "government.target.slots",
+   "symbol": "beta_G2_elderly",
+   "value": 0.6582,
+   "status": "EXOG_V1",
+   "basis": "owner PDF reading 2026-08-05: symbols read; held at trend in Phase 2",
+   "candidates": [],
+   "equation": "15",
+   "wired": false
+  },
+  {
+   "slot": "housing.growth.slots[0]",
+   "group": "housing.growth.slots",
+   "symbol": "c_hpi",
+   "value": 0.0167,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: const",
+   "candidates": [],
+   "equation": "28",
+   "wired": false
+  },
+  {
+   "slot": "housing.growth.slots[1]",
+   "group": "housing.growth.slots",
+   "symbol": "alpha_hpi0",
+   "value": 0.0405,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: EC loading",
+   "candidates": [],
+   "equation": "28",
+   "wired": false
+  },
+  {
+   "slot": "housing.growth.slots[2]",
+   "group": "housing.growth.slots",
+   "symbol": "alpha_hpi1",
+   "value": 0.5029,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: AR",
+   "candidates": [],
+   "equation": "28",
+   "wired": false
+  },
+  {
+   "slot": "housing.growth.slots[3]",
+   "group": "housing.growth.slots",
+   "symbol": "alpha_hpi2",
+   "value": -1.4996,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: rate",
+   "candidates": [],
+   "equation": "28",
+   "wired": true
+  },
+  {
+   "slot": "housing.target.slots[0]",
+   "group": "housing.target.slots",
+   "symbol": "beta_hpi0",
+   "value": 0.1693,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: const",
+   "candidates": [],
+   "equation": "27",
+   "wired": false
+  },
+  {
+   "slot": "housing.target.slots[1]",
+   "group": "housing.target.slots",
+   "symbol": "beta_hpi1",
+   "value": 0.9539,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: CPI (prior provisional 'income' was wrong)",
+   "candidates": [],
+   "equation": "27",
+   "wired": true
+  },
+  {
+   "slot": "housing.target.slots[2]",
+   "group": "housing.target.slots",
+   "symbol": "beta_hpi2",
+   "value": -4.5095,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: household rate",
+   "candidates": [],
+   "equation": "27",
+   "wired": true
+  },
+  {
+   "slot": "import_.demand_weights.slots[0]",
+   "group": "import_.demand_weights.slots",
+   "symbol": "zeta_M_c",
+   "value": 0.21,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: order C·FI·IH·G·X confirmed",
+   "candidates": [],
+   "equation": "21",
+   "wired": false
+  },
+  {
+   "slot": "import_.demand_weights.slots[1]",
+   "group": "import_.demand_weights.slots",
+   "symbol": "zeta_M_fi",
+   "value": 0.22,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: order C·FI·IH·G·X confirmed",
+   "candidates": [],
+   "equation": "21",
+   "wired": false
+  },
+  {
+   "slot": "import_.demand_weights.slots[2]",
+   "group": "import_.demand_weights.slots",
+   "symbol": "zeta_M_ih",
+   "value": 0.22,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: order C·FI·IH·G·X confirmed",
+   "candidates": [],
+   "equation": "21",
+   "wired": false
+  },
+  {
+   "slot": "import_.demand_weights.slots[3]",
+   "group": "import_.demand_weights.slots",
+   "symbol": "zeta_M_g",
+   "value": 0.08,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: order C·FI·IH·G·X confirmed",
+   "candidates": [],
+   "equation": "21",
+   "wired": false
+  },
+  {
+   "slot": "import_.demand_weights.slots[4]",
+   "group": "import_.demand_weights.slots",
+   "symbol": "zeta_M_x",
+   "value": 0.29,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: order C·FI·IH·G·X confirmed",
+   "candidates": [],
+   "equation": "21",
+   "wired": false
+  },
+  {
+   "slot": "import_.growth.slots[0]",
+   "group": "import_.growth.slots",
+   "symbol": "c_M",
+   "value": 0.0028,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: const",
+   "candidates": [],
+   "equation": "22",
+   "wired": false
+  },
+  {
+   "slot": "import_.growth.slots[1]",
+   "group": "import_.growth.slots",
+   "symbol": "alpha_M0",
+   "value": 0.1477,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: EC loading",
+   "candidates": [],
+   "equation": "22",
+   "wired": false
+  },
+  {
+   "slot": "import_.growth.slots[2]",
+   "group": "import_.growth.slots",
+   "symbol": "alpha_M1",
+   "value": 1.0108,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: demand growth",
+   "candidates": [],
+   "equation": "22",
+   "wired": true
+  },
+  {
+   "slot": "import_.growth.slots[3]",
+   "group": "import_.growth.slots",
+   "symbol": "alpha_M2",
+   "value": -0.0062,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: exchange rate",
+   "candidates": [],
+   "equation": "22",
+   "wired": true
+  },
+  {
+   "slot": "import_.target.slots[0]",
+   "group": "import_.target.slots",
+   "symbol": "beta_M0",
+   "value": -4.5009,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: const",
+   "candidates": [],
+   "equation": "20",
+   "wired": false
+  },
+  {
+   "slot": "import_.target.slots[1]",
+   "group": "import_.target.slots",
+   "symbol": "beta_M1",
+   "value": 1.3916,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: absorption demand",
+   "candidates": [],
+   "equation": "20",
+   "wired": true
+  },
+  {
+   "slot": "import_price.growth.slots[0]",
+   "group": "import_price.growth.slots",
+   "symbol": "c_pm",
+   "value": 0.0013,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: const",
+   "candidates": [],
+   "equation": "32",
+   "wired": false
+  },
+  {
+   "slot": "import_price.growth.slots[1]",
+   "group": "import_price.growth.slots",
+   "symbol": "alpha_pm0",
+   "value": 0.1813,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: EC loading",
+   "candidates": [],
+   "equation": "32",
+   "wired": false
+  },
+  {
+   "slot": "import_price.growth.slots[2]",
+   "group": "import_price.growth.slots",
+   "symbol": "alpha_pm1",
+   "value": 0.8794,
+   "status": "PROVISIONAL",
+   "basis": "owner PDF reading 2026-08-05: symbol fixed; term per eq (32) printed order not transcribed (P3)",
+   "candidates": [
+    "world-price+fx growth",
+    "oil growth"
+   ],
+   "equation": "32",
+   "wired": true
+  },
+  {
+   "slot": "import_price.growth.slots[3]",
+   "group": "import_price.growth.slots",
+   "symbol": "alpha_pm2",
+   "value": 0.2883,
+   "status": "PROVISIONAL",
+   "basis": "owner PDF reading 2026-08-05: symbol fixed; term per eq (32) printed order not transcribed (P3)",
+   "candidates": [
+    "oil growth",
+    "world-price+fx growth"
+   ],
+   "equation": "32",
+   "wired": false
+  },
+  {
+   "slot": "import_price.target.slots[0]",
+   "group": "import_price.target.slots",
+   "symbol": "beta_pm0",
+   "value": -4.6222,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: const",
+   "candidates": [],
+   "equation": "31",
+   "wired": false
+  },
+  {
+   "slot": "import_price.target.slots[1]",
+   "group": "import_price.target.slots",
+   "symbol": "beta_pm1",
+   "value": 1.0651,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: world import price",
+   "candidates": [],
+   "equation": "31",
+   "wired": true
+  },
+  {
+   "slot": "import_price.target.slots[2]",
+   "group": "import_price.target.slots",
+   "symbol": "beta_pm2",
+   "value": 0.4391,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: oil",
+   "candidates": [],
+   "equation": "31",
+   "wired": true
+  },
+  {
+   "slot": "investment_fi.growth.slots[0]",
+   "group": "investment_fi.growth.slots",
+   "symbol": "alpha_I0",
+   "value": 0.1983,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: EC loading",
+   "candidates": [],
+   "equation": "11",
+   "wired": false
+  },
+  {
+   "slot": "investment_fi.growth.slots[1]",
+   "group": "investment_fi.growth.slots",
+   "symbol": "alpha_I1",
+   "value": 0.0248,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: AR",
+   "candidates": [],
+   "equation": "11",
+   "wired": false
+  },
+  {
+   "slot": "investment_fi.growth.slots[2]",
+   "group": "investment_fi.growth.slots",
+   "symbol": "gamma_I1",
+   "value": 0.6182,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: output gap",
+   "candidates": [],
+   "equation": "11",
+   "wired": true
+  },
+  {
+   "slot": "investment_fi.growth.slots[3]",
+   "group": "investment_fi.growth.slots",
+   "symbol": "gamma_I2",
+   "value": -0.1,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: deflator",
+   "candidates": [],
+   "equation": "11",
+   "wired": false
+  },
+  {
+   "slot": "investment_fi.growth.slots[4]",
+   "group": "investment_fi.growth.slots",
+   "symbol": "gamma_I3",
+   "value": -0.0066,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: semiconductor — SIGN_NOTE: negative as printed, kept",
+   "candidates": [],
+   "equation": "11",
+   "wired": false
+  },
+  {
+   "slot": "investment_fi.target.slots[0]",
+   "group": "investment_fi.target.slots",
+   "symbol": "beta_I0",
+   "value": -4.624,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: const",
+   "candidates": [],
+   "equation": "9",
+   "wired": false
+  },
+  {
+   "slot": "investment_fi.target.slots[1]",
+   "group": "investment_fi.target.slots",
+   "symbol": "beta_I1",
+   "value": 1.2121,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: potential",
+   "candidates": [],
+   "equation": "9",
+   "wired": false
+  },
+  {
+   "slot": "investment_fi.target.slots[2]",
+   "group": "investment_fi.target.slots",
+   "symbol": "beta_I2",
+   "value": 0.0274,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: Covid dummy",
+   "candidates": [],
+   "equation": "9",
+   "wired": false
+  },
+  {
+   "slot": "loan_rates.firm.slots[0]",
+   "group": "loan_rates.firm.slots",
+   "symbol": "nu_Firm",
+   "value": 0.64,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: CORRECTION — ν_Firm=0.64 group is the FIRM equation",
+   "candidates": [],
+   "equation": "40",
+   "wired": false
+  },
+  {
+   "slot": "loan_rates.firm.slots[1]",
+   "group": "loan_rates.firm.slots",
+   "symbol": "rho_Firm",
+   "value": 0.7025,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: smoothing",
+   "candidates": [],
+   "equation": "40",
+   "wired": false
+  },
+  {
+   "slot": "loan_rates.firm.slots[2]",
+   "group": "loan_rates.firm.slots",
+   "symbol": "eta_bar_Firm",
+   "value": 0.0013,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: mean spread",
+   "candidates": [],
+   "equation": "40",
+   "wired": false
+  },
+  {
+   "slot": "loan_rates.firm.slots[3]",
+   "group": "loan_rates.firm.slots",
+   "symbol": "alpha_Firm",
+   "value": 0.1607,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: pass-through",
+   "candidates": [],
+   "equation": "40",
+   "wired": false
+  },
+  {
+   "slot": "loan_rates.household.slots[0]",
+   "group": "loan_rates.household.slots",
+   "symbol": "nu_HH",
+   "value": 0.36,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: CORRECTION — groups were swapped; ν_HH=0.36 group is the HOUSEHOLD equation (households closer to long rates)",
+   "candidates": [],
+   "equation": "40",
+   "wired": false
+  },
+  {
+   "slot": "loan_rates.household.slots[1]",
+   "group": "loan_rates.household.slots",
+   "symbol": "rho_HH",
+   "value": 0.6066,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: smoothing",
+   "candidates": [],
+   "equation": "40",
+   "wired": false
+  },
+  {
+   "slot": "loan_rates.household.slots[2]",
+   "group": "loan_rates.household.slots",
+   "symbol": "eta_bar_HH",
+   "value": 0.0038,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: mean spread",
+   "candidates": [],
+   "equation": "40",
+   "wired": false
+  },
+  {
+   "slot": "loan_rates.household.slots[3]",
+   "group": "loan_rates.household.slots",
+   "symbol": "alpha_HH",
+   "value": 0.2114,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: pass-through",
+   "candidates": [],
+   "equation": "40",
+   "wired": false
+  },
+  {
+   "slot": "loan_rates.shared.named[eta_cb]",
+   "group": "loan_rates.shared.named",
+   "symbol": "eta_bar_CB_ref",
+   "value": 0.0003,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: corp-bond spread reference in eqs 42-43 (shared; moved out of the old 'corporate' slot list)",
+   "candidates": [],
+   "equation": "40",
+   "wired": false
+  },
+  {
+   "slot": "policy_rule.named[phi_i]",
+   "group": "policy_rule.named",
+   "symbol": "phi_i",
+   "value": 0.85,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: smoothing (was 'rho')",
+   "candidates": [],
+   "equation": "35",
+   "wired": false
+  },
+  {
+   "slot": "policy_rule.named[phi_y]",
+   "group": "policy_rule.named",
+   "symbol": "phi_y",
+   "value": 0.5,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05",
+   "candidates": [],
+   "equation": "35",
+   "wired": false
+  },
+  {
+   "slot": "policy_rule.named[phi_pi]",
+   "group": "policy_rule.named",
+   "symbol": "phi_pi",
+   "value": 1.5,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05",
+   "candidates": [],
+   "equation": "35",
+   "wired": false
+  },
+  {
+   "slot": "policy_rule.named[pi_star]",
+   "group": "policy_rule.named",
+   "symbol": "pi_star",
+   "value": 0.02,
+   "status": "RESOLVED",
+   "basis": "owner PDF reading 2026-08-05: CORRECTION — 4th value is the inflation target π*, not r*; labels only, no numeric change",
+   "candidates": [],
+   "equation": "35",
+   "wired": false
+  }
+ ],
+ "coefficient_counts": {
+  "RESOLVED": 102,
+  "EXOG_V1": 15,
+  "PROVISIONAL": 15
+ },
+ "stale_exog": "`construction.*` 9슬롯과 `government.*` 6슬롯이 아직 `EXOG_V1`(«Phase 2 에서 추세 고정»)로 적혀 있는데, 8/21 에 두 블록이 해동돼 **지금 배선돼 있어요.** 상태 라벨이 15건 낡았어요.",
+ "unpublished": [
+  [
+   "β_sync",
+   "각주 25 — 동조화 계수를 안 실어요"
+  ],
+  [
+   "r*",
+   "각주 24 — 상수로 두고 Laubach–Williams 평균을 써요"
+  ],
+  [
+   "eq (4) ρ_M · β_M",
+   "Table 1 의 c 와 τ 배치가 확정이 안 돼요"
+  ],
+  [
+   "eq (6) 스필오버 가중",
+   "안 실려 있어요"
+  ],
+  [
+   "기타국(RW) 블록",
+   "통째로 안 실려 있어요"
+  ],
+  [
+   "금리 단위 규약",
+   "%p 인지 소수인지 어디에도 안 적혀 있어요"
+  ],
+  [
+   "pac_beta",
+   "PAC 할인인자. 0.99 는 분기 관례예요"
+  ],
+  [
+   "OIL_RHO",
+   "유가 AR(1) 지속성 0.90"
+  ]
+ ],
+ "census": {
+  "total": 207,
+  "printed": 44,
+  "unprinted": 163,
+  "partial": true,
+  "note": "**부분이에요.** 논문이 163개를 열거하지 않아서, 셀 수 있는 것만 세고 나머지는 회복 불가로 뒀어요. 채워 넣지 않았어요.",
+  "buckets": [
+   {
+    "name": "인쇄된 일반형의 블록별 인스턴스화",
+    "count": 24,
+    "how": "eq (4)(5)(6) 은 블록 j 에 대한 일반형이에요. 미국을 뺀 블록이 9개(중국·EU·일본·신흥아시아 6국·기타)라 3×9 = 27 인스턴스, 그중 3 이 인쇄돼요.",
+    "confidence": "셀 수 있어요"
+   },
+   {
+    "name": "미국 블록 (IMF QPM 2008 계열)",
+    "count": 5,
+    "how": "구현이 IS·필립스·준칙·수입갭·10년 다섯을 세워요. 논문은 안 인쇄해요.",
+    "confidence": "하한이에요"
+   },
+   {
+    "name": "항등식·변환",
+    "count": 14,
+    "how": "구현의 `KOREA_VARS` 31개 중 인쇄 짝이 없는 것 — 증분 여섯, 전년비 둘, 물가 수준 둘, 목표 하나, 대출 스프레드 둘, 어트랙터 하나.",
+    "confidence": "하한이에요"
+   },
+   {
+    "name": "기대·해법 기계 (부록 A)",
+    "count": 16,
+    "how": "A.1~A.16 — VECM·증강 VAR·컴패니언·k-step 예측·PAC 가중. 부록에 있지 본문 44 에는 없어요.",
+    "confidence": "셀 수 있어요"
+   },
+   {
+    "name": "한국 데이터 정의",
+    "count": null,
+    "how": "잠재산출·HP 추세·디플레이터·고령화율·감가상각률. 논문이 정의식을 안 적어서 **못 세요.**",
+    "confidence": "못 세요"
+   },
+   {
+    "name": "회복 불가",
+    "count": 104,
+    "how": "163 − (24+5+14+16). 논문에서 복원할 방법이 없어요.",
+    "confidence": "잔여예요"
+   }
+  ]
+ },
+ "eq_no_corrections": [
+  {
+   "where": "investment_growth",
+   "code": "10",
+   "paper": "11",
+   "why": "PDF 인쇄 p.18 에서 (10) 은 자본 사용자비용 정의이고 설비투자 성장식은 (11) 이에요."
+  }
+ ]
+}
