@@ -60,12 +60,15 @@ function Slot({ surface, owner }: { surface: Surface; owner: string }) {
       <Text as="h2" font="title3">
         {SURFACE_LABEL[surface]}
       </Text>
+      {/* 설명은 **머리에 한 번만** 선다. 처음엔 여기에도 뒀는데 탭 옆의 것과
+          나란히 두 번 찍혔다(실측 2026-08-21). 슬롯이 할 말은 «누가 채우나»
+          하나다. */}
       <Text as="p" font="body" color="fgMuted">
-        {SURFACE_BLURB[surface]}
+        아직 비어 있어요 — {owner}이 채워요.
       </Text>
       <Text as="p" font="legal" color="fgMuted">
-        아직 비어 있어요 — {owner}이 채워요. 껍데기와 계약은 서 있고, 엔진 산출물도
-        준비돼 있어요.
+        껍데기·계약·앵커는 서 있고 엔진 산출물도 준비돼 있어요. 읽을 것은
+        <b> docs/MODEL_LANE_CONTEXT.md</b> 예요.
       </Text>
     </VStack>
   );
