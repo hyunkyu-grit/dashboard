@@ -164,10 +164,12 @@ describe('행과 합계는 단위를 찍는다 — 독립 fmtKrw 호출이 아�
   });
 
   it('현금채권의 네 칸은 splitCashBondKrw 의 단위를 찍는다', () => {
-    const src = read('src/cashbond/CashBondWindow.tsx');
+    /* 창이 하나가 된 뒤(2026-08-21) 이 규칙도 같은 파일에 산다 — 채권 줄이
+     * 섞인 북은 조달 칸이 하나 더 서고, 넷이 가로로 더해져야 한다. */
+    const src = read('src/backtest/BacktestWindow.tsx');
     expect(src).toMatch(/splitCashBondKrw\(/);
     /* 줄마다 넷을 찍는 자리 — 평가·캐리·롤다운·조달이 모두 단위를 지난다. */
-    const inline = src.match(/평가 \{fmtKrwFromMan[\s\S]{0,220}?조달 \{fmtKrwFromMan/);
+    const inline = src.match(/평가 \{fmtKrwFromMan[\s\S]{0,260}?조달 \{fmtKrwFromMan/);
     expect(inline, '줄의 4분해가 단위 쌍둥이를 지나지 않는다').toBeTruthy();
   });
 
@@ -175,7 +177,7 @@ describe('행과 합계는 단위를 찍는다 — 독립 fmtKrw 호출이 아�
     /* `fmtKrw` 자체는 금지가 아니다 — 헤드라인·축 라벨·크기(노셔널)에 쓴다.
      * 금지는 **분해된 성분**에 쓰는 것이다. 성분 이름 바로 뒤에 오는 호출만 본다. */
     const offenders: string[] = [];
-    for (const f of ['src/backtest/BacktestWindow.tsx', 'src/cashbond/CashBondWindow.tsx']) {
+    for (const f of ['src/backtest/BacktestWindow.tsx', 'src/sim/ResultsWindow.tsx']) {
       const src = read(f);
       for (const m of src.matchAll(/(평가|캐리|롤다운|조달)\s*\{fmtKrw\(/g)) {
         offenders.push(`${f}: ${m[1]}`);

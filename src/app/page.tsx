@@ -42,9 +42,7 @@ import { PreviewPane } from '@/ui/PreviewPane';
 import { useFillHeight } from '@/ui/useFillHeight';
 import { BacktestWindow, encodeBook, seedBook } from '@/backtest/BacktestWindow';
 import type { BookRow } from '@/backtest/book';
-import { isBookable, newRow } from '@/backtest/book';
-import { CashBondWindow, seedCashBondBook } from '@/cashbond/CashBondWindow';
-import { encodeCashBondBook, newCashBondRow, type CashBondBookRow } from '@/cashbond/book';
+import { isBookable, newRow, yearBefore } from '@/backtest/book';
 import { SettingView } from '@/ui/SettingView';
 import { BondTypeFilter } from '@/ui/BondTypeFilter';
 import { SimulationPage, type CaseRuns } from '@/sim/SimulationPage';
@@ -288,42 +286,6 @@ const BANNER_H = 34;
     setBook(seeded);
   }, [btParam, previewRow, shown, data?.summary.asof, setBook]);
 
-  /* ── 현금채권 백테스트 창 ──────────────────────────────────────────────
-     IRS 의 `bt` 와 같은 규칙, 키는 `cb` — 링크가 곧 북이다. 별개 파라미터인
-     이유는 별개 창이라서다: 두 백테스트는 엔진도 문법(id 에 `:`)도 다르고,
-     한 키에 섞으면 링크를 연 쪽이 어느 창인지 문자열을 파싱해야 안다. */
-  const [cbParam, setCbParam] = useUrlState('cb');
-  const [cbBook, setCbBookState] = useState<CashBondBookRow[]>([]);
-  const cbOpen = cbParam != null;
-
-  const setCbBook = useCallback(
-    (next: CashBondBookRow[]) => {
-      setCbBookState(next);
-      setCbParam(encodeCashBondBook(next) || ' ');
-    },
-    [setCbParam],
-  );
-
-  const openCashBondBacktest = useCallback(() => {
-    if (!data) return;
-    const seedId =
-      previewRow && (previewRow.group === 'cashbond' || previewRow.group === 'asw')
-        ? previewRow.id
-        : (shown[0]?.id ?? data.cashbond.rows[0]?.id ?? '');
-    setCbBook(seedCashBondBook(cbParam, seedId, data.cashbond.asof, data.cashbond.from));
-  }, [data, previewRow, shown, cbParam, setCbBook]);
-
-  useEffect(() => {
-    if (!cbOpen || cbBook.length > 0 || !data) return;
-    setCbBookState(
-      seedCashBondBook(cbParam, data.cashbond.rows[0]?.id ?? '', data.cashbond.asof, data.cashbond.from),
-    );
-  }, [cbOpen, cbParam, cbBook.length, data]);
-
-  /* 창의 유니버스는 **북의 첫 줄이 정한다** — 탭이 아니라. 창을 띄워 둔 채
-     다른 탭으로 가도 종목·테너 목록이 갈리면 안 된다. */
-  const cbKind = cbBook[0]?.id.startsWith('ASW:') ? 'ASW' : 'CB';
-
   /* **차트를 눌러서 들어간다** [v1 계약 복원, OWNER 2026-08-18 — "원래 백테스트는
      그래프를 눌러서 들어갔었는데"]. v1 은 pane 의 차트 블록 전체가 role="button"
      이었고, 클릭하면 그 행 + **커서가 짚고 있던 날짜**(`btf`)로 백테스트가 열렸다
@@ -335,22 +297,22 @@ const BANNER_H = 34;
      담을 수 없는 행(포워드·변동성 등)이면 버튼과 같은 폴백으로 간다. */
   const openBacktestAt = useCallback(
     (row: Row, from?: string) => {
-      /* 현금채권·자산스왑 행은 자기 창으로 간다 — IRS 엔진은 `:` 가 든 id 를
-         전부 거절한다(서버가 거부하는 것을 화면이 제안하지 않는다). */
-      if (row.group === 'cashbond' || row.group === 'asw') {
-        if (!data) return;
-        const seeded = newCashBondRow(row.id, data.cashbond.asof, data.cashbond.from);
-        if (from) seeded.entry = from;
-        setCbBook([seeded]);
-        return;
-      }
       if (!isBookable(row)) {
         openBacktest();
         return;
       }
-      setBook([newRow(row.id, from ?? data?.summary.asof ?? '')]);
+      /* 현금채권·자산스왑도 **같은 북**이다 [OWNER, 2026-08-21]. 진입일 기본만
+         다르다 — 채권은 캐리가 쌓여야 읽히는 화면이라 며칠짜리 기본값이 늘
+         "거의 0" 을 보여 준다(`yearBefore` 의 근거). */
+      const bond = row.group === 'cashbond' || row.group === 'asw';
+      const entry =
+        from ??
+        (bond && data
+          ? yearBefore(data.cashbond.asof, data.cashbond.from)
+          : (data?.summary.asof ?? ''));
+      setBook([newRow(row.id, entry)]);
     },
-    [openBacktest, setBook, setCbBook, data],
+    [openBacktest, setBook, data],
   );
 
   /* 링크로 들어온 경우: URL 에 북이 있으면 그걸로 화면을 세운다(한 번만). */
@@ -505,7 +467,7 @@ const BANNER_H = 34;
               <button
                 type="button"
                 className="sr-rv-pillbtn"
-                onClick={isCashBondTab ? openCashBondBacktest : openBacktest}
+                onClick={openBacktest}
               >
                 백테스트
               </button>
@@ -727,10 +689,18 @@ const BANNER_H = 34;
           두 번의 교훈). */}
       {/* 창은 자기 경계를 진다 — 창 안이 죽어도 뒤의 표는 살아 있고, 닫기는
           `FloatingWindow` 의 헤더가 아니라 **URL** 이 쥐고 있어서 여전히 닫힌다. */}
+      {/* 창은 **하나**다 [OWNER, 2026-08-21]. 종전에는 IRS 와 현금채권이 각자
+          창을 열었고 URL 키도 둘(`bt`·`cb`)이었다. 한 북에 스왑과 채권이 같이
+          서는 지금은 그 갈래가 곧 두 개의 답을 뜻하므로 남겨 둘 수 없다 —
+          `cb` 링크는 이제 열리지 않고, 북은 전부 `bt` 에 실린다. */}
       {btOpen && data ? (
         <ErrorBoundary region="백테스트 창" fallback="백테스트 결과를 그리지 못했어요.">
         <BacktestWindow
           rows={rows}
+          cashbondRows={data.cashbond.rows}
+          cashbondTypes={data.cashbond.types}
+          cashbondAsOf={data.cashbond.asof}
+          cashbondFrom={data.cashbond.from}
           asOf={data.summary.asof}
           policy={data.summary.policy}
           book={book}
@@ -740,26 +710,6 @@ const BANNER_H = 34;
             setBookState([]);
           }}
         />
-        </ErrorBoundary>
-      ) : null}
-
-      {/* 현금채권 백테스트 창 — IRS 창과 같은 규칙(URL 이 열림을 쥔다), 다른
-          엔진. 유니버스는 북의 첫 줄이 정한 kind 다 (`cbKind` 의 주석). */}
-      {cbOpen && data ? (
-        <ErrorBoundary region="현금채권 백테스트 창" fallback="현금채권 백테스트를 그리지 못했어요.">
-          <CashBondWindow
-            rows={data.cashbond.rows.filter((r) => r.kind === cbKind)}
-            types={data.cashbond.types}
-            asOf={data.cashbond.asof}
-            policy={data.summary.policy}
-            minDate={data.cashbond.from}
-            book={cbBook}
-            setBook={setCbBook}
-            onClose={() => {
-              setCbParam(undefined);
-              setCbBookState([]);
-            }}
-          />
         </ErrorBoundary>
       ) : null}
 

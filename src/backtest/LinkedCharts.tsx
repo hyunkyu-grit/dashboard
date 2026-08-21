@@ -42,9 +42,9 @@ import { fmtKrw } from '@/lib/krw';
 import { loadCd, RefKey } from '@/ui/PreviewPane';
 import { placeReadout } from '@/ui/ReadoutCard';
 
-/** `PnlSeries` — v1 과 같은 구조 프롭. IRS 북(`BacktestResult`)과 현금채권
- * (`CashBondBacktest`)이 둘 다 이 모양을 만족하고, 차트는 그 둘의 차이를 알
- * 필요가 없다. 이 네 필드가 사라지면 타입이 먼저 말한다. */
+/** `PnlSeries` — v1 과 같은 구조 프롭. 스왑과 현금채권이 한 북에 섞여도
+ * (`BacktestResult`) 차트는 줄의 종류를 알 필요가 없다: 필요한 것은 이 네
+ * 필드뿐이고, 하나라도 사라지면 타입이 먼저 말한다. */
 export interface PnlSeries {
   from: string;
   to: string;

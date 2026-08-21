@@ -1017,6 +1017,42 @@ thead th {
   text-align: center;
 }
 
+/* ── 두 격자를 가르는 머리 [OWNER, 2026-08-21 — 혼합 북] ────────────────────
+   스왑 KRD 와 채권 KRD 는 다른 커브의 감도라 한 칸에 못 더한다. 표는 하나로
+   두되(손익 3분해는 원이라 그냥 더해진다) 격자만 두 덩어리로 세운다.
+
+   그룹 줄이 헤더 위에 서므로 **테너 줄의 `top` 이 그만큼 내려가야 한다.**
+   두 값이 갈리면 세로 스크롤 중에 테너 머리가 그룹 머리 밑으로 파고든다.
+   26px 은 이 줄의 실제 높이다(패딩 4+4 + 13px 글자 한 줄). 하나를 고치면
+   **둘 다** 고쳐야 한다. */
+.sr-recon-grouprow > .sr-recon-th {
+  top: 0;
+  height: 26px;
+  padding: 4px 0;
+  text-align: left;
+}
+
+/* 라벨만 가로로 붙는다 — `left` 는 왼쪽 고정 열의 폭이고 인라인으로 온다
+   (13px 헤더의 `ch` 는 14px 본문의 `ch` 와 다르다 — `headCh` 의 근거). */
+.sr-recon-grouplabel {
+  position: sticky;
+  display: inline-block;
+  padding-left: 8px;
+  font-weight: 500;
+  color: var(--color-fg);
+}
+
+.sr-recon-hasgroups > .sr-recon-th {
+  top: 26px;
+}
+
+/* 경계는 헤어라인 하나 — "여기서부터 다른 커브". `border` 가 아니라 inset
+   그림자인 이유는 `.sr-recon-edge-*` 와 같다: 트랙 폭이 1px 밀리면 `ch` 로
+   적은 sticky 오프셋과 실제 경계가 어긋난다. */
+.sr-recon-groupsep {
+  box-shadow: inset 1px 0 0 var(--color-bgLine);
+}
+
 .sr-recon-right {
   text-align: right;
 }

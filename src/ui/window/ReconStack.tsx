@@ -104,9 +104,15 @@ const KIND_CH = 5;
  * 환산해서 넘긴다 — `ch` 는 **그 요소 자신의** 폰트에서 '0' 의 진행폭이다. */
 const headCh = (n: number) => `calc(${n}ch * 14 / 13)`;
 
+export interface ReconStackGroup {
+  label: string;
+  cols: { key: string; label: string }[];
+}
+
 export function ReconStack({
   days,
   tenors,
+  groups,
   note,
   defaultOrder = 'asc',
   maxHeight = '30vh',
@@ -115,6 +121,14 @@ export function ReconStack({
    * 토글)이지 호출자의 배열이 아니다. */
   days: ReconStackDay[];
   tenors: string[];
+  /** 격자를 **두 덩어리로 가른다** [OWNER, 2026-08-21 — 혼합 북].
+   *
+   * 스왑 KRD 는 IRS 제로커브 노드, 채권 KRD 는 민평 노드에 실린 감도다. 같은
+   * "3Y" 라는 이름을 쓰지만 다른 위험이라 한 칸에 더할 수 없고, 그래서 열쇠에
+   * 접두사가 붙어 온다(`S:3Y`·`B:3Y`) — 화면에 적히는 것은 `label`(테너)뿐이고
+   * 어느 커브인지는 그룹 머리가 말한다. 없으면 격자가 하나다(한 종류뿐인 북),
+   * 그때 `tenors` 가 곧 열쇠이자 라벨이다. */
+  groups?: ReconStackGroup[];
   /** 표 아래 한 줄 — 잘린 창 같은 데이터 사실. */
   note?: string;
   /** 첫 표시 방향 [v1 OWNER, 2026-08-11 — "날짜는 오름차순 내림차순 선택할 수
@@ -134,6 +148,20 @@ export function ReconStack({
   }
   const shown = order === 'asc' ? days : [...days].reverse();
 
+  /* 열은 **열쇠와 라벨이 다를 수 있다.** 격자가 하나면 둘이 같고(테너 문자열),
+     둘로 갈리면 열쇠에 접두사가 붙는다. 아래는 전부 이 목록으로만 돈다 —
+     `tenors` 를 직접 훑는 자리가 남으면 접두사가 화면에 새어 나온다. */
+  const cols: { key: string; label: string }[] =
+    groups && groups.length > 1
+      ? groups.flatMap((g) => g.cols)
+      : tenors.map((t) => ({ key: t, label: t }));
+  const banded = groups && groups.length > 1 ? groups : null;
+  /* 그룹 경계에 서는 열쇠 — 헤어라인 하나로 "여기서부터 다른 커브" 를 말한다.
+     첫 그룹의 첫 열은 빠진다(왼쪽 범례의 경계가 이미 거기 있다). */
+  const sepKeys = new Set(
+    banded ? banded.slice(1).map((g) => g.cols[0]?.key).filter(Boolean) : [],
+  );
+
   /* 오른쪽 범례의 하루 칸들(rowSpan=3). 조달 열은 현금채권 대사에서만 선다 —
      `funding` 필드의 존재가 곧 판정이고, IRS 대사는 필드 자체가 없다. */
   const hasFunding = days.some((d) => d.funding !== undefined);
@@ -149,16 +177,23 @@ export function ReconStack({
   const tailCols = summaryCols.length + 1; // 맨 앞의 합계 열
 
   const tenorW = tenorWidth(
-    tenors,
-    days.flatMap((d) => METRICS.flatMap((m) => tenors.map((t) => cellText(m, d[m][t] ?? null)))),
+    cols.map((c) => c.label),
+    days.flatMap((d) =>
+      METRICS.flatMap((m) => cols.map((c) => cellText(m, d[m][c.key] ?? null))),
+    ),
   );
 
   /* 히트맵 농도의 기준은 **표 전체**의 max|KRD| — 날마다 다시 잡으면 작은 날의 작은
      값이 큰 날의 큰 값과 같은 진하기가 된다. */
-  const krdScale = Math.max(...days.flatMap((d) => tenors.map((t) => Math.abs(d.krd[t] ?? 0))), 0);
+  const krdScale = Math.max(
+    ...days.flatMap((d) => cols.map((c) => Math.abs(d.krd[c.key] ?? 0))),
+    0,
+  );
 
   const rowTotal = (d: ReconStackDay, m: Metric): number | null => {
-    if (m === 'krd') return tenors.reduce((s, t) => s + (d.krd[t] ?? 0), 0);
+    // KRD 의 합계는 **두 커브가 다 1bp 움직였을 때**의 원/bp 다. 열을 섞는 것과
+    // 다른 셈이다(칸 하나가 두 위험을 뜻하는 게 아니라, 북 전체의 평행이동이다).
+    if (m === 'krd') return cols.reduce((s, c) => s + (d.krd[c.key] ?? 0), 0);
     if (m === 'est') return d.estTotal;
     return null; // Δbp 의 테너 합은 아무 뜻이 없다
   };
@@ -176,21 +211,69 @@ export function ReconStack({
         <table
           className="sr-recon"
           style={{
-            width: `calc(${DATE_CH}ch + ${KIND_CH}ch + ${tenors.length} * (${tenorW}) + ${tailCols} * ${TAIL_CH}ch)`,
+            width: `calc(${DATE_CH}ch + ${KIND_CH}ch + ${cols.length} * (${tenorW}) + ${tailCols} * ${TAIL_CH}ch)`,
           }}
         >
           <colgroup>
             <col style={{ width: `${DATE_CH}ch` }} />
             <col style={{ width: `${KIND_CH}ch` }} />
-            {tenors.map((t) => (
-              <col key={t} style={{ width: tenorW }} />
+            {cols.map((c) => (
+              <col key={c.key} style={{ width: tenorW }} />
             ))}
             {Array.from({ length: tailCols }, (_, i) => (
               <col key={i} style={{ width: `${TAIL_CH}ch` }} />
             ))}
           </colgroup>
           <thead>
-            <tr>
+            {/* 격자를 가르는 머리 — 혼합 북에서만 [OWNER, 2026-08-21].
+                꼬리 칸을 빈 `th` 로 **그대로 한 벌 더** 세우는 이유: 오른쪽
+                범례는 `right` 오프셋 사다리로 고정되는데, `colSpan` 하나로
+                덮으면 그 사다리가 이 줄에서만 끊겨 가로 스크롤 중 밑이 샌다
+                (이 표의 첫 규율 — 트랙과 오프셋이 자로 맞아야 한다). */}
+            {banded ? (
+              <tr className="sr-recon-grouprow">
+                <th className="sr-recon-th sr-recon-pin" style={{ left: 0 }} />
+                <th
+                  className="sr-recon-th sr-recon-pin sr-recon-edge-l"
+                  style={{ left: headCh(DATE_CH) }}
+                />
+                {banded.map((g, gi) => (
+                  <th
+                    key={g.label}
+                    colSpan={g.cols.length}
+                    className={`sr-recon-th${gi > 0 ? ' sr-recon-groupsep' : ''}`}
+                  >
+                    {/* 라벨은 **가로 스크롤을 따라 붙는다.** 가운데 정렬이던 첫
+                        판은 열다섯 칸의 중앙에 서서 화면 밖에 있었다(실측
+                        2026-08-21: DOM 에는 있는데 눈에는 없다). 왼쪽 고정
+                        열(날짜+구분)의 바로 오른쪽에 붙어, 그 격자가 보이는
+                        동안 이름도 같이 보인다 — 이 표의 «범례는 사방 고정»
+                        규율과 같은 이유다. */}
+                    <span
+                      className="sr-recon-grouplabel"
+                      style={{ left: headCh(DATE_CH + KIND_CH) }}
+                    >
+                      {g.label}
+                    </span>
+                  </th>
+                ))}
+                {[
+                  ['합계', summaryCols.length] as [string, number],
+                  ...summaryCols.map(
+                    (c, i) => [c.label, summaryCols.length - 1 - i] as [string, number],
+                  ),
+                ].map(([label, step]) => (
+                  <th
+                    key={`grp-${label}`}
+                    className={`sr-recon-th sr-recon-right sr-recon-pin${
+                      step === summaryCols.length ? ' sr-recon-edge-r' : ''
+                    }`}
+                    style={{ right: step === 0 ? 0 : headCh(step * TAIL_CH) }}
+                  />
+                ))}
+              </tr>
+            ) : null}
+            <tr className={banded ? 'sr-recon-hasgroups' : undefined}>
               {/* 날짜 헤더가 곧 정렬 토글이다. 정렬 대상이 날짜 하나뿐이라 화살표는
                   항상 보인다: 지금 방향이 상태이고, 누르면 뒤집힌다. */}
               <th className="sr-recon-th sr-recon-pin" style={{ left: 0 }}>
@@ -215,9 +298,14 @@ export function ReconStack({
               >
                 구분
               </th>
-              {tenors.map((t) => (
-                <th key={t} className="sr-recon-th sr-recon-center">
-                  {t}
+              {cols.map((c) => (
+                <th
+                  key={c.key}
+                  className={`sr-recon-th sr-recon-center${
+                    sepKeys.has(c.key) ? ' sr-recon-groupsep' : ''
+                  }`}
+                >
+                  {c.label}
                 </th>
               ))}
               {/* 오른쪽 범례 — 뒤에서부터 11ch 트랙씩 쌓인다. 조달 열이 서면
@@ -271,12 +359,14 @@ export function ReconStack({
                     >
                       <span className="sr-recon-kind">{METRIC_LABEL[m]}</span>
                     </td>
-                    {tenors.map((t) => {
-                      const v = d[m][t] ?? null;
+                    {cols.map((c) => {
+                      const v = d[m][c.key] ?? null;
                       return (
                         <td
-                          key={t}
-                          className="sr-recon-td sr-recon-center"
+                          key={c.key}
+                          className={`sr-recon-td sr-recon-center${
+                            sepKeys.has(c.key) ? ' sr-recon-groupsep' : ''
+                          }`}
                           style={
                             m === 'krd'
                               ? { background: tintFor(v ?? 0, krdScale) }

@@ -15,6 +15,12 @@
  *
  * **북이지 한 거래가 아니다.** 줄마다 종목·방향·규모·진입·청산이 따로 논다.
  *
+ * **한 북에 스왑과 현금채권이 같이 선다** [OWNER, 2026-08-21 — "현금채권이랑
+ * 스왑을 섞어서 백테스팅"]. 종전에는 창이 둘이었고 엔진도 둘이었다. 창을 합친
+ * 이유는 질문이 하나이기 때문이다 — "이 북이 얼마였나" 에 두 답이 있으면 그건
+ * 두 북이다. 산술은 그대로 두 엔진이 한다(`backend/app/mixedbook.py`): 여기서
+ * 새로 계산하는 것은 없고, 창은 줄마다 붙어 오는 `kind` 를 읽어 그린다.
+ *
  * **헤드라인은 북 합계이고 차트는 그 선 하나만 그린다.** 포지션별로는 선이
  * 아니라 숫자를 준다 — 한 축에 서너 개 곡선은 아무도 안 읽고, "어느 게 벌었나"
  * 는 숫자 한 열이 더 빨리 답한다.
@@ -29,27 +35,35 @@ import { Select } from '@coinbase/cds-web/alpha/select';
 import { Button } from '@coinbase/cds-web/buttons';
 import { TextInput } from '@coinbase/cds-web/controls';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
+import { SegmentedTabs } from '@coinbase/cds-web/tabs';
 import {
   TextBody,
   TextCaption,
   TextDisplay3,
   TextLabel1,
   TextLabel2,
+  TextLegal,
 } from '@coinbase/cds-web/typography';
 import { CartesianChart, Line, XAxis, YAxis } from '@coinbase/cds-web/visualizations/chart';
 
 import {
   BacktestUnavailable,
   fetchBacktest,
+  fetchCashBondSeries,
+  isBondKind,
   runErrorMessage,
   type BacktestPosition,
   type BacktestRecon,
   type BacktestResult,
+  type BookKind,
+  type CashBondRow,
   type PolicyStep,
+  type Unit,
 } from '@/lib/api';
 import { fmtLevel, unitSuffix } from '@/lib/format';
 import { seriesUrl } from '@/lib/staticPaths';
-import { fmtKrw, fmtKrwFromMan, splitKrw } from '@/lib/krw';
+import { fmtKrw, fmtKrwFromMan, splitCashBondKrw, splitKrw } from '@/lib/krw';
+import { useFunding } from '@/state/funding';
 import type { Row } from '@/table/rows';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { DROPDOWN_STYLES } from '@/ui/window/popup';
@@ -57,20 +71,35 @@ import { ReconStack, type ReconStackDay } from '@/ui/window/ReconStack';
 
 import { LinkedCharts } from './LinkedCharts';
 import {
+  bookKindOf,
   decodeBook,
   directionLabel,
   encodeBook,
   isBookable,
+  isBondRow,
+  isSwapBookable,
   loadBacktestMemory,
   MAX_POSITIONS,
   newRow,
   runnable,
   saveBacktestMemory,
+  yearBefore,
   type BookRow,
 } from './book';
 
 const MEMORY_KEY = 'backtest';
 const AXIS = 'pnl';
+const EOK = 1e8;
+
+/** 줄의 종류. 스왑 셋(아웃라이트·스프레드·플라이)을 하나로 묶은 이유는 그
+ * 목록이 이미 한 드롭다운이기 때문이다 — 여기서 다시 가르면 고르는 걸음만
+ * 늘고 얻는 것이 없다. 채권 둘은 **종목군과 만기를 따로** 고르므로 갈린다. */
+const KIND_ORDER: BookKind[] = ['swap', 'cashbond', 'assetswap'];
+const KIND_LABEL: Record<BookKind, string> = {
+  swap: '스왑',
+  cashbond: '현금채권',
+  assetswap: '자산스왑',
+};
 
 /**
  * 진입일 이후 첫 관측 — **실행 전에 보여줄 진입 레벨** [v1 OWNER 피드백,
@@ -90,13 +119,20 @@ export function pointOnOrAfter(
 
 /* 종목별 히스토리는 **풀 해상도**로 받는다. 150점 프리뷰는 진입일을 3주 반
  * 단위로 스냅해서, 확신에 찬 틀린 레벨을 찍는다. 창이 열려 있는 동안 id 당 한
- * 번만 받는다(미리보기 pane 과 같은 경로라 서버 캐시도 같이 탄다). */
+ * 번만 받는다(미리보기 pane 과 같은 경로라 서버 캐시도 같이 탄다).
+ *
+ * 채권 id 는 **다른 경로**다(민평은 SQL 에만 있다). 캐시가 하나인 이유는 id 가
+ * 하나이기 때문이다 — `CB:KTB:3Y` 는 어느 경로로 왔든 같은 계열이다. */
 const seriesCache = new Map<string, Promise<{ t: string; v: number }[] | null>>();
 function loadSeriesPoints(id: string): Promise<{ t: string; v: number }[] | null> {
   let hit = seriesCache.get(id);
   if (!hit) {
     hit = (async () => {
       try {
+        if (isBondKind(bookKindOf(id))) {
+          const s = await fetchCashBondSeries(id);
+          return s.points;
+        }
         const r = await fetch(seriesUrl(id, 'full'));
         if (!r.ok) return null;
         const j = (await r.json()) as { points?: { t: string; v: number }[] };
@@ -126,24 +162,34 @@ function legsSentence(p: BacktestPosition): string {
 }
 
 /**
- * 북 전체의 3분해 — **표시 정밀도에서 합계와 맞도록**.
+ * 북 전체의 분해 — **표시 정밀도에서 합계와 맞도록**.
  *
- * 서버가 포지션마다 낸 평가·롤다운을 더하고, 캐리는 `splitKrw` 가 합계에서 뺀 값으로
- * 낸다. 셋을 각자 반올림했더니 화면에서 1만원이 어긋났다(실측 2026-08-14: 세 항목
+ * 서버가 포지션마다 낸 평가·롤다운을 더하고, 캐리는 합계에서 뺀 값으로 낸다.
+ * 셋을 각자 반올림했더니 화면에서 1만원이 어긋났다(실측 2026-08-14: 세 항목
  * 합 −6,127 vs 헤드라인 −6,128). 이 셋은 합계의 **구성**이라, 읽는 사람이 더해서
- * 헤드라인이 안 나오면 그건 화면이 틀린 것이다. */
+ * 헤드라인이 안 나오면 그건 화면이 틀린 것이다.
+ *
+ * 조달 칸은 **채권 줄이 있을 때만** 선다. 스왑만 있는 북에 조달 0 을 적으면
+ * "조달이 0원이었다" 로 읽히는데, 스왑에는 그 개념 자체가 없다.
+ */
 function decompose(result: BacktestResult) {
   let valuation = 0;
   let rolldown = 0;
   let startup = 0;
+  let funding = 0;
+  let hasFunding = false;
   for (const p of result.positions) {
     valuation += p.valuation;
     rolldown += p.rolldown ?? 0;
-    // 개시(거래일→발효일 한 밤)는 평가에 접는다 [OWNER, 2026-08-14] —
-    // `splitKrw` 의 넷째 인자가 그 자리다. 옛 세션의 결과에는 필드가 없다.
+    // 개시(거래일→발효일 한 밤)는 평가에 접는다 [OWNER, 2026-08-14].
     startup += p.startup ?? 0;
+    if (p.funding != null) {
+      funding += p.funding;
+      hasFunding = true;
+    }
   }
-  return splitKrw(result.pnl, valuation, rolldown, startup);
+  if (!hasFunding) return { ...splitKrw(result.pnl, valuation, rolldown, startup), uFund: null };
+  return splitCashBondKrw(result.pnl, valuation, rolldown, funding, startup);
 }
 
 /** 서버 recon → 대사 스택 [v1 OWNER, 2026-08-11].
@@ -166,6 +212,7 @@ function backtestDays(recon: BacktestRecon): ReconStackDay[] {
     valuation: r.valuation === null ? null : r.valuation + (r.startup ?? 0),
     carry: r.carry,
     rolldown: r.rolldown,
+    funding: r.funding ?? null,
     actual: r.actual,
   }));
 }
@@ -207,16 +254,52 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+/** 배타 선택은 CDS `SegmentedTabs` 다 [OWNER 2026-08-13 §5.4] — 시뮬레이션의
+ * 같은 래퍼와 같은 근거(그 파일의 주석: `SegmentedControl` 은 deprecated). */
+function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+  label: string;
+}) {
+  const tabs = options.map((o) => ({ id: o.value, label: o.label }));
+  return (
+    <SegmentedTabs
+      accessibilityLabel={label}
+      tabs={tabs}
+      activeTab={tabs.find((t) => t.id === value) ?? null}
+      onChange={(t) => t && onChange(t.id)}
+    />
+  );
+}
+
 export function BacktestWindow({
   rows,
+  cashbondRows,
+  cashbondTypes,
+  cashbondAsOf,
+  cashbondFrom,
   asOf,
   book,
   setBook,
   onClose,
   policy,
 }: {
-  /** 표의 행들 — 종목 목록의 출처다. 담을 수 있는 것만 고른다(`isBookable`). */
+  /** IRS 표의 행들 — 스왑 종목 목록의 출처다. 담을 수 있는 것만 고른다. */
   rows: Row[];
+  /** 현금채권·자산스왑 행 전부 — 채권 줄의 종목군·만기 목록의 출처다.
+   * 백엔드가 못 닿았으면 빈 배열이고, 그때는 종류 목록에서 채권이 빠진다. */
+  cashbondRows: CashBondRow[];
+  cashbondTypes: { id: string; label: string }[];
+  /** 민평 일자 — 채권 줄의 날짜 상한. IRS 일자와 하루씩 다를 수 있다. */
+  cashbondAsOf: string;
+  /** 민평 시작일 — 채권 줄 진입일의 바닥이자 기본값(1년 전)의 바닥. */
+  cashbondFrom: string;
   /** 데이터 일자 — 새 줄의 기본 진입일이자 청산 미기재의 뜻("데이터 끝까지"). */
   asOf: string;
   book: BookRow[];
@@ -226,6 +309,10 @@ export function BacktestWindow({
    * 창이 스스로 가져오지 않고 받는다(미리보기 pane 과 같은 규칙). */
   policy?: PolicyStep;
 }) {
+  /* 조달은 Setting 이 정한 값을 그대로 싣는다 [OWNER — "Cash Bond 전용"].
+   * 서버는 채권 줄이 있을 때만 읽는다. */
+  const [funding] = useFunding();
+
   const [result, setResult] = useState<BacktestResult | undefined>(
     () => loadBacktestMemory(MEMORY_KEY).result as BacktestResult | undefined,
   );
@@ -253,12 +340,36 @@ export function BacktestWindow({
     saveBacktestMemory(MEMORY_KEY, { book });
   }, [book]);
 
-  const options = useMemo(
-    () =>
-      rows
-        .filter(isBookable)
-        .map((r) => ({ value: r.id, label: r.label })),
+  const swapOptions = useMemo(
+    () => rows.filter(isSwapBookable).map((r) => ({ value: r.id, label: r.label })),
     [rows],
+  );
+
+  /** 채권 행을 id 로 찾는 표 — 만기 목록과 단위가 여기서 나온다. */
+  const bondById = useMemo(
+    () => new Map(cashbondRows.map((r) => [r.id, r])),
+    [cashbondRows],
+  );
+
+  /** 그 종류에 실제로 행이 있는 종목군만. 자산스왑은 만기가 좁아 종목군도 좁다. */
+  const bondTypesFor = useCallback(
+    (kind: BookKind) => {
+      const want = kind === 'assetswap' ? 'ASW' : 'CB';
+      return cashbondTypes.filter((t) =>
+        cashbondRows.some((r) => r.kind === want && r.bondType === t.id),
+      );
+    },
+    [cashbondTypes, cashbondRows],
+  );
+
+  /** 고를 수 있는 종류. 민평을 못 읽었으면 채권이 아예 안 뜬다 — 고를 수는
+   * 있는데 실행이 안 되는 칸을 두지 않는다(이 리포의 claim-vs-behaviour 규칙). */
+  const kinds = useMemo(
+    () =>
+      KIND_ORDER.filter(
+        (k) => k === 'swap' || cashbondRows.some((r) => r.kind === (k === 'assetswap' ? 'ASW' : 'CB')),
+      ),
+    [cashbondRows],
   );
 
   const run = useCallback(async () => {
@@ -268,7 +379,7 @@ export function BacktestWindow({
     setError(undefined);
     setUnavailable(false);
     try {
-      const r = await fetchBacktest(rs);
+      const r = await fetchBacktest(rs, funding);
       setResult(r);
       saveBacktestMemory(MEMORY_KEY, { result: r });
     } catch (e) {
@@ -277,22 +388,58 @@ export function BacktestWindow({
     } finally {
       setRunning(false);
     }
-  }, [book]);
+  }, [book, funding]);
 
   const patch = (key: string, next: Partial<BookRow>) =>
     setBook(book.map((r) => (r.key === key ? { ...r, ...next } : r)));
 
+  /** 종류를 바꾼다. **방향은 되돌리고 진입일은 그 상품의 기본으로 옮긴다** —
+   * 숏 스프레드를 들고 있다가 현금채권을 고르면 방향 칸이 사라지면서 −1 이
+   * 남는데, 서버는 그걸 거절하므로 안 보이는 값 때문에 줄이 죽는다 (시뮬레이션이
+   * 같은 함정을 v1 642c5c46 에서 겪었다). 진입일은 채권이 캐리를 쌓아야 읽히는
+   * 화면이라 며칠짜리 기본값이 늘 "거의 0" 을 보여 준다. */
+  const switchKind = (key: string, kind: BookKind) => {
+    const cur = book.find((r) => r.key === key);
+    if (!cur) return;
+    if (kind === 'swap') {
+      patch(key, { id: swapOptions[0]?.value ?? '10Y', direction: 1, entry: asOf, exit: '' });
+      return;
+    }
+    const want = kind === 'assetswap' ? 'ASW' : 'CB';
+    const curType = bondById.get(cur.id)?.bondType;
+    const pool = cashbondRows.filter((r) => r.kind === want);
+    const next = pool.find((r) => r.bondType === curType) ?? pool[0];
+    if (!next) return;
+    patch(key, {
+      id: next.id,
+      direction: 1,
+      entry: isBondRow(cur) ? cur.entry : yearBefore(cashbondAsOf, cashbondFrom),
+      exit: '',
+    });
+  };
+
+  /** 종목군을 바꿀 때 만기를 되도록 지킨다. 못 지키면 **가장 긴 것**으로
+   * 떨어진다 — 통안채는 3년까지고 자산스왑은 양쪽에 있는 만기에만 서므로,
+   * 없는 조합을 고르면 칸이 비는 대신 그 종목군이 실제로 갖는 끝으로 간다. */
+  const switchBondType = (key: string, bondType: string) => {
+    const cur = bondById.get(book.find((r) => r.key === key)?.id ?? '');
+    if (!cur) return;
+    const same = cashbondRows.filter((r) => r.kind === cur.kind && r.bondType === bondType);
+    const next = same.find((r) => r.tenor === cur.tenor) ?? same[same.length - 1];
+    if (next) patch(key, { id: next.id });
+  };
+
   const parts = result ? decompose(result) : null;
+  const hasBond = book.some(isBondRow);
 
   return (
     <FloatingWindow
       windowKey="backtest"
       title="백테스트"
-      /* 1020 — 북 한 줄의 산술(아래 칸 폭 주석: 종목 160 + 방향 264 + 규모 88
-         + 날짜 128×2 + 레벨 96 + gap 6×12 + ✕)이 기본 980 의 내용폭(~948)을
-         24px 넘어 진입 레벨과 ✕가 둘째 줄로 접혔다. 방향·종목을 말줄임 없이
-         전부 적는 쪽을 창이 넓어지는 것보다 우선한 오너 지시의 귀결이다
-         [2026-08-19 — "… 처럼 생략되는 것도 별로"]. */
+      /* 1020 — 북 한 줄의 산술. 방향이 세그먼트로 **자기 줄에 내려간 뒤**
+         (아래 그 자리의 주석) 첫 줄은 종류 132 + 종목 160 + 만기 92 + 규모 88 +
+         날짜 128×2 + 레벨 96 = 824 + gap 6×12 + ✕ 로 여유가 있다. 폭을 안 줄인
+         이유는 답 쪽(포지션별 줄·대사 서랍)이 이 폭을 쓰고 있어서다. */
       width={1020}
       aside={
         <TextCaption as="span" color="fgMuted" noWrap>
@@ -308,11 +455,19 @@ export function BacktestWindow({
             <ReconStack
               days={backtestDays(result.recon)}
               tenors={result.recon.tenors}
+              groups={result.recon.groups}
               defaultOrder="desc"
               note={
-                result.recon.truncated
-                  ? '긴 백테스트라 최근 영업일만 실었어요 — 기간 전체 분해는 위에 있어요.'
-                  : undefined
+                [
+                  result.recon.truncated
+                    ? '긴 백테스트라 최근 영업일만 실었어요 — 기간 전체 분해는 위에 있어요.'
+                    : '',
+                  result.recon.dropped
+                    ? `민평과 IRS 달력이 어긋난 ${result.recon.dropped}일은 뺐어요 — 한쪽만 쉰 날과 그 다음 날이에요. 두 계열이 서로 다른 밤을 재고 있어서 더하면 어느 하루도 아니에요.`
+                    : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ') || undefined
               }
             />
           ) : null,
@@ -325,140 +480,177 @@ export function BacktestWindow({
       <VStack gap={2} padding={2} width="100%">
         {/* ── 북 ───────────────────────────────────────────────────────────── */}
         <VStack gap={1} width="100%">
-          {/* 칸 폭은 **가장 긴 실제 내용**에 맞춘다 [OWNER 2026-08-18 — "버튼이나
-              탭들 사이에 거리가 너무 멀어"]. 첫 판(180/210/110/140/140/120)은
-              CDS Select 가 상자를 채우지 않아 칸마다 죽은 여백이 섰고, 여섯 칸
-              합(996px)이 창 내용폭(~940)을 넘어 **진입 레벨과 ✕가 둘째 줄로
-              접혔다.**
+          {book.map((r) => {
+            const kind = bookKindOf(r.id);
+            const bond = isBondKind(kind);
+            const bondRow = bond ? bondById.get(r.id) : undefined;
+            const tenors = bondRow
+              ? cashbondRows.filter(
+                  (x) => x.kind === bondRow.kind && x.bondType === bondRow.bondType,
+                )
+              : [];
+            const unit: Unit = bondRow?.unit ?? (r.id.includes('-') ? 'bp' : '%');
+            const maxDate = bond ? cashbondAsOf : asOf;
+            return (
+              <VStack key={r.key} gap={0.5} width="100%">
+                <HStack gap={1.5} alignItems="flex-end" flexWrap="wrap">
+                  {/* 종류 132 — 가장 긴 라벨 "현금채권" 이 13px legal 로 ~52px 이고
+                      CDS 컨트롤의 크롬(좌우 패딩 + 셰브론)이 82px 을 먹는다(이 창의
+                      다른 칸들과 같은 실측 산술). */}
+                  <Box width={132}>
+                    <Field label="종류">
+                      {/* font legal(13) — 컨트롤 값 13px 통일(popup.ts 의 근거). */}
+                      <Select
+                        size="s"
+                        font="legal"
+                        styles={DROPDOWN_STYLES}
+                        accessibilityLabel="종류"
+                        value={kind}
+                        onChange={(v) => v && switchKind(r.key, v as BookKind)}
+                        options={kinds.map((k) => ({ value: k, label: KIND_LABEL[k] }))}
+                      />
+                    </Field>
+                  </Box>
+                  <Box width={160}>
+                    <Field label="종목">
+                      <Select
+                        size="s"
+                        font="legal"
+                        styles={DROPDOWN_STYLES}
+                        accessibilityLabel="종목"
+                        value={bond ? (bondRow?.bondType ?? '') : r.id}
+                        onChange={(v) =>
+                          v && (bond ? switchBondType(r.key, v) : patch(r.key, { id: v }))
+                        }
+                        options={
+                          bond
+                            ? bondTypesFor(kind).map((t) => ({ value: t.id, label: t.label }))
+                            : swapOptions
+                        }
+                      />
+                    </Field>
+                  </Box>
+                  {/* 만기 칸은 채권에만 선다 [OWNER — "Cash Bond에서는 종목, 테너로"].
+                      스왑은 종목 이름이 이미 만기를 말한다(3s10s 의 두 다리). */}
+                  {bond ? (
+                    <Box width={92}>
+                      <Field label="만기">
+                        <Select
+                          size="s"
+                          font="legal"
+                          styles={DROPDOWN_STYLES}
+                          accessibilityLabel="만기"
+                          value={r.id}
+                          onChange={(v) => v && patch(r.key, { id: v })}
+                          options={tenors.map((x) => ({ value: x.id, label: x.tenor }))}
+                        />
+                      </Field>
+                    </Box>
+                  ) : null}
+                  <Box width={88}>
+                    <Field label="규모 (억)">
+                      {/* fontSize legal(13) — 컨트롤 값 13px 통일(popup.ts 의 근거).
+                          height 32 — 이 행의 등고. 13px 패스가 `Select` 는
+                          `font="legal"` 로 상자까지 39→32 로 줄였지만 `TextInput` 은
+                          `fontSize` 라 글자만 줄고 상자는 CDS `size="s"` 기본값(38)에
+                          남았다(HANDOFF.md 8.21 의 실측). */}
+                      <TextInput
+                        size="s"
+                        fontSize="legal"
+                        height={32}
+                        accessibilityLabel="규모(억)"
+                        value={String(r.eok)}
+                        onChange={(e) => patch(r.key, { eok: Number(e.target.value) || 0 })}
+                      />
+                    </Field>
+                  </Box>
+                  <Box width={128}>
+                    <Field label="진입일">
+                      {/* 네이티브 date — CDS `DateInput` 은 마스크 텍스트라 ISO 를
+                          직접 다루지 않고, 이 제품의 날짜는 화면 전체가 ISO 다
+                          (표 헤더·신선도 칩·대사). 여기서만 다른 문법을 쓰면 같은
+                          날짜가 두 모양으로 존재한다. */}
+                      <input
+                        className="sr-date"
+                        type="date"
+                        value={r.entry}
+                        min={bond ? cashbondFrom : undefined}
+                        max={maxDate}
+                        onChange={(e) => patch(r.key, { entry: e.target.value })}
+                        aria-label="진입일"
+                      />
+                    </Field>
+                  </Box>
+                  <Box width={128}>
+                    <Field label="청산일">
+                      <input
+                        className="sr-date"
+                        type="date"
+                        value={r.exit}
+                        min={r.entry}
+                        max={maxDate}
+                        onChange={(e) => patch(r.key, { exit: e.target.value })}
+                        aria-label="청산일 (비우면 데이터 끝까지)"
+                      />
+                    </Field>
+                  </Box>
+                  {/* 진입 레벨 — 실행 전에도. 타이핑한 날짜가 **실제로 어느 레벨에
+                      꽂히는지**가 실행을 누르기 전에 읽혀야 한다. 그 날짜에 관측이
+                      없으면(휴일·데이터 끝 이후) 서버가 스냅할 그 날의 값을 그대로
+                      보여준다 — 규칙이 하나여야 두 개의 진입 레벨이 안 생긴다. */}
+                  <Box width={96}>
+                    <Field label="진입 레벨">
+                      {/* 컨트롤이 아닌 값도 컨트롤과 같은 32px 상자에 담는다.
+                          이 행은 `alignItems="flex-end"` 라 바닥이 정렬되는데, 그
+                          규칙에서는 **블록 높이가 곧 라벨 높이**다: 값이 맨살
+                          글자(20px)면 블록이 38 이 되어 라벨만 형제보다 12px 아래로
+                          내려앉았다(실측 2026-08-19). */}
+                      <HStack height={32} alignItems="center">
+                        <TextLabel2 as="span" tabularNumbers noWrap>
+                          {(() => {
+                            const p = pointOnOrAfter(points[r.id], r.entry);
+                            if (!p) return '—';
+                            return `${fmtLevel(p.v, unit)}${unitSuffix(unit)}`;
+                          })()}
+                        </TextLabel2>
+                      </HStack>
+                    </Field>
+                  </Box>
+                  <button
+                    type="button"
+                    className="sr-window-close"
+                    onClick={() => setBook(book.filter((x) => x.key !== r.key))}
+                    aria-label="줄 삭제"
+                  >
+                    ✕
+                  </button>
+                </HStack>
+                {/* 방향은 **자기 줄의 세그먼트**다 [2026-08-21, 시뮬레이션의 같은
+                    자리와 같은 판단]. 드롭다운이던 시절 이 칸은 264px 였다 — 가장
+                    긴 문장 "스티프너 (1.5Y 페이 · 6M 리시브)" 를 안 자르려는 폭이고
+                    [OWNER 2026-08-19 — "… 처럼 생략되는 것도 별로"], 종류 칸이
+                    들어오면서 한 줄에 다 세우면 창이 1164px 가 돼야 했다. 선택지가
+                    둘뿐인 컨트롤에 그만한 가로를 주는 대신 세로 한 줄을 쓴다.
 
-              방향 104 는 아웃라이트("리시브")의 폭이었다 — 스프레드·플라이를
-              고르면 "스티프너 (1.5Y 페이 · 6M 리시브)" 가 "스…" 로 잘렸다
-              [OWNER 2026-08-19 — "… 처럼 생략되는 것도 별로"]. 264 는 실측
-              산술이다: 가장 긴 방향 문장 "스티프너 (1.5Y 페이 · 6M 리시브)"
-              가 13px legal 로 175px 이고, CDS 컨트롤의 크롬(좌우 패딩 +
-              셰브론)이 82px 을 먹는다(Box 248 에서 안쪽 가용 166 실측) —
-              175 + 82 = 257, 여유 7. 종목 160 도 같은 산술이다: 가장 긴
-              플라이 "6M/1.5Y/10Y" ≈ 70px + 크롬 82. 여섯 칸 합 ~864 + gap
-              72 + ✕ 가 기본 창(내용폭 ~948)을 넘어서 창이 1020 으로 넓어졌다
-              (FloatingWindow width 주석). */}
-          {book.map((r) => (
-            <HStack key={r.key} gap={1.5} alignItems="flex-end" flexWrap="wrap">
-              <Box width={160}>
-                <Field label="종목">
-                  {/* font legal(13) — 컨트롤 값 13px 통일(popup.ts 의 근거). */}
-                  <Select
-                    size="s"
-                    font="legal"
-                    styles={DROPDOWN_STYLES}
-                    accessibilityLabel="종목"
-                    value={r.id}
-                    onChange={(v) => v && patch(r.key, { id: v })}
-                    options={options}
-                  />
-                </Field>
-              </Box>
-              <Box width={264}>
-                <Field label="방향">
-                  <Select
-                    size="s"
-                    font="legal"
-                    styles={DROPDOWN_STYLES}
-                    accessibilityLabel="방향"
-                    value={String(r.direction)}
-                    onChange={(v) => patch(r.key, { direction: Number(v) })}
+                    **채권에는 방향 칸이 없다** — 살 수만 있다 [OWNER, 2026-08-14].
+                    비활성 세그먼트를 놓아 두는 대신 칸을 안 그린다: 못 고르는
+                    컨트롤은 "왜 안 눌리지" 를 묻게 한다. */}
+                {bond ? null : (
+                  <Segmented
+                    label="방향"
+                    value={String(r.direction) as '1' | '-1'}
                     options={[
                       { value: '1', label: directionLabel(r.id, 1) },
                       { value: '-1', label: directionLabel(r.id, -1) },
                     ]}
+                    onChange={(v) => patch(r.key, { direction: v === '-1' ? -1 : 1 })}
                   />
-                </Field>
-              </Box>
-              <Box width={88}>
-                <Field label="규모 (억)">
-                  {/* fontSize legal(13) — 컨트롤 값 13px 통일(popup.ts 의 근거).
-                      height 32 — 이 행의 등고. 13px 패스가 `Select` 는
-                      `font="legal"` 로 상자까지 39→32 로 줄였지만 `TextInput` 은
-                      `fontSize` 라 글자만 줄고 상자는 CDS `size="s"` 기본값(38)에
-                      남았다. 2026-08-14 에 "둘 다 39px" 로 검증됐던 등고가 그때
-                      비대칭으로 깨진 것이고(HANDOFF.md 8.21), 그 결과 이 칸만
-                      6px 높고 라벨이 6px 위에 앉았다(실측). 폰트로 되돌리면
-                      13px 규칙이 깨지므로 상자를 직접 적는다 — `height` 는
-                      TextInput 이 InputStack 에서 받는 CDS prop 이다. */}
-                  <TextInput
-                    size="s"
-                    fontSize="legal"
-                    height={32}
-                    accessibilityLabel="규모(억)"
-                    value={String(r.eok)}
-                    onChange={(e) => patch(r.key, { eok: Number(e.target.value) || 0 })}
-                  />
-                </Field>
-              </Box>
-              <Box width={128}>
-                <Field label="진입일">
-                  {/* 네이티브 date — CDS `DateInput` 은 마스크 텍스트라 ISO 를
-                      직접 다루지 않고, 이 제품의 날짜는 화면 전체가 ISO 다
-                      (표 헤더·신선도 칩·대사). 여기서만 다른 문법을 쓰면 같은
-                      날짜가 두 모양으로 존재한다. */}
-                  <input
-                    className="sr-date"
-                    type="date"
-                    value={r.entry}
-                    max={asOf}
-                    onChange={(e) => patch(r.key, { entry: e.target.value })}
-                    aria-label="진입일"
-                  />
-                </Field>
-              </Box>
-              <Box width={128}>
-                <Field label="청산일">
-                  <input
-                    className="sr-date"
-                    type="date"
-                    value={r.exit}
-                    max={asOf}
-                    onChange={(e) => patch(r.key, { exit: e.target.value })}
-                    aria-label="청산일 (비우면 데이터 끝까지)"
-                  />
-                </Field>
-              </Box>
-              {/* 진입 레벨 — 실행 전에도. 타이핑한 날짜가 **실제로 어느 레벨에
-                  꽂히는지**가 실행을 누르기 전에 읽혀야 한다. 그 날짜에 관측이
-                  없으면(휴일·데이터 끝 이후) 서버가 스냅할 그 날의 값을 그대로
-                  보여준다 — 규칙이 하나여야 두 개의 진입 레벨이 안 생긴다. */}
-              <Box width={96}>
-                <Field label="진입 레벨">
-                  {/* 컨트롤이 아닌 값도 컨트롤과 같은 32px 상자에 담는다.
-                      이 행은 `alignItems="flex-end"` 라 바닥(189)이 정렬되는데,
-                      그 규칙에서는 **블록 높이가 곧 라벨 높이**다: 값이 맨살
-                      글자(20px)면 블록이 38 이 되어 라벨만 형제보다 12px 아래로
-                      내려앉았다(실측 라벨 bottom 167 vs 155). 상자를 주면 블록이
-                      형제와 같은 50 이 되고, 글자는 상자 중앙에 서서 컨트롤
-                      중심선(173)과 만난다. */}
-                  <HStack height={32} alignItems="center">
-                    <TextLabel2 as="span" tabularNumbers noWrap>
-                      {(() => {
-                        const p = pointOnOrAfter(points[r.id], r.entry);
-                        if (!p) return '—';
-                        const unit = r.id.includes('-') ? 'bp' : '%';
-                        return `${fmtLevel(p.v, unit)}${unitSuffix(unit)}`;
-                      })()}
-                    </TextLabel2>
-                  </HStack>
-                </Field>
-              </Box>
-              <button
-                type="button"
-                className="sr-window-close"
-                onClick={() => setBook(book.filter((x) => x.key !== r.key))}
-                aria-label="줄 삭제"
-              >
-                ✕
-              </button>
-            </HStack>
-          ))}
+                )}
+              </VStack>
+            );
+          })}
 
-          <HStack gap={1} alignItems="center">
+          <HStack gap={1} alignItems="center" flexWrap="wrap">
             <Button
               variant="secondary"
               size="s"
@@ -475,6 +667,16 @@ export function BacktestWindow({
               <TextCaption as="span" color="fgMuted">
                 한 창에 {MAX_POSITIONS}줄까지예요.
               </TextCaption>
+            ) : null}
+            {/* 조달은 채권 줄이 있을 때만 말한다 — 스왑에는 그 개념이 없다.
+                TextCaption 은 uppercase 라 "+10bp (Setting)" 이 "+10BP (SETTING)"
+                이 된다(v1 실측 함정). 문장·단위는 TextLegal 이 진다. */}
+            {hasBond ? (
+              <TextLegal as="span" color="fgMuted">
+                채권 조달 {funding.basis === 'base' ? '기준금리' : '콜금리'}{' '}
+                {funding.spreadBp >= 0 ? '+' : ''}
+                {funding.spreadBp}bp (Setting)
+              </TextLegal>
             ) : null}
           </HStack>
         </VStack>
@@ -502,8 +704,8 @@ export function BacktestWindow({
               >
                 {fmtKrw(result.pnl)}
               </TextDisplay3>
-              {/* 3분해 [OWNER 2026-08-11 — 교과서]. **항등식이지 귀속 모델이
-                  아니다**: 평가 + 롤다운 + 캐리 = 총손익, 정확히.
+              {/* 분해 [OWNER 2026-08-11 — 교과서]. **항등식이지 귀속 모델이
+                  아니다**: 평가 + 롤다운 + 캐리 (+ 조달) = 총손익, 정확히.
                   항목마다 부호색을 준다(v1 과 같은 규칙) — 어느 성분이 벌었고
                   어느 쪽이 까먹었는지가 이 줄의 전부라서, 셋을 한 색으로 두면
                   다시 읽어야 한다. */}
@@ -511,11 +713,23 @@ export function BacktestWindow({
                 <Part label="평가" u={parts.uVal} />
                 <Part label="롤다운" u={parts.uRoll} />
                 <Part label="캐리" u={parts.uCarry} />
+                {parts.uFund != null ? <Part label="조달" u={parts.uFund} /> : null}
               </HStack>
-              {/* 구간 안에서 어디까지 갔었나 — 같은 응답이 이미 담고 있다. */}
-              <TextCaption as="span" color="fgMuted" tabularNumbers>
+              {/* 구간 안에서 어디까지 갔었나 — 같은 응답이 이미 담고 있다.
+                  "bp" 가 든 문장이 뒤에 붙을 수 있어 TextLegal 이다. */}
+              <TextLegal as="span" color="fgMuted" tabularNumbers>
                 최대 이익 {fmtKrw(result.maxProfit)} · 최대 손실 {fmtKrw(result.maxLoss)}
-              </TextCaption>
+                {result.funding ? ` · 조달 ${result.funding.label}` : ''}
+              </TextLegal>
+              {/* 두 달력이 어긋난 날 — 혼합 북에서만 온다. 안 센 날이 있다는
+                  사실은 데이터 사실이라 표 옆에 적는다(빠뜨리면 합계가 왜
+                  안 맞는지 읽는 사람이 알 길이 없다). */}
+              {result.calendar?.dropped ? (
+                <TextLegal as="span" color="fgMuted">
+                  민평과 IRS 달력이 다 가진 날 위에서 셌어요 — 한쪽에만 있던{' '}
+                  {result.calendar.dropped}일은 빼고요.
+                </TextLegal>
+              ) : null}
             </VStack>
 
             {/* 차트 한 쌍 [v1 OWNER, 2026-08-04 — LINKED PAIR]: 종목 차트가
@@ -524,7 +738,8 @@ export function BacktestWindow({
                 세션 복원 직후 한 프레임) 손익 선 하나로 물러선다 — 빈 자리보다
                 낫고, 다음 렌더에 쌍이 선다. */}
             {(() => {
-              const firstId = result.positions[0]?.id ?? '';
+              const first = result.positions[0];
+              const firstId = first?.id ?? '';
               const inst = points[firstId];
               const win = inst
                 ? inst.filter((p) => p.t >= result.from && p.t <= result.to)
@@ -533,7 +748,9 @@ export function BacktestWindow({
                 return (
                   <LinkedCharts
                     points={win}
-                    unit={firstId.includes('-') ? 'bp' : '%'}
+                    unit={
+                      bondById.get(firstId)?.unit ?? (firstId.includes('-') ? 'bp' : '%')
+                    }
                     result={result}
                     policy={policy}
                     marks={[
@@ -543,7 +760,7 @@ export function BacktestWindow({
                       .concat(
                         result.positions
                           .filter((p) => p.closed || p.matured)
-                          .map((p) => ({ date: p.exit, label: '청산' })),
+                          .map((p) => ({ date: p.exit, label: p.matured ? '만기' : '청산' })),
                       )}
                   />
                 );
@@ -556,8 +773,7 @@ export function BacktestWindow({
                     accessibilityLabel="북 손익 추이"
                     /* `right: 12, bottom: 8` — 본문 pane 의 CHART_INSET 과 같은 값
                        [OWNER 승인 2026-08-18 점검]. 첫 판(right 8, bottom 0)에서
-                       +300만원 같은 y 라벨이 선 위에 얹혀 있었다 — pane 이 같은
-                       값으로 이미 겪고 고친 자리다(그쪽 상수 주석의 실측). */
+                       +300만원 같은 y 라벨이 선 위에 얹혀 있었다. */
                     inset={{ top: 12, right: 12, bottom: 8, left: 8 }}
                     series={[
                       {
@@ -584,30 +800,53 @@ export function BacktestWindow({
               ) : null;
             })()}
 
-            {/* 포지션별 — 선이 아니라 숫자다. */}
+            {/* 포지션별 — 선이 아니라 숫자다. 줄마다 자기 `kind` 를 지므로
+                스왑은 다리 문장을, 채권은 표면금리를 적는다. */}
             <VStack gap={0.5} width="100%">
-              {result.positions.map((p) => (
+              {result.positions.map((p, i) => (
                 <HStack
-                  key={`${p.id}-${p.entry}`}
+                  key={`${p.id}-${p.entry}-${i}`}
                   className="sr-bt-row"
                   gap={1.5}
                   alignItems="baseline"
                   flexWrap="wrap"
                 >
                   <TextLabel1 as="span" noWrap>
-                    {p.id}
+                    {p.label ?? p.id}
                   </TextLabel1>
-                  <TextCaption as="span" color="fgMuted" noWrap>
-                    {legsSentence(p)}
-                  </TextCaption>
+                  {p.kind === 'swap' ? (
+                    <TextCaption as="span" color="fgMuted" noWrap>
+                      {legsSentence(p)}
+                    </TextCaption>
+                  ) : (
+                    <>
+                      <TextCaption as="span" color="fgMuted" tabularNumbers noWrap>
+                        {(p.notional / EOK).toLocaleString(undefined, {
+                          maximumFractionDigits: 0,
+                        })}
+                        억 매수
+                      </TextCaption>
+                      <TextCaption as="span" color="fgMuted" tabularNumbers noWrap>
+                        표면 {fmtLevel(p.coupon ?? null, '%')}%
+                      </TextCaption>
+                    </>
+                  )}
                   <TextCaption as="span" color="fgMuted" tabularNumbers noWrap>
                     {p.entry} → {p.exit}
                     {p.matured ? ' (만기)' : p.closed ? ' (청산)' : ''}
                   </TextCaption>
-                  <TextCaption as="span" color="fgMuted" tabularNumbers noWrap>
-                    {fmtLevel(p.entryValue, p.legs.length === 1 ? '%' : 'bp')} →{' '}
-                    {fmtLevel(p.exitValue, p.legs.length === 1 ? '%' : 'bp')}
-                  </TextCaption>
+                  {p.kind === 'swap' ? (
+                    <TextCaption as="span" color="fgMuted" tabularNumbers noWrap>
+                      {fmtLevel(p.entryValue, p.legs.length === 1 ? '%' : 'bp')} →{' '}
+                      {fmtLevel(p.exitValue, p.legs.length === 1 ? '%' : 'bp')}
+                    </TextCaption>
+                  ) : null}
+                  {p.kind === 'assetswap' && p.aswSpread != null ? (
+                    /* "bp" 가 든 문장 — TextCaption 의 uppercase 를 피한다 */
+                    <TextLegal as="span" color="fgMuted" tabularNumbers noWrap>
+                      진입 스프레드 {fmtLevel(p.aswSpread, 'bp')}bp
+                    </TextLegal>
+                  ) : null}
                   <TextLabel2
                     as="span"
                     tabularNumbers
@@ -616,33 +855,69 @@ export function BacktestWindow({
                   >
                     {fmtKrw(p.pnl)}
                   </TextLabel2>
-                  {/* 기계는 접어 둔다 — 다리별 노셔널과 DV01 은 두 번째 질문의
-                      답이고, 첫 번째 답 옆에 두면 둘 다 안 읽힌다. 다리가 하나면
-                      접을 것도 없다(노셔널이 곧 그 줄의 규모다). */}
-                  {p.legs.length > 1 ? (
-                    <details className="sr-bt-legs">
-                      <summary>
-                        <TextCaption as="span" color="fgMuted">
-                          자세히
-                        </TextCaption>
-                      </summary>
-                      <VStack gap={0.25} paddingY={0.5}>
-                        {p.legs.map((l) => (
-                          <TextCaption
-                            key={l.tenor}
-                            as="span"
-                            color="fgMuted"
-                            tabularNumbers
-                            noWrap
-                          >
-                            {l.tenor} {l.side === 'pay' ? '페이' : '리시브'} ·{' '}
-                            {mag(l.notional ?? 0)} · DV01 {mag(l.dv01 * (l.notional ?? 0) * 1e-4)}
-                            /bp · 진입 {fmtLevel(l.entryRate, '%')}%
+                  {/* 기계는 접어 둔다 — 두 번째 질문의 답이고, 첫 번째 답 옆에
+                      두면 둘 다 안 읽힌다. 스왑은 다리별 노셔널·DV01, 채권은
+                      줄의 4분해(가로로 반드시 더해진다 — `splitCashBondKrw`). */}
+                  {p.kind === 'swap' ? (
+                    p.legs.length > 1 ? (
+                      <details className="sr-bt-legs">
+                        <summary>
+                          <TextCaption as="span" color="fgMuted">
+                            자세히
                           </TextCaption>
-                        ))}
-                      </VStack>
-                    </details>
-                  ) : null}
+                        </summary>
+                        <VStack gap={0.25} paddingY={0.5}>
+                          {p.legs.map((l) => (
+                            <TextCaption
+                              key={l.tenor}
+                              as="span"
+                              color="fgMuted"
+                              tabularNumbers
+                              noWrap
+                            >
+                              {l.tenor} {l.side === 'pay' ? '페이' : '리시브'} ·{' '}
+                              {mag(l.notional ?? 0)} · DV01{' '}
+                              {mag(l.dv01 * (l.notional ?? 0) * 1e-4)}
+                              /bp · 진입 {fmtLevel(l.entryRate, '%')}%
+                            </TextCaption>
+                          ))}
+                        </VStack>
+                      </details>
+                    ) : null
+                  ) : (
+                    (() => {
+                      const u = splitCashBondKrw(
+                        p.pnl,
+                        p.valuation,
+                        p.rolldown ?? 0,
+                        p.funding ?? 0,
+                        p.startup ?? 0,
+                      );
+                      return (
+                        <details className="sr-bt-legs">
+                          <summary>
+                            <TextCaption as="span" color="fgMuted">
+                              자세히
+                            </TextCaption>
+                          </summary>
+                          <VStack gap={0.25} paddingY={0.5}>
+                            <TextCaption as="span" color="fgMuted" tabularNumbers noWrap>
+                              평가 {fmtKrwFromMan(u.uVal)} · 캐리 {fmtKrwFromMan(u.uCarry)} ·
+                              롤다운 {fmtKrwFromMan(u.uRoll)} · 조달 {fmtKrwFromMan(u.uFund)}
+                            </TextCaption>
+                            {p.kind === 'assetswap' && p.swapPnl != null ? (
+                              <TextCaption as="span" color="fgMuted" tabularNumbers noWrap>
+                                스왑 다리 {fmtKrw(p.swapPnl)} · 진입금리{' '}
+                                {p.swapEntryRate != null
+                                  ? `${fmtLevel(p.swapEntryRate, '%')}%`
+                                  : '—'}
+                              </TextCaption>
+                            ) : null}
+                          </VStack>
+                        </details>
+                      );
+                    })()
+                  )}
                 </HStack>
               ))}
             </VStack>
@@ -667,4 +942,4 @@ export function seedBook(btParam: string | undefined, seedId: string, asOf: stri
   return [newRow(seedId, asOf)];
 }
 
-export { encodeBook };
+export { encodeBook, isBookable };

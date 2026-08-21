@@ -70,6 +70,7 @@ from . import payloads
 from . import rv as rv_mod
 from . import schedule_cache
 from .backtest import BacktestError, Position, book_recon, run_backtest
+from . import mixedbook
 from .cache import cached
 from .cors import allowed_origin_regex, allowed_origins
 from . import dev_marker
@@ -499,7 +500,11 @@ def dv01(series_id: str) -> dict:
 
 
 @router.get("/api/backtest")
-def backtest(positions: str = "") -> dict:
+def backtest(
+    positions: str = "",
+    basis: str = funding.DEFAULT_BASIS,
+    spreadBp: float = funding.DEFAULT_SPREAD_BP,
+) -> dict:
     """Revalue a BOOK of positions daily and sum them (§backtest).
 
     `positions` is a `;`-separated list, one position per entry, each
@@ -517,11 +522,17 @@ def backtest(positions: str = "") -> dict:
     because the answer depends on inputs the reader chooses. Vercel runs the
     frontend and this backend runs behind it [OWNER, 2026-07-31], which is also
     what keeps §16 intact — the browser still computes nothing.
+
+    스왑과 현금채권을 **한 북에** 담는다 [OWNER, 2026-08-21]. `id` 가 `CB:`/`ASW:`
+    로 시작하면 채권 줄이다 — 같은 문자열이 시뮬레이션·모니터에서 뜻하는 것과
+    같고(`instruments.kind_of`), 조달은 채권 줄이 있을 때만 읽힌다. 한 종류뿐인
+    북은 종전 엔진에 그대로 위임되므로 답이 한 원도 달라지지 않는다
+    (`app/mixedbook.py`).
     """
     if not positions.strip():
         raise HTTPException(status_code=422, detail="at least one position is required")
 
-    parsed: list[Position] = []
+    parsed: list[mixedbook.MixedPosition] = []
     for raw in positions.split(";"):
         raw = raw.strip()
         if not raw:
@@ -534,7 +545,7 @@ def backtest(positions: str = "") -> dict:
             )
         try:
             parsed.append(
-                Position(
+                mixedbook.MixedPosition(
                     series_id=parts[0],
                     direction=int(parts[1]),
                     notional=float(parts[2]),
@@ -545,14 +556,30 @@ def backtest(positions: str = "") -> dict:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=f"bad position {raw!r}: {exc}")
 
+    # 민평은 **채권 줄이 있을 때만** 읽는다 — 스왑만 있는 북이 SQL 에 닿아야 할
+    # 이유가 없고, 닿게 만들면 그 테이블이 죽은 날 스왑 백테스트까지 같이 죽는다.
+    spec = _funding_spec(basis, spreadBp)
+    matrix = None
+    if mixedbook.has_bond(parsed):
+        try:
+            matrix = creditmatrix.load()
+        except creditmatrix.CreditMatrixError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+
     try:
         # 일별 대사(`recon`)는 별도 패스다 — KRD 범프가 백테스트 본체보다
         # 비싸서 엔진 함수를 둘로 나눴다(backtest.book_recon doc). 응답은
         # 종전 그대로 한 덩어리에 `recon`만 얹는다.
-        result = run_backtest(_dataset, parsed)
-        result["recon"] = book_recon(_dataset, parsed)
+        result = mixedbook.run_backtest(matrix, _dataset, parsed, spec)
+        result["recon"] = mixedbook.book_recon(matrix, _dataset, parsed, spec)
         return result
-    except BacktestError as exc:
+    except (
+        BacktestError,
+        mixedbook.MixedBookError,
+        cashbond.CashBondError,
+        creditmatrix.CreditMatrixError,
+        funding.FundingError,
+    ) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
 

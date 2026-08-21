@@ -82,8 +82,18 @@ export const surfaceUrl = () =>
  * ask, and callers must say so rather than fetch a file that will never exist.
  * Returns null in that case — a URL here would 404 as HTML and surface as a
  * JSON parse error, which tells the reader nothing. */
-export function backtestUrl(spec: string): string | null {
-  const q = `positions=${encodeURIComponent(spec)}`;
+export function backtestUrl(
+  spec: string,
+  funding?: { basis: string; spreadBp: number },
+): string | null {
+  /* 조달은 **채권 줄이 있을 때만** 서버가 읽는다 [2026-08-21]. 그래도 늘 실어
+   * 보내는 이유: 북에 채권이 섞였는지는 문자열을 파싱해야 알고, 그 판정을 두
+   * 군데(여기와 서버)에 두면 갈릴 수 있다. 스왑만 있는 북에서는 서버가 이 값을
+   * 쓰지 않으므로 답이 달라지지 않는다. */
+  const f = funding
+    ? `&basis=${encodeURIComponent(funding.basis)}&spreadBp=${funding.spreadBp}`
+    : "";
+  const q = `positions=${encodeURIComponent(spec)}${f}`;
   // Development against a live backend: the explicit origin.
   if (!IS_STATIC) return `${API_BASE}/api/backtest?${q}`;
   /* 정적 모드(= `NEXT_PUBLIC_API_BASE` 를 빈 문자열로 명시): 같은 출처 경로.
@@ -126,12 +136,6 @@ export const cashbondInstrumentsUrl = () => liveUrl("/api/cashbond/instruments")
 
 export const cashbondSeriesUrl = (id: string) =>
   liveUrl(`/api/cashbond/series/${encodeURIComponent(id)}`);
-
-export const cashbondBacktestUrl = (spec: string, basis: string, spreadBp: number) =>
-  liveUrl(
-    "/api/cashbond/backtest",
-    `positions=${encodeURIComponent(spec)}&basis=${encodeURIComponent(basis)}&spreadBp=${spreadBp}`,
-  );
 
 export const fundingSettingsUrl = (basis: string, spreadBp: number) =>
   liveUrl("/api/settings/funding", `basis=${encodeURIComponent(basis)}&spreadBp=${spreadBp}`);

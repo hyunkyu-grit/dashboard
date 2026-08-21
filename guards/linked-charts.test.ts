@@ -57,8 +57,13 @@ describe('정렬은 구성이다 (소스 핀)', () => {
     expect(src).toMatch(/<ReferenceLine dataY=\{0\}/);
   });
 
-  it('두 창이 같은 컴포넌트를 쓴다 — 껍데기가 두 벌이면 정렬 규칙도 두 벌이 된다', () => {
+  it('창이 하나다 — 껍데기가 두 벌이면 정렬 규칙도 두 벌이 된다', () => {
+    /* 종전에는 IRS 창과 현금채권 창이 같은 컴포넌트를 쓰는지를 봤다. 두 창이
+     * 한 창이 된 지금(2026-08-21) 그 질문의 답은 구조가 진다 — 확인할 것은
+     * 그 창이 이 컴포넌트를 쓰는지와, **두 번째 창이 생기지 않았는지**다. */
     expect(read('src/backtest/BacktestWindow.tsx')).toMatch(/<LinkedCharts/);
-    expect(read('src/cashbond/CashBondWindow.tsx')).toMatch(/<LinkedCharts/);
+    expect(fs.existsSync(path.join(__dirname, '..', 'src/cashbond/CashBondWindow.tsx'))).toBe(
+      false,
+    );
   });
 });

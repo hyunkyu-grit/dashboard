@@ -8,6 +8,7 @@ import { splitKrw } from '../src/lib/krw';
 import type { Row } from '../src/table/rows';
 import {
   BOOKABLE_GROUPS,
+  SWAP_GROUPS,
   decodeBook,
   directionLabel,
   encodeBook,
@@ -36,8 +37,14 @@ const row = (id: string, group: Row['group']): Row =>
      sortKey: [1], movePct: null, key: false }) as Row;
 
 describe('담을 수 있는 것 — 엔진이 받는 것만', () => {
-  it('아웃라이트·스프레드·플라이만', () => {
-    expect(BOOKABLE_GROUPS).toEqual(['outright', 'spread', 'fly']);
+  it('스왑 셋 + 채권 둘 [OWNER, 2026-08-21 — 한 북에 섞는다]', () => {
+    expect(BOOKABLE_GROUPS).toEqual(['outright', 'spread', 'fly', 'cashbond', 'asw']);
+  });
+
+  it('종목 드롭다운이 쓰는 목록은 스왑 셋뿐이다', () => {
+    /* 현금채권·자산스왑은 **종목군과 만기를 따로** 고른다 [OWNER — "Cash Bond
+     * 에서는 종목, 테너로"]. 같은 드롭다운에 섞으면 90줄이 넘어 고를 수가 없다. */
+    expect(SWAP_GROUPS).toEqual(['outright', 'spread', 'fly']);
   });
 
   it('포워드는 뺀다 — `_validate` 가 x 가 든 id 를 전부 거부한다', () => {
@@ -52,10 +59,12 @@ describe('담을 수 있는 것 — 엔진이 받는 것만', () => {
     expect(isBookable(row('BSS 3Y', 'bss'))).toBe(false);
   });
 
-  it('담을 수 있는 셋은 통과', () => {
+  it('담을 수 있는 다섯은 통과', () => {
     expect(isBookable(row('10Y', 'outright'))).toBe(true);
     expect(isBookable(row('3Y-10Y', 'spread'))).toBe(true);
     expect(isBookable(row('1Y-3Y-10Y', 'fly'))).toBe(true);
+    expect(isBookable(row('CB:KTB:3Y', 'cashbond'))).toBe(true);
+    expect(isBookable(row('ASW:KTB:3Y', 'asw'))).toBe(true);
   });
 });
 
@@ -97,7 +106,8 @@ describe('링크가 곧 북 — 왕복', () => {
 
   it('디코딩이 같은 북을 낸다 (키만 새로 붙는다)', () => {
     const back = decodeBook(encodeBook(book));
-    expect(back.map(({ key, ...r }) => r)).toEqual(book.map(({ key, ...r }) => r));
+    const drop = (r: BookRow) => ({ ...r, key: undefined });
+    expect(back.map(drop)).toEqual(book.map(drop));
   });
 
   it('억 ↔ 원 변환은 한 자리에서만 일어난다', () => {
@@ -224,7 +234,9 @@ describe('차트를 눌러서 들어간다 [v1 계약, OWNER 2026-08-18 복원]'
   it('클릭 진입은 새로 심는다 — 기억된 북이 날짜 힌트를 가리지 않는다', () => {
     // 특정 차트의 특정 날짜를 눌렀다는 것은 명시적인 질문이다. seedBook 을
     // 지나면 기억된 북이 먼저 살아나서 짚은 날짜가 영영 안 먹는 것처럼 보인다.
-    expect(page).toMatch(/setBook\(\[newRow\(row\.id, from \?\? /);
+    expect(page).toMatch(/setBook\(\[newRow\(row\.id, entry\)\]\)/);
+    // 그 `entry` 안에 짚은 날짜가 먼저 온다 — 없을 때만 상품별 기본으로 떨어진다.
+    expect(page).toMatch(/const entry =[\s\S]{0,40}?from \?\?/);
   });
 
   it('더블클릭 확대-리셋은 없다 — 첫 클릭이 창을 열면 도달 불가다', () => {

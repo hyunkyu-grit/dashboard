@@ -10,7 +10,6 @@
 
 import {
   backtestUrl,
-  cashbondBacktestUrl,
   cashbondInstrumentsUrl,
   cashbondSeriesUrl,
   dv01Url,
@@ -412,8 +411,21 @@ export interface BacktestLeg {
   dv01: number;      // per unit notional, at the entry curve
 }
 
+/** 북의 한 줄이 무엇인가 [2026-08-21]. 한 창이 스왑과 채권을 다 그리므로
+ * **줄마다 자기 종류를 진다** — 서버 `mixedbook._tag_swap`/`_tag_bond` 가 붙인다.
+ * id 로 다시 알아내지 않는 이유: 판정이 두 군데 있으면 갈린다. */
+export type BookKind = "swap" | "cashbond" | "assetswap";
+
+export function isBondKind(kind: BookKind): boolean {
+  return kind === "cashbond" || kind === "assetswap";
+}
+
 /** One line of the book, as the server priced it. */
 export interface BacktestPosition {
+  kind: BookKind;
+  /** 사람이 읽는 이름. 스왑은 id 그대로(`3Y-10Y`), 채권은 `국고채 3년` 처럼
+   * 종목군과 만기를 편 것이다(`cashbond.instrument_label`). */
+  label: string;
   id: string;
   direction: number;
   notional: number;
@@ -449,7 +461,21 @@ export interface BacktestPosition {
    * 갖지 않는다 [OWNER, 2026-08-14]. 옛 세션에서 복원한 결과에만 없다. */
   startup?: number;
   /** settled cash alone, the part of `carry` that has actually been paid */
-  cash: number;
+  cash?: number;
+  /** 조달 — **채권 줄만** [OWNER, 2026-08-14]. 스왑에는 개념이 없어 `null` 이
+   * 온다: 0 으로 채우면 "조달이 0원이었다" 로 읽히는데 그건 다른 말이다.
+   * 서버가 이미 음수로 준다 — 화면에서 부호를 다시 주면 두 번 뒤집힌다. */
+  funding: number | null;
+  /* ── 아래는 채권 줄에만 있다 (`kind !== "swap"`) ─────────────────────── */
+  bondType?: string;
+  tenor?: string;
+  coupon?: number;
+  entryYield?: number;
+  exitYield?: number;
+  /** 자산스왑에만: 스왑 다리 손익과 진입 스프레드(bp). */
+  swapPnl?: number | null;
+  swapEntryRate?: number;
+  aswSpread?: number;
 }
 
 /** 일별 대사 [OWNER, 2026-08-11] — one business day of the book: the
@@ -481,12 +507,26 @@ export interface BacktestReconRow {
   carryover?: boolean;
 }
 
+/** KRD 격자 한 덩어리. 혼합 북에서만 온다 [OWNER, 2026-08-21] — 스왑 KRD 는
+ * IRS 제로커브 노드, 채권 KRD 는 민평 노드라 **같은 칸에 더할 수 없다**. 열쇠는
+ * 접두사가 붙어 있고(`S:3Y`·`B:3Y`) 화면에 적히는 것은 `label`(테너)뿐이다 —
+ * 어느 커브인지는 그룹 머리가 말한다. */
+export interface BacktestReconGroup {
+  label: string;
+  cols: { key: string; label: string }[];
+}
+
 export interface BacktestRecon {
   /** every tenor label, ascending — columns; the table hides all-zero ones */
   tenors: string[];
+  /** 있으면 격자를 그 순서로 가른다. 없으면 격자가 하나다(한 종류뿐인 북). */
+  groups?: BacktestReconGroup[];
   rows: BacktestReconRow[];
   /** true when the window was cut to the last ~250 business days */
   truncated: boolean;
+  /** 두 달력이 어긋나 대사에서 뺀 날의 수 — 혼합 북에서만. 지어낸 행보다
+   * 빠진 행이 낫고, 빠졌다는 사실은 표 아래 한 줄이 말한다. */
+  dropped?: number;
 }
 
 export interface BacktestResult {
@@ -505,6 +545,11 @@ export interface BacktestResult {
   pnl: number;
   maxProfit: number;
   maxLoss: number;
+  /** 조달 출처 — 채권 줄이 있는 북에서만 온다. */
+  funding?: FundingProvenance;
+  /** 어느 달력 위에서 셌나 [2026-08-21]. 혼합 북은 민평 ∩ IRS 다 —
+   * `dropped` 는 그 구간에서 한쪽에만 있던 날의 수다. */
+  calendar?: { basis: string; dropped: number };
   /** 일별 대사 — optional only for results restored from an older session's
    * memory; the live endpoint always sends it. */
   recon?: BacktestRecon;
@@ -534,8 +579,9 @@ export function encodePositions(rows: PositionInput[]): string {
 
 export async function fetchBacktest(
   rows: PositionInput[],
+  funding?: { basis: string; spreadBp: number },
 ): Promise<BacktestResult> {
-  const url = backtestUrl(encodePositions(rows));
+  const url = backtestUrl(encodePositions(rows), funding);
   if (url === null) throw new BacktestUnavailable();
   const r = await fetch(url);
   /* 404 means the route is not there, which on a deployed site means no
@@ -780,34 +826,11 @@ export async function fetchCashBondSeries(id: string): Promise<CashBondSeries> {
   return liveJson(cashbondSeriesUrl(id), "cashbond/series");
 }
 
-export interface CashBondPositionInput {
-  id: string;
-  direction: number;
-  /** 억 단위 — 화면이 억으로 받는다 (IRS 백테스트와 같은 규약). */
-  eok: number;
-  entry: string;
-  exit: string;
-}
-
-export function encodeCashBondPositions(rows: CashBondPositionInput[]): string {
-  return rows
-    .map((r) =>
-      [r.id, r.direction, r.eok * 1e8, r.entry, r.exit]
-        .filter((v, i) => i < 4 || v !== "")
-        .join(","),
-    )
-    .join(";");
-}
-
-export async function fetchCashBondBacktest(
-  rows: CashBondPositionInput[],
-  funding: { basis: string; spreadBp: number },
-): Promise<CashBondBacktest> {
-  return liveJson(
-    cashbondBacktestUrl(encodeCashBondPositions(rows), funding.basis, funding.spreadBp),
-    "cashbond/backtest",
-  );
-}
+/* 현금채권 전용 백테스트 fetcher 는 은퇴했다 [2026-08-21]. 북이 하나가 되면서
+ * 부르는 데가 없어졌고, 남겨 두면 이 창이 못 그리는 모양의 페이로드를 가져오는
+ * 길이 하나 열려 있는 셈이다. 서버의 `/api/cashbond/backtest` 는 그대로 있다
+ * (자기 테스트를 지고 있고, 지우는 것은 이 레인의 일이 아니다). 문법은
+ * `encodePositions` 하나로 통일됐다 — 그쪽이 두 상품의 id 를 다 싣는다. */
 
 export async function fetchFundingSettings(funding: {
   basis: string;

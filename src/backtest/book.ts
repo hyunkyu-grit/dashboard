@@ -7,7 +7,7 @@
  * 북이 무엇인가(모양·인코딩·기억)를 갈라두면 규칙을 DOM 없이 검증할 수 있다.
  */
 
-import { encodePositions, type PositionInput } from "@/lib/api";
+import { encodePositions, isBondKind, type BookKind, type PositionInput } from "@/lib/api";
 import type { Group, Row } from "@/table/rows";
 
 /** 한 창에 열두 줄. v1 의 상한이고, 근거는 화면이 아니라 **읽기**다: 열둘을
@@ -25,10 +25,42 @@ export const MAX_POSITIONS = 12;
  * **서버가 거부하는 것을 화면이 제안하지 않는다** — 이 리포가 이름 붙여 둔
  * claim-vs-behaviour 결함이 정확히 그것이다.
  */
-export const BOOKABLE_GROUPS: Group[] = ["outright", "spread", "fly"];
+export const BOOKABLE_GROUPS: Group[] = ["outright", "spread", "fly", "cashbond", "asw"];
 
 export function isBookable(row: Row): boolean {
   return BOOKABLE_GROUPS.includes(row.group);
+}
+
+/** 스왑만 담던 시절의 목록 — 종목 드롭다운이 이걸 쓴다. 현금채권·자산스왑은
+ * 종목군과 만기를 **따로** 고르므로(그쪽 화면의 [OWNER] 규칙) 같은 목록에
+ * 섞이지 않는다. */
+export const SWAP_GROUPS: Group[] = ["outright", "spread", "fly"];
+
+export function isSwapBookable(row: Row): boolean {
+  return SWAP_GROUPS.includes(row.group);
+}
+
+/** id 만 보고 줄의 종류를 안다 — 백엔드 `mixedbook.is_bond` · 시뮬레이션
+ * `scenario.kindOf` 와 같은 규칙이다. 접두사가 가장 먼저인 이유는 저쪽에
+ * 적혀 있다: `CB:KTB:3Y` 에는 `-` 가 없어 아웃라이트로 읽힌다. */
+export function bookKindOf(id: string): BookKind {
+  if (id.startsWith("CB:")) return "cashbond";
+  if (id.startsWith("ASW:")) return "assetswap";
+  return "swap";
+}
+
+export function isBondRow(row: { id: string }): boolean {
+  return isBondKind(bookKindOf(row.id));
+}
+
+/** 채권 줄의 진입일 기본값 = **1년 전** (데이터 시작일보다 이르면 그 날).
+ * 채권은 캐리가 쌓여야 읽히는 화면이라 며칠짜리 기본값은 늘 "거의 0" 을
+ * 보여 준다 [v1 CashBondWindow 의 같은 규칙]. */
+export function yearBefore(asOf: string, floorDate: string): string {
+  const d = new Date(asOf);
+  d.setFullYear(d.getFullYear() - 1);
+  const iso = d.toISOString().slice(0, 10);
+  return iso < floorDate ? floorDate : iso;
 }
 
 export interface BookRow extends PositionInput {
@@ -67,6 +99,9 @@ export function newRow(id: string, entry: string): BookRow {
  * 없는 것보다 나쁘다.
  */
 export function directionLabel(id: string, direction: number): string {
+  // 채권은 살 수만 있다 [OWNER, 2026-08-14] — 화면은 이 줄에 방향 칸을 안
+  // 그리지만, 부르는 자리가 생겼을 때 "페이" 라고 답하면 그건 거짓말이다.
+  if (isBondKind(bookKindOf(id))) return "매수";
   const legs = id.split("-");
   const pay = direction > 0 ? "페이" : "리시브";
   const rec = direction > 0 ? "리시브" : "페이";
@@ -81,7 +116,15 @@ export function directionLabel(id: string, direction: number): string {
 /** 실행할 수 있는 줄만. 종목과 진입일이 있고 규모가 0 이 아니어야 한다 —
  * 반쯤 채운 줄을 서버에 보내면 422 를 라벨 없이 받는다. */
 export function runnable(book: BookRow[]): BookRow[] {
-  return book.filter((r) => r.id && r.entry && r.eok !== 0);
+  return book.filter(
+    (r) =>
+      r.id &&
+      r.entry &&
+      r.eok !== 0 &&
+      // 채권은 매수만이고 규모도 양수다 [OWNER, 2026-08-14 — "국고채는 매도는
+      // 없는거고"]. 서버가 거절하는 것을 화면이 보내지 않는다.
+      (!isBondRow(r) || (r.direction === 1 && r.eok > 0)),
+  );
 }
 
 /* ── URL — 북은 붙여넣을 수 있는 링크다 ─────────────────────────────────────
@@ -107,6 +150,9 @@ export function decodeBook(s: string | undefined | null): BookRow[] {
     const n = Number(notional);
     if (!id || !entry || !Number.isFinite(direction) || !Number.isFinite(n)) continue;
     if (direction !== 1 && direction !== -1) continue;
+    // 손으로 만든 URL 의 채권 매도 — 서버도 거절한다. 반쯤 해석한 북으로
+    // 실행하느니 그 줄이 없는 게 낫다(이 함수의 규칙).
+    if (isBondKind(bookKindOf(id)) && (direction !== 1 || n <= 0)) continue;
     seq += 1;
     out.push({
       key: `u${seq}`,

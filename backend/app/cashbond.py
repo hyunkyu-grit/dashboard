@@ -412,38 +412,9 @@ def run_backtest(
     prevs: list[dict[int, float]] = []
 
     for p, leg in zip(positions, legs):
-        rec, own, own_prev = run_bond_leg(m, p, leg, sample, spec)
-        rec = {
-            "id": p.id,
-            "kind": p.kind,
-            "bondType": p.bond_type,
-            "label": instrument_label(p.kind, p.bond_type, p.tenor),
-            "tenor": p.tenor,
-            "direction": p.direction,
-            "notional": p.notional,
-            "entry": m.dates[leg.entry_i].isoformat(),
-            "exit": m.dates[leg.exit_i].isoformat(),
-            "closed": leg.exit_i < len(m.dates) - 1,
-            **rec,
-            # 스왑 다리가 없는 행은 개시가 없다 — 이 채권은 진입일에 발행돼
-            # 진입일부터 경과이자가 붙으므로 결제 시차의 밤 자체가 없다.
-            "startup": 0.0,
-            "swapPnl": None,
-        }
-
-        if p.kind == KIND_ASW:
-            srec, sown, sprev = _swap_leg(dataset, p, leg, m, sample, imap, swap_cache)
-            for key in ("valuation", "rolldown", "carry", "startup"):
-                rec[key] = round(rec[key] + srec[key], 0)
-            rec["swapPnl"] = srec["pnl"]
-            rec["swapEntryRate"] = srec["entryRate"]
-            rec["aswSpread"] = round((leg.coupon * 100 - srec["entryRate"]) * 100, 2)
-            for i in own:
-                own[i] += sown.get(i, 0.0)
-            for i in own_prev:
-                own_prev[i] += sprev.get(i, 0.0)
-            rec["pnl"] = round(own[sample[-1]] if sample else 0.0, 0)
-
+        rec, own, own_prev = run_bond_position(
+            m, dataset, p, leg, sample, spec, imap, swap_cache
+        )
         records.append(rec)
         series.append(own)
         prevs.append(own_prev)
@@ -478,6 +449,60 @@ def run_backtest(
         "maxLoss": min(pnls) if pnls else 0.0,
         "funding": fd.provenance(spec),
     }
+
+
+def run_bond_position(
+    m: CreditMatrix,
+    dataset,
+    pos: BondPosition,
+    leg: _BondLeg,
+    sample: list[int],
+    spec: fd.FundingSpec,
+    imap: dict[int, int],
+    swap_cache: dict,
+) -> tuple[dict, dict[int, float], dict[int, float]]:
+    """한 줄 → (기록, {자리: 손익}, {자리: 전영업일 손익}).
+
+    현금채권은 채권 다리 하나, 자산스왑은 거기에 같은 명목의 페이 고정을 더한
+    둘이다(`_swap_leg` 의 par-par 규약). 두 다리를 합치는 산술이 **한 군데에만**
+    있어야 하는 이유 [2026-08-21]: 혼합 북(`app/mixedbook.py`)이 같은 줄을 다른
+    달력 위에서 세는데, 그 병합을 저쪽에 한 벌 더 적으면 같은 자산스왑이 두
+    화면에서 다른 수를 낼 수 있다 — 이 리포가 claim-vs-behaviour 결함이라 이름
+    붙여 둔 것이 정확히 그것이다.
+    """
+    rec, own, own_prev = run_bond_leg(m, pos, leg, sample, spec)
+    rec = {
+        "id": pos.id,
+        "kind": pos.kind,
+        "bondType": pos.bond_type,
+        "label": instrument_label(pos.kind, pos.bond_type, pos.tenor),
+        "tenor": pos.tenor,
+        "direction": pos.direction,
+        "notional": pos.notional,
+        "entry": m.dates[leg.entry_i].isoformat(),
+        "exit": m.dates[leg.exit_i].isoformat(),
+        "closed": leg.exit_i < len(m.dates) - 1,
+        **rec,
+        # 스왑 다리가 없는 행은 개시가 없다 — 이 채권은 진입일에 발행돼
+        # 진입일부터 경과이자가 붙으므로 결제 시차의 밤 자체가 없다.
+        "startup": 0.0,
+        "swapPnl": None,
+    }
+
+    if pos.kind == KIND_ASW:
+        srec, sown, sprev = _swap_leg(dataset, pos, leg, m, sample, imap, swap_cache)
+        for key in ("valuation", "rolldown", "carry", "startup"):
+            rec[key] = round(rec[key] + srec[key], 0)
+        rec["swapPnl"] = srec["pnl"]
+        rec["swapEntryRate"] = srec["entryRate"]
+        rec["aswSpread"] = round((leg.coupon * 100 - srec["entryRate"]) * 100, 2)
+        for i in own:
+            own[i] += sown.get(i, 0.0)
+        for i in own_prev:
+            own_prev[i] += sprev.get(i, 0.0)
+        rec["pnl"] = round(own[sample[-1]] if sample else 0.0, 0)
+
+    return rec, own, own_prev
 
 
 def _swap_leg(
