@@ -832,6 +832,10 @@ export interface SimReconRow {
   /** 구 캐시 응답에는 3분해가 없다 — 0 이 아니라 미정의(공란 정책). */
   carryPnl?: number | null;
   rolldownPnl?: number | null;
+  /** 조달 — 채권 줄이 있을 때만 숫자다 [2026-08-21]. 응답이 고정 모델을 지나
+   * 스왑만 있는 북에서도 `null` 이 실려 오므로, 열을 세울지는 **숫자가 하나라도
+   * 있나**로 정한다(`ReconStack` 의 `hasFunding`). 서버가 이미 음수로 준다. */
+  funding?: number | null;
   carryover?: boolean;
 }
 

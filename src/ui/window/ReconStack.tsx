@@ -164,9 +164,13 @@ export function ReconStack({
     banded ? banded.slice(1).map((g) => g.cols[0]?.key).filter(Boolean) : [],
   );
 
-  /* 오른쪽 범례의 하루 칸들(rowSpan=3). 조달 열은 현금채권 대사에서만 선다 —
-     `funding` 필드의 존재가 곧 판정이고, IRS 대사는 필드 자체가 없다. */
-  const hasFunding = days.some((d) => d.funding !== undefined);
+  /* 오른쪽 범례의 하루 칸들(rowSpan=3). 조달 열은 **말할 것이 있을 때만** 선다.
+     판정이 «필드가 있나» 가 아니라 «숫자가 하나라도 있나» 인 이유 [2026-08-21]:
+     백테스트는 조달이 없는 북에서 필드를 아예 안 싣지만, 시뮬레이션은 응답이
+     고정 모델을 지나므로 스왑만 있는 북에도 `funding: null` 이 전 행에 실린다.
+     «필드 존재» 로 재면 그 표에 250줄짜리 «—» 조달 칸이 선다 — 스왑에는 조달이라는
+     질문 자체가 없는데. 숫자로 재면 두 화면이 한 규칙으로 옳다. */
+  const hasFunding = days.some((d) => typeof d.funding === 'number');
   const summaryCols: { label: string; get: (d: ReconStackDay) => number | null }[] = [
     { label: '평가', get: (d) => d.valuation },
     { label: '캐리', get: (d) => d.carry },

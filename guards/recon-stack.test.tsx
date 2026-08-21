@@ -46,9 +46,22 @@ describe('조달 열은 **있을 때만** 선다 [2026-08-21]', () => {
     expect(container.querySelectorAll("tbody td[rowspan='3']")).toHaveLength(5);
   });
 
-  it('필드가 null 이기만 해도 열은 선다 — 그건 "그날은 모른다" 이다', () => {
+  it('전 행이 null 이면 열은 안 선다 — 250줄짜리 «—» 칸을 만들지 않는다', () => {
+    /* 시뮬레이션 응답은 고정 모델을 지나 스왑만 있는 북에도 `funding: null` 을
+     * 전 행에 싣는다. 판정이 «필드가 있나» 였을 때 그 표에 빈 조달 칸이 섰다. */
     const { container } = render(
       <ReconStack days={[{ ...day(0), funding: null }]} tenors={TENORS} />,
+    );
+    const headers = [...container.querySelectorAll('thead th')].map((h) => h.textContent);
+    expect(headers).not.toContain('조달');
+  });
+
+  it('숫자가 한 행이라도 있으면 선다 — 이월 앵커의 null 은 그 열에 딸린다', () => {
+    const { container } = render(
+      <ReconStack
+        days={[{ ...day(0), funding: -1234 }, { ...day(1), funding: null }]}
+        tenors={TENORS}
+      />,
     );
     const headers = [...container.querySelectorAll('thead th')].map((h) => h.textContent);
     expect(headers).toContain('조달');

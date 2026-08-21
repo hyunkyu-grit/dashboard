@@ -91,13 +91,33 @@ def build_irs_daily_recon(
     irs_fm_mtm_theta: np.ndarray,
     irs_daily_scf: np.ndarray,
     irs_fm_carry_cash: np.ndarray | None = None,
+    bond_daily: list[dict] | None = None,
 ) -> list[dict]:
-    """IRS 일별 손익 대사 — 정확한 일별 KRD 재계산.
+    """일별 손익 대사 — 정확한 일별 KRD 재계산.
 
     전략: 선형 에이징 완전 폐기 → IRS_Trade 기반 실시간 KRD.
     최적화: 일당 12개 범프 커브 1회 빌드 + 배치 DF LUT → 종목별 순수 NPV
-    차분만 수행. 호출자는 `par_rates 가 있고 skip_recon 이 아닐 때만` 부른다
-    — 빈 대사표 분기(배포 계약 보정)는 chart.py 쪽 주석 참조.
+    차분만 수행.
+
+    ── 채권 줄 [2026-08-21] ────────────────────────────────────────────────
+
+    종전에는 이 표가 **스왑만** 셌다. 시뮬레이션은 2026-08-14 부터 한 북에
+    채권을 섞을 수 있었으므로, 혼합 포트폴리오에서 표의 합이 헤드라인과 조용히
+    어긋났다(실측: 스왑 10Y + 국고채 3Y 90일 · 표 357,930,341 대 헤드라인
+    263,577,886 — 차이 94,352,455 가 정확히 채권 몫이다). 채권만 있는 북은
+    par 커브가 없어 표가 아예 비었다.
+
+    `bond_daily` 는 chart.py 의 주 루프가 **이미 만든** `decomposition_daily`
+    그대로다 — 여기서 새로 계산하는 산술은 없다(누적 계열의 차분뿐). 귀속은
+    스왑과 **같은 관행**이다 [OWNER, 2026-08-11]: 평가는 백워드(전일 대비),
+    캐리·조달은 포워드(오늘 → 다음 영업일). 그래서 D+0 행이 첫날 밤의 캐리를
+    싣고 마지막 행의 캐리는 0 이다 — 스왑 쪽과 한 글자도 다르지 않다.
+
+    KRD 격자는 **스왑만**이다. 시뮬의 채권은 테너별 KRD 를 매일 재계산하지
+    않는다 — 하나의 pvbp 를 잔존으로 감쇠시키고 섹터 커브에서 한 숫자를
+    보간한다(daily_valuation). 진입 KRD 를 잔존으로 스케일해 채워 넣을 수는
+    있지만, 그러면 진짜 재계산인 스왑 열과 정적 배분인 채권 열이 한 표에서
+    같은 것처럼 보인다. 지어내지 않고 비워 두고, 화면이 그 사실을 말한다.
     """
     _recon_names  = qe.KRD_NAMES
     _recon_tenors = qe.KRD_TENORS
@@ -162,7 +182,14 @@ def build_irs_daily_recon(
     # 마켓 컨벤션: "N일자 KRD/PVBP"는 N의 결제일(다음 영업일) 기준으로 재평가한
     # 값을 보고한다 — irs_fm_mtm(simulate_irs_path_fm 내부에서 이미 동일 규칙
     # 적용됨)과 일관되도록 여기서도 val_date를 결제일로 한 번 밀어서 넘긴다.
+    #: 스왑이 없거나 par 커브가 없으면 KRD 기계 자체가 정의되지 않는다.
+    #  종전에는 그때 호출자가 표를 통째로 비웠는데(채권만 북이 그 경우다),
+    #  대사할 것이 없는 게 아니라 **격자만** 없는 것이다 — 손익 줄은 선다.
+    _has_krd = bool(par_rates) and bool(irs_positions)
+
     def _krd_at(_vd: date, _cd: int) -> dict[str, float]:
+        if not _has_krd:
+            return {_n: 0.0 for _n in _recon_names}
         # par 커브 구성: 6M+ ramp + 1D/3M BOK 계단 앙커. 6M+ par 노드는
         # ramp 충격 그대로, 1D/3M 앙커는 기본 float rate + BOK 누적 bp.
         _par_day: list[tuple[float, float]] = [
@@ -213,6 +240,31 @@ def build_irs_daily_recon(
         )
         return theta, carry, theta - carry
 
+    # ── 채권 줄의 일별 성분 ────────────────────────────────────────────────
+    # `bond_daily` 는 chart.py 의 `decomposition_daily` 다: 0번이 D+0 앵커(전부
+    # 0)이고 그 뒤로 영업일마다 하나 — 이 표의 행과 1:1 이다. 담긴 값은 **누적**
+    # 이라 여기서 차분만 한다.
+    _bd = bond_daily or []
+    _has_bond = any(
+        (r.get("bondMtm") or r.get("bondCarry") or r.get("fundingCost")) for r in _bd
+    )
+
+    def _bd_at(i: int, key: str) -> float:
+        return float(_bd[i].get(key) or 0.0) if 0 <= i < len(_bd) else 0.0
+
+    def _bond_back(j: int) -> int:
+        """행 j 의 채권 평가 — **백워드**(전일 대비). 스왑의 평가와 같은 방향."""
+        return round(_bd_at(j, "bondMtm") - _bd_at(j - 1, "bondMtm")) if j >= 1 else 0
+
+    def _bond_fwd(j: int) -> tuple[int, int]:
+        """행 j 의 (캐리, 조달) — **포워드**(오늘 → 다음 영업일). 스왑의 세타와
+        같은 방향이라, D+0 행이 첫날 밤을 싣고 마지막 행은 0 이다."""
+        if j + 1 >= len(_bd):
+            return 0, 0
+        carry = round(_bd_at(j + 1, "bondCarry") - _bd_at(j, "bondCarry"))
+        fund = round(_bd_at(j + 1, "fundingCost") - _bd_at(j, "fundingCost"))
+        return carry, fund
+
     irs_daily_recon: list[dict] = []
     # D+0 앵커 행 — 위 주석 참조. (0 → 첫 영업일의 세타)
     if _cals:
@@ -222,6 +274,7 @@ def build_irs_daily_recon(
             if irs_fm_carry_cash is not None
             else 0
         )
+        _b_carry0, _b_fund0 = _bond_fwd(0)
         irs_daily_recon.append({
             "date":         base_date.isoformat(),
             "day":          0,
@@ -230,14 +283,15 @@ def build_irs_daily_recon(
             "dailyDbp":     {_n: 0.0 for _n in _recon_names},
             "pnl":          {_n: 0 for _n in _recon_names},
             "totalEstPnl":  0,
-            "totalActual":  _t0,
+            "totalActual":  _t0 + _b_carry0 + _b_fund0,
             "settleCf":     0,
             "npvChange":    0,
             "residual":     0,
             "thetaPnl":     _t0,
             "valuationPnl": 0,
-            "carryPnl":     _c0,
+            "carryPnl":     _c0 + _b_carry0,
             "rolldownPnl":  _t0 - _c0,
+            **({"funding": _b_fund0} if _has_bond else {}),
         })
 
     _prev_cal_r = 0
@@ -263,6 +317,10 @@ def build_irs_daily_recon(
         # 캐리(동결 커브 순액크루얼+정산, carry_split.py) / 롤다운(잔차 —
         # 표시 정밀도 가산성 보존).
         _theta_pnl, _carry_pnl, _rolldown_pnl = _fwd_theta(_row_j)
+        # 채권 몫 — 스왑과 같은 귀속(평가 백워드 · 캐리/조달 포워드). 행 j 는
+        # `bond_daily` 의 j+1 번(0번은 D+0 앵커).
+        _b_val = _bond_back(_row_j + 1)
+        _b_carry, _b_fund = _bond_fwd(_row_j + 1)
         irs_daily_recon.append({
             "date":         _val_date_r.isoformat(),
             "day":          _cal_day,
@@ -273,16 +331,18 @@ def build_irs_daily_recon(
             "totalEstPnl":  _total_est,
             # 그날 손익 = 평가(백워드) + 세타(포워드) — 데스크 관행 데일리.
             # 누적 궤적의 증분(구 정의)과는 세타 타이밍이 하루 어긋난다.
-            "totalActual":  _valuation_pnl + _theta_pnl,
+            "totalActual":  _valuation_pnl + _theta_pnl + _b_val + _b_carry + _b_fund,
             "settleCf":     _settle,
             "npvChange":    _npv_change,
-            # 선형화 잔차: 추정이 설명하는 대상은 평가(커브무브)뿐이다 —
-            # 백테스트 recon 과 같은 정의로 정렬(세타를 섞어 빼지 않는다).
+            # 선형화 잔차: 추정이 설명하는 대상은 **스왑의** 평가(커브무브)뿐이다
+            # — 백테스트 recon 과 같은 정의로 정렬(세타를 섞어 빼지 않는다).
+            # 채권 평가는 격자가 없어 추정할 상대가 없으므로 여기 안 들어간다.
             "residual":     _valuation_pnl - _total_est,
             "thetaPnl":     _theta_pnl,
-            "valuationPnl": _valuation_pnl,
-            "carryPnl":     _carry_pnl,
+            "valuationPnl": _valuation_pnl + _b_val,
+            "carryPnl":     _carry_pnl + _b_carry,
             "rolldownPnl":  _rolldown_pnl,
+            **({"funding": _b_fund} if _has_bond else {}),
         })
         _prev_cal_r  = _cal_day
         _pvbp_prev_r = _pvbp_r
@@ -312,6 +372,7 @@ def build_irs_daily_recon(
             "carryPnl":     None,
             "rolldownPnl":  None,
             "carryover":    True,
+            **({"funding": None} if _has_bond else {}),
         })
 
     return irs_daily_recon

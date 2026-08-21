@@ -155,6 +155,11 @@ class IrsDailyReconRow(BaseModel):
     # 라운딩 잔차로 롤다운을 잡는다). 구 캐시/구 응답 호환을 위해 기본 0.
     carryPnl: int | None = 0
     rolldownPnl: int | None = 0
+    # 조달 — **채권 줄이 있을 때만** 실린다 [2026-08-21]. 스왑에는 그 개념이
+    # 없으므로 «0원» 도 «모른다» 도 아니고 그 질문이 없다: 필드 부재가 그 뜻이고
+    # (화면의 `hasFunding` 이 그것을 본다), 이월 앵커 행에서만 null 이다.
+    # 서버가 이미 음수로 준다 — 화면에서 부호를 다시 주지 않는다.
+    funding: int | None = None
     carryover: bool = False
 
 

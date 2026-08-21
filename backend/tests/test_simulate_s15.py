@@ -295,8 +295,17 @@ def test_swaps_excluded_when_no_quotes(client: TestClient, monkeypatch) -> None:
     # Swaps are OUT of every numeric surface (excluded ≠ zero-priced): the
     # trajectory carries no swap P&L and the decomposition marks it undefined.
     assert all(row["swapPnL"] == 0 for row in body["chartData"])
-    assert body["irsDailyReconciliation"] == []
     assert body["irsSettlementEvents"] == []
+    # [2026-08-21] 대사표는 **채권 줄로 남는다.** 종전 핀은 `== []` 였는데,
+    # 그건 표가 스왑만 셀 때의 계약이다 — 제외된 것은 스왑이지 채권이 아니고,
+    # 채권에는 여전히 대사할 손익이 있다. 스왑 격자는 0 이다(제외 ≠ 0가격:
+    # 그 런에는 스왑 포지션 자체가 없다).
+    _rows = [r_ for r_ in body["irsDailyReconciliation"] if not r_.get("carryover")]
+    assert _rows, "채권이 남았는데 대사표가 비었다"
+    assert all(v == 0 for v in _rows[0]["pvbp"].values())
+    assert sum(r_["totalActual"] for r_ in _rows) == pytest.approx(
+        body["summary"]["finalTotal"], abs=len(_rows)
+    )
     d = body["totalReturnDecomposition"]
     assert d["swapMtm"] is None and d["swapCarry"] is None
     assert d["total"] == pytest.approx(body["summary"]["finalTotal"], abs=1.0)

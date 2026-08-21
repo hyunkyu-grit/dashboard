@@ -328,36 +328,6 @@ def build_chart_data(
     # 영업일 스케줄 (한국 공휴일+주말 제외) — recon/메인 시뮬 루프 공용
     _bizday_schedule = build_bizday_schedule(base_date, sim_days)
 
-    # ── IRS 일별 손익 대사표 (recon.py) ─────────────────────────────────────
-    # 배포 계약 보정 — 원본과 다른 유일한 런타임 동작: 실제 프론트 브리지
-    # (position-bridge.ts, S6)는 irsParRates를 아직 싣지 않아 irsCurves가 빈
-    # 배열로 온다. 원본(rates-simulator-main)은 이 경우 대사 루프의 부트스트랩이
-    # 빈 par 커브로 ValueError를 던져 요청 전체가 500이었다(2026-07-15 실측).
-    # par 커브가 없으면 IRS 일별 대사표 자체가 정의되지 않으므로, 대사표만
-    # 비우고 나머지(채권 chartData/summary/pvbp/book)는 정상 산출한다. IRS
-    # 포지션이 있는데 커브가 없는 경우는 원본과 동일하게 FM 경로에서 실패한다.
-    irs_daily_recon: list[dict] = (
-        build_irs_daily_recon(
-            irs_positions=irs_positions,
-            par_rates=par_rates,
-            base_date=base_date,
-            base_date_str=base_date_str,
-            sim_days=sim_days,
-            shock_type=shock_type,
-            irs_sc_t=_irs_sc_t,
-            irs_sc_bp=_irs_sc_bp,
-            path_factor_arr=_path_factor_arr,
-            funding_events=funding_events,
-            bizday_schedule=_bizday_schedule,
-            irs_fm_mtm=irs_fm_mtm,
-            irs_fm_mtm_theta=irs_fm_mtm_theta,
-            irs_daily_scf=irs_daily_scf,
-            irs_fm_carry_cash=irs_fm_carry_cash,
-        )
-        if par_rates and not skip_recon
-        else []
-    )
-
     # 단기 이벤트 계단 함수: funding_events 날짜 → D+N 변환
     try:
         _short_evts = sorted(
@@ -571,6 +541,47 @@ def build_chart_data(
         "finalTotal": last.get("totalPnL", 0),
         "breakEvenDay": break_even_day,
     }
+
+    # ── 일별 손익 대사표 (recon.py) ─────────────────────────────────────────
+    #
+    # **루프 뒤로 옮겼다** [2026-08-21]. 종전에는 루프 앞이었고 그래서 스왑만
+    # 셀 수 있었다 — 채권의 일별 성분은 이 루프가 만들기 때문이다. `decomposition_daily`
+    # 를 그대로 넘긴다: 대사표가 채권 산술을 다시 쓰지 않고 **이 루프가 이미 낸
+    # 누적 계열의 차분**만 읽는다(두 번째 정의를 만들지 않는다).
+    #
+    # 게이트도 넓어졌다. 종전 조건은 `par_rates` 하나였는데, 그건 **스왑의 KRD
+    # 격자**에 필요한 것이지 표 전체의 조건이 아니다. 채권만 있는 북은 par 커브가
+    # 없어서 표가 통째로 비어 있었다 — 격자만 없는 것이지 대사할 손익이 없는 게
+    # 아니다(recon.py 의 `_has_krd`).
+    #
+    # 배포 계약 보정(종전 주석 승계): 실제 프론트 브리지는 irsCurves 를 비워
+    # 보내고 스왑이 있을 때만 스냅샷에서 채워진다. 스왑이 있는데 커브가 없으면
+    # 원본과 동일하게 FM 경로에서 먼저 실패한다.
+    _recon_wanted = (not skip_recon) and (
+        bool(par_rates) or any(p.bondType != "swap" for p in positions)
+    )
+    irs_daily_recon: list[dict] = (
+        build_irs_daily_recon(
+            irs_positions=irs_positions,
+            par_rates=par_rates,
+            base_date=base_date,
+            base_date_str=base_date_str,
+            sim_days=sim_days,
+            shock_type=shock_type,
+            irs_sc_t=_irs_sc_t,
+            irs_sc_bp=_irs_sc_bp,
+            path_factor_arr=_path_factor_arr,
+            funding_events=funding_events,
+            bizday_schedule=_bizday_schedule,
+            irs_fm_mtm=irs_fm_mtm,
+            irs_fm_mtm_theta=irs_fm_mtm_theta,
+            irs_daily_scf=irs_daily_scf,
+            irs_fm_carry_cash=irs_fm_carry_cash,
+            bond_daily=decomposition_daily,
+        )
+        if _recon_wanted
+        else []
+    )
 
     # s15 T2 — 만기 시점 Total Return 분해 (비라운딩 float; 문서화된 항등:
     # bondMtm + bondCarry + fundingCost + swapMtm + swapCarry + swapRolldown

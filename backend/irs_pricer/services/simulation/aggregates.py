@@ -21,7 +21,28 @@ def build_frontend_pvbp_sensitivity(positions: list[FrontendPosition]) -> list[d
     sectors = ["국고채", "통안채", "특은채", "시은채", "공사채", "여전채", "회사채", "IRS", "OIS"]
     # qe.KRD_NAMES를 그대로 참조(하드코딩된 별도 목록이면 엔진에 새 테너를 추가해도
     # 여기서 누락되어 "합계"가 실제 평행이동 PVBP와 어긋난다 — 6Y/8Y/9Y 추가 시 실제로 발생했던 문제)
-    tenors = qe.KRD_NAMES
+    #
+    # [2026-08-21] 같은 병이 **다른 격자에서** 한 번 더 났다. `qe.KRD_NAMES` 는
+    # IRS 커브의 노드이고, 채권 줄의 `krdMap` 은 **민평 격자**에 산다 — 민평에만
+    # 있는 2.5Y·20Y·30Y 는 이 표의 열에 없어서 통째로 떨어졌다. 실측: 국고채 30Y
+    # 100억 한 줄의 KRD 15,965,062원/bp 가 표의 합계에 **0** 으로 떴다. 리스크가
+    # 없다고 말하는 표는 리스크를 못 재는 표보다 나쁘다.
+    #
+    # 그래서 포지션이 **실제로 들고 있는** 테너를 열에 더한다. 아무도 안 들고
+    # 있으면 목록은 종전과 한 글자도 다르지 않다(가산적) — 골든이 그대로 통과하는
+    # 이유이자, 열이 쓸데없이 늘지 않는 이유다. 순서는 연수 오름차순이라 표가
+    # 왼쪽에서 오른쪽으로 만기순으로 읽힌다.
+    _extra = {
+        t
+        for p in positions
+        for t in (p.krdMap or {})
+        if t not in qe.KRD_NAMES and (p.krdMap or {}).get(t)
+    }
+    tenors = (
+        sorted([*qe.KRD_NAMES, *_extra], key=parse_tenor_to_years)
+        if _extra
+        else qe.KRD_NAMES
+    )
 
     # 원본은 pandas group-by-sum이었다(rates-simulator-main/backend/main.py) —
     # 같은 행들을 같은 순서로 테너별 순차 합산하는 plain-dict 버전. 이 배포에는

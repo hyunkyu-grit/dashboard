@@ -118,8 +118,20 @@ function partsOf(run: SimResponse) {
 }
 
 /** 엔진의 일별 대사 → 대사 스택. **시간순이 기본**(D+0 이 위) — 미래 경로에는
- * "최신" 이랄 게 없다. 여기서 계산하는 것은 없다. */
-function simDays(rows: SimReconRow[]): ReconStackDay[] {
+ * "최신" 이랄 게 없다. 여기서 계산하는 것은 없다.
+ *
+ * 내보내는 이유는 백테스트 쪽 `backtest/recon.ts` 와 같다 [2026-08-21]: 조달 칸의
+ * 판단이 창 안에만 있으면 가드가 닿지 못하고, 저쪽에서 정확히 그 자리가 한 번
+ * 조용히 틀렸다. */
+/** 이 실행에 채권 줄이 있나 — 조달 칸에 **숫자가** 있는지가 그 판정이다
+ * (`ReconStack` 의 `hasFunding` 과 같은 규칙, 한 벌이어야 한다). 스왑만 있는
+ * 북에서는 응답이 고정 모델을 지나며 `funding: null` 이 전 행에 실려 오므로
+ * «필드가 있나» 로 재면 250줄짜리 «—» 조달 칸이 선다. */
+export function hasBondRows(rows: SimReconRow[]): boolean {
+  return rows.some((r) => typeof r.funding === 'number');
+}
+
+export function simDays(rows: SimReconRow[]): ReconStackDay[] {
   return rows.map((r) => ({
     date: r.date,
     title: r.carryover
@@ -132,6 +144,10 @@ function simDays(rows: SimReconRow[]): ReconStackDay[] {
     valuation: r.valuationPnl,
     carry: r.carryPnl ?? null,
     rolldown: r.rolldownPnl ?? null,
+    /* 조달은 채권 줄이 있을 때만 숫자로 온다 — 열을 세울지는 스택이 정한다
+       (`hasFunding`: 숫자가 하나라도 있나). 여기서 `?? 0` 으로 채우면 스왑만
+       있는 북에 «조달 0원» 이라는 없는 사실이 생긴다. */
+    funding: r.funding ?? null,
     actual: r.totalActual,
   }));
 }
@@ -227,6 +243,7 @@ export function ResultsWindow({
 
   const p = run ? partsOf(run) : null;
   const recon = run?.irsDailyReconciliation ?? [];
+  const hasBondRow = hasBondRows(recon);
 
   return (
     <FloatingWindow
@@ -481,8 +498,8 @@ export function ResultsWindow({
           <TextLegal as="span" color="fgMuted">
             하루가 세 줄이에요 — KRD(전일 종가 감도), Δbp(그날 변화), 손익(KRD × Δbp 추정).
             같은 블록의 KRD와 Δbp를 곱하면 손익 줄이 나와요. 추정 합계와 평가의 차가 선형화
-            잔차이고, 평가·캐리·롤다운을 더하면 그날 손익이에요. 마지막 블록은 다음 영업일로
-            들고 가는 이월 리스크예요.
+            잔차이고, 평가·캐리·롤다운(+조달)을 더하면 그날 손익이에요. 마지막 블록은 다음
+            영업일로 들고 가는 이월 리스크예요.
           </TextLegal>
           {recon.length ? (
             <ReconStack
@@ -490,6 +507,16 @@ export function ResultsWindow({
               tenors={Object.keys(recon[0].pvbp)}
               defaultOrder="asc"
               maxHeight="34vh"
+              /* 격자가 무엇의 것인지 표가 말한다 [2026-08-21]. 손익 줄은 북
+                 전체(채권 포함)를 세지만 KRD·Δbp 격자는 **스왑의 것**이다 —
+                 시뮬의 채권은 테너별 KRD 를 매일 재계산하지 않고 하나의 pvbp 를
+                 잔존으로 감쇠시키므로, 진입 KRD 를 스케일해 채워 넣으면 진짜
+                 재계산인 스왑 열과 같아 보인다. 지어내지 않고 그 사실을 적는다. */
+              note={
+                hasBondRow
+                  ? '격자(KRD·Δbp)는 스왑 줄의 것이에요 — 채권은 테너별 감도를 매일 다시 재지 않아서 여기 안 세워요. 손익 줄은 채권까지 다 센 북 전체예요.'
+                  : undefined
+              }
             />
           ) : (
             <TextLegal as="span" color="fgMuted">

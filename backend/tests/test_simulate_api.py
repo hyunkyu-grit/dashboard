@@ -76,6 +76,21 @@ REPRESENTATIVE_REQUEST = json.loads(
 # pvbp 가 정확히 한 칸 시프트(행 0 시드는 동일)·전 행 +carryover=False·
 # 앵커 1행 추가 — pvbp/carryover 밖의 모든 키·값과 recon 밖 전체는 바이트
 # 동일.
+# [2026-08-21] 대사표가 **채권 줄까지** 세면서 다시 떴다. 종전에는 스왑만 세서
+# 혼합 북에서 표의 합이 헤드라인과 조용히 어긋났다 — 이 대표 요청에서만 표 합
+# +26,167,884 대 헤드라인 −192,093,885 로 **2억 1,826만원**(정확히 finalSwap
+# 만큼: 표가 스왑만 세고 있었다는 증거)이었고, 지금은 −192,093,893 로 8원 차다
+# (61행 × 라운딩). 재핀의 폭발 반경을 실측으로 좁혀 두었다:
+#
+#   대사 **밖의 모든 키** — 바이트 동일 (헤드라인·chartData·decomposition 불변)
+#   대사 **안**          — 움직인 필드는 carryPnl · totalActual · valuationPnl 셋뿐
+#                          (채권 몫이 더해진 자리). pvbp/pnl/dailyDbp/cumulativeBp/
+#                          thetaPnl/rolldownPnl/settleCf/npvChange/residual/
+#                          totalEstPnl 은 전부 불변. 행 수도 62 그대로.
+#   새 키                — `funding` 하나 (채권 줄이 있을 때만 숫자)
+#
+# 골든 파일도 `irsDailyReconciliation` **한 키만** 갈아 끼웠다 — 나머지가 표류할
+# 자리를 만들지 않는다.
 GOLDEN_RESPONSE = json.loads(
     (DATA / "simulate_golden_dv01_response.json").read_text(encoding="utf-8")
 )
@@ -536,8 +551,23 @@ def test_bond_only_empty_irs_curves(client: TestClient) -> None:
     body = r.json()
     assert body["status"] == "ok"
     assert len(body["chartData"]) == 9  # day 0 + 8 business days
-    assert body["irsDailyReconciliation"] == []
     assert body["irsSettlementEvents"] == []
     # The bond math is unaffected by the missing par curve.
     assert body["chartData"][-1]["mtmPnL"] != 0
     assert body["summary"]["finalSwap"] == 0
+
+    # [2026-08-21] 표가 **더 이상 비지 않는다.** 종전에는 여기가
+    # `irsDailyReconciliation == []` 를 못박고 있었다 — par 커브가 없으면 표가
+    # 통째로 빈다는 계약이었고, 그건 **격자**의 조건이지 표의 조건이 아니었다.
+    # 채권만 있는 북에도 대사할 손익은 있다(평가·캐리·조달). 격자는 스왑의
+    # 것이라 여기서는 전부 0 이고, 그 사실은 화면이 각주로 말한다.
+    rec = body["irsDailyReconciliation"]
+    rows = [r_ for r_ in rec if not r_.get("carryover")]
+    assert rows, "채권만 있는 북의 대사표가 비었다"
+    assert all(v == 0 for v in rows[0]["pvbp"].values()), "스왑이 없는데 격자가 섰다"
+    # 그리고 표는 헤드라인으로 닫힌다 — 이 표가 있는 이유가 그것이다.
+    assert sum(r_["totalActual"] for r_ in rows) == pytest.approx(
+        body["summary"]["finalTotal"], abs=len(rows)
+    )
+    # 조달 열은 채권 줄이 있으므로 선다 (서버가 이미 음수로 준다).
+    assert any(isinstance(r_.get("funding"), int) for r_ in rows)

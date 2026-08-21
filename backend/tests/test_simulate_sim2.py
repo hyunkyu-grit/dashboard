@@ -190,7 +190,21 @@ def test_funding_stepping_moves_only_funding_side_fields(client) -> None:
     assert a["bookDailyPnLs"] == b["bookDailyPnLs"]
     assert a["exclusions"] == b["exclusions"]
     assert a["irsSettlementEvents"] == b["irsSettlementEvents"]
-    assert a["irsDailyReconciliation"] == b["irsDailyReconciliation"]
+    # [2026-08-21] 대사표는 더 이상 평가 쪽 전용이 아니다 — 채권의 **캐리·조달**
+    # 까지 실으므로 조달 스테핑이 그 칸들을 움직이는 것이 옳다. 안 움직여야 하는
+    # 것은 격자와 평가·세타 쪽이다.
+    _INVARIANT = (
+        "pvbp", "cumulativeBp", "dailyDbp", "pnl", "totalEstPnl",
+        "settleCf", "npvChange", "residual", "thetaPnl", "rolldownPnl",
+        "valuationPnl",
+    )
+    _ra, _rb = a["irsDailyReconciliation"], b["irsDailyReconciliation"]
+    assert len(_ra) == len(_rb)
+    for _x, _y in zip(_ra, _rb):
+        for _k in _INVARIANT:
+            assert _x[_k] == _y[_k], f"조달 스테핑이 {_k} 를 움직였다"
+    # 그리고 조달 쪽은 **실제로** 움직였다 — 안 움직이면 이 표가 조달을 안 싣는 것이다.
+    assert any(_x.get("funding") != _y.get("funding") for _x, _y in zip(_ra, _rb))
     assert a["distribution"]["ratePaths"] == b["distribution"]["ratePaths"]
     for ra, rb in zip(a["chartData"], b["chartData"]):
         assert ra["mtmPnL"] == rb["mtmPnL"]
