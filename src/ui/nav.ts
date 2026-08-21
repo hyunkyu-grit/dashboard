@@ -171,22 +171,39 @@ export function tabForSection(s: SectionId, lastGroup: Group): TabId {
  *
  * 세입자는 **탭이 아니라 URL 상태**다(`?g=lab&lab=scenario`). 탭을 늘리면
  * `sectionOf()` 가 드는 «섹션은 유도값» 규칙에 두 번째 상태가 끼어든다. */
-export type LabId = 'surface' | 'scenario' | 'issuance' | 'model';
+export type LabId = 'surface' | 'issuance' | 'model';
+
+/** 내려간 세입자. 공유된 링크가 죽지 않게 갈 곳을 적어 둔다. */
+export const RETIRED_LAB: Record<string, LabId> = { scenario: 'model' };
 
 export const DEFAULT_LAB: LabId = 'surface';
 
 export const LAB_ITEMS: { id: LabId; label: string; desc: string; glyph: string }[] = [
   { id: 'surface', label: '커브 표면', desc: '풀별 커브가 지난 몇 해 어떻게 움직였나', glyph: '◇' },
-  { id: 'scenario', label: '시나리오', desc: '이 금통위 경로가 프라이싱되면 커브는 어디가 정합인가', glyph: '◆' },
   { id: 'issuance', label: '발행 캘린더', desc: '내일 이 섹터에 얼마가 새로 얹히나', glyph: '▤' },
-  /* 「모형」은 시나리오를 **대체하러** 들어온다 [OWNER 2026-08-21]. 셋이 아니라
-     둘이 되는 자리인데, 지금은 셸만 서 있고 내용은 다음 두 세션이 채운다. 그때
-     시나리오가 내려간다 — 죽은 쌍둥이로 남기지 않는다. */
+  /* 「모형」이 시나리오를 **대체했다** [OWNER 2026-08-21, 2026-08-21 시행].
+     시나리오는 여기서 내려갔다 — 죽은 쌍둥이로 남기지 않는다. 그 화면이 하던
+     일은 세 면으로 갈라졌다: 손잡이와 결과표는 「전략」, 논문 Figure 18 의 여덟
+     칸은 「모형」의 기저 충격반응, 원장 줄은 「방법」의 해석 원장.
+     셈 모듈(`lab/scenario/combine.ts` 등)은 **그대로 산다** — 「전략」이 같은
+     산술을 쓰기 때문이고, 가드 40개가 계속 그 산술을 잠근다. */
   { id: 'model', label: '모형', desc: '경로 하나로 데스크 노트까지, 그리고 그 숫자가 어디서 왔는지', glyph: '⌗' },
 ];
 
 export function isLabId(v: string | undefined): v is LabId {
-  return v === 'surface' || v === 'scenario' || v === 'issuance' || v === 'model';
+  return v === 'surface' || v === 'issuance' || v === 'model';
+}
+
+/**
+ * URL 의 세입자 키를 지금 사는 세입자로 옮긴다.
+ *
+ * `lab=scenario` 를 그냥 모르는 값으로 두면 기본 세입자(커브 표면)로 떨어지는데,
+ * 그건 **다른 화면**이다. 공유된 링크가 조용히 엉뚱한 데로 가면 링크를 준 사람이
+ * 거짓말을 한 셈이 된다.
+ */
+export function resolveLab(v: string | undefined): LabId {
+  if (isLabId(v)) return v;
+  return (v && RETIRED_LAB[v]) || DEFAULT_LAB;
 }
 
 /** 메가 패널을 여는 섹션. 나머지는 목적지가 하나뿐이라 버튼이다. */

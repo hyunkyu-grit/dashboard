@@ -51,11 +51,10 @@ import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { StartFilter } from '@/ui/StartFilter';
 import { TopNav } from '@/ui/TopNav';
 import { useUrlState } from '@/ui/useUrlState';
-import { DEFAULT_LAB, isLabId, LAB_ITEMS, type LabId } from '@/ui/nav';
+import { LAB_ITEMS, resolveLab, type LabId } from '@/ui/nav';
 import { Surface3D } from '@/ui/Surface3D';
 import { IssuancePage } from '@/lab/IssuancePage';
 import { ModelSpace } from '@/lab/model/ModelSpace';
-import { ScenarioPage } from '@/lab/ScenarioPage';
 
 /** Swap groups first (v1's), then the Cash Bond pair (2026-08-18).
  *
@@ -120,7 +119,9 @@ export default function Home() {
      끼어든다. 모르는 값은 기본 세입자로 떨어진다(딥링크 게이트, GROUPS 와 같은
      규율). */
   const [labParam, setLabParam] = useUrlState('lab');
-  const lab: LabId = isLabId(labParam) ? labParam : DEFAULT_LAB;
+  /* 내려간 세입자의 링크는 **갈 곳으로 옮긴다**(`resolveLab`). 시나리오가
+     2026-08-21 에 「모형」으로 내려갔고, 그 주소를 공유해 둔 사람이 있다. */
+  const lab: LabId = resolveLab(labParam);
 
 
   /* ONE value in the URL, and the section is derived from it (`ui/nav.ts`).
@@ -406,7 +407,7 @@ const BANNER_H = 34;
         onNavigate={(t, labId) => {
           setGroupParam(t);
           /* Lab 을 떠나면 세입자 키를 URL 에서 걷는다 — 안 걷으면 Backtest 를
-             보는 주소에 `lab=scenario` 가 남아 공유한 링크가 거짓을 말한다. */
+             보는 주소에 세입자 키가 남아 공유한 링크가 거짓을 말한다. */
           setLabParam(t === 'lab' ? (labId ?? lab) : undefined);
           setSelectedId(undefined);
           // a pending hover from the tab being left must not land on the new one
@@ -550,18 +551,14 @@ const BANNER_H = 34;
           <ErrorBoundary
             region="연구실"
             fallback={
-              lab === 'scenario'
-                ? '시나리오 화면을 그리지 못했어요.'
-                : lab === 'issuance'
-                  ? '발행 캘린더를 그리지 못했어요.'
-                  : lab === 'model'
-                    ? '모형 화면을 그리지 못했어요.'
-                    : '커브 표면을 그리지 못했어요.'
+              lab === 'issuance'
+                ? '발행 캘린더를 그리지 못했어요.'
+                : lab === 'model'
+                  ? '모형 화면을 그리지 못했어요.'
+                  : '커브 표면을 그리지 못했어요.'
             }
           >
-            {lab === 'scenario' ? (
-              <ScenarioPage policy={data?.summary.policy} />
-            ) : lab === 'issuance' ? (
+            {lab === 'issuance' ? (
               <IssuancePage />
             ) : lab === 'model' ? (
               /* 세션 1 이 세운 껍데기. 세 면의 내용은 다음 두 세션이 각자
