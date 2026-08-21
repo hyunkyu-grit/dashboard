@@ -2224,45 +2224,6 @@ thead th {
  *
  * 칸은 누를 수 있다 — 그날 상세가 아래에 열린다. 그래서 hover·선택 상태가 있고,
  * 비영업일은 눌러도 볼 것이 없지만 **자리는 지킨다**(빠지면 요일이 어긋난다). */
-/* ── 성분 격자 (`lab/scenario/ModelExplainer.tsx`) ───────────────────────────
- *
- * 행이 손잡이, 열이 테너. `Table` 이 아니라 격자인 이유는 **높이**다 — CDS
- * TableCell 은 값 둘레를 여섯 겹으로 감싸며 행마다 36px 을 먹는데, 여덟 행이면
- * 그것만으로 이 탭이 스크롤을 부른다(실측 2026-08-20: 모형 탭이 365px 넘쳤다).
- * 여기 행은 20px 이다.
- *
- * 첫 열은 이름이라 왼쪽, 나머지는 숫자라 오른쪽 — 앱의 표 규약 그대로다. */
-.sr-scn-decomp {
-  display: grid;
-  grid-template-columns: minmax(96px, max-content) repeat(var(--sr-decomp-cols), minmax(0, 1fr));
-  column-gap: 12px;
-  width: 100%;
-}
-
-.sr-scn-dc-l,
-.sr-scn-dc-n {
-  min-height: 20px;
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-
-.sr-scn-dc-n {
-  justify-content: flex-end;
-}
-
-.sr-scn-dc-h {
-  padding-bottom: 2px;
-}
-
-/* 합계 세 줄이 시작하는 자리. 칸마다 그으므로 열 간격을 건너뛰지 않는다 —
-   한 줄로 그으면 격자의 column-gap 위를 지나며 숫자와 어긋난다. */
-.sr-scn-dc-l[data-rule='1'],
-.sr-scn-dc-n[data-rule='1'] {
-  border-top: 1px solid var(--color-bgLine);
-  margin-top: 4px;
-  padding-top: 4px;
-}
 
 /* 열 자리. **요일 머리와 날짜 격자가 이것만 공유한다** — 아래 `.sr-cal-grid` 의
  * 「높이를 채운다」 규칙까지 머리가 물려받으면 머리 줄도 같이 늘어나 바닥에 빈

@@ -30,25 +30,66 @@ import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Pressable } from '@coinbase/cds-web/system';
 import { Text } from '@coinbase/cds-web/typography';
 
+import { fmtBp } from '@/lib/format';
 import { ControlCard, ControlCollapsible } from '@/ui/ControlCard';
 import { ErrorState, LoadingState } from '@/ui/DataState';
 
 import {
+  type Bias,
+  type Dir,
   type Gloss,
   fetchIssuanceCalendar,
   fetchIssuanceDay,
   IssuanceUnavailable,
   type CalDay,
+  type EventNote,
   type IssuanceCalendar,
   type IssuanceDay,
+  type OmoStrength,
   type Strength,
+  type Versus,
 } from './issuance/api';
 
 /** 다섯 열이다 [OWNER, 2026-08-20] — 토·일은 백엔드가 보내지 않는다. */
 const DOW = ['월', '화', '수', '목', '금'];
 
-/* 칸의 일정은 색을 안 쓴다 — 색은 방향만 나른다. 레인은 잉크의 세기로만 가르고
- * (금통위만 진하다), 그 이상은 누른 뒤 상세가 말한다. */
+/* ── 방향 [OWNER, 2026-08-21] ────────────────────────────────────────────────
+ *
+ * 채권의 «강세» 는 금리가 내리는 것이다. 이 앱에서 파랑이 하락 전용이라 강세가
+ * `.sr-down`(파랑), 약세가 `.sr-up`(빨강)이 된다.
+ *
+ * **칸에는 색을 안 쓴다 — 실측 때문이다.** 달력 칸은 그날 발행액만큼 잉크로
+ * 채워져 있고(`--sr-cal-fill`, 상한 10%), 그 위에서 방향색이 바닥을 못 지킨다:
+ *
+ *     라이트 채움  0%   상승 4.66  하락 4.54   ← 통과
+ *     라이트 채움  5%   상승 4.35  하락 4.24   ← **미달**
+ *     라이트 채움 10%   상승 4.06  하락 3.95   ← 미달
+ *
+ * `direction.css` 가 이미 적어 둔 제약("방향색을 회색 면에 올리면 기준 미달")의
+ * 이 화면 판본이다. 그래서 칸은 **글리프**로 방향을 나르고, 색은 시트에서만
+ * 쓴다 — 시트는 `--sr-popover`(라이트 흰색·다크 bgElevation2) 위라 둘 다 통과다.
+ */
+
+const DIR_INK: Record<Dir, string> = {
+  강세: 'sr-down',
+  약세: 'sr-up',
+  중립: 'sr-flat',
+  양방향: 'sr-flat',
+};
+
+/** 칸의 방향. 화살표는 **금리**의 방향이다 — 강세가 곧 금리 하락이다. */
+const DIR_MARK: Record<Dir, string> = {
+  강세: '↓',
+  약세: '↑',
+  중립: '',
+  양방향: '↕',
+};
+
+/** 방향 한 글자. `null` 은 «중립» 이 아니라 «잰 것이 없다» 라서 아무것도 안 적는다. */
+function mark(dir: Dir | null): string {
+  return dir ? DIR_MARK[dir] : '';
+}
+
 
 const jo = (v: number) => (v >= 0.005 ? `${v.toFixed(2)}조` : '');
 const eok = (v: number | null | undefined) =>
@@ -268,8 +309,14 @@ export function IssuancePage() {
           <Text as="h2" font="label1" color="fgMuted" tabularNumbers noWrap>
             {ym.slice(0, 4)}년 {Number(ym.slice(5, 7))}월
           </Text>
+          {/* 화살표가 무엇인지 **여기서** 말한다. 시트에 있는 온전한 단서는
+              칸을 눌러야 보이는데, 칸을 안 누르고 색만 보고 가는 사람이 이
+              화면의 다수다. 머리 줄은 이미 서 있어서 높이를 안 먹는다 —
+              설정 열에 카드를 하나 더 세우면 855 창에서 그 열이 넘친다
+              (실측 2026-08-21: 열 664, 쓴 높이 590). */}
           <Text as="span" font="caption" color="fgMuted" tabularNumbers noWrap>
-            납입기일 기준 · 오늘 {cal.today} · 칸을 누르면 그날이 펴져요
+            납입기일 기준 · 오늘 {cal.today} · 칸을 누르면 그날이 펴져요 ·
+            {' '}↓↑ 는 그 재료가 금리를 미는 쪽이에요
           </Text>
         </VStack>
 
@@ -315,8 +362,14 @@ export function IssuancePage() {
                        까는 그 문법이다. 바닥의 막대였는데, 그건 한 줄을 더 먹어서
                        세 일정이 있는 날의 칸을 넘치게 했다. */
                     style={{ ['--sr-cal-fill' as string]: amt > 0 ? (amt / peak).toFixed(3) : '0' }}
+                    /* 읽어 주는 말에는 화살표가 아니라 **방향의 이름**이 간다 —
+                       스크린 리더가 «↑» 를 «위쪽 화살표» 라고 읽는다. */
                     accessibilityLabel={`${d.iso} 발행 ${amt.toFixed(2)}조 ${n}건${
-                      d.ev.length ? `, ${d.ev.map((e) => e.label).join(', ')}` : ''
+                      d.ev.length
+                        ? `, ${d.ev
+                            .map((e) => (e.dir ? `${e.label} ${e.dir} 요인` : e.label))
+                            .join(', ')}`
+                        : ''
                     }`}
                     onClick={() => setSel(sel === d.iso ? null : d.iso)}
                   >
@@ -350,6 +403,8 @@ export function IssuancePage() {
                             font="legal"
                             color={e.lane === 'mpc' ? undefined : 'fgMuted'}
                           >
+                            {mark(e.dir)}
+                            {mark(e.dir) ? ' ' : ''}
                             {e.label}
                           </Text>
                         ))}
@@ -402,15 +457,118 @@ export function IssuancePage() {
  * 문장은 **서버가 준 그대로** 출력한다. 첫 이식에서 이걸 빼먹었더니 «강한 수요/
  * 약한 수요» 라는 판정만 남고 그 판정이 무엇을 잰 것인지가 사라졌다
  * [OWNER 지적, 2026-08-20]. */
-function LaneHead({ g }: { g: Gloss }) {
+function LaneHead({ g, bias = true }: { g: Gloss; bias?: boolean }) {
   return (
     <VStack gap={0.25} width="100%" minWidth={0}>
-      <Text as="h4" font="label2" noWrap>
-        {g.title}
-      </Text>
+      <HStack gap={1} alignItems="baseline" width="100%" minWidth={0}>
+        <Text as="h4" font="label2" noWrap>
+          {g.title}
+        </Text>
+        {/* 그날 아무 일도 없었으면 방향 낱말을 안 단다. 이 태그는 레인의
+            성질이지만 머리에 붙으면 «오늘» 의 판정으로 읽힌다 — 발행이 0 건인
+            날에 «약세 요인» 이 서 있었다(실측 2026-08-21, 8/20). */}
+        {bias && g.bias ? (
+          <Box style={{ marginInlineStart: 'auto' }}>
+            <DirTag dir={g.bias.dir} />
+          </Box>
+        ) : null}
+      </HStack>
       <Text as="p" font="legal" color="fgMuted">
-        {[g.what, g.why].filter(Boolean).join(' ')}
+        {[g.what, g.why, g.bias?.why].filter(Boolean).join(' ')}
       </Text>
+    </VStack>
+  );
+}
+
+/** 방향 한 낱말. **시트에서만 색을 쓴다** — 달력 칸은 발행량만큼 채워져 있어
+ * 방향색이 대비 바닥을 못 지킨다(파일 머리의 실측표).
+ *
+ * «중립» 과 «양방향» 은 잉크다. 둘 다 어느 쪽도 아니라서 색을 받을 자격이 없고,
+ * 색을 주면 화면에 방향이 넷이 된다. */
+function DirTag({ dir }: { dir: Dir }) {
+  return (
+    <Text as="span" className={DIR_INK[dir]} font="legal" noWrap>
+      {dir === '양방향' ? '결과가 정해요' : `${dir} 요인`}
+    </Text>
+  );
+}
+
+/** 성격 설명 하나 — 방향 낱말이 그 문단의 머리에 붙는다.
+ *
+ * **한 문단이다.** 설명과 방향을 두 문단으로 그렸더니 둘이 같은 사실을 말해
+ * 같은 글이 두 번 찍혔다(실측 2026-08-21, 비경쟁인수 줄). */
+function EventNoteLine({ e }: { e: EventNote }) {
+  return (
+    <Text as="p" font="legal" color="fgMuted">
+      {e.dir && e.dir !== '중립' ? (
+        <>
+          <Text as="span" className={DIR_INK[e.dir]} font="legal">
+            {e.dir === '양방향' ? '결과가 정해요' : `${e.dir} 요인`}
+          </Text>
+          {' · '}
+        </>
+      ) : null}
+      {e.text}
+    </Text>
+  );
+}
+
+/** 근거까지 딸린 방향 한 줄. 방향만 있고 근거가 없으면 그건 점괘다. */
+function BiasLine({ b }: { b: Bias | null | undefined }) {
+  if (!b) return null;
+  return (
+    <HStack gap={1} alignItems="baseline" flexWrap="wrap" minWidth={0}>
+      <DirTag dir={b.dir} />
+      <Text as="span" font="legal" color="fgMuted">
+        {b.why}
+      </Text>
+    </HStack>
+  );
+}
+
+/** 발행 당시 민평 대비 한 줄.
+ *
+ * **잣대 이름을 늘 적는다.** 이 «민평» 은 등급 커브지 개별종목 민평이 아니고,
+ * 이름을 빼면 화면이 없는 것을 있는 척한다.
+ *
+ * 부호 있는 숫자만 색을 받는다(v1 §4, 이 리포가 이어받은 규칙). 여기 색은
+ * 강세·약세가 아니라 «민평보다 높다/낮다» 다 — 그게 이 앱에서 빨강·파랑이
+ * 뜻하는 바 그대로다. */
+function MpLine({ m }: { m: Versus | null }) {
+  if (!m) return null;
+  if (m.bp == null) {
+    return m.why ? (
+      <Text as="span" font="legal" color="fgMuted">
+        {m.why}
+      </Text>
+    ) : null;
+  }
+  const ink = m.bp > 0.5 ? 'sr-up' : m.bp < -0.5 ? 'sr-down' : 'sr-flat';
+  return (
+    <VStack gap={0} width="100%" minWidth={0}>
+      <HStack gap={1} alignItems="baseline" flexWrap="wrap" minWidth={0}>
+        <Text as="span" className={ink} font="label2" noWrap>
+          {m.side ?? '민평 대비'} {fmtBp(m.bp)}bp
+        </Text>
+        {/* 잣대 이름에 등급이 박혀 있어서, 종목의 등급과 나란히 놓으면 갈린
+            것이 그 자리에서 보인다. 문장으로 또 적지 않는다 — 하루에 다섯
+            줄이 등급 불일치면 같은 35자가 다섯 번 찍힌다(실측 2026-08-21,
+            8/13 현대캐피탈 넷 + 하나카드). 문장은 레인 각주 한 벌이다. */}
+        <Text as="span" font="legal" color="fgMuted" tabularNumbers>
+          {m.curve} {m.years?.toFixed(1)}Y {pct(m.rate)}
+          {m.asof ? ` (${m.asof.slice(5)})` : ''}
+        </Text>
+      </HStack>
+      {m.note ? (
+        <Text as="span" font="legal" color="fgMuted">
+          {m.note}
+        </Text>
+      ) : null}
+      {m.why ? (
+        <Text as="span" font="legal" color="fgMuted">
+          {m.why}
+        </Text>
+      ) : null}
     </VStack>
   );
 }
@@ -458,13 +616,25 @@ function DayDetail({
           {day.mpc ? (
             <VStack gap={1} width="100%" minWidth={0}>
               <LaneHead g={day.gloss.mpc} />
-              <Text as="span" font="label2" tabularNumbers>
-                {day.mpc.decision
-                  ? `${day.mpc.decision.decision ?? '결정'} · ${
-                      day.mpc.decision.before ?? '—'
-                    }% → ${day.mpc.decision.after ?? '—'}%`
-                  : '회의가 있는 날이에요. 결과는 아직이에요.'}
-              </Text>
+              <VStack gap={0.25} width="100%" minWidth={0}>
+                <Text as="span" font="label2" tabularNumbers>
+                  {day.mpc.decision
+                    ? `${day.mpc.decision.decision ?? '결정'} · ${
+                        day.mpc.decision.before ?? '—'
+                      }% → ${day.mpc.decision.after ?? '—'}%`
+                    : '회의가 있는 날이에요. 결과는 아직이에요.'}
+                </Text>
+                {/* 결정이 아직이면 방향도 아직이다 — 열린 회의와 안 열린
+                    회의는 다른 사실이다. */}
+                <BiasLine b={day.mpc.bias} />
+                {/* 결정문의 요지. 페이로드가 처음부터 싣고 있었는데 화면이 안
+                    썼다 — «약세 요인» 의 근거가 한국은행 자기 말로 여기 있다. */}
+                {day.mpc.decision?.gist ? (
+                  <Text as="p" font="legal" color="fgMuted">
+                    {day.mpc.decision.gist}
+                  </Text>
+                ) : null}
+              </VStack>
               <LaneNote text={day.gloss.mpc.note} />
             </VStack>
           ) : null}
@@ -489,11 +659,12 @@ function DayDetail({
                       응찰률 {pct(a.ratio)} · 가중평균 {pct(a.wavgRate)}
                       {a.dealers != null ? ` · 인수기관 ${a.dealers}개` : ''}
                     </Text>
-                    {a.strength ? <StrengthLine s={a.strength} /> : null}
-                    {a.gloss.map((g) => (
-                      <Text key={g} as="p" font="legal" color="fgMuted">
-                        {g}
-                      </Text>
+                    {/* 시장 대비와 지난번 대비는 다른 질문이라 둘 다 적는다 —
+                        민평 대비가 여기, 직전 입찰 대비가 `StrengthLine` 안에. */}
+                    <MpLine m={a.mp} />
+                    {a.strength ? <StrengthLine s={a.strength} bias={a.bias} /> : null}
+                    {a.events.map((e) => (
+                      <EventNoteLine key={e.key} e={e} />
                     ))}
                   </VStack>
                 ))}
@@ -520,11 +691,10 @@ function DayDetail({
                         </Text>
                       </Box>
                     </HStack>
-                    {o.gloss.map((g) => (
-                      <Text key={g} as="p" font="legal" color="fgMuted">
-                        {g}
-                      </Text>
+                    {o.events.map((e) => (
+                      <EventNoteLine key={e.key} e={e} />
                     ))}
+                    <OmoScale s={o.strength} />
                   </VStack>
                 ))}
               </VStack>
@@ -533,7 +703,7 @@ function DayDetail({
           ) : null}
 
           <VStack gap={1} width="100%" minWidth={0}>
-            <LaneHead g={day.gloss.iss} />
+            <LaneHead g={day.gloss.iss} bias={day.issuing.length > 0} />
             {day.issuing.length === 0 ? (
               <Text as="span" font="legal" color="fgMuted">
                 이 날짜에 공시된 발행이 없어요.
@@ -560,6 +730,9 @@ function DayDetail({
                         {r.maturity ? ` · 만기 ${r.maturity}` : ''}
                         {r.coupon != null ? ` · ${r.coupon.toFixed(3)}%` : ''}
                       </Text>
+                      {/* «그래서 비싸게 찍었나 싸게 찍었나» — 이 화면이 «누가
+                          얼마를» 다음에 답해야 하는 하나. */}
+                      <MpLine m={r.mp} />
                     </VStack>
                     <Box style={{ marginInlineStart: 'auto' }}>
                       <Text as="span" font="label2" tabularNumbers noWrap>
@@ -570,7 +743,20 @@ function DayDetail({
                 ))}
               </VStack>
             )}
+            {/* 등급이 잣대와 갈린 종목이 있으면 **레인에 한 번** 말한다.
+                줄마다 적었더니 8/13 하루에 같은 35자가 다섯 번 찍혔다. */}
+            {day.issuing.some((r) => r.mp?.match === false) ? (
+              <LaneNote text="등급이 잣대와 다른 종목은 «오버·언더» 대신 «민평 대비» 로만 적었어요 — 그 차이엔 가격이 아니라 등급 몫이 섞여 있어요." />
+            ) : null}
             <LaneNote text={day.gloss.iss.note} />
+          </VStack>
+
+          {/* 시트 바닥 한 벌. **레인마다 안 적는다** — 네 레인이 같은 문장을
+              네 번 되풀이하면 그건 각주가 아니라 소음이다. */}
+          <VStack gap={0.25} width="100%" minWidth={0}>
+            <LaneNote text={day.gloss.ktb.biasCaveat} />
+            <LaneNote text={day.mp.caveat} />
+            <LaneNote text={day.mp.note} />
           </VStack>
         </>
       )}
@@ -580,13 +766,17 @@ function DayDetail({
 
 /** 같은 연물 52주와 견준 한 줄. **표본이 모자라면 등급 대신 그렇다고 말한다** —
  * 6회 미만에서 백분위는 계단이라 숫자가 과장된다(원본의 규율). */
-function StrengthLine({ s }: { s: Strength }) {
+function StrengthLine({ s, bias }: { s: Strength; bias: Bias | null }) {
   return (
     <VStack gap={0} width="100%">
       <HStack gap={1} alignItems="baseline" flexWrap="wrap">
         <Text as="span" font="label2" noWrap>
           {s.grade}
         </Text>
+        {/* 등급 말이 «수요» 에서 멈춘 것은 그 모듈의 규율이었다("응찰률은
+            수요÷공급이라는 산수라 거기까지가 정의") — 마지막 한 칸을 잇는
+            것이 오너의 지시고, 이 태그가 그 자리다. */}
+        {bias ? <DirTag dir={bias.dir} /> : null}
         {s.pct !== null ? (
           <Text as="span" font="legal" color="fgMuted" tabularNumbers noWrap>
             {s.label} 최근 1년{' '}
@@ -605,9 +795,13 @@ function StrengthLine({ s }: { s: Strength }) {
       </HStack>
       {s.wavgDelta != null ? (
         <Text as="span" font="legal" color="fgMuted" tabularNumbers>
-          직전 입찰 대비 {s.wavgDelta > 0 ? '+' : ''}
-          {Math.round(s.wavgDelta)}bp
+          직전 입찰 대비 {fmtBp(s.wavgDelta)}bp
           {s.prevDate ? ` (${s.prevDate.slice(5)})` : ''}
+        </Text>
+      ) : null}
+      {bias ? (
+        <Text as="span" font="legal" color="fgMuted">
+          {bias.why}
         </Text>
       ) : null}
       {(s.notes ?? []).map((n) => (
@@ -616,5 +810,40 @@ function StrengthLine({ s }: { s: Strength }) {
         </Text>
       ))}
     </VStack>
+  );
+}
+
+/** 공개시장운영의 규모 — 방향 다음의 사실.
+ *
+ * 방향만 있고 규모가 없으면 흡수 1천억과 흡수 3조가 화면에서 같은 무게로
+ * 읽힌다. `annotate_omo` 는 이식할 때 같이 왔지만 첫 판에서 안 불렀다.
+ *
+ * **수치는 서버가 필드로만 준다** — 그쪽 규율이 "화면이 행으로 그린다" 라서,
+ * 문장 조립은 여기 몫이다. */
+function OmoScale({ s }: { s: OmoStrength | null }) {
+  if (!s) return null;
+  const bits: string[] = [];
+  if (s.size) {
+    bits.push(
+      s.sizeMed != null ? `${s.size} · 평년 ${eok(s.sizeMed)}` : s.size,
+    );
+  }
+  if (s.cover != null) {
+    bits.push(
+      `응찰배율 ${s.cover.toFixed(2)}배${
+        s.coverMed != null ? ` (평년 ${s.coverMed.toFixed(2)})` : ''
+      }`,
+    );
+  }
+  if (s.spread != null) {
+    // «기준금리 0.0bp» 는 «기준금리가 0» 으로 읽힌다. 이건 수준이 아니라
+    // 스프레드라서 «대비» 가 있어야 문장이 된다.
+    bits.push(`기준금리 대비 ${fmtBp(s.spread)}bp`);
+  }
+  if (bits.length === 0) return null;
+  return (
+    <Text as="span" font="legal" color="fgMuted" tabularNumbers>
+      {bits.join(' · ')}
+    </Text>
   );
 }

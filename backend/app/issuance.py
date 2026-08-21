@@ -51,9 +51,21 @@ import functools
 import os
 import pathlib
 
+from . import issuance_mp as mp
 from .engine_port import _is_kr_business_day, _next_business_day
-from .issuance_gloss import explain, for_label
+from .issuance_gloss import (
+    BIAS_CAVEAT,
+    BOTH,
+    EVENT_BIAS,
+    MPC_BIAS,
+    STRENGTH_BIAS,
+    explain,
+    for_event,
+    net_dir,
+    speak,
+)
 from .issuance_strength import annotate as annotate_auctions
+from .issuance_strength import annotate_omo
 
 #: CSV 가 사는 곳. 수집기가 쓰는 그 디렉터리를 그대로 읽는다.
 #: 없으면 이 화면만 서지 않고 나머지 앱은 멀쩡히 돈다.
@@ -126,6 +138,20 @@ def _date(x) -> dt.date | None:
         return None
 
 
+def _yyyymmdd(x) -> str | None:
+    """`20260814` -> `2026-08-14`. 파이프라인의 **제출일만** 이 모양이다.
+
+    같은 CSV 안에서 납입기일·만기일은 이미 ISO 인데 제출일 하나가 붙여 쓴
+    여덟 자리다(수집기가 DART 원문의 표기를 그대로 실었다). `_date` 는 열 자를
+    보므로 이 칸을 통째로 못 읽는다 — 실측 2026-08-21: 그대로 넘겼더니 민평
+    기준일이 전부 납입기일로 물러섰다.
+    """
+    s = str(x or "").strip()
+    if len(s) == 8 and s.isdigit():
+        return f"{s[:4]}-{s[4:6]}-{s[6:]}"
+    return s or None
+
+
 def _adjust(d: dt.date) -> dt.date:
     """Following. 규약은 추측이 아니라 신고서 본문에 적혀 있다(원본 README) —
     상환기일이 휴업일이면 다음 첫 영업일로 미루고 그날까지의 이자를 준다.
@@ -180,16 +206,53 @@ def _auctions(stamp: float) -> list[dict]:
 
 @functools.lru_cache(maxsize=4)
 def _omo(stamp: float) -> list[dict]:
-    return [
+    """공개시장운영 + 강도.
+
+    `annotate_omo` 는 이식할 때 같이 왔지만 첫 판에서 안 불렀다. 그래서 이
+    레인은 «RP매각 2조» 까지만 말하고 «그게 평년보다 큰가» 를 못 말했다.
+    방향 판정을 붙이면서 같이 켠다 [OWNER 2026-08-21] — 방향만 있고 규모가
+    없으면 흡수 1천억과 흡수 3조가 화면에서 같은 무게로 읽힌다.
+
+    `base_at` 은 그날 유효한 기준금리다. 없으면 그 모듈이 스프레드 행을 안
+    그린다 — 모르는 채로 «+85bp» 라고 쓰지 않는다(그쪽의 규율).
+    """
+    rows = [
         {
             **r,
             "일자": str(r.get("일자") or "")[:10],
             "예정금액": _num(r.get("예정금액")),
+            "응찰금액": _num(r.get("응찰금액")),
             "낙찰금액": _num(r.get("낙찰금액")),
             "금리": _num(r.get("금리")),
         }
         for r in _read("omo")
     ]
+    return annotate_omo(rows, _base_at(stamp))
+
+
+def _base_at(stamp: float):
+    """`iso -> 그날 유효한 기준금리`. 출처는 금통위 **결과표**다.
+
+    `policy.load_base_rate` 는 엑셀을 읽는데 이 화면의 다른 모든 것이 CSV 라,
+    엑셀이 없는 PC 에서 캘린더 전체가 같이 죽는다. 여기 필요한 것은 «그날의
+    수준» 하나뿐이고 결과표가 그걸 이미 들고 있다.
+    """
+    steps = sorted(
+        (iso, v["after"])
+        for iso, v in _mpc(stamp).items()
+        if v.get("after") is not None
+    )
+
+    def at(iso: str) -> float | None:
+        got = None
+        for d, rate in steps:
+            if d <= iso:
+                got = rate
+            else:
+                break
+        return got
+
+    return at
 
 
 @functools.lru_cache(maxsize=4)
@@ -242,12 +305,36 @@ def build(
             continue
         by_day.setdefault(r["_d"], {}).setdefault(s, []).append(r["_amt"])
 
-    auc_days = {r["입찰일"] for r in _auctions(stamp) if r.get("입찰일")}
+    # 칸에 붙는 방향 [OWNER, 2026-08-21]. **이 앱에서 색은 방향만 나른다** —
+    # 달력 칸이 그 규칙을 지금까지 «색을 안 쓴다» 로 지켰는데, 이제 나를 방향이
+    # 생겼으므로 쓴다.
+    #
+    # 국고채 입찰의 방향은 «입찰이 있다» 가 아니라 **응찰이 얼마나 들어왔나**
+    # 라서, 결과가 나온 날에만 선다. 그날 연물이 여럿이고 서로 갈리면(3년물은
+    # 셌는데 10년물은 약했다) 한 글자로 못 누르므로 «양방향» 이다 — 자세한
+    # 것은 눌러서 본다.
+    auc_dir: dict[str, str] = {}
+    for r in _auctions(stamp):
+        iso = r.get("입찰일")
+        if not iso:
+            continue
+        auc_dir.setdefault(iso, [])
+        st = r.get("강도") or {}
+        b = STRENGTH_BIAS.get(st.get("tone") or "")
+        if b:
+            auc_dir[iso].append(b["dir"])
+    # 등급이 하나도 없는 날(그날 경쟁입찰 없이 비경쟁인수만 있던 날)은 방향이
+    # **없다** — «중립» 이 아니다. 중립은 «평년 수준이라 안 민다» 는 판정이고,
+    # 여기는 잰 것이 없다. 둘을 한 값으로 접으면 화면이 안 잰 것을 판정으로
+    # 읽는다.
+    auc_dir = {k: (net_dir(v) if v else None) for k, v in auc_dir.items()}
+
     omo_by_day: dict[str, set[str]] = {}
     for r in _omo(stamp):
         if r["일자"]:
             omo_by_day.setdefault(r["일자"], set()).add((r.get("구분") or "").strip())
     mpc_set = set(mpc_dates)
+    mpc_done = _mpc(stamp)
 
     months = {}
     for y, m in span:
@@ -258,13 +345,30 @@ def build(
             d = first + dt.timedelta(days=i)
             iso = d.isoformat()
             sec = by_day.get(d, {})
+            # **순서가 곧 위계다.** 칸에는 두 줄까지만 적히고 나머지는 «+N»
+            # 이라(달력의 관례이고, 셋을 다 적으면 다섯 주가 카드에 안 들어
+            # 간다), 뒤에 놓인 것은 안 보인다. 첫 판은 입찰 → 공개시장운영 →
+            # 금통위 순이었고, 그래서 **2026-07-16 인상 결정이 «+2» 뒤에
+            # 숨었다**(실측 2026-08-21). 그날 하나만 볼 수 있다면 그건 금통위다.
             events = []
-            if iso in auc_days:
-                events.append({"lane": "ktb", "label": "국고채 입찰"})
-            for kind in sorted(omo_by_day.get(iso, ())):
-                events.append({"lane": "omo", "label": kind})
             if iso in mpc_set:
-                events.append({"lane": "mpc", "label": "금통위"})
+                # 열린 회의와 안 열린 회의는 다른 사실이다. 결정이 아직이면
+                # 방향은 «양방향» — 그날 갈린다는 뜻이지 중립이 아니다.
+                dec = (mpc_done.get(iso) or {}).get("decision")
+                b = MPC_BIAS.get(dec or "")
+                events.append(
+                    {"lane": "mpc", "label": "금통위", "dir": b["dir"] if b else BOTH}
+                )
+            if iso in auc_dir:
+                events.append(
+                    {"lane": "ktb", "label": "국고채 입찰", "dir": auc_dir[iso]}
+                )
+            for kind in sorted(omo_by_day.get(iso, ())):
+                # 모르는 구분은 방향도 모른다 — 한국은행이 새 조작을 들고
+                # 나오면 여기가 비고, 그게 사실이다.
+                events.append(
+                    {"lane": "omo", "label": kind, "dir": EVENT_BIAS.get(kind)}
+                )
             if d.weekday() >= 5:
                 # 토·일은 격자에서 뺀다 [OWNER, 2026-08-20]. 잃는 것이 없다 —
                 # 입찰·공개시장운영·금통위는 영업일에만 서고, 발행 납입일은
@@ -322,23 +426,65 @@ def build(
         "issuanceThrough": max((r["_d"] for r in pipe), default=None)
         and max(r["_d"] for r in pipe).isoformat(),
         # 국고채 입찰은 **결과**만 있다(예정 일정은 스크래핑이라 안 옮겼다).
-        "auctionThrough": max(auc_days) if auc_days else None,
+        "auctionThrough": max(auc_dir) if auc_dir else None,
         "caveats": [
             "ISSUANCE_ONLY: 만기도래는 이 화면이 보지 않아요.",
             "SHELF_HORIZON: 은행채·여전채에는 발행계획이 없어요. 앞날의 빈칸은 "
             "«없음» 이 아니라 «아직 공시 안 됨» 이에요.",
             "AUCTION_RESULTS_ONLY: 국고채 입찰은 결과가 나온 것까지만 보여요. "
             "앞날의 입찰 예정은 아직 안 붙였어요.",
+            # 칸에 방향색이 붙었으므로 그 한계도 달력에서 말해야 한다 —
+            # 상세를 안 열어 본 사람이 색만 보고 간다.
+            f"BIAS_IS_THE_MATERIAL: {BIAS_CAVEAT}",
         ],
     }
 
 
+def _muted_if_nothing_moved(events: list[dict], allotted: float | None) -> list[dict]:
+    """낙찰이 0 이면 방향을 걷는다. **아무것도 안 오간 날은 판정할 것이 없다.**
+
+    이 열쇠말들의 방향은 그 일이 «일어났다» 가 아니라 «얼마나 일어났다» 에서
+    나온다. 비경쟁인수가 그 표본이다 — 국고채전문딜러가 옵션을 행사했다는 것은
+    그 사이 시장 금리가 낙찰금리 아래로 내려왔다는 뜻이라 강세 방증인데,
+    **행사가 0 이면 그 방증이 없는 것**이다. 그런데 라벨은 행사가 있든 없든
+    똑같이 «비경쟁인수 Ⅲ» 이라 정적인 표로는 못 가른다(실측 2026-07-16:
+    0억 행사에 «강세 요인» 이 붙었다).
+
+    바이백도 같은 성질이다(되산 물량이 0 이면 줄어든 물량도 없다). 그래서
+    열쇠말을 하나씩 세지 않고 **금액으로 한 번에** 가른다 —
+    `issuance_strength._analyse_omo_unit` 이 공개시장운영에 대해 이미 세운
+    규칙과 같은 것이다.
+
+    설명은 걷지 않는다. 그건 «이게 무엇인가» 라 행사액과 무관하게 참이다.
+    """
+    if allotted:
+        return events
+    return [{**e, "dir": None} for e in events]
+
+
 def day_detail(iso: str, mpc_dates: list[str]) -> dict:
-    """그날 하루 — 발행 종목 · 국고채 입찰 결과(+강도) · 공개시장운영 · 금통위."""
+    """그날 하루 — 발행 종목 · 국고채 입찰 결과(+강도) · 공개시장운영 · 금통위.
+
+    두 가지가 줄마다 따라붙는다 [OWNER, 2026-08-21]:
+
+        민평 대비   그때 그 금리가 시장보다 오버였나 언더였나 (`issuance_mp`)
+        방향        그 재료가 금리를 어느 쪽으로 미나 (`issuance_gloss`)
+
+    **민평은 없어도 화면이 선다.** SQL 이 안 잡히는 PC 가 있고(CSV 는 잡힌다),
+    거기서 캘린더 전체가 같이 죽으면 안 된다. 그래서 `matrix()` 는 삼키고,
+    `mp` 블록이 «왜 없는지» 를 대신 말한다.
+    """
     stamp = data_stamp()
     d = _date(iso)
     if d is None:
         raise IssuanceUnavailable(f"{iso} 는 날짜가 아니에요")
+
+    try:
+        cm = mp.matrix()
+        mp_note = None
+    except mp.Unavailable as e:
+        cm = None
+        mp_note = f"민평을 못 읽어서 오버·언더를 못 재요 — {e}"
 
     issuing = [
         {
@@ -353,6 +499,21 @@ def day_detail(iso: str, mpc_dates: list[str]) -> dict:
             "report": (r.get("보고서") or "").strip() or None,
             # DART 원문으로 가는 길. 이 화면의 모든 숫자가 거기서 나왔다.
             "rcept": (str(r.get("접수번호") or "").strip() or None),
+            # 그때 그 금리가 시장보다 오버였나 언더였나. 기준일은 **제출일**
+            # 이다 — 금리가 정해져 공시에 실리는 날이 그날이다.
+            "mp": (
+                None
+                if cm is None
+                else mp.for_issue(
+                    cm,
+                    sector=r["_sector"],
+                    grade_raw=r.get("신용등급"),
+                    filed=_date(_yyyymmdd(r.get("제출일"))),
+                    paid=r["_d"],
+                    maturity=_date(r.get("만기일")),
+                    coupon=_num(r.get("표면금리")),
+                )
+            ),
         }
         for r in _pipeline(stamp)
         if r["_d"] == d and r["_sector"] in SECTORS
@@ -373,9 +534,30 @@ def day_detail(iso: str, mpc_dates: list[str]) -> dict:
             "partial": r.get("부분낙찰률"),
             "dealers": r.get("인수기관수"),
             "issueDate": (str(r.get("발행일") or "")[:10] or None),
-            "strength": r.get("강도"),
-            # 라벨에 걸리는 덧붙임(물가채·외평채·비경쟁인수·교환·바이백 …).
-            "gloss": for_label(f"{r.get('구분') or ''} {r.get('종목명') or ''}"),
+            # `issuance_strength` 는 원본의 글자 그대로라 합니다체다. 그 파일은
+            # 못 고치므로(사본 대조가 잠근다) **경계에서 옮긴다** — 안 그러면
+            # 한 화면에 두 목소리가 선다(실측 2026-08-21: 문장 19개).
+            "strength": speak(r.get("강도")),
+            # 종목의 성격에 걸리는 «설명 + 방향» (물가채·외평채·비경쟁인수·
+            # 교환·바이백 …). **한 벌이다** — 따로 내면 같은 문단이 두 번 찍힌다.
+            "events": _muted_if_nothing_moved(
+                for_event(f"{r.get('구분') or ''} {r.get('종목명') or ''}"),
+                r.get("낙찰금액"),
+            ),
+            # 그날의 방향. 응찰 강도가 정한다 — 발행 자체는 미리 공표돼 이미
+            # 반영돼 있고, 새로 알게 되는 사실은 «얼마나 들어왔나» 뿐이다.
+            "bias": STRENGTH_BIAS.get((r.get("강도") or {}).get("tone") or ""),
+            "mp": (
+                None
+                if cm is None
+                else mp.for_auction(
+                    cm,
+                    code=r.get("종목코드"),
+                    bid_date=d,
+                    issue_date=_date(r.get("발행일")),
+                    wavg=r.get("가중평균낙찰금리"),
+                )
+            ),
         }
         for r in _auctions(stamp)
         if r.get("입찰일") == iso
@@ -388,7 +570,13 @@ def day_detail(iso: str, mpc_dates: list[str]) -> dict:
             "planned": r.get("예정금액"),
             "allotted": r.get("낙찰금액"),
             "rate": r.get("금리"),
-            "gloss": for_label((r.get("구분") or "").strip()),
+            # 흡수인가 공급인가 — 설명과 방향이 한 벌로 온다. 이건 해석이
+            # 아니라 사실이라 라벨만으로 선다.
+            "events": for_event((r.get("구분") or "").strip()),
+            # 그리고 그게 평년보다 큰 규모인가. 방향만 있고 규모가 없으면
+            # 흡수 1천억과 흡수 3조가 같은 무게로 읽힌다. 여기도 사본의
+            # 합니다체를 경계에서 옮긴다.
+            "strength": speak(r.get("강도")),
         }
         for r in _omo(stamp)
         if r["일자"] == iso
@@ -418,8 +606,19 @@ def day_detail(iso: str, mpc_dates: list[str]) -> dict:
         # 열림 여부와 결정을 따로 답한다 — 화면이 «오늘 금통위예요, 결과는 아직» 을
         # 말할 수 있어야 한다.
         "mpc": (
-            {"scheduled": True, "decision": _mpc(stamp).get(iso)}
+            {
+                "scheduled": True,
+                "decision": _mpc(stamp).get(iso),
+                # 인하는 강세, 인상은 약세, 동결은 중립. 결정이 아직이면
+                # 방향도 아직이다 — 열린 회의와 안 열린 회의는 다른 사실이다.
+                "bias": MPC_BIAS.get(
+                    (_mpc(stamp).get(iso) or {}).get("decision") or ""
+                ),
+            }
             if iso in set(mpc_dates)
             else None
         ),
+        # 민평이 붙었는지, 그리고 그 잣대가 무엇인지. 화면이 «등급 커브» 라고
+        # 말할 수 있어야 한다 — 개별민평인 척하면 그게 거짓말이다.
+        "mp": {"note": mp_note, "caveat": None if cm is None else mp.CAVEAT},
     }

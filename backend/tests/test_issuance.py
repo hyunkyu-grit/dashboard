@@ -136,7 +136,9 @@ def test_a_scheduled_meeting_without_a_decision_is_not_the_same_as_no_meeting():
     구분되지 않는다 — 화면이 «오늘 금통위예요, 결과는 아직» 을 말할 수 있어야 한다.
     """
     upcoming = day_detail("2026-08-27", MPC)["mpc"]
-    assert upcoming == {"scheduled": True, "decision": None}
+    # `bias` 가 2026-08-21 에 늘었다. 결정이 아직이면 방향도 아직이다 —
+    # 그 성질은 `test_issuance_mp.py` 가 따로 잠근다.
+    assert upcoming == {"scheduled": True, "decision": None, "bias": None}
     assert day_detail("2026-08-10", MPC)["mpc"] is None
 
 
@@ -200,13 +202,18 @@ def test_the_day_carries_its_own_explanation():
     ktb = d["gloss"]["ktb"]
     assert ktb["title"] == "국고채 입찰"
     assert "응찰률" in (ktb["note"] or ""), "응찰률을 어떻게 읽는지가 빠졌어요"
-    # 라벨에 걸리는 덧붙임도 같이 온다(그날 비경쟁인수가 있다).
-    assert any(a["gloss"] for a in d["auctions"])
+    # 라벨에 걸리는 덧붙임도 같이 온다(그날 비경쟁인수가 있다). 설명과 방향은
+    # **한 벌**이다 — 따로 내면 같은 문단이 두 번 찍힌다.
+    assert any(a["events"] for a in d["auctions"])
 
 
 @needs_data
 def test_issuance_only():
-    """만기도래는 페이로드에 없다 [OWNER]."""
+    """만기도래는 페이로드에 없다 [OWNER].
+
+    `mp` 가 2026-08-21 에 늘었다 — 민평을 못 읽는 PC 에서 «왜 오버·언더가 없나»
+    를 화면이 말할 자리다. 만기도래는 여전히 없다.
+    """
     d = day_detail("2026-08-10", MPC)
-    assert set(d) == {"date", "gloss", "issuing", "auctions", "omo", "mpc"}
+    assert set(d) == {"date", "gloss", "issuing", "auctions", "omo", "mpc", "mp"}
     assert all("maturityDue" not in r for r in d["issuing"])
