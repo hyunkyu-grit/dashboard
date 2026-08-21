@@ -97,13 +97,13 @@ describe('동결 경로는 통째로 0 이다', () => {
 });
 
 describe('준칙 몫', () => {
-  /* 실측(진단 §C.1b): 지속 −25×8 의 12개월 3Y 는 +11.68bp 이고 그중 +3.85bp,
+  /* 실측(진단 §C.1b · P4 재측정): 지속 −25×8 의 12개월 3Y 는 +11.69bp 이고 그중 +3.86bp,
      33% 가 준칙 되돌림이다. 이 숫자가 리스크 줄의 근거라 값으로 핀을 박는다. */
   it('지속 −25×8 · 12개월 3Y 의 준칙 몫이 실측과 같다', () => {
     const d = decomposeTenor(solvePath(Array<number>(8).fill(-25)), '3y', 4);
-    expect(d.totalBp).toBeCloseTo(11.676, 2);
+    expect(d.totalBp).toBeCloseTo(11.686, 2);
     expect(d.terms.find((t) => t.key === 'eh')!.value).toBeCloseTo(8.333, 2);
-    expect(d.terms.find((t) => t.key === 'rule')!.value).toBeCloseTo(3.854, 2);
+    expect(d.terms.find((t) => t.key === 'rule')!.value).toBeCloseTo(3.863, 2);
     expect(d.terms.find((t) => t.key === 'cd')!.value).toBeCloseTo(-0.511, 2);
     expect(d.ruleShare!).toBeCloseTo(0.33, 2);
   });

@@ -331,11 +331,110 @@ def consumption_target() -> BehavioralEquation:
 
 
 def investment_fi_target() -> BehavioralEquation:
-    """Eq. 9: i_fi* = β_I0 + β_I1·potential + β_I2·Covid (all RESOLVED)."""
+    """Eq. 9 (Appendix-D slots only): i_fi* = β_I0 + β_I1·potential + β_I2·Covid.
+
+    The printed equation carries a FOURTH term, `- UC_I,t`, whose coefficient
+    is printed as -1 and therefore has no Appendix-D slot.  It lives in
+    `FIInvestment` because it is the only part of the target that survives
+    into deviation space — see that class.
+    """
     return BehavioralEquation("investment_fi_target", "9", {
         "const": C("investment_fi.target.slots", 0),
         "potential": C("investment_fi.target.slots", 1),
         "covid_dummy": C("investment_fi.target.slots", 2)})
+
+
+class FIInvestment(Equation):
+    """FI (facility) investment, eq. 9-11 — Table 3.
+
+        (9)   ln I*_t  = b_I0 + b_I1 ln Ybar_t + b_I2 Dummy_20Q2 - UC_I,t
+        (10)  UC_I,t   = (i_Firm,t + i_CB,t)/2 - pi^yoy_cpi,t/4 + delta_I,t
+        (11)  d ln I_t = a_I0 (ln I*_{t-1} - ln I_{t-1}) + a_I1 d ln I_{t-1}
+                         + E_t[sum d_k ln d I*_{t+k}]
+                         + g_I1 d yhat_t + g_I2 d ln P_I,t + g_I3 ln DRAM_t
+
+    ## Why this class exists (2026-08-21, session P4)
+
+    The target's deviation was wired as the literal `0.0`, so the ONLY route
+    from a rate to FI investment was the output gap.  Construction (eq 12-14)
+    wires the same user cost properly, which made the two expenditure blocks
+    asymmetric and left the paper's US +25bp -> FI investment -0.02% panel
+    without a mechanism.  Wiring it back introduces NO new estimated
+    coefficient: eq (9) prints the loading on UC_I as -1 and Appendix D has no
+    slot for it.
+
+    ## What survives into deviation space
+
+        endogenous, carried     i_Firm, i_CB (= kr10y + cb), cpi_yoy
+        trend, hence 0          b_I1 ln Ybar  (potential IS the trend)
+        constant, hence 0       b_I0, the Covid dummy
+        exogenous, hence 0      delta_I (DELTA_I_EXOGENOUS below)
+
+    So the target deviation reduces to exactly `-UC_I` in deviations.
+
+    ## NOTE the sign, and note that it is NOT construction's
+
+    eq (10) SUBTRACTS pi/4; eq (13) ADDS it.  Both are reproduced as printed
+    (both pages rendered from the PDF and read, 2026-08-21).  This is a real
+    asymmetry in the paper, not a transcription slip on either side, so the
+    two `user_cost_dev` implementations must stay separate.
+
+    ## DELTA_I_EXOGENOUS
+
+    eq (10) prints `delta_I,t` WITH a time subscript, so it is not a constant
+    by the paper's own notation.  No depreciation-by-asset-type series is
+    ingested.  It is dropped here not because it is constant but because it is
+    exogenous: no basis shocks it, so its deviation is zero in every
+    simulation and it only bites in the historical residual and in a level
+    forecast.  Construction's eq (13) `delta_IH,t` is dropped for the same
+    reason (its docstring says "constant", which the printed equation does not
+    support).
+
+    ## PAC_EXPECTATION_OMITTED — no longer exact
+
+    eq (11) carries a PAC expectation of future target changes.  While the
+    target was pinned at zero, dropping that term was EXACT: a zero target has
+    zero expected changes.  Now that the target moves with the user cost, it
+    is an APPROXIMATION, exactly as it already is for construction (eq 14).
+    Table 3 prints an error-correction loading and an AR term, not a d_k
+    sequence, so the polynomial's own weights are not recoverable here.
+
+    ## GAMMA_I2_EXOG_ZERO / GAMMA_I3_ABSENT
+
+    eq (11)'s two global-cycle regressors are not wired in the solver.
+    `gamma_I2 * d ln P_I` is a structural zero in deviation space -- the FI
+    investment deflator is exogenous and no basis shocks it, which is the same
+    reason construction's `g_deflator` is absent from its solver row.  It IS
+    subtracted in the historical residual, where it is not zero.
+    `gamma_I3 * ln DRAM` cannot be filled at all: DRAM_t is Gartner's
+    semiconductor excess-demand index, a paid series.  The ECOS series named
+    "DRAM" is an export price index, a different variable; it was wired in
+    error once and reverted.
+    """
+    eq_no = "9-11"
+    flags = ("PAC_EXPECTATION_OMITTED", "DELTA_I_EXOGENOUS",
+             "GAMMA_I2_EXOG_ZERO", "GAMMA_I3_ABSENT")
+
+    def __init__(self):
+        super().__init__("investment_fi")
+
+    @staticmethod
+    def user_cost_dev(i_firm, i_cb, cpi_yoy) -> float:
+        """eq (10) in deviations — delta_I is exogenous and drops out.
+
+        NOTE the sign: eq (10) SUBTRACTS pi/4 while eq (13) for construction
+        ADDS it. Both are reproduced as printed.
+        """
+        return (i_firm + i_cb) / 2.0 - cpi_yoy / 4.0
+
+    @staticmethod
+    def target_dev(uc_dev) -> float:
+        """eq (9) in deviations — everything but the user cost drops out.
+
+        The loading is -1 because the paper prints -1, not because anyone
+        picked it. There is no Appendix-D slot to pick.
+        """
+        return -uc_dev
 
 
 def export_target() -> BehavioralEquation:

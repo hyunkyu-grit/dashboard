@@ -40,13 +40,21 @@ import type { TenorDecomposition } from './decompose';
  *
  *  사본이라 갈릴 수 있어서 `guards/model-strategy-risk.test.ts` 가 원본을 읽어
  *  대조한다. 눈으로 옮겨 적고 잊는 자리가 이 리포에 이미 여럿 있었다. */
-export const RULE_SIGMA_PP = 0.498;
+export const RULE_SIGMA_PP = 0.4981;
 
 /** 그 추정이 선 표본. 화면이 그대로 인용한다. */
 export const RULE_SIGMA_SAMPLE = '2000Q1–2026Q2';
 
-/** 과거 준칙 잔차의 자기상관. 부록 C 대안의 근거 숫자다. */
+/** 과거 준칙 잔차의 자기상관. 부록 C 대안의 근거 숫자다.
+ *
+ *  **점추정만으로는 부족하다.** 2026-08-21 (P4) 에 같은 잔차를 OLS 로 다시
+ *  풀어 표준오차를 붙였다(`backend/scripts/p4_ar1.py`) — Newey-West(L=4)
+ *  0.0745, OLS 0.0589. 95% 구간이 대략 [0.65, 0.95] 이고, 급단절(ρ=0)은 그
+ *  밖으로 한참 나간다. 상수 제외·추세 제거 판도 0.78~0.83 안이다. */
 export const RULE_RESIDUAL_AR1 = 0.801;
+
+/** 위 자기상관 추정의 Newey-West 표준오차. 화면이 0.801 을 인용할 때 같이 든다. */
+export const RULE_RESIDUAL_AR1_SE = 0.0745;
 
 /** 이 면이 구현한 지평 이탈 처리. 화면에 이 이름이 뜬다. */
 export const RESIDUAL_TREATMENT = '급단절' as const;

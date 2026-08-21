@@ -15,11 +15,48 @@
       "basis": "policy_q1",
       "page": "pp.37-38",
       "anchors": [
-        { "id": "kr_policy_25bp.gap", "panel": "GDP 갭", "var": "y_gap", "value": -0.07, "unit": "%p", "kind": "peak" },
-        { "id": "kr_policy_25bp.cpi", "panel": "소비자물가", "var": "cpi_yoy", "value": -0.05, "unit": "%p", "kind": "peak", "note": "시차를 두고 나타나요" },
-        { "id": "kr_policy_25bp.hpi", "panel": "주택가격", "var": "hpi", "value": -0.4, "unit": "%", "kind": "peak" },
-        { "id": "kr_policy_25bp.debt_krw", "panel": "명목 가계부채", "var": null, "value": -5.1, "unit": "조원", "kind": "peak", "note": "이 모형은 부채를 **비율**(eq 44)로 풀어서 명목 잔액이 편차 공간에 없어요. 대조할 수가 없어요." },
-        { "id": "kr_policy_25bp.debt_ratio", "panel": "가계부채/GDP", "var": "debt", "value": -0.3, "unit": "%p", "kind": "peak" }
+        {
+          "id": "kr_policy_25bp.gap",
+          "panel": "GDP 갭",
+          "var": "y_gap",
+          "value": -0.07,
+          "unit": "%p",
+          "kind": "peak"
+        },
+        {
+          "id": "kr_policy_25bp.cpi",
+          "panel": "소비자물가",
+          "var": "cpi_yoy",
+          "value": -0.05,
+          "unit": "%p",
+          "kind": "peak",
+          "note": "시차를 두고 나타나요"
+        },
+        {
+          "id": "kr_policy_25bp.hpi",
+          "panel": "주택가격",
+          "var": "hpi",
+          "value": -0.4,
+          "unit": "%",
+          "kind": "peak"
+        },
+        {
+          "id": "kr_policy_25bp.debt_krw",
+          "panel": "명목 가계부채",
+          "var": null,
+          "value": -5.1,
+          "unit": "조원",
+          "kind": "peak",
+          "note": "이 모형은 부채를 **비율**(eq 44)로 풀어서 명목 잔액이 편차 공간에 없어요. 대조할 수가 없어요."
+        },
+        {
+          "id": "kr_policy_25bp.debt_ratio",
+          "panel": "가계부채/GDP",
+          "var": "debt",
+          "value": -0.3,
+          "unit": "%p",
+          "kind": "peak"
+        }
       ]
     },
     {
@@ -28,10 +65,40 @@
       "basis": "us_2q",
       "page": "pp.39-40",
       "anchors": [
-        { "id": "us_policy_25bp.kr10y", "panel": "한국 장기금리", "var": "kr10y", "value": 0.06, "unit": "%p", "kind": "peak", "note": "β_sync 1.05 를 이 앵커에 핀으로 맞췄어요 — 논문이 계수를 안 실었거든요(각주 25)." },
-        { "id": "us_policy_25bp.gdp", "panel": "GDP", "var": "y_gap", "value": -0.04, "unit": "%p", "kind": "peak" },
-        { "id": "us_policy_25bp.fi", "panel": "설비투자", "var": "i_fi", "value": -0.02, "unit": "%", "kind": "peak" },
-        { "id": "us_policy_25bp.cpi", "panel": "소비자물가", "var": "cpi_yoy", "value": null, "unit": "%p", "kind": "shape", "note": "올랐다가 내려가요 — 논문이 숫자를 안 적었어요." }
+        {
+          "id": "us_policy_25bp.kr10y",
+          "panel": "한국 장기금리",
+          "var": "kr10y",
+          "value": 0.06,
+          "unit": "%p",
+          "kind": "peak",
+          "note": "β_sync 1.05 를 이 앵커에 핀으로 맞췄어요 — 논문이 계수를 안 실었거든요(각주 25)."
+        },
+        {
+          "id": "us_policy_25bp.gdp",
+          "panel": "GDP",
+          "var": "y_gap",
+          "value": -0.04,
+          "unit": "%p",
+          "kind": "peak"
+        },
+        {
+          "id": "us_policy_25bp.fi",
+          "panel": "설비투자",
+          "var": "i_fi",
+          "value": -0.02,
+          "unit": "%",
+          "kind": "peak"
+        },
+        {
+          "id": "us_policy_25bp.cpi",
+          "panel": "소비자물가",
+          "var": "cpi_yoy",
+          "value": null,
+          "unit": "%p",
+          "kind": "shape",
+          "note": "올랐다가 내려가요 — 논문이 숫자를 안 적었어요."
+        }
       ]
     },
     {
@@ -40,10 +107,38 @@
       "basis": "oil",
       "page": "pp.41-42",
       "anchors": [
-        { "id": "oil_10pct.cpi", "panel": "소비자물가", "var": "cpi_yoy", "value": 0.16, "unit": "%p", "kind": "peak" },
-        { "id": "oil_10pct.consumption", "panel": "소비", "var": "c", "value": -0.08, "unit": "%", "kind": "peak" },
-        { "id": "oil_10pct.gdp", "panel": "GDP", "var": "y_gap", "value": -0.05, "unit": "%p", "kind": "peak" },
-        { "id": "oil_10pct.imports", "panel": "수입", "var": "m", "value": -0.07, "unit": "%", "kind": "peak" }
+        {
+          "id": "oil_10pct.cpi",
+          "panel": "소비자물가",
+          "var": "cpi_yoy",
+          "value": 0.16,
+          "unit": "%p",
+          "kind": "peak"
+        },
+        {
+          "id": "oil_10pct.consumption",
+          "panel": "소비",
+          "var": "c",
+          "value": -0.08,
+          "unit": "%",
+          "kind": "peak"
+        },
+        {
+          "id": "oil_10pct.gdp",
+          "panel": "GDP",
+          "var": "y_gap",
+          "value": -0.05,
+          "unit": "%p",
+          "kind": "peak"
+        },
+        {
+          "id": "oil_10pct.imports",
+          "panel": "수입",
+          "var": "m",
+          "value": -0.07,
+          "unit": "%",
+          "kind": "peak"
+        }
       ]
     }
   ],
@@ -52,17 +147,54 @@
     "total": 13,
     "note": "예전 12/13 은 Table 8 값의 **순열을 이 밴드에 맞춰 고른 결과**라 기준선이 아니에요. 2026-08-21 에 44개 인쇄식을 전수 대조하면서 그 순열 탐색을 은퇴시켰어요.",
     "misses": [
-      { "anchor_id": "kr_policy_25bp.hpi", "measured": -0.94, "why": "금리→주택 진폭이에요. 논문이 금리 단위 규약을 안 박았어요." },
-      { "anchor_id": "kr_policy_25bp.debt_ratio", "measured": -0.766, "why": "주택을 타고 오는 같은 사슬이에요." },
-      { "anchor_id": "oil_10pct.consumption", "measured": null, "why": "부채→소비로 이어지는 같은 사슬이에요." },
-      { "anchor_id": "oil_10pct.imports", "measured": null, "why": "같은 사슬의 수요 쪽이에요." }
+      {
+        "anchor_id": "kr_policy_25bp.hpi",
+        "measured": -0.9282,
+        "why": "금리→주택 진폭이에요. 논문이 금리 단위 규약을 안 박았어요."
+      },
+      {
+        "anchor_id": "kr_policy_25bp.debt_ratio",
+        "measured": -0.7533,
+        "why": "주택을 타고 오는 같은 사슬이에요."
+      },
+      {
+        "anchor_id": "oil_10pct.consumption",
+        "measured": -0.1473,
+        "why": "부채→소비로 이어지는 같은 사슬이에요."
+      },
+      {
+        "anchor_id": "oil_10pct.gdp",
+        "measured": -0.084,
+        "why": "같은 사슬의 수요 쪽이에요. **여기 실려 있던 것은 `oil_10pct.imports` 였는데 그건 통과해요**(−0.095, 밴드 [−0.098, −0.042]) — 2026-08-21 (P4) 에 전건을 다시 재서 고쳤어요."
+      }
     ],
     "measured_but_not_scored": [
-      { "anchor_id": "kr_policy_25bp.gap", "measured": -0.0881 },
-      { "anchor_id": "kr_policy_25bp.cpi", "measured": -0.0396 }
+      {
+        "anchor_id": "kr_policy_25bp.gap",
+        "measured": -0.0871
+      },
+      {
+        "anchor_id": "kr_policy_25bp.cpi",
+        "measured": -0.0391
+      },
+      {
+        "anchor_id": "oil_10pct.imports",
+        "measured": -0.0949
+      },
+      {
+        "anchor_id": "us_policy_25bp.fi",
+        "measured": -0.0358
+      }
     ],
     "outside_the_scorecard": [
-      { "what": "정책충격에서의 수출", "measured": -0.0023, "unit": "%", "why": "논문 본문이 정책충격의 수출 최대치를 숫자로 안 적었어요. 그래서 13개 밴드에는 안 들어가요. 다만 정책충격에서 수출을 미는 항이 eq (19) 의 환율 하나인데 그 계수가 0.0033 이라 사실상 안 움직여요 — 2026-08-21 에 관측했고 별개 레인으로 둬요." }
-    ]
+      {
+        "what": "정책충격에서의 수출",
+        "measured": -0.0023,
+        "unit": "%",
+        "why": "논문 본문이 정책충격의 수출 최대치를 숫자로 안 적었어요. 그래서 13개 밴드에는 안 들어가요. 다만 정책충격에서 수출을 미는 항이 eq (19) 의 환율 하나인데 그 계수가 0.0033 이라 사실상 안 움직여요 — 2026-08-21 에 관측했고 별개 레인으로 둬요."
+      }
+    ],
+    "measured_from": "아래 실측값은 전부 **IRF 실행**에서 재요 — `bigfoot/solve/irf.py` 의 13줄이 9/13 을 만드는 잣대거든요. 예전에는 이 칸들이 **기저**(policy_q1)에서 잰 값이라 두 잣대가 섞여 있었어요. 2026-08-21 (P4) 에 IRF 쪽으로 통일했어요.",
+    "fi_usercost_wired": "2026-08-21 (P4) 에 eq (9) 의 `− UC_I` 를 배선했어요. 미 정책 +25bp 의 설비투자 반응이 −0.032% 에서 −0.036% 가 됐고, 논문의 −0.02% 에서 **더 멀어졌어요.** 그래도 배선은 둬요 — 기준은 인쇄된 식이지 점수가 아니에요. 그리고 이 배선이 실패 넷을 **거의 안 움직였어요**(전부 0.001 미만): 진폭 문제는 «금리가 갈 곳이 하나 없어서» 가 아니에요."
   }
 }

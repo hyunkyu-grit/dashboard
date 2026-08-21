@@ -64,8 +64,8 @@ from wiring.paper_pages import EQUATION_PAGE  # noqa: E402
 BLOCK = {
     "external": ["us_y", "us_pi", "us_i", "us10y", "oil",
                  "f_china", "f_japan", "f_eu", "f_ea", "f_rw", "d_x"],
-    "expenditure": ["c", "dc", "i_fi", "di", "g", "dg", "i_con", "di_con",
-                    "ih_star", "x", "m", "y_gap"],
+    "expenditure": ["c", "dc", "i_fi", "di", "i_fi_star", "g", "dg",
+                    "i_con", "di_con", "ih_star", "x", "m", "y_gap"],
     "price": ["pi_core", "pi_inf", "p_core", "p_cpi", "cpi_yoy", "pm"],
     "financial": ["s", "i_kr", "cb", "kr10y", "kr3y", "eta_hh", "eta_firm",
                   "r_hh", "r_firm", "hpi", "dhpi", "hpi_yoy", "debt",
@@ -75,7 +75,8 @@ BLOCK_OF = {v: b for b, vs in BLOCK.items() for v in vs}
 
 LABEL = {
     "c": "민간소비", "dc": "소비 증가율", "i_fi": "설비투자",
-    "di": "설비투자 증가율", "g": "정부소비", "dg": "정부소비 증가율",
+    "di": "설비투자 증가율", "i_fi_star": "설비투자 목표",
+    "g": "정부소비", "dg": "정부소비 증가율",
     "i_con": "건설투자", "di_con": "건설투자 증가율",
     "ih_star": "건설투자 목표", "x": "수출", "m": "수입", "y_gap": "GDP 갭",
     "pi_core": "근원물가 상승률", "pi_inf": "물가 어트랙터",
@@ -105,6 +106,7 @@ EQ_OF = {
     "dc": (None, "8"),
     "i_fi": ("9", "11"),
     "di": (None, "11"),
+    "i_fi_star": ("9", None),
     "i_con": ("12", "14"),
     "di_con": (None, "14"),
     "ih_star": ("12", None),
@@ -445,6 +447,13 @@ _FN_SLOTS = {
     ("self.con.user_cost_dev", "cpi_yoy"): "construction.usercost",
     ("self.con.target_dev", "uc_dev"): "construction.target.slots[2]",
     ("self.con.target_dev", "gb_dev"): "construction.target.slots[1]",
+    # eq (9)(10) 설비투자 — 2026-08-21 (P4) 에 배선됐다. 주소가 «slots[n]» 이
+    # 아닌 이유: eq (9) 는 사용자비용의 계수를 **−1 로 인쇄**해서 부록 D 에
+    # 슬롯이 없다. 없는 슬롯 번호를 지어내지 않고 그 사실을 주소가 말한다.
+    ("self.fi.user_cost_dev", "i_firm"): "investment_fi.usercost",
+    ("self.fi.user_cost_dev", "i_cb"): "investment_fi.usercost",
+    ("self.fi.user_cost_dev", "cpi_yoy"): "investment_fi.usercost",
+    ("self.fi.target_dev", "uc_dev"): "investment_fi.target.printed_unit",
     ("eq.spread_dev", "eta_lag"): "loan_rates.shared.named",
     ("eq.spread_dev", "cb_dev"): "loan_rates.*.slots",
     ("eq.rate_dev", "call"): "loan_rates.*.slots",
@@ -762,7 +771,8 @@ def _apply_merges(edges: list, merges: dict) -> list:
 #: (계수는 eq 31 수입물가 목표식 것인데 eq 25 로 찍혔다).
 SLOT_EQ = {
     "consumption.target": "7", "consumption.growth": "8",
-    "investment_fi.target": "9", "investment_fi.growth": "11",
+    "investment_fi.target": "9", "investment_fi.usercost": "10",
+    "investment_fi.growth": "11",
     "construction.target": "12", "construction.usercost": "13",
     "construction.growth": "14",
     "government.target": "15", "government.growth": "16",

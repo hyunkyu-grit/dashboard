@@ -40,7 +40,7 @@
         "shock": "한국 정책금리 +25bp",
         "panel": "주택가격",
         "anchor": "-0.4%",
-        "measured": -0.94,
+        "measured": -0.9282,
         "page": "pp.37-38",
         "why": "금리→주택 진폭이에요. 논문이 금리 단위 규약을 안 박았어요."
       },
@@ -49,7 +49,7 @@
         "shock": "한국 정책금리 +25bp",
         "panel": "가계부채/GDP",
         "anchor": "-0.3%p",
-        "measured": -0.766,
+        "measured": -0.7533,
         "page": "pp.37-38",
         "why": "주택을 타고 오는 같은 사슬이에요."
       },
@@ -58,28 +58,36 @@
         "shock": "유가 +10%",
         "panel": "소비",
         "anchor": "-0.08%",
-        "measured": null,
+        "measured": -0.1473,
         "page": "pp.41-42",
         "why": "부채→소비로 이어지는 같은 사슬이에요."
       },
       {
-        "anchor_id": "oil_10pct.imports",
+        "anchor_id": "oil_10pct.gdp",
         "shock": "유가 +10%",
-        "panel": "수입",
-        "anchor": "-0.07%",
-        "measured": null,
+        "panel": "GDP",
+        "anchor": "-0.05%p",
+        "measured": -0.084,
         "page": "pp.41-42",
-        "why": "같은 사슬의 수요 쪽이에요."
+        "why": "같은 사슬의 수요 쪽이에요. **여기 실려 있던 것은 `oil_10pct.imports` 였는데 그건 통과해요**(−0.095, 밴드 [−0.098, −0.042]) — 2026-08-21 (P4) 에 전건을 다시 재서 고쳤어요."
       }
     ],
     "measured_but_not_scored": [
       {
         "anchor_id": "kr_policy_25bp.gap",
-        "measured": -0.0881
+        "measured": -0.0871
       },
       {
         "anchor_id": "kr_policy_25bp.cpi",
-        "measured": -0.0396
+        "measured": -0.0391
+      },
+      {
+        "anchor_id": "oil_10pct.imports",
+        "measured": -0.0949
+      },
+      {
+        "anchor_id": "us_policy_25bp.fi",
+        "measured": -0.0358
       }
     ],
     "outside_the_scorecard": [
@@ -89,7 +97,9 @@
         "unit": "%",
         "why": "논문 본문이 정책충격의 수출 최대치를 숫자로 안 적었어요. 그래서 13개 밴드에는 안 들어가요. 다만 정책충격에서 수출을 미는 항이 eq (19) 의 환율 하나인데 그 계수가 0.0033 이라 사실상 안 움직여요 — 2026-08-21 에 관측했고 별개 레인으로 둬요."
       }
-    ]
+    ],
+    "measured_from": "아래 실측값은 전부 **IRF 실행**에서 재요 — `bigfoot/solve/irf.py` 의 13줄이 9/13 을 만드는 잣대거든요. 예전에는 이 칸들이 **기저**(policy_q1)에서 잰 값이라 두 잣대가 섞여 있었어요. 2026-08-21 (P4) 에 IRF 쪽으로 통일했어요.",
+    "fi_usercost_wired": "2026-08-21 (P4) 에 eq (9) 의 `− UC_I` 를 배선했어요. 미 정책 +25bp 의 설비투자 반응이 −0.032% 에서 −0.036% 가 됐고, 논문의 −0.02% 에서 **더 멀어졌어요.** 그래도 배선은 둬요 — 기준은 인쇄된 식이지 점수가 아니에요. 그리고 이 배선이 실패 넷을 **거의 안 움직였어요**(전부 0.001 미만): 진폭 문제는 «금리가 갈 곳이 하나 없어서» 가 아니에요."
   },
   "known_seams": [
     {
@@ -106,8 +116,8 @@
     }
   ],
   "tests": {
-    "collected": null,
-    "source": "이 빌드에서 안 셌어요"
+    "collected": 48,
+    "source": "pytest"
   },
   "engine": {
     "home": "backend/bigfoot",

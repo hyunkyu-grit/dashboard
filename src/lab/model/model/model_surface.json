@@ -79,8 +79,8 @@
    "block": "expenditure",
    "page": "p.18",
    "printed": "I* = β_I0 + β_I1·잠재산출 + β_I2·코로나더미 **− UC_I**",
-   "differs": "**`− UC_I` 가 안 배선돼 있어요.** 목표 편차를 문자 그대로 0 으로 둬서, 설비투자로 들어오는 화살표가 산출갭 하나뿐이에요.",
-   "wired": false
+   "differs": "2026-08-21 에 `− UC_I` 를 배선했어요. 편차 공간에서 앞의 셋은 상수·추세·더미라 전부 0 이 되고, **목표가 곧 `−UC_I`** 예요.",
+   "wired": true
   },
   {
    "no": "10",
@@ -88,7 +88,7 @@
    "block": "expenditure",
    "page": "p.18",
    "printed": "UC_I = (기업대출금리 + 회사채금리)/2 − CPI상승률/4 + 감가상각률",
-   "differs": "안 배선돼 있어요 — eq (9) 가 이걸 안 받으니 계산할 자리가 없어요. 건설투자(eq 13)는 같은 것을 제대로 씁니다.",
+   "differs": "배선돼 있어요. 감가상각률은 외생이라 편차가 0 이에요(DELTA_I_EXOGENOUS). 건설(eq 13)은 물가항의 부호가 반대인데, 그 비대칭은 논문 것이라 양쪽 다 인쇄된 대로 뒀어요.",
    "wired": false
   },
   {
@@ -97,7 +97,7 @@
    "block": "expenditure",
    "page": "p.18",
    "printed": "오차수정 + AR + **기대 할인합** + γ_I1 Δŷ + γ_I2 Δln P_I + γ_I3 ln DRAM",
-   "differs": "배선된 것은 오차수정·AR·Δŷ 셋뿐이에요. 기대항 없음, 투자디플레이터 없음, DRAM 지수는 Gartner 유료라 없음. **코드가 이 식을 eq 10 이라고 부르는데 인쇄 번호는 11 이에요**(PDF 인쇄 p.18).",
+   "differs": "배선된 것은 오차수정·AR·Δŷ 셋이고, 오차수정이 이제 **전분기 목표**를 읽어요(인쇄된 대로). 기대항 없음(PAC_EXPECTATION_OMITTED — 목표가 0 이 아니게 됐으니 이제 근사예요), 투자디플레이터는 외생이라 편차에서 0 (GAMMA_I2_EXOG_ZERO), DRAM 지수는 Gartner 유료라 없음. **코드가 이 식을 eq 10 이라고 부르는데 인쇄 번호는 11 이에요**(PDF 인쇄 p.18).",
    "wired": true
   },
   {
@@ -1674,7 +1674,7 @@
    "basis": "owner PDF reading 2026-08-05: EC loading",
    "candidates": [],
    "equation": "11",
-   "wired": false
+   "wired": true
   },
   {
    "slot": "investment_fi.growth.slots[1]",

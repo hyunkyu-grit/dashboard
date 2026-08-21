@@ -53,7 +53,7 @@ WIRING_FLAGS = [
 
 OIL_RHO = 0.90          # WIRING_OIL_RHO
 
-KOREA_VARS = ["c", "dc", "i_fi", "di", "g", "dg",
+KOREA_VARS = ["c", "dc", "i_fi", "di", "i_fi_star", "g", "dg",
               "i_con", "di_con", "ih_star", "x", "m", "y_gap",
               "pi_core", "pi_inf",
               "p_core", "p_cpi", "cpi_yoy", "pm", "hpi", "dhpi", "hpi_yoy",
@@ -134,6 +134,7 @@ class BigfootSystem:
         self.pac = korea.ConsumptionPAC(engine=self.engine,
                                         beta=self.opt["pac_beta"])
         self.inv = korea.investment_growth()
+        self.fi = korea.FIInvestment()                # eq (9-11), 2026-08-21
         self.gov = korea.GovernmentConsumption()      # eq (15-16), 2026-08-21
         self.con = korea.ConstructionInvestment()     # eq (12-14), 2026-08-21
         self.xg, self.mg = korea.export_growth(), korea.import_growth()
@@ -452,7 +453,20 @@ class BigfootSystem:
                              + self.pac.deltas["purch"].value * purch
                              + F_c + res["consumption"][t])
                 new["c"] = lag("c", t) + new["dc"]
-                new["di"] = (self.inv.alpha.value * (0.0 - lag("i_fi", t))
+                # FI investment, eq (9)-(11).  The target's deviation is
+                # -UC_I: potential is the trend, the constant and the Covid
+                # dummy drop, and delta_I is exogenous.  eq (11)'s error
+                # correction reads the target at t-1 as printed, so the target
+                # is a state variable here exactly as `ih_star` is for
+                # construction.  Until 2026-08-21 this was the literal `0.0`
+                # and the policy rate had NO route into equipment investment.
+                uc_i = self.fi.user_cost_dev(
+                    i_firm=new["r_firm"],
+                    i_cb=new["kr10y"] + new["cb"],
+                    cpi_yoy=new["cpi_yoy"])
+                new["i_fi_star"] = self.fi.target_dev(uc_dev=uc_i)
+                new["di"] = (self.inv.alpha.value
+                             * (lag("i_fi_star", t) - lag("i_fi", t))
                              + self.inv.extras["dy_lag"].value * lag("di", t)
                              + self.inv.extras["gap"].value * d_gap
                              + res["investment"][t])

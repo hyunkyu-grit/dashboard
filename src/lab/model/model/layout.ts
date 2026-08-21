@@ -255,27 +255,11 @@ export type Ghost = {
  * 인쇄면을 렌더해서 대조한 자리다.
  */
 export const PRINTED_NOT_WIRED: Ghost[] = [
-  {
-    from: 'r_firm',
-    to: 'i_fi',
-    equation: '9',
-    paper_page: 'p.18',
-    why: 'eq (9) 는 설비투자 목표에 자본 사용자비용을 계수 −1 로 넣어요. 구현은 목표 편차를 0 으로 둬서 이 화살표가 없어요.',
-  },
-  {
-    from: 'cb',
-    to: 'i_fi',
-    equation: '10',
-    paper_page: 'p.18',
-    why: 'eq (10) 의 사용자비용은 기업대출금리와 **회사채금리의 평균**이에요. 그 절반이 이 통로예요.',
-  },
-  {
-    from: 'cpi_yoy',
-    to: 'i_fi',
-    equation: '10',
-    paper_page: 'p.18',
-    why: '사용자비용을 물가상승률로 실질화해요. 같은 이유로 안 와 있어요.',
-  },
+  /* 2026-08-21 (P4): `r_firm → i_fi` · `cb → i_fi` · `cpi_yoy → i_fi` 유령 셋이
+     여기서 내려갔어요. eq (9) 의 `− UC_I` 를 배선했거든요 — 이제 실재하는
+     화살표라서, 셋을 여기 남겨 두면 화면이 «논문에만 있다» 고 거짓말을 해요.
+     엣지리스트에서는 `r_firm·cb·kr10y·cpi_yoy → 설비투자 목표 → 설비투자` 로
+     서요(건설의 `ih_star` 와 같은 모양). */
   {
     from: 'pi_core',
     to: 'i_fi',

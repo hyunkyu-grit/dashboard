@@ -95,6 +95,11 @@
    "block": "expenditure"
   },
   {
+   "id": "i_fi_star",
+   "label": "설비투자 목표",
+   "block": "expenditure"
+  },
+  {
    "id": "i_kr",
    "label": "기준금리",
    "block": "financial"
@@ -571,6 +576,18 @@
    "lagged": false
   },
   {
+   "from": "i_fi_star",
+   "to": "i_fi",
+   "block": "expenditure",
+   "horizon": "SR",
+   "sign": "+",
+   "coefficient_slot": "investment_fi.growth.slots[0]",
+   "equation": "11",
+   "paper_page": "p.18",
+   "via": null,
+   "lagged": true
+  },
+  {
    "from": "y_gap",
    "to": "i_fi",
    "block": "expenditure",
@@ -578,6 +595,54 @@
    "sign": "+",
    "coefficient_slot": "investment_fi.growth.slots[2]",
    "equation": "11",
+   "paper_page": "p.18",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "cb",
+   "to": "i_fi_star",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "-",
+   "coefficient_slot": "investment_fi.target.printed_unit",
+   "equation": "9",
+   "paper_page": "p.18",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "cpi_yoy",
+   "to": "i_fi_star",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "+",
+   "coefficient_slot": "investment_fi.target.printed_unit",
+   "equation": "9",
+   "paper_page": "p.18",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "kr10y",
+   "to": "i_fi_star",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "-",
+   "coefficient_slot": "investment_fi.target.printed_unit",
+   "equation": "9",
+   "paper_page": "p.18",
+   "via": null,
+   "lagged": false
+  },
+  {
+   "from": "r_firm",
+   "to": "i_fi_star",
+   "block": "expenditure",
+   "horizon": "LR",
+   "sign": "-",
+   "coefficient_slot": "investment_fi.target.printed_unit",
+   "equation": "9",
    "paper_page": "p.18",
    "via": null,
    "lagged": false

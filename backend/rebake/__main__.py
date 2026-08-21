@@ -130,6 +130,17 @@ def rebake(*, offline: bool = False, count_tests: bool = True) -> dict:
 FRONTEND = BACKEND.parent / "src" / "lab" / "model" / "artifacts"
 MIRRORED = ARTIFACTS + ("paper_anchors.json",)
 
+#: 기저의 **세 번째** 사본. `src/lab/scenario/combine.ts` 가 이걸 import 하고,
+#: 「전략」 면의 대조축인 `guards/model-strategy-basis.test.ts` 와
+#: `guards/scenario-parity.test.ts` 가 그 통로로 값을 읽는다.
+#:
+#: 여기 없으면 리베이크가 이 사본만 안 옮겨서 낡고, 새로 뽑은 패리티 벡터와
+#: 안 맞아 가드가 빨개진다. 2026-08-21 (P4) 진단에서 찾았다.
+EXTRA_MIRRORS = {
+    "scenario_basis.json": BACKEND.parent / "src" / "lab" / "scenario"
+                           / "basis.json",
+}
+
 
 def _mirror_to_frontend() -> None:
     FRONTEND.mkdir(parents=True, exist_ok=True)
@@ -137,6 +148,9 @@ def _mirror_to_frontend() -> None:
         src = ((BACKEND / "config" / name)
                if name == "paper_anchors.json" else (OUT / name))
         shutil.copy(src, FRONTEND / name)
+    for name, dest in EXTRA_MIRRORS.items():
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(OUT / name, dest)
 
 
 def main(argv: list[str]) -> int:

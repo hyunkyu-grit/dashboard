@@ -405,7 +405,7 @@ def extract_residuals(start: str = "2000Q1",
                         - pac.deltas["d_debt"].require() * D(d["debt"])
                         - F)
 
-    # --- investment (eq 11 as printed, paper p.18; zero target in deviations)
+    # --- investment (eq 9-11 as printed, paper p.18)
     #
     #   Δln I = α_I0(ln I*_{t-1} − ln I_{t-1}) + α_I1 Δln I_{t-1} + E[Σ d_k …]
     #           + γ_I1 Δŷ + γ_I2 Δln P_I + γ_I3 ln DRAM
@@ -416,9 +416,17 @@ def extract_residuals(start: str = "2000Q1",
     # 지수**다(논문 19쪽: "the excess demand index of semi-conductor from
     # Gartner"). 유료 계열이라 ECOS·FRED 어디에도 없다. 한때 ECOS 수출물가
     # DRAM(402Y016/30911201AA)을 넣었다가 되돌렸다 — 이름만 같고 다른 것이다.
+    #
+    # 2026-08-21 (P4): 목표 편차가 문자 그대로 `0.0` 이던 자리를 eq (9) 의
+    # `− UC_I` 로 채웠다. 솔버(`solve/system.py`)와 **같은 식**이어야 한다 —
+    # 한쪽만 고치면 역사 잔차가 솔버가 푸는 것과 다른 식의 잔차가 된다.
+    fi = korea.FIInvestment()
+    uc_i = fi.user_cost_dev(i_firm=d["r_firm"], i_cb=d["kr10y"] + d["cb"],
+                            cpi_yoy=d["cpi_yoy"])
+    i_fi_star = fi.target_dev(uc_dev=uc_i)
     inv = korea.investment_growth()
     r["investment"] = (D(d["i_fi"])
-                       - inv.alpha.require() * (0.0 - L(d["i_fi"]))
+                       - inv.alpha.require() * (L(i_fi_star) - L(d["i_fi"]))
                        - inv.extras["dy_lag"].require() * L(D(d["i_fi"]))
                        # eq (11) 은 gamma_I1 * d yhat 이다 — 갭의 변화지 수준이 아니다.
                        - inv.extras["gap"].require() * D(d["y_gap"])

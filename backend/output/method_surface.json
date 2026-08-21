@@ -87,13 +87,13 @@
   },
   {
    "key": "fi-usercost",
-   "title": "설비투자에 금리가 안 들어가요 — eq (9) 의 `− UC_I` 미배선",
+   "title": "설비투자에 금리를 다시 넣었어요 — eq (9) 의 `− UC_I` 배선",
    "paper_says": "eq (9) 는 설비투자 목표에 자본 사용자비용을 **계수 −1 로** 넣고, eq (10) 이 그 사용자비용을 기업대출금리·회사채금리·물가·감가상각으로 정의해요.",
-   "we_do": "목표에 상수·잠재산출·코로나더미만 넣고, 솔버는 목표 편차를 **문자 그대로 0** 으로 둬요.",
-   "why": "이관 시점에 그렇게 배선돼 있었어요. 2026-08-21 배선 대조에서 찾았어요.",
-   "could_be_wrong": "**정책금리가 설비투자에 닿는 통로가 산출갭 하나뿐**이에요. 건설투자는 같은 사용자비용이 제대로 배선돼 있어서 두 블록이 비대칭이고, 논문의 미국 +25bp 패널에 있는 설비투자 −0.02% 를 우리 방식으로는 재현할 근거가 약해요.",
-   "paper": "eq (9)(10), 인쇄 p.18",
-   "code": "backend/bigfoot/equations/korea.py::investment_fi_target · backend/bigfoot/solve/system.py (`0.0 - lag(\"i_fi\", t)`)",
+   "we_do": "인쇄된 대로 배선해요. 목표 편차 = `−[(기업대출금리 + 회사채금리)/2 − 물가상승률/4]` 이고, eq (11) 이 인쇄한 대로 **전분기** 목표를 오차수정에 넣어요. 감가상각 `δ_I` 는 외생이라 편차가 0 이에요.",
+   "why": "2026-08-21 (P4) 이전에는 솔버가 목표 편차를 **문자 그대로 0** 으로 뒀어요. 그래서 정책금리가 설비투자에 닿는 통로가 산출갭 하나뿐이었고, 같은 사용자비용이 제대로 배선된 건설투자와 비대칭이었어요. 새로 켜진 추정 계수는 **0개**예요 — 논문이 계수를 −1 로 인쇄했고 부록 D 에 슬롯이 없거든요.",
+   "could_be_wrong": "**논문의 미국 +25bp 설비투자 −0.02% 에서 오히려 멀어졌어요** — 배선 전 −0.032%, 배선 후 −0.036%. 점수가 아니라 인쇄된 식이 기준이라 그대로 뒀어요. 그리고 실패 넷(주택·부채·소비·유가GDP)은 **거의 안 움직였어요**(전부 0.001 미만) — 진폭 문제의 뿌리가 죽은 통로가 아니라는 뜻이에요.",
+   "paper": "eq (9)(10)(11), 인쇄 p.18",
+   "code": "backend/bigfoot/equations/korea.py::FIInvestment · backend/bigfoot/solve/system.py (`i_fi_star`) · backend/bigfoot/conditional/residuals.py",
    "node": "i_fi",
    "equation": "9"
   },
@@ -224,7 +224,7 @@
    {
     "irf": "A",
     "metric": "gdp_gap_trough_pp",
-    "value": -0.0867,
+    "value": -0.0871,
     "band": [
      -0.09,
      -0.05
@@ -234,7 +234,7 @@
    {
     "irf": "A",
     "metric": "cpi_yoy_trough_pp",
-    "value": -0.039,
+    "value": -0.0391,
     "band": [
      -0.07,
      -0.03
@@ -244,7 +244,7 @@
    {
     "irf": "A",
     "metric": "housing_trough_pct",
-    "value": -0.929,
+    "value": -0.9282,
     "band": [
      -0.5,
      -0.3
@@ -254,7 +254,7 @@
    {
     "irf": "A",
     "metric": "debt_gdp_change_pp",
-    "value": -0.7539,
+    "value": -0.7533,
     "band": [
      -0.4,
      -0.2
@@ -264,7 +264,7 @@
    {
     "irf": "B",
     "metric": "gdp_gap_trough_pp",
-    "value": -0.0254,
+    "value": -0.0255,
     "band": [
      -0.06,
      -0.02
@@ -284,7 +284,7 @@
    {
     "irf": "C",
     "metric": "gdp_gap_trough_pp",
-    "value": -0.0836,
+    "value": -0.084,
     "band": [
      -0.07,
      -0.03
@@ -383,9 +383,9 @@
     "paper": -0.07,
     "unit": "%p",
     "kind": "peak",
-    "measured": -0.0867,
+    "measured": -0.0871,
     "measured_q": 5,
-    "measured_12q": -0.0867,
+    "measured_12q": -0.0871,
     "tail": false,
     "band": [
      -0.09,
@@ -402,9 +402,9 @@
     "paper": -0.05,
     "unit": "%p",
     "kind": "peak",
-    "measured": -0.039,
+    "measured": -0.0391,
     "measured_q": 8,
-    "measured_12q": -0.039,
+    "measured_12q": -0.0391,
     "tail": false,
     "band": [
      -0.07,
@@ -421,9 +421,9 @@
     "paper": -0.4,
     "unit": "%",
     "kind": "peak",
-    "measured": -0.929,
+    "measured": -0.9282,
     "measured_q": 6,
-    "measured_12q": -0.929,
+    "measured_12q": -0.9282,
     "tail": false,
     "band": [
      -0.5,
@@ -456,9 +456,9 @@
     "paper": -0.3,
     "unit": "%p",
     "kind": "peak",
-    "measured": -0.7539,
+    "measured": -0.7533,
     "measured_q": 7,
-    "measured_12q": -0.7539,
+    "measured_12q": -0.7533,
     "tail": false,
     "band": [
      -0.4,
@@ -491,9 +491,9 @@
     "paper": -0.04,
     "unit": "%p",
     "kind": "peak",
-    "measured": -0.0254,
+    "measured": -0.0255,
     "measured_q": 2,
-    "measured_12q": -0.0254,
+    "measured_12q": -0.0255,
     "tail": false,
     "band": [
      -0.06,
@@ -510,9 +510,9 @@
     "paper": -0.02,
     "unit": "%",
     "kind": "peak",
-    "measured": -0.0324,
+    "measured": -0.0358,
     "measured_q": 23,
-    "measured_12q": -0.0121,
+    "measured_12q": -0.0188,
     "tail": true,
     "band": null,
     "verdict": "no_band",
@@ -580,9 +580,9 @@
     "paper": -0.05,
     "unit": "%p",
     "kind": "peak",
-    "measured": -0.0836,
+    "measured": -0.084,
     "measured_q": 5,
-    "measured_12q": -0.0836,
+    "measured_12q": -0.084,
     "tail": false,
     "band": [
      -0.07,
@@ -599,9 +599,9 @@
     "paper": -0.07,
     "unit": "%",
     "kind": "peak",
-    "measured": -0.0905,
-    "measured_q": 5,
-    "measured_12q": -0.0905,
+    "measured": -0.0949,
+    "measured_q": 6,
+    "measured_12q": -0.0949,
     "tail": false,
     "band": null,
     "verdict": "no_band",

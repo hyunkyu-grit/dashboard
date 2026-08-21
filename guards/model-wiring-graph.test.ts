@@ -137,10 +137,33 @@ describe('논문에만 있는 화살표 (배선 대 인쇄)', () => {
     }
   });
 
-  it('설비투자로 오는 배선은 산출갭 하나뿐이다 (eq 9 의 사용자비용 미배선)', () => {
-    const into = G.edges.filter((e) => e.to === 'i_fi');
-    expect(into.map((e) => e.from)).toEqual(['y_gap']);
+  /* 2026-08-21 (P4) 에 뒤집힌 시험이다. 여기 있던 것은 «설비투자로 오는 배선은
+     산출갭 하나뿐이다» 였고, 그게 참인 동안 정책금리가 설비투자에 닿는 통로가
+     없었다. eq (9) 의 `− UC_I` 를 배선했으니 이제 그 반대를 잰다 — 되돌아가면
+     여기가 빨개져야지, 화면이 조용히 «금리가 설비투자에 온다» 로 읽히면 안 된다. */
+  it('설비투자 목표에 자본 사용자비용이 와 있다 (eq 9 · 10)', () => {
+    const into = G.edges.filter((e) => e.to === 'i_fi_star');
+    expect(new Set(into.map((e) => e.from))).toEqual(
+      new Set(['r_firm', 'cb', 'kr10y', 'cpi_yoy']),
+    );
+    /* 목표식이므로 장기 엣지다. */
+    for (const e of into) expect(e.horizon, e.from).toBe('LR');
+    /* 금리 셋은 음, 물가는 **양**이다 — eq (10) 이 π/4 를 **빼기** 때문이고,
+       건설의 eq (13) 은 더한다. 그 비대칭이 논문 것이라 화면에 서야 한다. */
+    const sign = Object.fromEntries(into.map((e) => [e.from, e.sign]));
+    expect(sign.r_firm).toBe('-');
+    expect(sign.cb).toBe('-');
+    expect(sign.kr10y).toBe('-');
+    expect(sign.cpi_yoy).toBe('+');
+    const ihCpi = G.edges.find((e) => e.from === 'cpi_yoy' && e.to === 'ih_star');
+    expect(ihCpi?.sign, '건설은 반대 부호여야 해요').toBe('-');
   });
+
+  it('설비투자는 목표와 산출갭 둘에서 온다', () => {
+    const into = G.edges.filter((e) => e.to === 'i_fi');
+    expect(new Set(into.map((e) => e.from))).toEqual(new Set(['i_fi_star', 'y_gap']));
+  });
+
 });
 
 describe('자리 계산', () => {
