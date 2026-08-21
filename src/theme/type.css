@@ -2443,3 +2443,55 @@ thead th {
 .sr-cal-blank {
   min-height: 0;
 }
+
+/* ── 충격반응 격자 (Lab · 시나리오 「충격반응」 탭) ──────────────────────────
+ *
+ * 논문 Figure 18 은 **2열 × 4행**이다. 그 구도가 이 그림의 뜻이라 화면도 2열을
+ * 기본으로 잡는다 — 금리와 환율이 한 줄, 갭과 물가가 한 줄, 하는 식으로 짝이
+ * 맞아야 읽힌다. 좁아지면 1열로 무너진다.
+ *
+ * 칸 높이를 못 박는 이유: 칸마다 머리글 줄 수가 다르다(논문 대조 줄이 있는 칸과
+ * 없는 칸, 범례가 있는 칸과 없는 칸). 높이를 내용에 맡기면 같은 행의 두 그림이
+ * 서로 다른 높이가 되고, 그러면 두 곡선의 기울기를 눈으로 못 견준다. */
+.sr-irf-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .sr-irf-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.sr-irf-panel {
+  border: 1px solid var(--color-bgLine);
+  border-radius: 8px;
+  background: var(--sr-card);
+  min-width: 0;
+}
+
+/* 그림 자리만 등고다. 위아래 글줄은 칸마다 다르게 두고, 플롯만 같은 높이로
+   맞춘다 — 견줘야 하는 것은 곡선이지 카드가 아니다. */
+.sr-irf-plot {
+  height: 132px;
+  min-width: 0;
+}
+
+.sr-irf-swatch {
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+  /* 색은 호출부가 **CSS 변수로** 넘긴다. 인라인 `background: <색>` 은 이 리포의
+     규칙(CLAUDE.md §1)이 막는다 — 팔레트가 컴포넌트로 새는 통로이기 때문. */
+  background: var(--sr-irf-swatch-color, var(--color-fg));
+}
+
+/* 비어 있는 여덟 번째 칸. 테두리를 점선으로 두어 «못 그린 칸» 임을 형태로도
+   말한다 — 글만으로 두면 로딩 중인 칸처럼 보인다. */
+.sr-irf-absent {
+  border-style: dashed;
+  background: transparent;
+}

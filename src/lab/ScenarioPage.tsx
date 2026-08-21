@@ -50,6 +50,7 @@ import { DROPDOWN_STYLES } from '@/ui/window/popup';
 import { fetchScenarioAnchors, ScenarioUnavailable, type AnchorsPayload } from './scenario/api';
 import { assembleRows, type ScenarioRow } from './scenario/assemble';
 import { BASIS, ZERO_KNOBS, combine, outOfDomain, type Knobs } from './scenario/combine';
+import { IrfPanels } from './scenario/IrfPanels';
 import { ModelChart } from './scenario/ModelChart';
 import { ModelExplainer } from './scenario/ModelExplainer';
 import { PRESETS, knobsFromPreset, matchPreset, type PresetId } from './scenario/presets';
@@ -77,6 +78,11 @@ const VIEW_TABS = [
      한 탭에 쌓았더니 그림이 카드 높이를 못 받아 위쪽 1/3 에 눌려 있었다. */
   { id: 'model' as const, label: '모형' },
   { id: 'parts' as const, label: '성분' },
+  /* 「충격반응」은 **논문의 화면**이다 [OWNER, 2026-08-21 — "논문대로 내주고 +
+     트레이딩 데스크용으로 하나 더"]. 앞의 셋은 금리 한 칸을 시장과 견주는
+     데스크 화면이고, 이 탭은 BOK-LOOK 이 Figure 18 에서 그리는 여덟 칸이다.
+     리시브·페이는 여기 없다 — 논문이 시킨 적 없는 층이라 그쪽에 두었다. */
+  { id: 'irf' as const, label: '충격반응' },
 ];
 
 const TENOR_LABEL: Record<string, string> = {
@@ -182,7 +188,7 @@ export function ScenarioPage({ policy }: { policy?: PolicyStep }) {
   /* 「모형」 탭이 있는 이유 [OWNER, 2026-08-20]: 이 숫자는 우리가 만든 모형이
      아니라 경제학자들이 세워 둔 것을 빌려 쓴 결과다. 무엇을 빌렸는지 말할 수
      없으면 화면은 트레이더에게 «믿거나 말거나» 를 요구하는 셈이다. */
-  const [view, setView] = useState<'result' | 'model' | 'parts'>('result');
+  const [view, setView] = useState<'result' | 'model' | 'parts' | 'irf'>('result');
 
   const load = useCallback(async () => {
     setRetrying(true);
@@ -206,6 +212,13 @@ export function ScenarioPage({ policy }: { policy?: PolicyStep }) {
   const rows = useMemo(() => (anchors ? assembleRows(anchors, diffs) : []), [anchors, diffs]);
   const preset = matchPreset(knobs);
   const outside = outOfDomain(BASIS, knobs);
+  /* 「모형이 아무 말도 안 한 상태」 — 손잡이가 아니라 **결과**로 판정한다.
+     손잡이를 세면 «0.25pp 와 −0.25pp 를 같이 놓아 상쇄된 경우» 를 놓치고,
+     그때도 화면은 시장 캐리를 트레이드라고 부르게 된다. */
+  const modelSilent = useMemo(
+    () => rows.length > 0 && rows.every((r) => Math.abs(r.deltaBp) < 0.05),
+    [rows],
+  );
 
   const patch = useCallback((p: Partial<Knobs>) => setKnobs((k) => ({ ...k, ...p })), []);
   const setQuarter = useCallback(
@@ -421,7 +434,7 @@ export function ScenarioPage({ policy }: { policy?: PolicyStep }) {
         <VStack gap={1} paddingX={2} paddingTop={2} paddingBottom={view === 'result' ? 1.5 : 0}>
           <HStack gap={1.5} alignItems="center" width="100%" flexWrap="wrap">
             <SegmentedTabs
-              accessibilityLabel="결과 · 모형 · 성분"
+              accessibilityLabel="결과 · 모형 · 성분 · 충격반응"
               tabs={VIEW_TABS}
               activeTab={VIEW_TABS.find((t) => t.id === view) ?? null}
               onChange={(t) => t && setView(t.id)}
@@ -439,7 +452,7 @@ export function ScenarioPage({ policy }: { policy?: PolicyStep }) {
             </HStack>
           </HStack>
 
-          {view === 'result' ? <Verdict rows={rows} /> : null}
+          {view === 'result' ? <Verdict rows={rows} idle={modelSilent} /> : null}
         </VStack>
 
         {/* 「모형」·「성분」은 **패딩을 스스로 진다** — 차트/표 아래 통계 블록이 카드
@@ -466,8 +479,15 @@ export function ScenarioPage({ policy }: { policy?: PolicyStep }) {
             </>
           ) : view === 'model' ? (
             <ModelChart rows={rows} asof={anchors.asof} />
-          ) : (
+          ) : view === 'parts' ? (
             <ModelExplainer rows={rows} diffs={diffs} />
+          ) : (
+            /* 격자는 위에서 아래로 길어지므로 이 칸만 흐르게 둔다. 바깥은
+               `overflowY: hidden` 이라(모형·성분이 스스로 높이를 나눈다)
+               여기서 열어 주지 않으면 아래 칸들이 잘린다. */
+            <Box paddingX={2} paddingBottom={2} minHeight={0} style={{ overflowY: 'auto' }}>
+              <IrfPanels diffs={diffs} />
+            </Box>
           )}
         </VStack>
       </VStack>
@@ -479,11 +499,36 @@ export function ScenarioPage({ policy }: { policy?: PolicyStep }) {
  *
  * 이 화면의 답이 표 맨 오른쪽 13px 글자에 숨어 있었다(첫 판). Strategy 가 랭킹
  * 1등을 히어로로 먼저 말하는 것과 같은 이유로, 여기서도 답이 먼저 선다. */
-function Verdict({ rows }: { rows: ScenarioRow[] }) {
+function Verdict({ rows, idle }: { rows: ScenarioRow[]; idle: boolean }) {
   const r = rows.find((x) => x.tenor === HEADLINE_TENOR) ?? rows[0];
   if (!r) return null;
   const vs = r.vsMarketBp;
   const label = TENOR_LABEL[r.tenor] ?? r.tenor;
+
+  /* 손잡이가 전부 0 이면 모형은 **아무 말도 안 한 것**이다. 그런데 「차이」 칸에는
+     시장 캐리 전액이 그대로 떠서, 화면이 «리시브 −55bp» 라고 추천하는 것처럼
+     읽힌다 [실측 2026-08-21, Base 프리셋에서 3Y −55.2bp].
+     그 −55.2 는 모형의 의견이 아니라 **시장 포워드 그 자체**다. 베이스라인이
+     랜덤워크(«아무 일 없으면 오늘 자리»)여서 생기는 구조적인 일이라, 손잡이를
+     안 놓는 한 이 화면은 **언제나** 캐리 전액 리시브라고 말한다.
+     그래서 그 상태에서는 방향 어휘를 걷고, 무엇을 보고 있는지 이름을 바꾼다. */
+  if (idle) {
+    return (
+      <VStack gap={0} width="100%">
+        <Text as="span" font="label1" color="fgMuted" noWrap>
+          모형은 아직 아무 말도 안 했어요
+        </Text>
+        <HStack gap={1.5} alignItems="baseline" flexWrap="wrap">
+          <Text as="span" font="display3" color="fgMuted" noWrap>
+            {label} {fmtBp(r.marketCarryBp)}bp
+          </Text>
+          <Text as="span" font="legal" color="fgMuted">
+            이건 시장이 이미 매긴 캐리예요. 손잡이를 하나 놓아야 모형이 대답해요.
+          </Text>
+        </HStack>
+      </VStack>
+    );
+  }
 
   return (
     <VStack gap={0} width="100%">

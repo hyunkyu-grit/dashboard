@@ -69,6 +69,11 @@ const QUARTERLY_VARS = [
   's',
   'hpi',
   'debt',
+  /* 수출·수입은 논문 Figure 18 의 「Trades」 칸이다 [2026-08-21]. 기저가
+     여태 안 담고 있었고, `build.py` 의 `VARS` 에 두 줄을 더해 다시 구웠다.
+     새로 푼 것은 없다 — 풀려 있던 것을 안 담았을 뿐이다. */
+  'x',
+  'm',
 ] as const;
 
 export type QuarterlyVar = (typeof QUARTERLY_VARS)[number];
@@ -231,6 +236,21 @@ export function combine(basis: Basis, knobs: Knobs): Diffs {
   );
   for (let q = 0; q < 8; q += 1) coefs[`policy_q${q + 1}`] = cPol[q];
 
+  return combineCoefs(basis, coefs);
+}
+
+/**
+ * 기저 계수 → 편차 경로. `combine()` 의 마지막 걸음이자, **손잡이를 거치지 않고
+ * 기저를 직접 부르는 유일한 통로**다.
+ *
+ * 이 통로가 필요한 이유는 논문 실험이 손잡이로 표현되지 않기 때문이다
+ * [2026-08-21]. 화면의 기준금리 경로는 여덟 분기를 **전부 못 박는다** — q2 에
+ * 0 을 두면 «준칙이 올리려 해도 동결» 이라는 뜻이다. 그런데 논문 Figure 18 은
+ * q1 에만 +25bp 를 얹고 **q2 부터 준칙이 다시 돈다**. 둘은 다른 실험이고,
+ * 후자가 정확히 기저 `policy_q1` 그 자체다. 그래서 계수 1 로 직접 부른다.
+ */
+export function combineCoefs(basis: Basis, coefs: Record<string, number>): Diffs {
+  const b = basis.bases;
   const T = basis.horizon_q;
   const H = basis.irs_h;
 
@@ -259,6 +279,9 @@ export function combine(basis: Basis, knobs: Knobs): Diffs {
   out.coefs = coefs;
   return out;
 }
+
+/** 논문 Figure 18 의 실험 — 정책 +25bp 를 1분기에만, 그 뒤는 준칙. */
+export const PAPER_IRF_COEFS: Record<string, number> = { policy_q1: 1 };
 
 /**
  * 분기 경로를 일 단위로 읽는다 — 단조 조각선형.

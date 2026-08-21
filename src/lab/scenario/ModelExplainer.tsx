@@ -193,14 +193,20 @@ function Decomposition({
   rows: ScenarioRow[];
 }) {
   const cols = rows.map((r) => TENOR_LABEL[r.tenor] ?? r.tenor);
+  /* 손잡이가 전부 0 이면 위 다섯 줄이 모두 0 이고, 그러면 마지막 줄은 시장
+     캐리에 부호만 뒤집은 것이 된다. 그걸 「트레이드」라고 부르면 화면이 없는
+     신호를 판다 — 모형은 «충격 없음» 이라고 말했을 뿐이다 [2026-08-21].
+     이름과 각주만 바꾼다. 숫자는 그대로 두는 게 맞다 — 시장 캐리는 지워야 할
+     거짓이 아니라 그 자체로 사실이다. */
+  const silent = rows.length > 0 && rows.every((r) => Math.abs(r.deltaBp) < 0.05);
   const sums: { label: string; note: string; cells: (number | null)[]; tint?: boolean; strong?: boolean }[] = [
-    { label: '모형이 말하는', note: '위 다섯의 합', cells: rows.map((r) => r.deltaBp) },
+    { label: '모형이 말하는', note: silent ? '손잡이가 0 이라 아무 말도 안 해요' : '위 다섯의 합', cells: rows.map((r) => r.deltaBp) },
     { label: '시장이 프라이싱한', note: '1Y 시작 포워드 − 스팟', cells: rows.map((r) => r.marketCarryBp) },
     {
-      label: '차이 = 트레이드',
-      note: '음수면 리시브 · 양수면 페이',
+      label: silent ? '차이 = 시장 캐리 전액' : '차이 = 트레이드',
+      note: silent ? '모형의 의견이 아니에요 · 손잡이를 놓아야 트레이드가 돼요' : '음수면 리시브 · 양수면 페이',
       cells: rows.map((r) => r.vsMarketBp),
-      tint: true,
+      tint: !silent,
       strong: true,
     },
   ];
