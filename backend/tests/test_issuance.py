@@ -211,9 +211,68 @@ def test_the_day_carries_its_own_explanation():
 def test_issuance_only():
     """만기도래는 페이로드에 없다 [OWNER].
 
-    `mp` 가 2026-08-21 에 늘었다 — 민평을 못 읽는 PC 에서 «왜 오버·언더가 없나»
-    를 화면이 말할 자리다. 만기도래는 여전히 없다.
+    2026-08-21 에 넷이 늘었다 — `mp`(민평을 못 읽는 PC 에서 «왜 오버·언더가
+    없나» 를 말할 자리)·`res`(지준)·`sum`(그날 규모)·`src`(출처). 만기도래는
+    여전히 없다.
     """
     d = day_detail("2026-08-10", MPC)
-    assert set(d) == {"date", "gloss", "issuing", "auctions", "omo", "mpc", "mp"}
+    assert set(d) == {
+        "date", "gloss", "issuing", "auctions", "omo", "mpc",
+        "mp", "res", "sum", "src",
+    }
     assert all("maturityDue" not in r for r in d["issuing"])
+    # 발행은 서버가 안 센다 — 섹터 필터가 목록을 줄이면 머리의 건수와
+    # 아래 목록의 길이가 어긋난다. 화면이 자기가 그리는 것을 센다.
+    assert "issN" not in d["sum"] and "issJo" not in d["sum"]
+
+
+@needs_data
+def test_the_reserve_lane_stands_on_the_published_table():
+    """지준이 달력에 선다 [OWNER, 2026-08-21 — 지시에 짚은 레인].
+
+    설명과 방향은 `issuance_gloss` 에 처음부터 있었는데 **데이터가 없어** 한 번도
+    뜬 적이 없었다. 한국은행 공표표를 실어 그 자리를 채웠다.
+    """
+    p = build(months_from(2026, 8, 1), MPC, today=dt.date(2026, 8, 21))
+    days = {d["iso"]: [e["label"] for e in d["ev"]] for d in p["months"]["2026-08"]["days"]}
+    assert "지준 마감" in days["2026-08-05"]
+    assert "지준 시작" in days["2026-08-06"]
+    # 상세는 남은 날수를 센다 — 마감이 다가올수록 조정이 단기자금으로 몰린다.
+    r = day_detail("2026-08-06", MPC)["res"]
+    assert r["kind"] == "지준 시작" and r["days"] == 35
+    assert r["gloss"]["title"] == "지급준비금"
+    assert day_detail("2026-08-10", MPC)["res"] is None
+
+
+@needs_data
+def test_the_meeting_leads_and_the_reserve_follows():
+    """칸은 두 줄까지만 적는다. 순서가 곧 위계다 — 금통위 → 지준 → 입찰 → 조작."""
+    p = build(months_from(2026, 8, 1), MPC, today=dt.date(2026, 8, 21))
+    days = {d["iso"]: [e["lane"] for e in d["ev"]] for d in p["months"]["2026-08"]["days"]}
+    assert days["2026-08-06"][0] == "res", "지준이 공개시장운영 뒤로 밀렸어요"
+    assert days["2026-08-05"][0] == "res"
+
+
+@needs_data
+def test_every_lane_names_where_its_numbers_came_from():
+    """출처 한 줄. **원본이 화면 바닥에 적던 것**을 v2 가 빼먹고 있었다.
+
+    응찰 강도가 «약한 수요» 라고 말하는데 그 숫자가 어느 공고에서 왔는지가
+    화면에 없었다.
+    """
+    src = day_detail("2026-08-10", MPC)["src"]
+    assert set(src) == {"iss", "ktb", "omo", "mpc", "res"}
+    for lane, v in src.items():
+        assert v["who"] and v["what"] and v["url"].startswith("https://"), lane
+
+
+@needs_data
+def test_the_day_carries_its_own_size():
+    """열자마자 그날 규모가 보이게. 흡수와 공급은 **상계하지 않는다**.
+
+    순액 하나로 누르면 «3조 흡수 + 3조 공급» 이 «0» 이 되는데, 그 둘은 같은 날
+    다른 창구로 오간 진짜 물량이다.
+    """
+    s = day_detail("2026-08-18", MPC)["sum"]
+    assert set(s) == {"ktbWon", "ktbN", "omoAbsorb", "omoSupply"}
+    assert s["omoSupply"] > 0, "그날 RP매입과 통안 중도환매가 있었어요"

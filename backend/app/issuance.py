@@ -52,6 +52,7 @@ import os
 import pathlib
 
 from . import issuance_mp as mp
+from . import reserve
 from .engine_port import _is_kr_business_day, _next_business_day
 from .issuance_gloss import (
     BIAS_CAVEAT,
@@ -89,6 +90,45 @@ FILES = {
     "omo": "omo.csv",
     "mpc": "mpc.csv",
 }
+
+
+#: 레인마다 «어디서 온 숫자인가». **원본이 화면 바닥에 한 줄씩 적던 것**이고,
+#: v2 는 그걸 빼먹은 채로 판정만 보여 주고 있었다 — 응찰 강도가 «약한 수요» 라고
+#: 말하는데 그 숫자가 어느 공고에서 왔는지가 화면에 없었다.
+#:
+#: 링크는 **레인의 원문 목록**이다. 종목 하나로 가는 길은 따로 있다(발행은
+#: DART 접수번호가 그 자리다 — `dartUrl`).
+SRC: dict[str, dict[str, str]] = {
+    "iss": {
+        "who": "DART 전자공시",
+        "what": "수치는 증권신고서·일괄신고추가서류 원문이에요.",
+        "url": "https://dart.fss.or.kr",
+    },
+    "ktb": {
+        "who": "기획재정부 국채시장",
+        "what": "수치는 「국고채 입찰결과」 공고 원문이에요.",
+        "url": "https://ktb.moef.go.kr/mnbyIsuCldr.do",
+    },
+    "omo": {
+        "who": "한국은행 공개시장운영 공지",
+        "what": "수치는 「공개시장운영」 공지 원문이에요.",
+        "url": "https://www.bok.or.kr/portal/bbs/P0001773/list.do?menuNo=200037",
+    },
+    "mpc": {
+        "who": "한국은행 통화정책방향",
+        "what": "결정과 요지는 통화정책방향 의결문 원문이에요.",
+        "url": ("https://www.bok.or.kr/portal/singl/crncyPolicyDrcMtg/"
+                "listYear.do?mtgSe=A"),
+    },
+    "res": {
+        "who": reserve.SOURCE,
+        "what": "적립기간은 한국은행이 해마다 한 장으로 공표하는 표예요.",
+        "url": reserve.SOURCE_URL,
+    },
+}
+
+#: DART 원문 한 건으로 가는 길. 접수번호가 그 열쇠다.
+DART_DOC = "https://dart.fss.or.kr/dsaf001/main.do?rcpNo={}"
 
 
 class IssuanceUnavailable(RuntimeError):
@@ -335,6 +375,9 @@ def build(
             omo_by_day.setdefault(r["일자"], set()).add((r.get("구분") or "").strip())
     mpc_set = set(mpc_dates)
     mpc_done = _mpc(stamp)
+    # 지준은 한국은행 공표표 단독이다 — 규칙으로 찍으면 열둘 중 둘이 어긋난다
+    # (`reserve.py` 머리글의 실측). 표 밖의 달에는 아무것도 안 선다.
+    res_by_day = reserve.events()
 
     months = {}
     for y, m in span:
@@ -358,6 +401,12 @@ def build(
                 b = MPC_BIAS.get(dec or "")
                 events.append(
                     {"lane": "mpc", "label": "금통위", "dir": b["dir"] if b else BOTH}
+                )
+            # 지준은 금통위 다음이다. 마감일은 콜금리가 조이는 날이라 그날
+            # 하나만 볼 수 있다면 입찰보다 이쪽이 먼저다.
+            for label in res_by_day.get(iso, ()):
+                events.append(
+                    {"lane": "res", "label": label, "dir": EVENT_BIAS.get(label)}
                 )
             if iso in auc_dir:
                 events.append(
@@ -486,6 +535,8 @@ def day_detail(iso: str, mpc_dates: list[str]) -> dict:
         cm = None
         mp_note = f"민평을 못 읽어서 오버·언더를 못 재요 — {e}"
 
+    res_detail = reserve.detail(iso)
+
     issuing = [
         {
             "issuer": (r.get("발행인") or "").strip(),
@@ -567,9 +618,17 @@ def day_detail(iso: str, mpc_dates: list[str]) -> dict:
         {
             "kind": (r.get("구분") or "").strip(),
             "name": (r.get("종목") or "").strip() or None,
+            "code": (r.get("종목코드") or "").strip() or None,
+            # 결과인가 공고인가. 공고만 뜬 날은 아직 아무것도 안 오갔다.
+            "stage": (r.get("단계") or "").strip() or None,
             "planned": r.get("예정금액"),
+            # 응찰금액 — 예정 대비 얼마나 몰렸나가 이 줄의 다른 사실이다.
+            "bid": r.get("응찰금액"),
             "allotted": r.get("낙찰금액"),
             "rate": r.get("금리"),
+            # 통안증권 경쟁입찰은 금리가 구간으로 낙찰된다. 상단이 하단과
+            # 다를 때만 뜻이 있다.
+            "rateHigh": _num(r.get("금리상단")),
             # 흡수인가 공급인가 — 설명과 방향이 한 벌로 온다. 이건 해석이
             # 아니라 사실이라 라벨만으로 선다.
             "events": for_event((r.get("구분") or "").strip()),
@@ -621,4 +680,36 @@ def day_detail(iso: str, mpc_dates: list[str]) -> dict:
         # 민평이 붙었는지, 그리고 그 잣대가 무엇인지. 화면이 «등급 커브» 라고
         # 말할 수 있어야 한다 — 개별민평인 척하면 그게 거짓말이다.
         "mp": {"note": mp_note, "caveat": None if cm is None else mp.CAVEAT},
+        # 지급준비금 적립기간의 시작·마감. 한국은행 공표표 단독이다.
+        "res": (
+            {**res_detail, "gloss": explain("res", res_detail["kind"])}
+            if res_detail
+            else None
+        ),
+        # 열자마자 그날 규모가 보이게. **날짜별로 흩어진 것을 여기서만 더한다** —
+        # 원본이 달 단위로 하던 일의 하루판이다. 단위를 섞지 않는다: 발행은
+        # 조원(달력 칸과 같은 단위), 입찰·공개시장운영은 억원(원문 단위)이다.
+        "sum": {
+            # **발행은 여기서 안 센다.** 화면의 섹터 필터가 목록을 줄이는데
+            # 서버가 전량으로 세어 두면 머리의 «7건» 과 아래 목록의 길이가
+            # 어긋난다. 화면이 자기가 그리는 것을 센다 — 한 벌만 존재한다.
+            #
+            # 국고채는 **낙찰**금액이다 — 입찰금액은 예정이라 미달이면 다르다.
+            # 비경쟁인수도 그날 실제로 나간 물량이라 같이 센다.
+            "ktbWon": round(sum(a["allotted"] or 0 for a in auctions)),
+            "ktbN": len(auctions),
+            # 흡수와 공급을 상계하지 않는다. 둘은 같은 시장에 닿지만 순액
+            # 하나로 누르면 «3조 흡수 + 3조 공급» 이 «0» 이 된다.
+            "omoAbsorb": round(sum(
+                o["allotted"] or 0 for o in omo
+                if (EVENT_BIAS.get(o["kind"]) == "약세")
+            )),
+            "omoSupply": round(sum(
+                o["allotted"] or 0 for o in omo
+                if (EVENT_BIAS.get(o["kind"]) == "강세")
+            )),
+        },
+        # 어디서 온 숫자인가. **원본이 레인마다 한 줄씩 적던 것**이고, v2 는
+        # 그걸 빼먹은 채로 판정만 보여 주고 있었다.
+        "src": SRC,
     }

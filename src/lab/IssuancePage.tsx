@@ -46,8 +46,10 @@ import {
   type IssuanceCalendar,
   type IssuanceDay,
   type OmoStrength,
+  type Src,
   type Strength,
   type Versus,
+  dartUrl,
 } from './issuance/api';
 
 /** 다섯 열이다 [OWNER, 2026-08-20] — 토·일은 백엔드가 보내지 않는다. */
@@ -162,6 +164,13 @@ export function IssuancePage() {
   }, [sel]);
 
   const month = cal?.months[ym];
+  /** 그날이 **공시가 닿는 끝** 뒤인가. 발행과 입찰은 지평이 다르므로 둘 중
+   * 이른 쪽을 넘으면 이미 «전부는 아니다» — 발행 쪽을 잣대로 쓴다(칸의 숫자가
+   * 발행이라서). */
+  const beyond = useCallback(
+    (iso: string) => !!cal?.issuanceThrough && iso > cal.issuanceThrough,
+    [cal],
+  );
   /** 필터가 켠 섹터만 더한다. 서버가 미리 더하지 않는 이유가 이 한 줄이다. */
   const amountOf = useCallback(
     (d: CalDay) =>
@@ -293,6 +302,17 @@ export function IssuancePage() {
           </Text>
         </ControlCollapsible>
 
+        {/* 페이로드가 처음부터 싣고 있었는데 화면이 한 번도 안 그렸다. **접어
+            둔다** — 855 창에서 설정 열이 넘치지 않는 유일한 모양이고, 이건
+            날마다 읽을 것이 아니라 «왜 비어 있지» 를 물을 때 펴는 것이다. */}
+        <ControlCollapsible title="이 화면이 못 보는 것" summary={`${cal.caveats.length}건`}>
+          {cal.caveats.map((c) => (
+            <Text key={c} as="p" font="legal" color="fgMuted">
+              {c.replace(/^[A-Z][A-Z_0-9]+:\s*/, '')}
+            </Text>
+          ))}
+        </ControlCollapsible>
+
       </VStack>
 
       {/* ── 달력 ──────────────────────────────────────────────────────── */}
@@ -358,13 +378,18 @@ export function IssuancePage() {
                     data-off={d.biz ? '0' : '1'}
                     data-today={d.today ? '1' : '0'}
                     data-sel={sel === d.iso ? '1' : '0'}
+                    /* 지평 밖의 빈칸은 «없음» 이 아니라 «아직 모름» 이다.
+                       그 둘은 반대 뜻이라 화면이 갈라 그려야 한다. */
+                    data-beyond={beyond(d.iso) ? '1' : '0'}
                     /* 크기는 **칸의 채움**이 진다 — Main 이 변화 열에 크기 틴트를
                        까는 그 문법이다. 바닥의 막대였는데, 그건 한 줄을 더 먹어서
                        세 일정이 있는 날의 칸을 넘치게 했다. */
                     style={{ ['--sr-cal-fill' as string]: amt > 0 ? (amt / peak).toFixed(3) : '0' }}
                     /* 읽어 주는 말에는 화살표가 아니라 **방향의 이름**이 간다 —
                        스크린 리더가 «↑» 를 «위쪽 화살표» 라고 읽는다. */
-                    accessibilityLabel={`${d.iso} 발행 ${amt.toFixed(2)}조 ${n}건${
+                    accessibilityLabel={`${d.iso} ${
+                      beyond(d.iso) ? '아직 공시 안 됨' : `발행 ${amt.toFixed(2)}조 ${n}건`
+                    }${
                       d.ev.length
                         ? `, ${d.ev
                             .map((e) => (e.dir ? `${e.label} ${e.dir} 요인` : e.label))
@@ -420,6 +445,19 @@ export function IssuancePage() {
                 );
               })}
             </Box>
+            {/* ── 지평 [2026-08-21] ────────────────────────────────────────
+                **빈칸에는 두 가지 뜻이 있고 그 둘은 반대다.** 지평 안은 «그날
+                아무 일도 없었다», 지평 밖은 «아직 모른다». 백엔드가 경계를
+                처음부터 보내고 있었는데 화면이 안 그리고 있었다 — 9월로 넘기면
+                22칸이 통째로 비고 어디에도 이유가 없었다(실측 2026-08-21).
+
+                설정 열이 아니라 **여기** 두는 이유는 높이다. 그쪽에 카드를 하나
+                더 세우면 855 창에서 그 열이 넘친다(실측: 열 664, 쓴 높이 590). */}
+            <Text as="p" font="legal" color="fgMuted" tabularNumbers>
+              발행 공시는 {cal.issuanceThrough ?? '—'}, 국고채 입찰 결과는{' '}
+              {cal.auctionThrough ?? '—'} 까지 닿아 있어요. 그 뒤 빗금 친 칸의
+              빈자리는 «없음» 이 아니라 «아직 공시 안 됨» 이에요.
+            </Text>
           </VStack>
 
         </VStack>
@@ -440,7 +478,7 @@ export function IssuancePage() {
               onClick={() => setSel(null)}
             />
             <VStack className="sr-cal-sheet" role="dialog" aria-label={`${sel} 발행 상세`}>
-              <DayDetail iso={sel} day={day} onClose={() => setSel(null)} />
+              <DayDetail iso={sel} day={day} off={off} onClose={() => setSel(null)} />
             </VStack>
           </>
         ) : null}
@@ -573,6 +611,22 @@ function MpLine({ m }: { m: Versus | null }) {
   );
 }
 
+/** 레인 바닥의 출처 한 줄 — **어디서 온 숫자인가**.
+ *
+ * 원본이 화면 바닥에 레인마다 적던 것이고, v2 는 그걸 빼먹은 채로 판정만
+ * 보여 주고 있었다. «약한 수요» 라는 말은 있는데 그 숫자가 어느 공고에서
+ * 왔는지가 화면에 없었다 — 오너가 첫 이식에서 지적한 병의 다른 판본이다. */
+function SrcLine({ s }: { s: Src }) {
+  return (
+    <Text as="p" font="legal" color="fgMuted">
+      {s.what} 출처{' '}
+      <a href={s.url} target="_blank" rel="noreferrer noopener">
+        {s.who} ↗
+      </a>
+    </Text>
+  );
+}
+
 /** 레인 각주 — 이 판정을 어떻게 읽는지. 표 아래에 붙는다. */
 function LaneNote({ text }: { text: string | null }) {
   if (!text) return null;
@@ -588,24 +642,54 @@ function LaneNote({ text }: { text: string | null }) {
 function DayDetail({
   iso,
   day,
+  off,
   onClose,
 }: {
   iso: string;
   day: IssuanceDay | null;
+  off: Set<string>;
   onClose: () => void;
 }) {
+  /* **섹터 필터가 여기에도 먹는다** [2026-08-21]. 캐피탈을 끄면 칸은 2.21조에서
+     0.44조로 줄었는데 그 날을 열면 현대캐피탈 넷이 그대로 다 나왔다(실측) —
+     필터가 달력만 바꾸고 시트는 무시하고 있었다.
+
+     **금액 큰 순으로 정렬한다.** 원본 순서는 공시 접수 순이라 500억·2,400억·
+     1,500억·500억·2,700억 처럼 섞여 나와서, 그날 무엇이 큰지가 안 보였다. */
+  const rows = (day?.issuing ?? [])
+    .filter((r) => !off.has(r.sector))
+    .sort((a, b) => b.eok - a.eok);
+  const hidden = (day?.issuing.length ?? 0) - rows.length;
+  const issJo = rows.reduce((a, r) => a + r.eok, 0) / 1e4;
+
   return (
     <VStack gap={3} width="100%" minWidth={0}>
-      <HStack gap={1} alignItems="baseline" width="100%">
-        <Text as="h3" font="label1" tabularNumbers noWrap>
-          {iso}
-        </Text>
-        <Box style={{ marginInlineStart: 'auto' }}>
-          <Chip size="xs" accessibilityLabel="닫기" onClick={onClose}>
-            닫기
-          </Chip>
-        </Box>
-      </HStack>
+      <VStack gap={0.25} width="100%" minWidth={0}>
+        <HStack gap={1} alignItems="baseline" width="100%">
+          <Text as="h3" font="label1" tabularNumbers noWrap>
+            {iso}
+          </Text>
+          <Box style={{ marginInlineStart: 'auto' }}>
+            <Chip size="xs" accessibilityLabel="닫기" onClick={onClose}>
+              닫기
+            </Chip>
+          </Box>
+        </HStack>
+        {/* 열자마자 그날 규모가 보이게. 흡수와 공급은 **상계하지 않는다** —
+            순액으로 누르면 «3조 흡수 + 3조 공급» 이 «0» 이 된다. */}
+        {day ? (
+          <Text as="span" font="legal" color="fgMuted" tabularNumbers>
+            {[
+              rows.length ? `발행 ${issJo.toFixed(2)}조 ${rows.length}건` : null,
+              day.sum.ktbN ? `국고채 ${eok(day.sum.ktbWon)} ${day.sum.ktbN}건` : null,
+              day.sum.omoAbsorb ? `흡수 ${eok(day.sum.omoAbsorb)}` : null,
+              day.sum.omoSupply ? `공급 ${eok(day.sum.omoSupply)}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ') || '이 날짜에는 아무것도 없어요.'}
+          </Text>
+        ) : null}
+      </VStack>
 
       {day === null ? (
         <Text as="span" font="legal" color="fgMuted">
@@ -636,6 +720,35 @@ function DayDetail({
                 ) : null}
               </VStack>
               <LaneNote text={day.gloss.mpc.note} />
+              <SrcLine s={day.src.mpc} />
+            </VStack>
+          ) : null}
+
+          {/* 지준 — 오너가 지시에 짚은 레인. 설명과 방향은 처음부터 있었는데
+              **데이터가 없어** 한 번도 뜬 적이 없었다. */}
+          {day.res ? (
+            <VStack gap={1} width="100%" minWidth={0}>
+              <LaneHead g={day.res.gloss} />
+              <VStack gap={0.25} width="100%" minWidth={0}>
+                <Text as="span" font="label2" tabularNumbers>
+                  {day.res.kind} · {day.res.start.slice(5)}~{day.res.end.slice(5)}
+                  {' '}({day.res.days}일)
+                </Text>
+                <Text as="span" font="legal" color="fgMuted" tabularNumbers>
+                  {day.res.month.slice(0, 4)}년 {Number(day.res.month.slice(5))}월
+                  {' '}계산기간에 대응해요 ·{' '}
+                  {day.res.leftDays > 0
+                    ? `마감까지 ${day.res.leftDays}일 남았어요`
+                    : '오늘이 마감이라 평균으로 메울 다음 날이 없어요'}
+                </Text>
+              </VStack>
+              {day.res.gloss.extra.map((t) => (
+                <Text key={t} as="p" font="legal" color="fgMuted">
+                  {t}
+                </Text>
+              ))}
+              <LaneNote text={day.res.gloss.note} />
+              <SrcLine s={day.src.res} />
             </VStack>
           ) : null}
 
@@ -656,9 +769,45 @@ function DayDetail({
                       </Box>
                     </HStack>
                     <Text as="span" font="legal" color="fgMuted" tabularNumbers>
-                      응찰률 {pct(a.ratio)} · 가중평균 {pct(a.wavgRate)}
-                      {a.dealers != null ? ` · 인수기관 ${a.dealers}개` : ''}
+                      {[
+                        a.offered != null ? `입찰 ${eok(a.offered)}` : null,
+                        a.bid != null ? `응찰 ${eok(a.bid)}` : null,
+                        a.ratio != null ? `응찰률 ${pct(a.ratio)}` : null,
+                        a.wavgRate != null ? `가중평균 ${pct(a.wavgRate)}` : null,
+                        a.dealers != null ? `인수기관 ${a.dealers}개` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
                     </Text>
+                    {/* 원본이 갖고 있었는데 v2 가 안 그리던 칸들. 낙찰금리 폭은
+                        낙찰된 응찰이 얼마나 흩어졌는가고(실측 95%가 폭 0 이라
+                        벌어진 날만 뜻이 있다), 부분낙찰률은 평년과 견줘야 읽힌다. */}
+                    {a.lowRate != null || a.partial != null || a.issueDate ? (
+                      <Text as="span" font="legal" color="fgMuted" tabularNumbers>
+                        {[
+                          // 폭이 0 인 날에 «3.780%~3.780%» 는 글자만 먹는다.
+                          // 실측 95%가 폭 0 이라 **벌어진 날만** 뜻이 있다.
+                          a.lowRate != null &&
+                          a.highRate != null &&
+                          a.highRate !== a.lowRate
+                            ? `낙찰금리 ${pct(a.lowRate)}~${pct(a.highRate)}`
+                            : null,
+                          // 부분낙찰률은 비율이라 소수 첫째 자리면 족하다 —
+                          // `pct` 는 10 미만을 셋째 자리까지 찍어서 평년(1자리)과
+                          // 자릿수가 어긋난다.
+                          a.partial != null
+                            ? `부분낙찰 ${a.partial.toFixed(1)}%${
+                                a.strength?.partMed != null
+                                  ? ` (평년 ${a.strength.partMed}%)`
+                                  : ''
+                              }`
+                            : null,
+                          a.issueDate ? `발행일 ${a.issueDate}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </Text>
+                    ) : null}
                     {/* 시장 대비와 지난번 대비는 다른 질문이라 둘 다 적는다 —
                         민평 대비가 여기, 직전 입찰 대비가 `StrengthLine` 안에. */}
                     <MpLine m={a.mp} />
@@ -670,6 +819,7 @@ function DayDetail({
                 ))}
               </VStack>
               <LaneNote text={day.gloss.ktb.note} />
+              <SrcLine s={day.src.ktb} />
             </VStack>
           ) : null}
 
@@ -687,10 +837,33 @@ function DayDetail({
                       <Box style={{ marginInlineStart: 'auto' }}>
                         <Text as="span" font="label2" tabularNumbers noWrap>
                           {eok(o.allotted)}
-                          {o.rate != null ? ` · ${pct(o.rate)}` : ''}
+                          {o.rate != null
+                            ? ` · ${pct(o.rate)}${
+                                o.rateHigh != null && o.rateHigh !== o.rate
+                                  ? `~${pct(o.rateHigh)}`
+                                  : ''
+                              }`
+                            : ''}
                         </Text>
                       </Box>
                     </HStack>
+                    {/* 응찰도 낙찰도 없던 종목 — 카드 한 줄을 차지할 내용이
+                        없다. 그렇다고 빼면 그날 공고가 있었다는 사실이 사라진다. */}
+                    {!o.bid && !o.allotted ? (
+                      <Text as="span" font="legal" color="fgMuted">
+                        응찰이 없었어요{o.stage && o.stage !== '결과' ? ` (${o.stage})` : ''}.
+                      </Text>
+                    ) : (
+                      <Text as="span" font="legal" color="fgMuted" tabularNumbers>
+                        {[
+                          o.planned != null ? `예정 ${eok(o.planned)}` : null,
+                          o.bid != null ? `응찰 ${eok(o.bid)}` : null,
+                          o.code ? o.code : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </Text>
+                    )}
                     {o.events.map((e) => (
                       <EventNoteLine key={e.key} e={e} />
                     ))}
@@ -699,18 +872,21 @@ function DayDetail({
                 ))}
               </VStack>
               <LaneNote text={day.gloss.omo.note} />
+              <SrcLine s={day.src.omo} />
             </VStack>
           ) : null}
 
           <VStack gap={1} width="100%" minWidth={0}>
-            <LaneHead g={day.gloss.iss} bias={day.issuing.length > 0} />
-            {day.issuing.length === 0 ? (
+            <LaneHead g={day.gloss.iss} bias={rows.length > 0} />
+            {rows.length === 0 ? (
               <Text as="span" font="legal" color="fgMuted">
-                이 날짜에 공시된 발행이 없어요.
+                {hidden > 0
+                  ? `이 날짜의 발행 ${hidden}건은 지금 끈 섹터예요.`
+                  : '이 날짜에 공시된 발행이 없어요.'}
               </Text>
             ) : (
               <VStack gap={0} width="100%" className="sr-scn-deftable">
-                {day.issuing.map((r, i) => (
+                {rows.map((r, i) => (
                   <HStack
                     key={`${r.issuer}${r.round}${i}`}
                     gap={1.5}
@@ -735,20 +911,43 @@ function DayDetail({
                       <MpLine m={r.mp} />
                     </VStack>
                     <Box style={{ marginInlineStart: 'auto' }}>
-                      <Text as="span" font="label2" tabularNumbers noWrap>
-                        {eok(r.eok)}
-                      </Text>
+                      <VStack gap={0} alignItems="flex-end">
+                        <Text as="span" font="label2" tabularNumbers noWrap>
+                          {eok(r.eok)}
+                        </Text>
+                        {/* 이 화면의 모든 숫자가 거기서 나왔다. 접수번호는
+                            페이로드가 처음부터 싣고 있었는데 길이 없었다. */}
+                        {r.rcept ? (
+                          <Text as="span" font="legal" noWrap>
+                            <a
+                              href={dartUrl(r.rcept)}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                            >
+                              신고서 ↗
+                            </a>
+                          </Text>
+                        ) : null}
+                      </VStack>
                     </Box>
                   </HStack>
                 ))}
               </VStack>
             )}
+            {/* 필터가 시트에도 먹는다. 몇 건을 감췄는지는 말해야 «이 날은
+                발행이 적었다» 로 오독되지 않는다. */}
+            {hidden > 0 && rows.length > 0 ? (
+              <Text as="span" font="legal" color="fgMuted">
+                끈 섹터 {hidden}건은 안 보여요.
+              </Text>
+            ) : null}
             {/* 등급이 잣대와 갈린 종목이 있으면 **레인에 한 번** 말한다.
                 줄마다 적었더니 8/13 하루에 같은 35자가 다섯 번 찍혔다. */}
-            {day.issuing.some((r) => r.mp?.match === false) ? (
+            {rows.some((r) => r.mp?.match === false) ? (
               <LaneNote text="등급이 잣대와 다른 종목은 «오버·언더» 대신 «민평 대비» 로만 적었어요 — 그 차이엔 가격이 아니라 등급 몫이 섞여 있어요." />
             ) : null}
             <LaneNote text={day.gloss.iss.note} />
+            <SrcLine s={day.src.iss} />
           </VStack>
 
           {/* 시트 바닥 한 벌. **레인마다 안 적는다** — 네 레인이 같은 문장을
@@ -793,6 +992,20 @@ function StrengthLine({ s, bias }: { s: Strength; bias: Bias | null }) {
           </Text>
         )}
       </HStack>
+      {/* 지표종목 교체기에는 두 종목이 같은 날 나오고, 판정은 **그 둘을 합쳐**
+          과거와 견준 것이다. 합계를 안 적으면 판정의 근거가 화면에서 사라진다
+          — 원본이 «이날 합계» 행으로 적던 것이다. */}
+      {(s.legs ?? 1) > 1 && s.tot != null ? (
+        <Text as="span" font="legal" color="fgMuted" tabularNumbers>
+          이날 합계 {eok(s.tot)}
+          {s.ratio != null ? ` · 응찰률 ${s.ratio.toFixed(1)}%` : ''} ({s.legs}종목)
+        </Text>
+      ) : null}
+      {s.totMed != null ? (
+        <Text as="span" font="legal" color="fgMuted" tabularNumbers>
+          평년 물량 {eok(s.totMed)}
+        </Text>
+      ) : null}
       {s.wavgDelta != null ? (
         <Text as="span" font="legal" color="fgMuted" tabularNumbers>
           직전 입찰 대비 {fmtBp(s.wavgDelta)}bp

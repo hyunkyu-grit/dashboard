@@ -66,6 +66,11 @@ export type Bias = { dir: Dir; why: string };
  * 둘이 같은 사실을 말하므로 같은 문단이 두 번 찍힌다(실측 2026-08-21). */
 export type EventNote = { key: string; text: string; dir: Dir | null };
 
+/** 레인의 원문 출처. **원본이 화면 바닥에 한 줄씩 적던 것**이고, v2 는 그걸
+ * 빼먹은 채로 판정만 보여 주고 있었다 — «약한 수요» 라는 말은 있는데 그 숫자가
+ * 어느 공고에서 왔는지가 없었다. */
+export type Src = { who: string; what: string; url: string };
+
 /** 발행 당시 민평 대비. **잣대는 등급 커브지 개별종목 민평이 아니다** — 이
  * 데이터에 종목 단위 시가평가가 없어서, 화면이 커브 이름을 같이 적는다.
  *
@@ -189,6 +194,13 @@ export type IssuanceDay = {
     planned: number | null;
     allotted: number | null;
     rate: number | null;
+    /** 통안 경쟁입찰은 금리가 구간으로 낙찰된다. 하단과 다를 때만 뜻이 있다. */
+    rateHigh: number | null;
+    code: string | null;
+    /** 결과인가 공고인가. 공고만 뜬 날은 아직 아무것도 안 오갔다. */
+    stage: string | null;
+    /** 예정 대비 얼마나 몰렸나 — 이 줄의 다른 사실이다. */
+    bid: number | null;
     /** 흡수인가 공급인가 — 설명과 방향이 한 벌로 온다. */
     events: EventNote[];
     /** 그게 평년보다 큰 규모인가. 방향만 있고 규모가 없으면 흡수 1천억과
@@ -213,7 +225,39 @@ export type IssuanceDay = {
   /** 민평이 붙었는지, 그리고 그 잣대가 무엇인지. SQL 이 없는 PC 에서는
    * 오버·언더만 빠지고 나머지는 그대로 선다 — `note` 가 왜 없는지를 말한다. */
   mp: { note: string | null; caveat: string | null };
+  /** 지급준비금 적립기간의 시작·마감. 그날이 둘 다 아니면 `null`.
+   *
+   * **규칙으로 찍지 않는다** — «매월 둘째 목요일» 은 2026년 열둘 중 둘에서
+   * 어긋난다. 한국은행 공표표 단독이다. */
+  res: {
+    kind: '지준 시작' | '지준 마감';
+    /** 이 적립기간이 대응하는 계산 대상월. */
+    month: string;
+    start: string;
+    end: string;
+    /** 적립기간 길이. 4주(28일)와 5주(35일)가 섞여 있다. */
+    days: number;
+    /** 마감까지 남은 날. 줄어들수록 남은 조정이 단기자금으로 몰린다. */
+    leftDays: number;
+    gloss: Gloss;
+  } | null;
+  /** 열자마자 보이는 그날 규모. **발행은 여기 없다** — 섹터 필터가 목록을
+   * 줄이므로 화면이 자기가 그리는 것을 센다(한 벌만 존재하게). */
+  sum: {
+    /** 억원. 비경쟁인수까지 그날 실제로 나간 물량. */
+    ktbWon: number;
+    ktbN: number;
+    /** 억원. **상계하지 않는다** — 순액으로 누르면 «3조 흡수 + 3조 공급» 이
+     * «0» 이 되는데 둘은 같은 날 다른 창구로 오간 진짜 물량이다. */
+    omoAbsorb: number;
+    omoSupply: number;
+  };
+  src: Record<'iss' | 'ktb' | 'omo' | 'mpc' | 'res', Src>;
 };
+
+/** DART 원문 한 건으로 가는 길. 접수번호가 그 열쇠다. */
+export const dartUrl = (rcept: string) =>
+  `https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${encodeURIComponent(rcept)}`;
 
 async function get<T>(url: string, what: string): Promise<T> {
   const r = await fetch(url);
