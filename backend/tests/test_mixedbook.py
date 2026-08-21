@@ -200,6 +200,31 @@ class TestCalendar:
             pts[after]["pnl"] - pts[before]["pnl"], abs=2.0
         )
 
+    def test_an_entry_before_the_shared_calendar_is_named(self):
+        """민평은 IRS 보다 늦게 시작한다(실측 2020-01-02 대 2016년). 그 앞에
+        들어간 스왑을 채권과 섞으면 **선만** 늦게 시작하고 총액은 옳다 — 0 에서
+        출발하지 않는 선을 설명 없이 두면 오독이라 날짜를 실어 보낸다."""
+        ds = _dataset(300)
+        m = _matrix(ds.dates[50:])          # 민평이 50영업일 늦게 시작한다
+        out = mb.run_backtest(
+            m, ds, [_pos("3Y", 1, ds.dates[5]), _pos("CB:KTB:3Y", 1, ds.dates[60])], SPEC
+        )
+        assert out["from"] == ds.dates[50].isoformat()
+        assert out["calendar"]["clippedFrom"] == ds.dates[5].isoformat()
+        # 총액은 진입일부터 다 들어 있다 — 첫 점이 0 이 아닌 것이 그 증거다
+        assert out["points"][0]["pnl"] != 0
+        # 줄의 기록은 **진짜 진입일**을 그대로 든다
+        assert out["positions"][0]["entry"] == ds.dates[5].isoformat()
+
+    def test_a_book_inside_the_shared_calendar_is_not_flagged(self):
+        ds = _dataset(300)
+        m = _matrix(ds.dates)
+        out = mb.run_backtest(
+            m, ds, [_pos("3Y", 1, ds.dates[5]), _pos("CB:KTB:3Y", 1, ds.dates[5])], SPEC
+        )
+        assert out["calendar"]["clippedFrom"] is None
+        assert out["points"][0]["pnl"] == 0
+
     def test_the_first_point_has_no_daily_change(self):
         ds = _dataset()
         m = _matrix(ds.dates)
@@ -308,6 +333,36 @@ class TestRecon:
         assert hole.isoformat() not in got
         assert ds.dates[151].isoformat() not in got
         assert r["dropped"] == 2
+
+    def test_a_finished_side_is_zero_filled_not_dropped(self):
+        """한쪽이 먼저 끝나도 대사표는 안 비워진다.
+
+        끝난 줄의 일별 손익은 0 이고 KRD 도 0 이다(누적은 얼어붙어 있다) —
+        지어내는 숫자가 아니라 참인 0 이라 채워 넣는다. 종전 판은 창의 끝을
+        `min` 으로 잡아, 「2020년에 산 국고채(2023 만기) + 지금도 들고 있는 스왑」
+        에서 표를 **통째로 비웠다**(실측 2026-08-21).
+        """
+        ds = _dataset(400)
+        m = _matrix(ds.dates)
+        book = [
+            _pos("3Y", 1, ds.dates[1]),
+            _pos("CB:KTB:3Y", 1, ds.dates[1], ds.dates[100]),   # 일찍 청산
+        ]
+        r = mb.book_recon(m, ds, book, SPEC)
+        body = [x for x in r["rows"] if not x.get("carryover")]
+        assert body, "끝난 줄 하나가 표를 비웠다"
+        # 창은 살아 있는 쪽의 끝까지 간다
+        assert body[-1]["t"] == ds.dates[-1].isoformat()
+        # 채권이 끝난 뒤의 행에서 채권 칸은 전부 0 — 그리고 행은 여전히 닫힌다
+        after = [x for x in body if x["t"] > ds.dates[100].isoformat()]
+        assert after
+        for row in after:
+            assert all(v == 0 for k, v in row["krd"].items() if k.startswith("B:"))
+            total = (
+                row["valuation"] + row["rolldown"] + row["carry"]
+                + (row["startup"] or 0) + (row["funding"] or 0)
+            )
+            assert total == pytest.approx(row["actual"], abs=2.0)
 
     def test_a_pure_book_keeps_the_old_shape(self):
         """한 종류뿐이면 그룹도 접두사도 없다 — 기존 화면이 그대로 읽는다."""

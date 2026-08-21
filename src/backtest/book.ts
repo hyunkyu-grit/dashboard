@@ -68,6 +68,22 @@ export interface BookRow extends PositionInput {
   key: string;
 }
 
+/** 새 줄의 진입일 기본 — **상품이 정한다.**
+ *
+ * 스왑은 데이터 일자(오늘), 채권은 1년 전이다. 두 규칙이 갈리는 이유는 위
+ * `yearBefore` 에 적혀 있고, 그것을 **부르는 자리마다** 다시 판단하면 언젠가
+ * 한 곳만 안 따라간다 — 실제로 창을 합치는 첫 판에서 그렇게 됐다(현금채권 탭의
+ * 백테스트 버튼과 「줄 추가」 가 채권 줄에 오늘을 심어, 늘 «거의 0» 을 보여
+ * 주는 북이 떴다). */
+export function defaultEntry(
+  id: string,
+  asOf: string,
+  bondAsOf: string,
+  bondFrom: string,
+): string {
+  return isBondRow({ id }) ? yearBefore(bondAsOf, bondFrom) : asOf;
+}
+
 let seq = 0;
 export function newRow(id: string, entry: string): BookRow {
   seq += 1;

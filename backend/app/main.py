@@ -69,7 +69,10 @@ from . import df_cache
 from . import payloads
 from . import rv as rv_mod
 from . import schedule_cache
-from .backtest import BacktestError, Position, book_recon, run_backtest
+# 백테스트 엔진은 이제 `mixedbook` 을 통해서만 부른다 — 스왑만 있는 북은 저쪽이
+# 그대로 위임한다. 여기서 `run_backtest` 를 직접 들고 있으면 «스왑 전용 길» 이
+# 하나 더 열려 있는 셈이고, 그 길로 들어간 북에는 `kind` 가 안 붙는다.
+from .backtest import BacktestError
 from . import mixedbook
 from .cache import cached
 from .cors import allowed_origin_regex, allowed_origins

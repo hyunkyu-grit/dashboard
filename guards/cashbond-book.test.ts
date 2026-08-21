@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { encodePositions } from '../src/lib/api';
@@ -5,6 +8,7 @@ import { splitCashBondKrw } from '../src/lib/krw';
 import {
   bookKindOf,
   decodeBook,
+  defaultEntry,
   directionLabel,
   encodeBook,
   isBondRow,
@@ -81,6 +85,37 @@ describe('진입일 기본 = 1년 전 (캐리가 쌓여야 읽히는 화면)', (
   });
   it('데이터 시작일이 바닥이다', () => {
     expect(yearBefore('2020-06-01', '2020-01-02')).toBe('2020-01-02');
+  });
+});
+
+describe('진입일 기본은 **상품이** 정한다 — 부르는 자리마다가 아니라', () => {
+  /* 창을 합치는 첫 판이 정확히 여기서 틀렸다: 현금채권 탭의 백테스트 버튼과
+   * 「줄 추가」 가 채권 줄에 **오늘**을 심어, 캐리가 하루도 안 쌓인 «거의 0» 북이
+   * 떴다. 판단이 한 함수에 있어야 세 자리가 같이 따라간다. */
+  it('스왑은 데이터 일자, 채권은 1년 전', () => {
+    expect(defaultEntry('10Y', '2026-08-19', '2026-08-19', '2020-01-02')).toBe('2026-08-19');
+    expect(defaultEntry('CB:KTB:3Y', '2026-08-19', '2026-08-19', '2020-01-02')).toBe(
+      '2025-08-19',
+    );
+    expect(defaultEntry('ASW:KTB:3Y', '2026-08-19', '2026-08-19', '2020-01-02')).toBe(
+      '2025-08-19',
+    );
+  });
+
+  it('민평 시작일이 바닥이다 — 그 앞은 서버가 조용히 스냅한다', () => {
+    expect(defaultEntry('CB:KTB:3Y', '2020-06-01', '2020-06-01', '2020-01-02')).toBe(
+      '2020-01-02',
+    );
+  });
+
+  it('새 줄을 만드는 세 자리가 전부 그 함수를 지난다', () => {
+    const read = (p: string) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
+    const win = read('src/backtest/BacktestWindow.tsx');
+    const page = read('src/app/page.tsx');
+    // 창의 「줄 추가」 · 창을 열 때의 씨앗 · 차트 클릭 진입
+    expect(win).toMatch(/newRow\(id, defaultEntry\(/);
+    expect(win).toMatch(/newRow\(seedId, defaultEntry\(/);
+    expect(page).toMatch(/defaultEntry\([\s\S]{0,20}?row\.id/);
   });
 });
 

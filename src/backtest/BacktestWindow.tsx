@@ -53,7 +53,6 @@ import {
   isBondKind,
   runErrorMessage,
   type BacktestPosition,
-  type BacktestRecon,
   type BacktestResult,
   type BookKind,
   type CashBondRow,
@@ -67,15 +66,16 @@ import { useFunding } from '@/state/funding';
 import type { Row } from '@/table/rows';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { DROPDOWN_STYLES } from '@/ui/window/popup';
-import { ReconStack, type ReconStackDay } from '@/ui/window/ReconStack';
+import { ReconStack } from '@/ui/window/ReconStack';
 
 import { LinkedCharts } from './LinkedCharts';
+import { backtestDays, reconNote } from './recon';
 import {
   bookKindOf,
   decodeBook,
+  defaultEntry,
   directionLabel,
   encodeBook,
-  isBookable,
   isBondRow,
   isSwapBookable,
   loadBacktestMemory,
@@ -83,7 +83,6 @@ import {
   newRow,
   runnable,
   saveBacktestMemory,
-  yearBefore,
   type BookRow,
 } from './book';
 
@@ -190,31 +189,6 @@ function decompose(result: BacktestResult) {
   }
   if (!hasFunding) return { ...splitKrw(result.pnl, valuation, rolldown, startup), uFund: null };
   return splitCashBondKrw(result.pnl, valuation, rolldown, funding, startup);
-}
-
-/** 서버 recon → 대사 스택 [v1 OWNER, 2026-08-11].
- *
- * 행은 서버 순서(오름차순) 그대로 넘기고 **첫 방향만** 최신-위(desc)로 준다 —
- * 대사는 보통 어제·오늘을 보는 일이다. 뒤집기 자체는 스택의 날짜 헤더 토글이 한다.
- *
- * 여기서 계산하는 것은 없다. 이름만 바꿔 넘긴다 — 두 번째 정의를 만들지 않는다.
- * 하나 접는 것이 있다: **개시**(거래일→발효일 한 밤)는 진입일 행에만 서고
- * 총손익 대비 0.005% 라 자기 열을 갖지 않는다 — 평가에 접는다 [OWNER,
- * 2026-08-14]. 엔진은 여전히 따로 센다(`backend/app/backtest.py`). */
-function backtestDays(recon: BacktestRecon): ReconStackDay[] {
-  return recon.rows.map((r) => ({
-    date: r.t,
-    title: r.carryover ? `${r.t} · 다음 영업일로 들고 가는 이월 리스크` : r.t,
-    krd: r.krd,
-    dbp: r.dbp,
-    est: r.est,
-    estTotal: r.estTotal,
-    valuation: r.valuation === null ? null : r.valuation + (r.startup ?? 0),
-    carry: r.carry,
-    rolldown: r.rolldown,
-    funding: r.funding ?? null,
-    actual: r.actual,
-  }));
 }
 
 /** 크기(노셔널·DV01)는 **부호가 없다**. `fmtKrw` 는 부호 있는 돈을 위한 것이라
@@ -401,8 +375,22 @@ export function BacktestWindow({
   const switchKind = (key: string, kind: BookKind) => {
     const cur = book.find((r) => r.key === key);
     if (!cur) return;
+    /* **적어 둔 날짜는 지킨다.** 종류를 바꾼다고 읽는 사람이 고른 진입일이
+       사라지면 그건 다른 질문이 된다. 손대는 자리는 둘뿐이다: 채권은 민평이
+       2020년부터라 그 앞을 바닥으로 걷어 올리고(안 그러면 서버가 조용히
+       스냅한다), 빈 칸에는 그 상품의 기본을 심는다. */
+    const keep = (id: string) => {
+      const base = cur.entry || defaultEntry(id, asOf, cashbondAsOf, cashbondFrom);
+      return isBondRow({ id }) && base < cashbondFrom ? cashbondFrom : base;
+    };
     if (kind === 'swap') {
-      patch(key, { id: swapOptions[0]?.value ?? '10Y', direction: 1, entry: asOf, exit: '' });
+      /* 스왑으로 옮길 때의 기본은 **10Y** 다 — 목록의 첫 줄이 아니라. 이 창의
+         종목 목록은 모니터의 행 순서를 그대로 따르므로 첫 줄이 `1D`(콜금리)인데,
+         «스왑» 을 골랐더니 하룻밤짜리가 서는 것은 아무도 뜻한 바가 아니다.
+         `newRow` 의 폴백과 같은 값이다(그쪽도 '10Y'). */
+      const id =
+        swapOptions.find((o) => o.value === '10Y')?.value ?? swapOptions[0]?.value ?? '10Y';
+      patch(key, { id, direction: 1, entry: keep(id) });
       return;
     }
     const want = kind === 'assetswap' ? 'ASW' : 'CB';
@@ -410,22 +398,24 @@ export function BacktestWindow({
     const pool = cashbondRows.filter((r) => r.kind === want);
     const next = pool.find((r) => r.bondType === curType) ?? pool[0];
     if (!next) return;
-    patch(key, {
-      id: next.id,
-      direction: 1,
-      entry: isBondRow(cur) ? cur.entry : yearBefore(cashbondAsOf, cashbondFrom),
-      exit: '',
-    });
+    /* 방향을 **되돌린다** — 숏 스프레드를 들고 있다가 채권을 고르면 방향 칸이
+       사라지면서 −1 이 남는데, 서버는 그걸 거절하므로 안 보이는 값 때문에 줄이
+       죽는다 (시뮬레이션이 v1 642c5c46 에서 같은 함정을 겪었다). */
+    patch(key, { id: next.id, direction: 1, entry: keep(next.id) });
   };
 
   /** 종목군을 바꿀 때 만기를 되도록 지킨다. 못 지키면 **가장 긴 것**으로
    * 떨어진다 — 통안채는 3년까지고 자산스왑은 양쪽에 있는 만기에만 서므로,
    * 없는 조합을 고르면 칸이 비는 대신 그 종목군이 실제로 갖는 끝으로 간다. */
   const switchBondType = (key: string, bondType: string) => {
-    const cur = bondById.get(book.find((r) => r.key === key)?.id ?? '');
-    if (!cur) return;
-    const same = cashbondRows.filter((r) => r.kind === cur.kind && r.bondType === bondType);
-    const next = same.find((r) => r.tenor === cur.tenor) ?? same[same.length - 1];
+    const id = book.find((r) => r.key === key)?.id ?? '';
+    const cur = bondById.get(id);
+    /* 행 목록에 없는 id 도 있다 — 손으로 만든 URL, 또는 민평이 아직 안 온 첫
+       프레임. 그때도 **고른 것은 먹어야 한다**: 종류는 id 접두사가 말해 주므로
+       그 종류의 그 종목군에서 가장 긴 만기로 간다(아래 폴백과 같은 규칙). */
+    const wantKind = cur?.kind ?? (bookKindOf(id) === 'assetswap' ? 'ASW' : 'CB');
+    const same = cashbondRows.filter((r) => r.kind === wantKind && r.bondType === bondType);
+    const next = same.find((r) => r.tenor === cur?.tenor) ?? same[same.length - 1];
     if (next) patch(key, { id: next.id });
   };
 
@@ -457,18 +447,7 @@ export function BacktestWindow({
               tenors={result.recon.tenors}
               groups={result.recon.groups}
               defaultOrder="desc"
-              note={
-                [
-                  result.recon.truncated
-                    ? '긴 백테스트라 최근 영업일만 실었어요 — 기간 전체 분해는 위에 있어요.'
-                    : '',
-                  result.recon.dropped
-                    ? `민평과 IRS 달력이 어긋난 ${result.recon.dropped}일은 뺐어요 — 한쪽만 쉰 날과 그 다음 날이에요. 두 계열이 서로 다른 밤을 재고 있어서 더하면 어느 하루도 아니에요.`
-                    : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ') || undefined
-              }
+              note={reconNote(result.recon)}
             />
           ) : null,
           unavailable: result
@@ -507,7 +486,15 @@ export function BacktestWindow({
                         accessibilityLabel="종류"
                         value={kind}
                         onChange={(v) => v && switchKind(r.key, v as BookKind)}
-                        options={kinds.map((k) => ({ value: k, label: KIND_LABEL[k] }))}
+                        /* **이 줄이 무엇인지는 언제나 적힌다.** 민평을 못 읽은
+                           날(SQL 이 죽었거나 아직 안 붙은 날) 채권 종류가 목록에서
+                           빠지는데, URL 에 담아 온 채권 줄이 그때 값 없는 빈 칸으로
+                           선다 — 읽는 사람은 «이게 뭐였더라» 를 묻게 된다. 고를 수
+                           없는 것과 무엇인지 모르는 것은 다르다. */
+                        options={(kinds.includes(kind) ? kinds : [...kinds, kind]).map((k) => ({
+                          value: k,
+                          label: KIND_LABEL[k],
+                        }))}
                       />
                     </Field>
                   </Box>
@@ -655,7 +642,17 @@ export function BacktestWindow({
               variant="secondary"
               size="s"
               disabled={book.length >= MAX_POSITIONS}
-              onClick={() => setBook([...book, newRow(book.at(-1)?.id ?? '10Y', asOf)])}
+              onClick={() => {
+                /* 새 줄은 **바로 위 줄을 닮는다** — 같은 상품을 다른 날짜로
+                   두 번 재는 것이 이 화면의 흔한 걸음이다. 진입일 기본은
+                   그 상품이 정한다(`defaultEntry`): 채권에 오늘을 심으면 캐리가
+                   하루도 안 쌓여 늘 «거의 0» 이 뜬다. */
+                const id = book.at(-1)?.id ?? '10Y';
+                setBook([
+                  ...book,
+                  newRow(id, defaultEntry(id, asOf, cashbondAsOf, cashbondFrom)),
+                ]);
+              }}
             >
               줄 추가
             </Button>
@@ -728,6 +725,16 @@ export function BacktestWindow({
                 <TextLegal as="span" color="fgMuted">
                   민평과 IRS 달력이 다 가진 날 위에서 셌어요 — 한쪽에만 있던{' '}
                   {result.calendar.dropped}일은 빼고요.
+                </TextLegal>
+              ) : null}
+              {/* 선이 늦게 시작할 때. 민평이 2020년부터라 그 앞에 들어간 스왑은
+                  공통 달력이 못 담는다 — **총액은 옳고 그림만 중간부터**다.
+                  0 에서 출발하지 않는 선을 설명 없이 두면 오독이다. */}
+              {result.calendar?.clippedFrom ? (
+                <TextLegal as="span" color="fgMuted">
+                  가장 이른 진입은 {result.calendar.clippedFrom} 인데 민평이{' '}
+                  {result.from} 부터라 선은 거기서 시작해요 — 손익 합계는 진입일부터
+                  전부 들어 있어요.
                 </TextLegal>
               ) : null}
             </VStack>
@@ -934,12 +941,18 @@ export function BacktestWindow({
 
 /** 창을 열 때 씨앗이 되는 북 — URL 의 `bt` 가 있으면 그것, 없으면 세션 기억,
  * 그것도 없으면 지금 보고 있는 종목 한 줄. */
-export function seedBook(btParam: string | undefined, seedId: string, asOf: string): BookRow[] {
+export function seedBook(
+  btParam: string | undefined,
+  seedId: string,
+  asOf: string,
+  bondAsOf: string,
+  bondFrom: string,
+): BookRow[] {
   const fromUrl = decodeBook(btParam);
   if (fromUrl.length) return fromUrl;
   const remembered = loadBacktestMemory(MEMORY_KEY).book;
   if (remembered?.length) return remembered;
-  return [newRow(seedId, asOf)];
+  return [newRow(seedId, defaultEntry(seedId, asOf, bondAsOf, bondFrom))];
 }
 
-export { encodeBook, isBookable };
+export { encodeBook };

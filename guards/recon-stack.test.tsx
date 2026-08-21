@@ -34,6 +34,97 @@ function day(i: number): ReconStackDay {
   };
 }
 
+describe('조달 열은 **있을 때만** 선다 [2026-08-21]', () => {
+  /* 창이 하나가 되면서 이 판정이 한 번 무너졌다: `funding: r.funding ?? null` 로
+   * 채웠더니 스왑만 있는 북에도 열이 서서 250줄이 전부 «—» 인 조달 칸이 생겼다.
+   * 스왑에는 조달이라는 개념 자체가 없으므로 «0원이었다» 도 «모른다» 도 아니고
+   * **그 질문이 없다** — `undefined` 가 그 뜻이고, null 은 다른 말이다. */
+  it('필드가 없으면 꼬리는 다섯이다 (평가·캐리·롤다운·그날 손익 + 합계)', () => {
+    const { container } = render(<ReconStack days={[day(0)]} tenors={TENORS} />);
+    const headers = [...container.querySelectorAll('thead th')].map((h) => h.textContent);
+    expect(headers).not.toContain('조달');
+    expect(container.querySelectorAll("tbody td[rowspan='3']")).toHaveLength(5);
+  });
+
+  it('필드가 null 이기만 해도 열은 선다 — 그건 "그날은 모른다" 이다', () => {
+    const { container } = render(
+      <ReconStack days={[{ ...day(0), funding: null }]} tenors={TENORS} />,
+    );
+    const headers = [...container.querySelectorAll('thead th')].map((h) => h.textContent);
+    expect(headers).toContain('조달');
+  });
+
+  it('값이 있으면 부호 그대로 — 서버가 이미 음수로 준다', () => {
+    const { container } = render(
+      <ReconStack days={[{ ...day(0), funding: -35_034_000 }]} tenors={TENORS} />,
+    );
+    expect(container.textContent).toContain('-35,034,000');
+  });
+});
+
+describe('두 격자 — 스왑 KRD · 채권 KRD [OWNER, 2026-08-21]', () => {
+  /* 같은 "3Y" 라는 이름을 쓰지만 IRS 제로커브 노드와 민평 노드는 다른 위험이다.
+   * 열쇠에 접두사가 붙어 오고, **화면에 적히는 것은 테너뿐**이다. */
+  const GROUPS = [
+    { label: '스왑 KRD', cols: [{ key: 'S:3M', label: '3M' }, { key: 'S:10Y', label: '10Y' }] },
+    { label: '채권 KRD', cols: [{ key: 'B:3M', label: '3M' }, { key: 'B:3Y', label: '3Y' }] },
+  ];
+  const KEYS = ['S:3M', 'S:10Y', 'B:3M', 'B:3Y'];
+  const mixed: ReconStackDay = {
+    date: '2026-03-02',
+    krd: { 'S:3M': -28400, 'S:10Y': 387162, 'B:3M': 1000, 'B:3Y': -2000 },
+    dbp: { 'S:3M': 0.25, 'S:10Y': -0.5, 'B:3M': 1.0, 'B:3Y': 0.75 },
+    est: { 'S:3M': -7100, 'S:10Y': 193581, 'B:3M': -1000, 'B:3Y': 1500 },
+    estTotal: 654,
+    valuation: -369066,
+    carry: 143836,
+    rolldown: 368131,
+    funding: -1234,
+    actual: 142901,
+  };
+
+  it('머리가 한 줄 더 서고 각 그룹이 자기 열 수만큼 걸친다', () => {
+    const { container } = render(
+      <ReconStack days={[mixed]} tenors={KEYS} groups={GROUPS} />,
+    );
+    expect(container.querySelectorAll('thead tr')).toHaveLength(2);
+    const spans = [...container.querySelectorAll('thead tr:first-child th[colspan]')];
+    expect(spans.map((th) => [th.textContent, th.getAttribute('colspan')])).toEqual([
+      ['스왑 KRD', '2'],
+      ['채권 KRD', '2'],
+    ]);
+  });
+
+  it('접두사는 화면에 안 샌다 — 열 이름은 테너뿐이다', () => {
+    const { container } = render(
+      <ReconStack days={[mixed]} tenors={KEYS} groups={GROUPS} />,
+    );
+    expect(container.textContent).not.toMatch(/S:|B:/);
+    const heads = [...container.querySelectorAll('thead tr:last-child th')].map(
+      (h) => h.textContent,
+    );
+    expect(heads.filter((h) => h === '3M')).toHaveLength(2); // 양쪽에 하나씩
+  });
+
+  it('값은 **열쇠**로 읽는다 — 라벨이 겹쳐도 안 섞인다', () => {
+    const { container } = render(
+      <ReconStack days={[mixed]} tenors={KEYS} groups={GROUPS} />,
+    );
+    expect(container.textContent).toContain('-28,400');   // S:3M
+    expect(container.textContent).toContain('1,000');     // B:3M
+  });
+
+  it('그룹이 하나뿐이면 머리를 안 세우되 열쇠는 그대로 쓴다', () => {
+    const one = [GROUPS[0]];
+    const { container } = render(
+      <ReconStack days={[mixed]} tenors={['S:3M', 'S:10Y']} groups={one} />,
+    );
+    expect(container.querySelectorAll('thead tr')).toHaveLength(1);
+    expect(container.textContent).not.toMatch(/S:/);
+    expect(container.textContent).toContain('-28,400');
+  });
+});
+
 describe('하루 = 가로줄 셋', () => {
   it('80일이면 정확히 240개의 <tr> 이 쌓인다', () => {
     const days = Array.from({ length: 80 }, (_, i) => day(i));
@@ -207,8 +298,11 @@ describe('두 창이 같은 표를 쓴다 [트레이더 피드백 5 — "둘 다
   });
 
   it('어댑터는 이름만 바꾼다 — 두 번째 정의를 만들지 않는다', () => {
+    /* 백테스트 쪽 어댑터는 창 밖으로 나왔다 [2026-08-21] — `src/backtest/recon.ts`.
+       조달 칸의 판단이 창 안에 있어서 가드가 못 닿았고, 그 사이에 한 번 조용히
+       틀렸다(그 파일의 머리글). 시뮬 쪽은 아직 창 안이다. */
     const bt = fs.readFileSync(
-      path.resolve(import.meta.dirname, '../src/backtest/BacktestWindow.tsx'),
+      path.resolve(import.meta.dirname, '../src/backtest/recon.ts'),
       'utf8',
     );
     const sim = fs.readFileSync(

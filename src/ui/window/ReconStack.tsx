@@ -151,10 +151,12 @@ export function ReconStack({
   /* 열은 **열쇠와 라벨이 다를 수 있다.** 격자가 하나면 둘이 같고(테너 문자열),
      둘로 갈리면 열쇠에 접두사가 붙는다. 아래는 전부 이 목록으로만 돈다 —
      `tenors` 를 직접 훑는 자리가 남으면 접두사가 화면에 새어 나온다. */
-  const cols: { key: string; label: string }[] =
-    groups && groups.length > 1
-      ? groups.flatMap((g) => g.cols)
-      : tenors.map((t) => ({ key: t, label: t }));
+  const cols: { key: string; label: string }[] = groups?.length
+    ? groups.flatMap((g) => g.cols)
+    : tenors.map((t) => ({ key: t, label: t }));
+  /* 머리를 **세우는** 조건과 열쇠를 **읽는** 조건은 다르다. 그룹이 하나뿐이면
+     가를 것이 없어 머리는 안 서지만, 열쇠는 여전히 `groups` 것이다(`tenors` 를
+     라벨로 쓰면 접두사가 화면에 새어 나온다). */
   const banded = groups && groups.length > 1 ? groups : null;
   /* 그룹 경계에 서는 열쇠 — 헤어라인 하나로 "여기서부터 다른 커브" 를 말한다.
      첫 그룹의 첫 열은 빠진다(왼쪽 범례의 경계가 이미 거기 있다). */

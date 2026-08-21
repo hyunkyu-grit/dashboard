@@ -39,7 +39,8 @@ describe('접는 자리 둘 다 접는다 (소스 핀)', () => {
   });
 
   it('대사 행의 평가가 startup 을 접는다', () => {
-    const src = read('src/backtest/BacktestWindow.tsx');
+    // 어댑터는 창 밖으로 나왔다 [2026-08-21] — `src/backtest/recon.ts` 의 머리글.
+    const src = read('src/backtest/recon.ts');
     expect(src).toMatch(/r\.valuation \+ \(r\.startup \?\? 0\)/);
   });
 

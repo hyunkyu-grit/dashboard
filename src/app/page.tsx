@@ -42,7 +42,7 @@ import { PreviewPane } from '@/ui/PreviewPane';
 import { useFillHeight } from '@/ui/useFillHeight';
 import { BacktestWindow, encodeBook, seedBook } from '@/backtest/BacktestWindow';
 import type { BookRow } from '@/backtest/book';
-import { isBookable, newRow, yearBefore } from '@/backtest/book';
+import { defaultEntry, isBookable, newRow } from '@/backtest/book';
 import { SettingView } from '@/ui/SettingView';
 import { BondTypeFilter } from '@/ui/BondTypeFilter';
 import { SimulationPage, type CaseRuns } from '@/sim/SimulationPage';
@@ -282,9 +282,18 @@ const BANNER_H = 34;
     const seedId = previewRow && isBookable(previewRow)
       ? previewRow.id
       : (shown.find(isBookable)?.id ?? '10Y');
-    const seeded = seedBook(btParam, seedId, data?.summary.asof ?? '');
+    /* 진입일 기본은 **씨앗 상품**이 정한다(`defaultEntry`). 현금채권 탭에서
+       이 버튼을 누르면 씨앗이 채권 줄인데, 거기 오늘을 심으면 캐리가 하루도
+       안 쌓여 늘 «거의 0» 인 북이 뜬다. */
+    const seeded = seedBook(
+      btParam,
+      seedId,
+      data?.summary.asof ?? '',
+      data?.cashbond.asof ?? '',
+      data?.cashbond.from ?? '',
+    );
     setBook(seeded);
-  }, [btParam, previewRow, shown, data?.summary.asof, setBook]);
+  }, [btParam, previewRow, shown, data, setBook]);
 
   /* **차트를 눌러서 들어간다** [v1 계약 복원, OWNER 2026-08-18 — "원래 백테스트는
      그래프를 눌러서 들어갔었는데"]. v1 은 pane 의 차트 블록 전체가 role="button"
@@ -301,15 +310,17 @@ const BANNER_H = 34;
         openBacktest();
         return;
       }
-      /* 현금채권·자산스왑도 **같은 북**이다 [OWNER, 2026-08-21]. 진입일 기본만
-         다르다 — 채권은 캐리가 쌓여야 읽히는 화면이라 며칠짜리 기본값이 늘
-         "거의 0" 을 보여 준다(`yearBefore` 의 근거). */
-      const bond = row.group === 'cashbond' || row.group === 'asw';
+      /* 현금채권·자산스왑도 **같은 북**이다 [OWNER, 2026-08-21]. 진입일은 짚은
+         날짜가 먼저이고, 없으면 그 상품의 기본이다(`defaultEntry` — 채권은
+         캐리가 쌓여야 읽히는 화면이라 1년 전이다). */
       const entry =
         from ??
-        (bond && data
-          ? yearBefore(data.cashbond.asof, data.cashbond.from)
-          : (data?.summary.asof ?? ''));
+        defaultEntry(
+          row.id,
+          data?.summary.asof ?? '',
+          data?.cashbond.asof ?? '',
+          data?.cashbond.from ?? '',
+        );
       setBook([newRow(row.id, entry)]);
     },
     [openBacktest, setBook, data],
@@ -318,7 +329,15 @@ const BANNER_H = 34;
   /* 링크로 들어온 경우: URL 에 북이 있으면 그걸로 화면을 세운다(한 번만). */
   useEffect(() => {
     if (!btOpen || book.length > 0 || !data) return;
-    setBookState(seedBook(btParam, shown.find(isBookable)?.id ?? '10Y', data.summary.asof));
+    setBookState(
+      seedBook(
+        btParam,
+        shown.find(isBookable)?.id ?? '10Y',
+        data.summary.asof,
+        data.cashbond.asof,
+        data.cashbond.from,
+      ),
+    );
   }, [btOpen, btParam, book.length, data, shown]);
 
 

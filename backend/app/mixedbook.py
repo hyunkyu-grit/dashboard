@@ -243,6 +243,7 @@ def _mixed(
     legs: dict[int, cb._BondLeg] = {}
     spans: dict[int, tuple[int, int]] = {}
 
+    entered: list[dt.date] = []      # 각 줄이 **실제로** 들어간 날 (스냅 뒤)
     for n, p in enumerate(positions):
         if is_bond(p.series_id):
             bp = _as_bond(p)
@@ -254,11 +255,13 @@ def _mixed(
             leg = cb._bond_leg(m, bp)
             bonds[n], legs[n] = bp, leg
             spans[n] = _k_span(mi, leg.entry_i, leg.exit_i, bp.id)
+            entered.append(m.dates[leg.entry_i])
         else:
             sp = _as_swap(p)
             entry_i, exit_i, _matured = _span_of(dataset, sp)
             swaps[n] = sp
             spans[n] = _k_span(di, entry_i, exit_i, sp.series_id)
+            entered.append(dataset.dates[entry_i])
 
     first_k = min(a for a, _b in spans.values())
     last_k = max(b for _a, b in spans.values())
@@ -319,7 +322,16 @@ def _mixed(
         "maxLoss": min(pnls) if pnls else 0.0,
         "funding": fd.provenance(spec),
         # 화면이 한 줄로 말한다 — 무엇을 안 세었는지는 데이터 사실이다.
-        "calendar": {"basis": "민평 ∩ IRS", "dropped": _dropped_days(m, dataset, a, b)},
+        "calendar": {
+            "basis": "민평 ∩ IRS",
+            "dropped": _dropped_days(m, dataset, a, b),
+            # **선이 늦게 시작하는가.** 민평은 2020-01-02 부터인데 IRS 는 그보다
+            # 앞이라, 2019년에 들어간 스왑을 채권과 섞으면 공통 달력이 그 진입을
+            # 못 담는다. 그때도 **총액은 옳다**(각 줄의 누적은 자기 진입일부터
+            # 세고, 첫 점이 그 값을 그대로 싣는다) — 그림만 중간부터 시작한다.
+            # 0 에서 출발하지 않는 선은 설명 없이 두면 오독이라 여기서 말한다.
+            "clippedFrom": min(entered).isoformat() if entered and min(entered) < a else None,
+        },
     }
 
 
@@ -353,33 +365,71 @@ def book_recon(
     s_at = {d.isoformat(): i for i, d in enumerate(dataset.dates)}
     b_at = {d.isoformat(): i for i, d in enumerate(m.dates)}
 
-    # 창을 먼저 맞춘다. 두 대사가 각자 **자기 달력의** 최근 250영업일을 싣고
-    # 오므로 시작일이 다르다(실측 2026-08-21: 스왑 2025-08-25 · 채권 2025-08-08).
-    # 겹치는 구간 밖의 행은 «달력이 어긋나서» 빠진 것이 아니라 그냥 그 창 밖이고,
-    # 그 사실은 `truncated` 가 이미 말한다 — 아래 `dropped` 에 섞으면 화면이
-    # 없는 병을 보고한다.
+    # 창을 맞춘다. 두 대사가 각자 **자기 달력의 · 자기 북의** 최근 250영업일을
+    # 싣고 오므로 양 끝이 다 다르다.
+    #
+    #   시작 — 잘린 창의 바닥이다. 그 앞은 «달력이 어긋나서» 빠진 것이 아니라
+    #          그냥 안 계산된 것이고, 그 사실은 `truncated` 가 이미 말한다.
+    #          그래서 **늦은 쪽**을 바닥으로 쓴다.
+    #   끝  — 그 북이 **끝난 날**이다. 한쪽이 먼저 끝났으면 그 뒤로 그 줄의
+    #          일별 손익은 0 이고 KRD 도 0 이다(누적은 얼어붙어 있다). 지어내는
+    #          숫자가 아니라 참인 0 이므로 채워 넣고 **늦은 쪽**까지 간다.
+    #
+    # 종전에는 끝도 min 이었다. 그 판에서 「2020년에 산 국고채 3Y(2023 만기) +
+    # 지금도 들고 있는 10Y 스왑」 이 대사표를 **통째로 비웠다**(실측 2026-08-21:
+    # 스왑 창 2025-08-25~2026-08-19 · 채권 창 2021-12-28~2023-01-02 → lo > hi).
+    # 화면에는 "이 실행에는 일별 대사가 없어요" 만 떴고, 그건 병이 아니라 답이
+    # 있는데 못 찾은 것이었다.
     if not s_rows or not b_rows:
         lo = hi = None
+        s_end = b_end = ""
     else:
         lo = max(min(s_rows), min(b_rows))
-        hi = min(max(s_rows), max(b_rows))
+        s_end, b_end = max(s_rows), max(b_rows)
+        hi = max(s_end, b_end)
 
-    # 그 창 안에서: 양쪽에 다 선 날만, 그리고 **어제가 같은 날인** 날만 [모듈
-    # 주석]. 뒤 조건이 하루를 더 먹는다 — 한쪽만 쉰 날의 **다음 날**은 두 계열이
-    # 서로 다른 밤을 재고 있어서, 더한 값이 어느 하루에도 속하지 않는다.
-    # 한쪽에만 있는 날의 행을 지어내면 그 줄은 대사가 아니라 추측이다.
+    def _zero(tenors: list[str]) -> dict:
+        """끝난 쪽의 하루 — 손익도 리스크도 0 이다(누적은 얼어붙어 있다).
+
+        `dbp` 만 0 이 아니라 **빈칸**이다. 그날 시장은 움직였겠지만 그 줄의
+        엔진은 이제 아무것도 안 재고 있고, 여기서 노드 변화를 다시 구하면 이
+        모듈이 피하려던 것 — Δbp 의 두 번째 정의 — 이 생긴다. KRD 가 0 이라
+        추정(krd × dbp)은 어차피 0 이므로 표의 산술은 그대로 닫힌다.
+        """
+        return {
+            "krd": {lb: 0 for lb in tenors},
+            "dbp": {},
+            "est": {},
+            "estTotal": 0,
+            "actual": 0,
+            "valuation": 0,
+            "rolldown": 0,
+            "carry": 0,
+            "startup": 0,
+            "funding": 0,
+        }
+
+    # 그 창 안에서: **살아 있는 쪽**이 다 선 날만, 그리고 그 쪽들의 **어제가 같은
+    # 날인** 날만 [모듈 주석]. 뒤 조건이 하루를 더 먹는다 — 한쪽만 쉰 날의
+    # **다음 날**은 두 계열이 서로 다른 밤을 재고 있어서, 더한 값이 어느 하루에도
+    # 속하지 않는다. 이미 끝난 쪽은 달력에 아무 요구도 하지 않는다(0 이라서).
     keep: list[str] = []
     dropped = 0
     for t in sorted(set(s_rows) | set(b_rows)):
         if lo is None or t < lo or t > hi:
             continue
+        s_live, b_live = t <= s_end, t <= b_end
+        if (s_live and t not in s_rows) or (b_live and t not in b_rows):
+            dropped += 1
+            continue
         si, bi = s_at.get(t), b_at.get(t)
-        if t not in s_rows or t not in b_rows or si is None or bi is None:
-            dropped += 1
-            continue
-        if si == 0 or bi == 0 or dataset.dates[si - 1] != m.dates[bi - 1]:
-            dropped += 1
-            continue
+        if s_live and b_live:
+            if si is None or bi is None or si == 0 or bi == 0:
+                dropped += 1
+                continue
+            if dataset.dates[si - 1] != m.dates[bi - 1]:
+                dropped += 1
+                continue
         keep.append(t)
 
     s_cols = [f"{SWAP_COL}:{lb}" for lb in sr["tenors"]]
@@ -389,9 +439,10 @@ def book_recon(
         src = row.get(field) or {}
         return {f"{prefix}:{lb}": src.get(lb) for lb in tenors}
 
+    zero_s, zero_b = _zero(sr["tenors"]), _zero(br["tenors"])
     rows: list[dict] = []
     for t in keep:
-        s, b = s_rows[t], b_rows[t]
+        s, b = s_rows.get(t, zero_s), b_rows.get(t, zero_b)
         total_est = (s["estTotal"] or 0) + (b["estTotal"] or 0)
         valuation = s["valuation"] + b["valuation"]
         rows.append(

@@ -498,7 +498,7 @@ export interface BacktestReconRow {
   rolldown: number | null;
   carry: number | null;
   /** 개시 — 그 포지션의 진입일 행에만 0 이 아니다 [OWNER, 2026-08-14].
-   * 화면에서는 평가에 접는다(BacktestWindow 의 backtestDays). */
+   * 화면에서는 평가에 접는다(`backtest/recon.ts` 의 backtestDays). */
   startup?: number | null;
   /** 조달 — 현금채권 대사에만 있다 [OWNER, 2026-08-14]. IRS 에는 조달 개념이
    * 없어 필드 자체가 안 온다. */
@@ -540,7 +540,11 @@ export interface BacktestResult {
    * to the won gives a figure that disagrees with the two on screen. */
   points: { t: string; pnl: number; d: number | null }[];
   /** whether every business day in the window is DRAWN. Nothing to do with
-   * `d`, which is one day either way; it describes the line's resolution. */
+   * `d`, which is one day either way; it describes the line's resolution.
+   *
+   * 혼합 북에서 «영업일» 은 **이 북이 마킹될 수 있는 날**이다 — 민평 ∩ IRS.
+   * 한쪽에만 있던 날은 여기 안 들어가고, 그 수는 `calendar.dropped` 가 말한다.
+   * 둘을 같이 읽어야 «다 그렸다» 가 무슨 뜻인지가 닫힌다. */
   complete: boolean;
   pnl: number;
   maxProfit: number;
@@ -548,8 +552,10 @@ export interface BacktestResult {
   /** 조달 출처 — 채권 줄이 있는 북에서만 온다. */
   funding?: FundingProvenance;
   /** 어느 달력 위에서 셌나 [2026-08-21]. 혼합 북은 민평 ∩ IRS 다 —
-   * `dropped` 는 그 구간에서 한쪽에만 있던 날의 수다. */
-  calendar?: { basis: string; dropped: number };
+   * `dropped` 는 그 구간에서 한쪽에만 있던 날의 수이고, `clippedFrom` 은 **선이
+   * 늦게 시작할 때** 가장 이른 진입일이다(민평이 2020년부터라 그 앞에 들어간
+   * 스왑은 공통 달력이 못 담는다). 총액은 그때도 옳다 — 그림만 중간부터다. */
+  calendar?: { basis: string; dropped: number; clippedFrom: string | null };
   /** 일별 대사 — optional only for results restored from an older session's
    * memory; the live endpoint always sends it. */
   recon?: BacktestRecon;
