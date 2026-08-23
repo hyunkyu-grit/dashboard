@@ -181,6 +181,30 @@ LEDGER = [
         "equation": "35",
     },
     {
+        "key": "residual-tail",
+        "title": "경로가 끝난 뒤의 준칙 잔차",
+        "paper_says": "부록 C 는 잔차를 국소수준 UC 모형으로 두고, 부록 B 는 "
+                      "조건 구간 **안**의 잔차만 이야기해요. 조건 구간이 끝난 "
+                      "뒤 그 잔차를 어떻게 두는지는 논문에 없어요.",
+        "we_do": "여덟 분기 경로가 끝나면 마지막 분기의 준칙 잔차가 0 으로 "
+                 "떨어지는 게 아니라 AR(1) ρ=0.801 로 잦아들어요.",
+        "why": "예전에는 q9 에서 정확히 0 이었는데, 그건 그렇게 정한 게 아니라 "
+               "**못이 없는 분기의 잔차를 아무도 안 채웠기 때문**이었어요. "
+               "같은 잔차의 역사 자기상관을 다시 재 보니 0.801 (Newey-West "
+               "표준오차 0.0745, 2000Q1–2026Q2, n=106) 이라 급단절(ρ=0)은 "
+               "10σ 밖이에요. 데이터가 감쇠 편이에요.",
+        "could_be_wrong": "**ρ 는 우리가 잰 값이지 논문이 박은 값이 아니에요.** "
+                          "그리고 그 잔차의 평균이 0 이 아니라(−0.19pp) 준칙이 "
+                          "덜 맞는 부분을 같이 담고 있을 수 있어요 — 추세를 "
+                          "빼면 0.78 로 내려가요. ρ=0 을 주면 예전 급단절이 "
+                          "정확히 복원돼요.",
+        "paper": "부록 B · 부록 C",
+        "code": "backend/bigfoot/solve/system.py::RESIDUAL_TAIL · "
+                "backend/scripts/p4_ar1.py · output/p4/ar1.json",
+        "node": "i_kr",
+        "equation": "35",
+    },
+    {
         "key": "policy-conditioning",
         "title": "정책금리에 조건을 거는 것",
         "paper_says": "부록 B 는 내생변수를 고정하고 잔차를 푸는 방법을 적어요. "
@@ -422,7 +446,7 @@ EXOGENOUS = [
 
 def _run_engine() -> dict:
     from bigfoot.solve.irf import SHOCKS, run_all, scorecard
-    from bigfoot.solve.phase3 import (BETA_SYNC_ADOPTED, FINAL_EQ24,
+    from bigfoot.solve.config import (BETA_SYNC_ADOPTED, FINAL_EQ24,
                                       FINAL_OPTIONS)
     res = run_all(BETA_SYNC_ADOPTED, FINAL_EQ24, FINAL_OPTIONS)
     return {"results": res, "rows": scorecard(res), "shocks": SHOCKS}
@@ -571,7 +595,7 @@ FREE_PARAMS = [
 def backtest_blockers() -> dict:
     """C.8 — 막는 것 목록과 그 크기 실측. **백테스트가 아니다.**"""
     from bigfoot.conditional.residuals import build_variables
-    from bigfoot.solve.phase3 import (BETA_SYNC_ADOPTED, FINAL_EQ24,
+    from bigfoot.solve.config import (BETA_SYNC_ADOPTED, FINAL_EQ24,
                                       FINAL_OPTIONS)
     from bigfoot.solve.system import BigfootSystem
 

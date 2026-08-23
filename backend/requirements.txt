@@ -76,10 +76,15 @@ statsmodels>=0.14    # hpfilter(잠재산출·추세) · AutoReg(위성 VAR 보�
 requests>=2.31       # ECOS·FRED 로더 (bigfoot/data/)
 pyyaml>=6.0          # config/appendix_d*.yaml — 논문 부록 D 계수
 
-# plotly 는 **런타임 의존이 아니어야 하는데 지금은 맞다.** `scenario_basis/
-# build.py` 가 최종 옵션 상수(FINAL_OPTIONS·FINAL_EQ24·BETA_SYNC_ADOPTED)를
-# `solve/phase3.py` 에서 가져오는데, 그 모듈이 **차트를 그리는 모듈**이라
-# 모듈 스코프에서 plotly 를 import 한다. 상수를 별도 모듈로 빼면 사라진다.
-# 이관 커밋에서 손대지 않은 이유는 D.3 게이트(기저 바이트 동일)가 그 커밋의
-# 유일한 증거이기 때문이다 — 리팩터링은 별도 커밋으로. [2026-08-21 기록]
-plotly>=5.0
+# plotly 는 **런타임 의존이 아니다** [2026-08-21 P4 D.6 에서 끊었다].
+# 예전에는 맞았다 — `scenario_basis/build.py` 가 최종 옵션 상수를
+# `solve/phase3.py` 에서 가져왔는데 그 모듈이 **차트를 그리는 모듈**이라
+# 모듈 스코프에서 plotly 를 끌고 왔다. 상수를 `solve/config.py`(import 없는
+# 순수 데이터)로 내리고 `conditional/hfl.py` 의 모듈 스코프 import 를 함수
+# 안으로 넣어서 끊었다. 지금 plotly 를 import 하는 넷은 전부 **리포트를
+# 그리는 자리**이고 전부 함수 안에서 한다:
+#   solve/phase3.py · cd_layer/study.py · conditional/hfl.py::render
+#   irs_curve/assembler.py
+# 다시 런타임으로 새는 것은 `tests/engine/test_runtime_imports.py` 가 막는다.
+# 굽기만 하는 배포는 이 줄 없이 돈다. 리포트를 그리려면 필요하다.
+plotly>=5.0          # 리포트·차트 전용 (런타임 굽기 경로에는 없다)

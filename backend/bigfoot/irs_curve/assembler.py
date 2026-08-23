@@ -97,7 +97,7 @@ def _hfl_dev_24q() -> np.ndarray:
             HFL_24Q_CACHE.read_text(encoding="utf-8"))["i_kr_dev"])
     from bigfoot.conditional.hfl import load_hfl_conditions
     from bigfoot.conditional.invert import conditional_forecast
-    from bigfoot.solve.phase3 import (BETA_SYNC_ADOPTED, FINAL_EQ24,
+    from bigfoot.solve.config import (BETA_SYNC_ADOPTED, FINAL_EQ24,
                                       FINAL_OPTIONS)
     from bigfoot.solve.system import BigfootSystem
     cond, _q = load_hfl_conditions()

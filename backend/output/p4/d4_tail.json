@@ -1,0 +1,854 @@
+{
+ "label": "d4_tail",
+ "anchors": [
+  {
+   "anchor_id": "kr_policy_25bp.gap",
+   "panel": "GDP 갭",
+   "var": "y_gap",
+   "anchor": -0.07,
+   "unit": "%p",
+   "kind": "peak",
+   "irf_measured": -0.08712,
+   "basis_measured": -0.08852,
+   "band": [
+    -0.098,
+    -0.042
+   ],
+   "pass": true
+  },
+  {
+   "anchor_id": "kr_policy_25bp.cpi",
+   "panel": "소비자물가",
+   "var": "cpi_yoy",
+   "anchor": -0.05,
+   "unit": "%p",
+   "kind": "peak",
+   "irf_measured": -0.03912,
+   "basis_measured": -0.03975,
+   "band": [
+    -0.07,
+    -0.03
+   ],
+   "pass": true
+  },
+  {
+   "anchor_id": "kr_policy_25bp.hpi",
+   "panel": "주택가격",
+   "var": "hpi",
+   "anchor": -0.4,
+   "unit": "%",
+   "kind": "peak",
+   "irf_measured": -0.92824,
+   "basis_measured": -0.94317,
+   "band": [
+    -0.56,
+    -0.24
+   ],
+   "pass": false
+  },
+  {
+   "anchor_id": "kr_policy_25bp.debt_krw",
+   "panel": "명목 가계부채",
+   "var": null,
+   "anchor": -5.1,
+   "unit": "조원",
+   "kind": "peak",
+   "skipped": "편차 공간에 없는 변수예요"
+  },
+  {
+   "anchor_id": "kr_policy_25bp.debt_ratio",
+   "panel": "가계부채/GDP",
+   "var": "debt",
+   "anchor": -0.3,
+   "unit": "%p",
+   "kind": "peak",
+   "irf_measured": -0.75328,
+   "basis_measured": -0.76539,
+   "band": [
+    -0.42,
+    -0.18
+   ],
+   "pass": false
+  },
+  {
+   "anchor_id": "us_policy_25bp.kr10y",
+   "panel": "한국 장기금리",
+   "var": "kr10y",
+   "anchor": 0.06,
+   "unit": "%p",
+   "kind": "peak",
+   "irf_measured": 0.05915,
+   "basis_measured": 0.03767,
+   "band": [
+    0.036,
+    0.084
+   ],
+   "pass": true
+  },
+  {
+   "anchor_id": "us_policy_25bp.gdp",
+   "panel": "GDP",
+   "var": "y_gap",
+   "anchor": -0.04,
+   "unit": "%p",
+   "kind": "peak",
+   "irf_measured": -0.02553,
+   "basis_measured": -0.0352,
+   "band": [
+    -0.056,
+    -0.024
+   ],
+   "pass": true
+  },
+  {
+   "anchor_id": "us_policy_25bp.fi",
+   "panel": "설비투자",
+   "var": "i_fi",
+   "anchor": -0.02,
+   "unit": "%",
+   "kind": "peak",
+   "irf_measured": -0.03576,
+   "band": [
+    -0.028,
+    -0.012
+   ],
+   "pass": false
+  },
+  {
+   "anchor_id": "us_policy_25bp.cpi",
+   "panel": "소비자물가",
+   "var": "cpi_yoy",
+   "anchor": null,
+   "unit": "%p",
+   "kind": "shape",
+   "irf_measured": 0.03774,
+   "basis_measured": 0.06918
+  },
+  {
+   "anchor_id": "oil_10pct.cpi",
+   "panel": "소비자물가",
+   "var": "cpi_yoy",
+   "anchor": 0.16,
+   "unit": "%p",
+   "kind": "peak",
+   "irf_measured": 0.17111,
+   "basis_measured": 0.17111,
+   "band": [
+    0.096,
+    0.224
+   ],
+   "pass": true
+  },
+  {
+   "anchor_id": "oil_10pct.consumption",
+   "panel": "소비",
+   "var": "c",
+   "anchor": -0.08,
+   "unit": "%",
+   "kind": "peak",
+   "irf_measured": -0.14734,
+   "band": [
+    -0.112,
+    -0.048
+   ],
+   "pass": false
+  },
+  {
+   "anchor_id": "oil_10pct.gdp",
+   "panel": "GDP",
+   "var": "y_gap",
+   "anchor": -0.05,
+   "unit": "%p",
+   "kind": "peak",
+   "irf_measured": -0.08396,
+   "basis_measured": -0.08396,
+   "band": [
+    -0.07,
+    -0.03
+   ],
+   "pass": false
+  },
+  {
+   "anchor_id": "oil_10pct.imports",
+   "panel": "수입",
+   "var": "m",
+   "anchor": -0.07,
+   "unit": "%",
+   "kind": "peak",
+   "irf_measured": -0.09492,
+   "basis_measured": -0.09492,
+   "band": [
+    -0.098,
+    -0.042
+   ],
+   "pass": true
+  }
+ ],
+ "band_scorecard": [
+  {
+   "irf": "A",
+   "metric": "gdp_gap_trough_pp",
+   "value": -0.0871,
+   "band": [
+    -0.09,
+    -0.05
+   ],
+   "pass": true
+  },
+  {
+   "irf": "A",
+   "metric": "cpi_yoy_trough_pp",
+   "value": -0.0391,
+   "band": [
+    -0.07,
+    -0.03
+   ],
+   "pass": true
+  },
+  {
+   "irf": "A",
+   "metric": "housing_trough_pct",
+   "value": -0.9282,
+   "band": [
+    -0.5,
+    -0.3
+   ],
+   "pass": false
+  },
+  {
+   "irf": "A",
+   "metric": "debt_gdp_change_pp",
+   "value": -0.7533,
+   "band": [
+    -0.4,
+    -0.2
+   ],
+   "pass": false
+  },
+  {
+   "irf": "B",
+   "metric": "gdp_gap_trough_pp",
+   "value": -0.0255,
+   "band": [
+    -0.06,
+    -0.02
+   ],
+   "pass": true
+  },
+  {
+   "irf": "C",
+   "metric": "cpi_yoy_peak_pp",
+   "value": 0.1711,
+   "band": [
+    0.12,
+    0.2
+   ],
+   "pass": true
+  },
+  {
+   "irf": "C",
+   "metric": "gdp_gap_trough_pp",
+   "value": -0.084,
+   "band": [
+    -0.07,
+    -0.03
+   ],
+   "pass": false
+  },
+  {
+   "irf": "C",
+   "metric": "consumption_trough_pct",
+   "value": -0.1473,
+   "band": [
+    -0.11,
+    -0.05
+   ],
+   "pass": false
+  },
+  {
+   "irf": "A",
+   "metric": "shape:fx_appreciation",
+   "value": null,
+   "band": null,
+   "pass": true
+  },
+  {
+   "irf": "B",
+   "metric": "shape:fx_depreciation",
+   "value": null,
+   "band": null,
+   "pass": true
+  },
+  {
+   "irf": "B",
+   "metric": "shape:inflation_up_then_down",
+   "value": null,
+   "band": null,
+   "pass": true
+  },
+  {
+   "irf": "A",
+   "metric": "shape:gdp_hump",
+   "value": null,
+   "band": null,
+   "pass": true
+  },
+  {
+   "irf": "C",
+   "metric": "shape:gdp_hump",
+   "value": null,
+   "band": null,
+   "pass": true
+  }
+ ],
+ "band_passed": 9,
+ "band_total": 13,
+ "basis_tails": {
+  "policy_q1": {
+   "y_gap": 0.2144,
+   "cpi_yoy": 0.0719,
+   "hpi": 0.2529,
+   "debt": 0.0122,
+   "i_kr": 0.0754,
+   "x": 0.3111,
+   "m": 0.2501
+  },
+  "policy_q2": {
+   "y_gap": 0.2057,
+   "cpi_yoy": 0.0314,
+   "hpi": 0.2432,
+   "debt": 0.0128,
+   "i_kr": 0.1005,
+   "x": 0.2881,
+   "m": 0.2332
+  },
+  "policy_q3": {
+   "y_gap": 0.1884,
+   "cpi_yoy": 0.0186,
+   "hpi": 0.2225,
+   "debt": 0.0477,
+   "i_kr": 0.1268,
+   "x": 0.2534,
+   "m": 0.2063
+  },
+  "policy_q4": {
+   "y_gap": 0.1617,
+   "cpi_yoy": 0.0782,
+   "hpi": 0.1897,
+   "debt": 0.0929,
+   "i_kr": 0.1538,
+   "x": 0.2065,
+   "m": 0.1687
+  },
+  "policy_q5": {
+   "y_gap": 0.1245,
+   "cpi_yoy": 0.1472,
+   "hpi": 0.1441,
+   "debt": 0.1486,
+   "i_kr": 0.1805,
+   "x": 0.1471,
+   "m": 0.1198
+  },
+  "policy_q6": {
+   "y_gap": 0.0763,
+   "cpi_yoy": 0.2249,
+   "hpi": 0.0851,
+   "debt": 0.2145,
+   "i_kr": 0.2059,
+   "x": 0.0742,
+   "m": 0.0592
+  },
+  "policy_q7": {
+   "y_gap": 0.0167,
+   "cpi_yoy": 0.3103,
+   "hpi": 0.0127,
+   "debt": 0.29,
+   "i_kr": 0.2289,
+   "x": 0.0108,
+   "m": 0.0129
+  },
+  "policy_q8": {
+   "y_gap": 0.4735,
+   "cpi_yoy": 0.7879,
+   "hpi": 0.5225,
+   "debt": 0.7625,
+   "i_kr": 0.4266,
+   "x": 0.5713,
+   "m": 0.5302
+  },
+  "cpi": {
+   "y_gap": 0.0599,
+   "cpi_yoy": 0.0261,
+   "hpi": 0.2835,
+   "debt": 0.1333,
+   "i_kr": 0.2144,
+   "x": 0.1337,
+   "m": 0.1167
+  },
+  "gap": {
+   "y_gap": 0.0758,
+   "cpi_yoy": 0.0647,
+   "hpi": 0.8637,
+   "debt": 0.9917,
+   "i_kr": 0.2099,
+   "x": 0.9457,
+   "m": 0.3373
+  },
+  "exports": {
+   "y_gap": 0.1816,
+   "cpi_yoy": 0.3207,
+   "hpi": 0.6136,
+   "debt": 0.8702,
+   "i_kr": 0.171,
+   "x": 0.2756,
+   "m": 0.0061
+  },
+  "us_2q": {
+   "y_gap": 0.179,
+   "cpi_yoy": 0.6949,
+   "hpi": 0.1874,
+   "debt": 0.524,
+   "i_kr": 0.9429,
+   "x": 0.0832,
+   "m": 0.2171
+  },
+  "us_4q": {
+   "y_gap": 0.2556,
+   "cpi_yoy": 0.7568,
+   "hpi": 0.2595,
+   "debt": 0.5885,
+   "i_kr": 0.9628,
+   "x": 0.0833,
+   "m": 0.2948
+  },
+  "us_6q": {
+   "y_gap": 0.3531,
+   "cpi_yoy": 0.8265,
+   "hpi": 0.3446,
+   "debt": 0.6607,
+   "i_kr": 0.982,
+   "x": 0.0917,
+   "m": 0.3912
+  },
+  "oil": {
+   "y_gap": 0.6584,
+   "cpi_yoy": 0.105,
+   "hpi": 0.8883,
+   "debt": 0.9851,
+   "i_kr": 0.0269,
+   "x": 0.4146,
+   "m": 0.6524
+  }
+ },
+ "irs_12m_bp": {
+  "policy_q1": {
+   "1y": -13.9883,
+   "2y": -11.4393,
+   "3y": -8.6406,
+   "5y": -4.5236,
+   "10y": -1.9607
+  },
+  "policy_q2": {
+   "1y": -5.2855,
+   "2y": -7.7476,
+   "3y": -6.6201,
+   "5y": -3.501,
+   "10y": -1.388
+  },
+  "policy_q3": {
+   "1y": 2.0449,
+   "2y": -4.6728,
+   "3y": -5.0466,
+   "5y": -2.8016,
+   "10y": -0.9779
+  },
+  "policy_q4": {
+   "1y": 9.8301,
+   "2y": -1.1065,
+   "3y": -3.1675,
+   "5y": -1.9759,
+   "10y": -0.5081
+  },
+  "policy_q5": {
+   "1y": 16.9654,
+   "2y": 2.6791,
+   "3y": -1.1449,
+   "5y": -1.1216,
+   "10y": -0.0302
+  },
+  "policy_q6": {
+   "1y": 13.7426,
+   "2y": 4.2286,
+   "3y": -0.5842,
+   "5y": -1.2002,
+   "10y": -0.0281
+  },
+  "policy_q7": {
+   "1y": 9.6059,
+   "2y": 5.8254,
+   "3y": 0.0868,
+   "5y": -1.264,
+   "10y": -0.0312
+  },
+  "policy_q8": {
+   "1y": 4.9162,
+   "2y": 22.0566,
+   "3y": 12.1894,
+   "5y": -3.1208,
+   "10y": -0.1196
+  },
+  "cpi": {
+   "1y": -0.4952,
+   "2y": -14.794,
+   "3y": -16.1343,
+   "5y": -10.2167,
+   "10y": -3.6617
+  },
+  "gap": {
+   "1y": -16.1998,
+   "2y": -12.1713,
+   "3y": -7.0876,
+   "5y": -0.3693,
+   "10y": 0.9247
+  },
+  "exports": {
+   "1y": -39.3555,
+   "2y": -24.8301,
+   "3y": -9.6653,
+   "5y": 6.3148,
+   "10y": 2.8515
+  },
+  "us_2q": {
+   "1y": -3.4446,
+   "2y": 1.9191,
+   "3y": 10.8044,
+   "5y": 15.1929,
+   "10y": 0.4265
+  },
+  "us_4q": {
+   "1y": 4.3502,
+   "2y": 26.4841,
+   "3y": 72.3517,
+   "5y": 100.3726,
+   "10y": 2.3816
+  },
+  "us_6q": {
+   "1y": -18.5634,
+   "2y": -30.1376,
+   "3y": -50.6205,
+   "5y": -65.9026,
+   "10y": -1.3956
+  },
+  "oil": {
+   "1y": -6.7516,
+   "2y": -9.9894,
+   "3y": -7.6381,
+   "5y": -2.6449,
+   "10y": -1.1121
+  }
+ },
+ "fi_investment": {
+  "irf_B_us25bp_trough_pct": -0.03576,
+  "irf_A_kr25bp_trough_pct": -0.07098,
+  "irf_C_oil10_trough_pct": -0.04617
+ },
+ "lab_path": {
+  "dots": [
+   -25.0,
+   -25.0,
+   -25.0,
+   -25.0,
+   -25.0,
+   -25.0,
+   -25.0,
+   -25.0
+  ],
+  "h_quarters": 4,
+  "i_kr_pp": [
+   -0.25,
+   -0.25,
+   -0.25,
+   -0.25,
+   -0.25,
+   -0.25,
+   -0.25,
+   -0.25,
+   -0.228831,
+   -0.193563,
+   -0.149818,
+   -0.102085,
+   -0.053838,
+   -0.007721,
+   0.034349,
+   0.071077,
+   0.101688,
+   0.125833,
+   0.143506,
+   0.154969,
+   0.160684,
+   0.161256,
+   0.15738,
+   0.1498
+  ],
+  "clawback_q9_q12_bp": [
+   2.117,
+   5.644,
+   10.018,
+   14.791
+  ],
+  "horizon_exit_bp": 14.791,
+  "rule_residual_pp": [
+   -0.254019,
+   -0.045563,
+   -0.05083,
+   -0.0571,
+   -0.06284,
+   -0.068967,
+   -0.074786,
+   -0.080429
+  ],
+  "rule_dev_sigma_rms": 0.2168,
+  "rule_dev_sigma_max": 0.5101,
+  "tenors": {
+   "1y": {
+    "total_bp": 0.0047,
+    "eh_bp": 0.0,
+    "rule_bp": 0.0,
+    "cd_bp": 0.0047,
+    "rule_share": null
+   },
+   "2y": {
+    "total_bp": 3.5032,
+    "eh_bp": 12.5,
+    "rule_bp": -8.4287,
+    "cd_bp": -0.5681,
+    "rule_share": -2.406
+   },
+   "3y": {
+    "total_bp": 8.1067,
+    "eh_bp": 8.3333,
+    "rule_bp": 0.3656,
+    "cd_bp": -0.5922,
+    "rule_share": 0.0451
+   },
+   "5y": {
+    "total_bp": 8.1199,
+    "eh_bp": 5.0,
+    "rule_bp": 3.1456,
+    "cd_bp": -0.0257,
+    "rule_share": 0.3874
+   },
+   "10y": {
+    "total_bp": 2.5817,
+    "eh_bp": 2.5,
+    "rule_bp": 0.0753,
+    "cd_bp": 0.0064,
+    "rule_share": 0.0292
+   }
+  }
+ },
+ "lab_paths": {
+  "sustained": {
+   "dots": [
+    -25.0,
+    -25.0,
+    -25.0,
+    -25.0,
+    -25.0,
+    -25.0,
+    -25.0,
+    -25.0
+   ],
+   "h_quarters": 4,
+   "i_kr_pp": [
+    -0.25,
+    -0.25,
+    -0.25,
+    -0.25,
+    -0.25,
+    -0.25,
+    -0.25,
+    -0.25,
+    -0.228831,
+    -0.193563,
+    -0.149818,
+    -0.102085,
+    -0.053838,
+    -0.007721,
+    0.034349,
+    0.071077,
+    0.101688,
+    0.125833,
+    0.143506,
+    0.154969,
+    0.160684,
+    0.161256,
+    0.15738,
+    0.1498
+   ],
+   "clawback_q9_q12_bp": [
+    2.117,
+    5.644,
+    10.018,
+    14.791
+   ],
+   "horizon_exit_bp": 14.791,
+   "rule_residual_pp": [
+    -0.254019,
+    -0.045563,
+    -0.05083,
+    -0.0571,
+    -0.06284,
+    -0.068967,
+    -0.074786,
+    -0.080429
+   ],
+   "rule_dev_sigma_rms": 0.2168,
+   "rule_dev_sigma_max": 0.5101,
+   "tenors": {
+    "1y": {
+     "total_bp": 0.0047,
+     "eh_bp": 0.0,
+     "rule_bp": 0.0,
+     "cd_bp": 0.0047,
+     "rule_share": null
+    },
+    "2y": {
+     "total_bp": 3.5032,
+     "eh_bp": 12.5,
+     "rule_bp": -8.4287,
+     "cd_bp": -0.5681,
+     "rule_share": -2.406
+    },
+    "3y": {
+     "total_bp": 8.1067,
+     "eh_bp": 8.3333,
+     "rule_bp": 0.3656,
+     "cd_bp": -0.5922,
+     "rule_share": 0.0451
+    },
+    "5y": {
+     "total_bp": 8.1199,
+     "eh_bp": 5.0,
+     "rule_bp": 3.1456,
+     "cd_bp": -0.0257,
+     "rule_share": 0.3874
+    },
+    "10y": {
+     "total_bp": 2.5817,
+     "eh_bp": 2.5,
+     "rule_bp": 0.0753,
+     "cd_bp": 0.0064,
+     "rule_share": 0.0292
+    }
+   }
+  },
+  "staircase": {
+   "dots": [
+    -25.0,
+    -50.0,
+    -50.0,
+    -50.0,
+    -50.0,
+    -50.0,
+    -50.0,
+    -50.0
+   ],
+   "h_quarters": 4,
+   "i_kr_pp": [
+    -0.25,
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.45863,
+    -0.389636,
+    -0.303956,
+    -0.210346,
+    -0.115587,
+    -0.024859,
+    0.058075,
+    0.130659,
+    0.191355,
+    0.239453,
+    0.274915,
+    0.29823,
+    0.310279,
+    0.312227,
+    0.305422,
+    0.291304
+   ],
+   "clawback_q9_q12_bp": [
+    4.137,
+    11.036,
+    19.604,
+    28.965
+   ],
+   "horizon_exit_bp": 28.965,
+   "rule_residual_pp": [
+    -0.254019,
+    -0.299582,
+    -0.096392,
+    -0.107929,
+    -0.11994,
+    -0.131808,
+    -0.143753,
+    -0.155215
+   ],
+   "rule_dev_sigma_rms": 0.3562,
+   "rule_dev_sigma_max": 0.6016,
+   "tenors": {
+    "1y": {
+     "total_bp": -8.3123,
+     "eh_bp": -6.25,
+     "rule_bp": 0.0,
+     "cd_bp": -2.0623,
+     "rule_share": -0.0
+    },
+    "2y": {
+     "total_bp": 2.5867,
+     "eh_bp": 21.875,
+     "rule_bp": -17.0321,
+     "cd_bp": -2.2562,
+     "rule_share": -6.5844
+    },
+    "3y": {
+     "total_bp": 13.0554,
+     "eh_bp": 14.5833,
+     "rule_bp": 0.4024,
+     "cd_bp": -1.9303,
+     "rule_share": 0.0308
+    },
+    "5y": {
+     "total_bp": 14.3298,
+     "eh_bp": 8.75,
+     "rule_bp": 6.0962,
+     "cd_bp": -0.5164,
+     "rule_share": 0.4254
+    },
+    "10y": {
+     "total_bp": 4.3042,
+     "eh_bp": 4.375,
+     "rule_bp": 0.1465,
+     "cd_bp": -0.2173,
+     "rule_share": 0.034
+    }
+   }
+  }
+ },
+ "linearity_gate": {
+  "a_policy_cpi": {
+   "max_curve_bp": 0.0002,
+   "max_macro_pp": 1e-06,
+   "pass": true
+  },
+  "b_us_exports": {
+   "max_curve_bp": 0.0001,
+   "max_macro_pp": 1e-06,
+   "pass": true
+  }
+ }
+}

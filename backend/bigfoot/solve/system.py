@@ -53,6 +53,43 @@ WIRING_FLAGS = [
 
 OIL_RHO = 0.90          # WIRING_OIL_RHO
 
+# ── 못이 끝난 뒤의 준칙 잔차 ────────────────────────────────────────────────
+#
+# 화면은 여덟 분기를 **전부** 못 박는다(`src/lab/model/strategy/path.ts::
+# PINNED_Q = 8`). 못이 박힌 분기에서는 준칙을 덮어쓰고, 그 분기의 준칙 잔차를
+# 역산해 `diagnostics.pin_residuals` 에 담는다. 그런데 못이 없는 분기의 잔차는
+# **떨어뜨리는 코드가 있어서가 아니라 없어서** 0 이었다 — q9 부터 정확히 0 이고
+# 그 순간부터 준칙이 자기 힘으로 되돌린다(실측 +8.4 / +15.9 / +22.4 / +27.8bp).
+#
+# 그게 「급단절」이고, **데이터가 그 편이 아니다.** 같은 잔차의 AR(1) 을 역사
+# 표본에서 다시 풀면(2026-08-21, `scripts/p4_ar1.py`) ρ = 0.801 이고 Newey-West
+# 표준오차 0.0745 다. 95% 구간이 대략 [0.65, 0.95] 라 급단절(ρ=0)은 10σ 밖이다.
+# 상수 제외·추세 제거 판도 0.78~0.83 안이다.
+#
+# ## 왜 부록 D 가 아니라 여기인가
+#
+# 부록 D 는 **논문이 인쇄한 계수**의 자리다. ρ 는 우리가 역사 잔차에서 추정한
+# 값이고 논문에 없다. 부록 D 에 섞으면 「논문이 박은 것」과 「우리가 잰 것」이
+# 한 표에서 구별되지 않는다.
+#
+# ## 왜 기존 감쇠 상수 둘을 못 쓰는가
+#
+#     assembler.PHI_I_TAIL = 0.85   기저 지평(24분기) **밖**의 정책 편차
+#     PolicyRule.phi_i              준칙 자체의 평활 — 금리의 지속성이지
+#                                   잔차의 지속성이 아니다
+#
+# ## 선형성이 안 깨지는 이유
+#
+# 꼬리는 **못 창의 마지막 분기**에서만 자란다(`pin_window`). 기저 `policy_qN`
+# 은 q(N−1) 한 칸만 못 박으므로 마지막 칸의 잔차가 `policy_q8` 말고는 전부 0
+# 이다 — 즉 꼬리는 `policy_q8` **하나에만** 실리고, 여덟 점을 다 못 박는
+# 정확해도 같은 규칙을 받는다. 선형결합이 크기를 자동으로 맞춘다.
+RESIDUAL_TAIL = "decay"          # "decay" | "break" — 기본은 감쇠
+RESIDUAL_TAIL_RHO = 0.801        # AR(1), 역사 준칙 잔차 2000Q1–2026Q2 (n=106)
+RESIDUAL_TAIL_RHO_SE = 0.0745    # Newey-West L=4 (OLS 0.0589)
+RESIDUAL_TAIL_HALF_LIFE_Q = 3.12
+RESIDUAL_TAIL_SOURCE = "backend/scripts/p4_ar1.py · output/p4/ar1.json"
+
 KOREA_VARS = ["c", "dc", "i_fi", "di", "i_fi_star", "g", "dg",
               "i_con", "di_con", "ih_star", "x", "m", "y_gap",
               "pi_core", "pi_inf",
@@ -256,7 +293,8 @@ class BigfootSystem:
 
     # -------------------------------------------------------------- solving
     def solve(self, shock: dict, residuals: dict = None, pin: dict = None,
-              us_override: dict = None) -> dict:
+              us_override: dict = None, pin_window: int | None = None,
+              tail_rho: float | None = None) -> dict:
         """shock: {'kr_rule_bp': x, 'us_rule_bp': x, 'oil_pct': x}.
 
         Phase-4 conditional inputs (all optional):
@@ -269,6 +307,12 @@ class BigfootSystem:
                        and returned in diagnostics['pin_residuals']
           us_override  {'y','pi','i'} imposed US paths (length >= T+40 for
                        the EH 10y) — bypasses the US-block simulation
+          pin_window   못 창의 길이(분기). 주면 그 창의 **마지막 분기**에서
+                       역산된 준칙 잔차가 그 뒤로 ρ 로 감쇠하며 이어진다
+                       (`RESIDUAL_TAIL`). 안 주면 창이 없는 것이고 꼬리도
+                       없다 — 못을 안 쓰는 호출자는 예전과 바이트 동일하다.
+          tail_rho     그 ρ 를 이 호출에서만 갈아끼운다. `0.0` 이면 급단절이
+                       정확히 복원된다(비교·테스트용)
         """
         T = self.T
         res = {k: np.zeros(T) for k in self.RESIDUAL_EQS}
@@ -284,6 +328,15 @@ class BigfootSystem:
                 raise KeyError(f"variable {k!r} is not pin-supported "
                                f"(supported: {self.PIN_SUPPORTED})")
         pin_resid = {k: np.zeros(T) for k in pin}
+
+        # 못 창이 끝나는 자리와 그 뒤의 감쇠율. 창을 안 주면 `tail_at` 이 None
+        # 이고 아래 분기가 통째로 안 돈다 — 못을 안 쓰는 호출자에게 이 기능은
+        # **존재하지 않는다.**
+        tail_at = None if pin_window is None else min(int(pin_window), T) - 1
+        rho = (tail_rho if tail_rho is not None
+               else (RESIDUAL_TAIL_RHO if RESIDUAL_TAIL == "decay" else 0.0))
+        if tail_at is not None and (tail_at < 0 or "i_kr" not in pin):
+            tail_at = None
 
         oil = self._oil_path(shock.get("oil_pct", 0.0))
         uspath = self._us_paths(shock.get("us_rule_bp", 0.0), us_override)
@@ -382,11 +435,16 @@ class BigfootSystem:
 
                 # policy & rates (WIRING_RULE_CPI); a pinned i_kr overrides
                 # the rule — its residual is backed out after convergence
+                # 못 창이 끝난 뒤에도 잔차는 0 으로 안 떨어진다 — 창의
+                # 마지막 분기 값이 ρ 로 잦아든다. `t > tail_at` 이라 그 분기의
+                # 값은 이미 역산돼 있다(아래 수렴 후 블록).
+                tail = (0.0 if tail_at is None or t <= tail_at
+                        else rho ** (t - tail_at) * pin_resid["i_kr"][tail_at])
                 rule_rhs = (self.pr.phi_i * lag("i_kr", t)
                             + (1 - self.pr.phi_i)
                             * ((1 + self.pr.phi_pi) * new["cpi_yoy"]
                                + self.pr.phi_y * new["y_gap"])
-                            + shock_a + res["policy_rule"][t])
+                            + shock_a + res["policy_rule"][t] + tail)
                 pinned_now = ("i_kr" in pin
                               and not np.isnan(pin["i_kr"][t]))
                 new["i_kr"] = pin["i_kr"][t] if pinned_now else rule_rhs
@@ -524,4 +582,13 @@ class BigfootSystem:
                 "diagnostics": {"iterations": iters,
                                 "max_iter_used": int(max(iters)),
                                 "final_deltas": deltas,
-                                "pin_residuals": pin_resid}}
+                                "pin_residuals": pin_resid,
+                                # 꼬리를 실제로 걸었나. 호출자가 «걸었다고
+                                # 믿는 것» 과 «걸린 것» 이 갈리면 여기서 보인다.
+                                "residual_tail": {
+                                    "applied": tail_at is not None
+                                    and rho != 0.0,
+                                    "from_q": None if tail_at is None
+                                    else tail_at + 1,
+                                    "rho": float(rho),
+                                }}}

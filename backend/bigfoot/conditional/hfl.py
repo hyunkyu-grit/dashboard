@@ -26,11 +26,9 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 from bigfoot.conditional.invert import conditional_forecast
-from bigfoot.solve.phase3 import BETA_SYNC_ADOPTED, FINAL_EQ24, FINAL_OPTIONS
+from bigfoot.solve.config import BETA_SYNC_ADOPTED, FINAL_EQ24, FINAL_OPTIONS
 from bigfoot.solve.system import BigfootSystem
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -234,6 +232,14 @@ PANELS = [  # (key, title, imposed?)
 
 def render(summary: dict, quarters: list, var_paths: dict,
            kr3y: np.ndarray, Tc: int) -> None:
+    # plotly 는 **여기 안에서만** import 한다. 모듈 스코프에 두면 이 파일을
+    # `load_hfl_conditions` 하나 때문에 import 하는 런타임 경로
+    # (`irs_curve/assembler.py`)가 그래프 라이브러리를 같이 끌고 온다
+    # (2026-08-21 P4 §C.7(b)). `cd_layer/study.py` 와 `irs_curve/assembler.py`
+    # 가 이미 같은 모양이다.
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+
     # single source of truth — rendered VERBATIM (drift test vs the hub)
     sentence = summary["headline"]["sentence_ko"]
     fig = make_subplots(rows=2, cols=3, vertical_spacing=0.14,

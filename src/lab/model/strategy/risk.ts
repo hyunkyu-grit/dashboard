@@ -17,19 +17,26 @@
  * 답이다. 문장의 출처는 `assumptions.json` 의 `r_star.effect_note` 이고,
  * 이 파일이 그걸 다시 쓰지 않는다.
  *
- * ## 지평 이탈 — 급단절을 구현하고 이름을 단다
+ * ## 지평 이탈 — 감쇠를 구현하고 이름을 단다 [2026-08-24 뒤집혔다]
  *
- * 기저는 «q9 에 `u_{i,t}` 가 0 으로 떨어지고 준칙이 되돌린다» 로 구워져 있다.
- * 부록 C(잔차의 국소수준 UC 모형)를 따라 `u` 를 AR 로 감쇠시키는 것이 원칙적인
- * 대안이고, **데이터가 그쪽 편이다** — `residual_moments.json` 이 준칙 잔차의
- * AR(1) 을 **0.801** 로 적고 있다.
+ * 예전 기저는 «q9 에 `u_{i,t}` 가 0 으로 떨어지고 준칙이 되돌린다» 였다. 그게
+ * 「급단절」이고, 이 파일은 그 이름을 달고 있었다. 그런데 그건 **정한 것이
+ * 아니라 안 채운 것**이었다 — 못이 없는 분기의 잔차를 아무도 안 넣어서 0
+ * 이었을 뿐이다(P4 §C.6).
  *
- * 그런데 그 변형은 **엔진을 다시 굽는 일**이라 이 면에서 할 수 있는 것이 아니다
- * (엔진은 세션 1 동결). 실측한 크기는 진단 §C.2 에 있고 PRODUCT.md 가 대안을
- * 기록한다. 화면은 **급단절이라고 이름을 달고** 그 되돌림의 크기를 경로마다
- * 그 자리에서 잰다.
+ * 2026-08-24 (D.4) 에 엔진이 부록 C 쪽으로 갔다. 못 창의 마지막 분기 잔차가
+ * AR(1) **ρ = 0.801** 로 잦아든다(`system.py::RESIDUAL_TAIL`). 데이터가 그
+ * 편이다 — Newey-West 표준오차 0.0745 라 급단절(ρ=0)은 10σ 밖이다.
+ *
+ * **화면의 숫자가 실제로 바뀌었다.** −25bp × 8분기 경로의 9~12분기 되돌림이
+ * +27.8bp → **+14.8bp** 다. 되돌림이 절반으로 준 이유는 명확하다: 완화 쪽으로
+ * 벗어난 잔차가 경로가 끝나는 순간 증발하지 않고 남아서 준칙을 붙잡는다.
+ *
+ * 이름은 기저가 싣고 온다(`scenario_basis.json::residual_tail.treatment`).
+ * 여기서 다시 정하지 않는다 — 두 벌이면 한쪽만 낡는다.
  */
 
+import basisJson from '../artifacts/scenario_basis.json';
 import assumptionsJson from '../artifacts/assumptions.json';
 
 import type { PathSolution } from './path';
@@ -56,8 +63,17 @@ export const RULE_RESIDUAL_AR1 = 0.801;
 /** 위 자기상관 추정의 Newey-West 표준오차. 화면이 0.801 을 인용할 때 같이 든다. */
 export const RULE_RESIDUAL_AR1_SE = 0.0745;
 
-/** 이 면이 구현한 지평 이탈 처리. 화면에 이 이름이 뜬다. */
-export const RESIDUAL_TREATMENT = '급단절' as const;
+/** 기저가 실제로 구운 지평 이탈 처리. 화면에 이 이름이 뜬다.
+ *
+ *  **기저에서 읽는다.** 예전에는 여기 `'급단절'` 이 상수로 박혀 있었고, 그건
+ *  그때의 엔진과 맞았다. D.4 가 엔진을 바꾸자 그 상수가 그 자리에서 거짓이
+ *  됐다 — 화면이 「급단절」이라고 말하면서 감쇠된 숫자를 보여 주는 상태다.
+ *  이름과 숫자가 같은 곳에서 나와야 그 병이 다시 안 생긴다. */
+export const RESIDUAL_TREATMENT: '감쇠' | '급단절' =
+  (basisJson as { residual_tail?: { treatment?: string } }).residual_tail
+    ?.treatment === 'break'
+    ? '급단절'
+    : '감쇠';
 
 export type RiskLine = {
   key: 'r-star' | 'horizon-exit' | 'rule-deviation';
@@ -125,7 +141,7 @@ export function riskLines(sol: PathSolution, headline: TenorDecomposition | null
           ? '경로가 끝나도 룰이 되돌릴 것이 없어요 — 이 경로는 베이스라인과 같은 자리예요.'
           : `경로가 끝나면 룰이 다시 움직여요 — 9~12분기에 ${fix1(Math.abs(exit))}bp 되돌려요.${share}`,
       badges: ['논문에 없는 해석이에요', `잔차 처리: ${RESIDUAL_TREATMENT}`],
-      source: `부록 B 각주 31 은 조건 변수마다 조정할 충격을 손으로 고른다고 해요. 정책금리에 조건을 걸면 eq (35) 의 준칙 잔차를 미는 셈인데, 논문은 그 예를 안 들어요. 기저는 9분기에 그 잔차를 0 으로 떨어뜨려요 — 과거 잔차의 자기상관이 ${RULE_RESIDUAL_AR1} 이라 부록 C 식으로 감쇠시키는 대안이 있고, 그건 엔진을 다시 구워야 해요.`,
+      source: `부록 B 각주 31 은 조건 변수마다 조정할 충격을 손으로 고른다고 해요. 정책금리에 조건을 걸면 eq (35) 의 준칙 잔차를 미는 셈인데, 논문은 그 예를 안 들어요. 경로가 끝나도 그 잔차는 0 으로 안 떨어지고 AR(1) ${RULE_RESIDUAL_AR1}(표준오차 ${RULE_RESIDUAL_AR1_SE}) 로 잦아들어요 — 부록 C 쪽이고, 과거 잔차를 다시 재서 고른 값이라 논문이 박은 값은 아니에요.`,
     },
     {
       key: 'rule-deviation',

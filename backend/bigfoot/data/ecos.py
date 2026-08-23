@@ -10,7 +10,6 @@ search (2026-08-05), not guessed:
     call rate   721Y001 / 1010000 / Q  무담보콜금리(1일), quarterly average
 """
 import os
-import sys
 from datetime import date
 from pathlib import Path
 
@@ -23,6 +22,20 @@ from statsmodels.tsa.filters.hp_filter import hpfilter
 ROOT = Path(__file__).resolve().parents[2]
 RAW_DIR = ROOT / "data" / "raw"
 ECOS_BASE = "https://ecos.bok.or.kr/api"
+
+
+class EcosDataError(RuntimeError):
+    """ECOS 계열을 API 로도 캐시로도 못 얻었다.
+
+    예전에는 이 자리가 `sys.exit()` 였다. `SystemExit` 는 `BaseException` 이라
+    바로 아래 `fetch_ecos` 의 `except (requests.RequestException, RuntimeError)`
+    가 **못 잡는다** — 그래서 인-프로세스로 엔진을 import 하는 모든 경로
+    (`wiring/edges.py` · `wiring/surfaces.py` · `tests/engine/**`)가 통째로
+    죽었고, 리베이크는 `engine_status.json` 을 아예 새로 못 써서 화면이
+    「막혔다」 대신 **어제의 「신선하다」** 를 그대로 보여 줬다.
+
+    `RuntimeError` 를 상속하는 것이 계약이다. 기존 `except` 가 그대로 잡는다.
+    """
 
 # name -> (stat, cycle, item, start, end)
 SERIES = {
@@ -127,7 +140,7 @@ def _api_key() -> str:
         for line in env.read_text(encoding="utf-8").splitlines():
             if line.startswith("ECOS_API_KEY="):
                 return line.split("=", 1)[1].strip()
-    sys.exit("ECOS_API_KEY not set (env var or .env)")
+    raise EcosDataError("ECOS_API_KEY not set (env var or .env)")
 
 
 def fetch_ecos(name: str) -> pd.DataFrame:
@@ -137,9 +150,11 @@ def fetch_ecos(name: str) -> pd.DataFrame:
     cache = RAW_DIR / f"{name}.csv"
     if os.environ.get("BIGFOOT_OFFLINE") == "1":
         return _read_cache(cache, name, forced=True)
-    key = _api_key()
     rows, first = [], 1
     try:
+        # 키를 여기서 읽는다. 밖에서 읽으면 «키가 없다» 가 폴백을 못 타고
+        # 그대로 위로 던져진다 — 캐시가 멀쩡히 있어도 굽기가 멈춘다.
+        key = _api_key()
         while True:
             url = (f"{ECOS_BASE}/StatisticSearch/{key}/json/kr/"
                    f"{first}/{first + 999}/{stat}/{cycle}/{start}/{end}/{item}")
@@ -162,7 +177,8 @@ def fetch_ecos(name: str) -> pd.DataFrame:
 
 def _read_cache(cache: Path, name: str, forced: bool = False) -> pd.DataFrame:
     if not cache.exists():
-        sys.exit(f"no cache for {name} at {cache} and API unavailable")
+        raise EcosDataError(
+            f"no cache for {name} at {cache} and API unavailable")
     df = pd.read_csv(cache, dtype={"TIME": str})
     if forced:
         print(f"[offline] {name} from cache (retrieved {df['retrieved_at'].iloc[0]})")

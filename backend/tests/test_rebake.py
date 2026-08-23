@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -174,10 +175,16 @@ def test_is_due_flips_after_an_mpc_passes():
 
 
 @needs_artifacts
-def test_a_failed_rebake_leaves_the_previous_artifacts_untouched(monkeypatch):
-    """중간 실패를 심고 이전 산출물이 바이트 그대로인지 본다."""
+def test_a_failed_rebake_leaves_the_previous_numbers_untouched(monkeypatch):
+    """중간 실패를 심고 **값**이 바이트 그대로인지 본다.
+
+    `engine_status.json` 은 여기서 빠진다 — 그건 값이 아니라 그 값에 대한
+    바깥의 판정이고, 실패했으면 판정이 바뀌는 게 맞다(아래 테스트).
+    """
     from rebake import __main__ as rb
-    before = {a: (OUT / a).read_bytes() for a in ARTIFACTS}
+    values = ("scenario_basis.json", "assumptions.json")
+    before = {a: (OUT / a).read_bytes() for a in values}
+    status_before = (OUT / "engine_status.json").read_bytes()
 
     def boom(*_a, **_k):
         raise rb.RebakeError("심어 둔 실패")
@@ -186,8 +193,65 @@ def test_a_failed_rebake_leaves_the_previous_artifacts_untouched(monkeypatch):
     with pytest.raises(rb.RebakeError):
         rb.rebake(count_tests=False)
 
-    for a in ARTIFACTS:
-        assert (OUT / a).read_bytes() == before[a], f"{a} 가 바뀌었어요"
+    try:
+        for a in values:
+            assert (OUT / a).read_bytes() == before[a], f"{a} 가 바뀌었어요"
+    finally:
+        (OUT / "engine_status.json").write_bytes(status_before)
+        shutil.copy(OUT / "engine_status.json",
+                    rb.FRONTEND / "engine_status.json")
+
+
+@needs_artifacts
+def test_a_failed_rebake_says_blocked_instead_of_yesterdays_fresh(monkeypatch):
+    """굽기가 멈추면 상태가 **앞으로** 간다.
+
+    2026-08-21 (P4) §C.7(a) 의 결함이다. 원자성만 있으면 어제 판이 그대로
+    남고, 그 판의 `staleness.state` 는 `fresh` 라서 화면이 「막혔다」 대신
+    「신선하다」 를 말한다. 프런트 사본까지 같이 가는지도 본다.
+    """
+    from rebake import __main__ as rb
+    before = (OUT / "engine_status.json").read_bytes()
+    assert json.loads(before)["staleness"]["state"] != "blocked"
+
+    def boom(*_a, **_k):
+        raise rb.RebakeError("심어 둔 실패")
+
+    monkeypatch.setattr(rb.layer2, "build_assumptions", boom)
+    try:
+        with pytest.raises(rb.RebakeError):
+            rb.rebake(count_tests=False)
+
+        after = json.loads((OUT / "engine_status.json").read_text("utf-8"))
+        assert after["staleness"]["state"] == "blocked"
+        assert "심어 둔 실패" in after["staleness"]["why"]
+        # 기저의 날짜는 **이전 것**이어야 한다 — 새 기저가 없으니까.
+        assert after["basis_as_of"] == json.loads(before)["basis_as_of"]
+        mirror = json.loads(
+            (rb.FRONTEND / "engine_status.json").read_text("utf-8"))
+        assert mirror["staleness"]["state"] == "blocked"
+    finally:
+        (OUT / "engine_status.json").write_bytes(before)
+        shutil.copy(OUT / "engine_status.json",
+                    rb.FRONTEND / "engine_status.json")
+
+
+def test_missing_data_raises_instead_of_killing_the_process():
+    """`sys.exit` 은 `SystemExit` 라 `except Exception` 이 못 잡는다.
+
+    인-프로세스로 엔진을 import 하는 경로(`wiring/edges.py` ·
+    `wiring/surfaces.py` · `tests/engine/**`)가 전부 그 자리에서 통째로 죽었다.
+    `RuntimeError` 를 상속하는 것이 계약이다 — `fetch_ecos` 의 기존 `except`
+    가 그대로 잡아 캐시로 넘어간다.
+    """
+    from bigfoot.data.ecos import EcosDataError, _read_cache
+    from bigfoot.data.fred import FredDataError
+
+    for exc in (EcosDataError, FredDataError):
+        assert issubclass(exc, RuntimeError)
+
+    with pytest.raises(EcosDataError):
+        _read_cache(Path("없는_경로") / "없는_파일.csv", "없는_계열")
 
 
 def test_two_rebakes_are_byte_identical():

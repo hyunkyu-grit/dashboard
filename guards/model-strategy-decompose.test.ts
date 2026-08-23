@@ -97,15 +97,21 @@ describe('동결 경로는 통째로 0 이다', () => {
 });
 
 describe('준칙 몫', () => {
-  /* 실측(진단 §C.1b · P4 재측정): 지속 −25×8 의 12개월 3Y 는 +11.69bp 이고 그중 +3.86bp,
-     33% 가 준칙 되돌림이다. 이 숫자가 리스크 줄의 근거라 값으로 핀을 박는다. */
+  /* 실측(P4 D.4 재측정, `output/p4/d4_tail.json`): 지속 −25×8 의 12개월 3Y 는
+     +8.11bp 이고 그중 +0.37bp, 4.5% 가 준칙 되돌림이다.
+
+     **D.4 전에는 +11.69bp / +3.86bp / 33% 였다.** 잔차 감쇠가 들어오면서
+     되돌림이 절반으로 줄었고, 그만큼 3Y 가 경로 자체를 더 많이 담는다.
+     「경로 그대로」 칸(+8.33bp)은 안 움직인다 — 못 창 안은 그대로니까.
+
+     이 숫자가 리스크 줄의 근거라 값으로 핀을 박는다. */
   it('지속 −25×8 · 12개월 3Y 의 준칙 몫이 실측과 같다', () => {
     const d = decomposeTenor(solvePath(Array<number>(8).fill(-25)), '3y', 4);
-    expect(d.totalBp).toBeCloseTo(11.686, 2);
+    expect(d.totalBp).toBeCloseTo(8.107, 2);
     expect(d.terms.find((t) => t.key === 'eh')!.value).toBeCloseTo(8.333, 2);
-    expect(d.terms.find((t) => t.key === 'rule')!.value).toBeCloseTo(3.863, 2);
-    expect(d.terms.find((t) => t.key === 'cd')!.value).toBeCloseTo(-0.511, 2);
-    expect(d.ruleShare!).toBeCloseTo(0.33, 2);
+    expect(d.terms.find((t) => t.key === 'rule')!.value).toBeCloseTo(0.366, 2);
+    expect(d.terms.find((t) => t.key === 'cd')!.value).toBeCloseTo(-0.592, 2);
+    expect(d.ruleShare!).toBeCloseTo(0.045, 2);
   });
 
   it('10년은 지평 이탈에 거의 안 흔들린다 — 앞뒤로 같은 꼬리가 들어가 상쇄된다', () => {

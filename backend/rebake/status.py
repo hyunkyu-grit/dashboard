@@ -151,7 +151,14 @@ def _tests_passed() -> dict:
 def build_status(basis_as_of: str, assumptions: dict, *,
                  cache_fallbacks: list[str] | None = None,
                  today: dt.date | None = None,
-                 count_tests: bool = True) -> dict:
+                 count_tests: bool = True,
+                 blocked_reason: str | None = None) -> dict:
+    """`blocked_reason` 이 있으면 «막힘» 이 다른 판정을 이긴다.
+
+    굽기가 아예 멈춘 자리에서 부른다(`rebake/__main__.py::_blocked_status`).
+    그때 `basis_as_of` 는 **이전 기저의** 날짜다 — 새 기저가 없으니까. 그
+    조합(옛 날짜 + blocked)이 정확히 화면이 말해야 하는 사실이다.
+    """
     today = today or dt.date.today()
     edges = data_edges()
     nxt = cadence.next_event(today)
@@ -163,7 +170,9 @@ def build_status(basis_as_of: str, assumptions: dict, *,
                 and it.get("value") is None:
             blocked_on.append(it["key"])
 
-    if blocked_on:
+    if blocked_reason:
+        state, why = "blocked", blocked_reason
+    elif blocked_on:
         state, why = "blocked", ("필수 입력을 못 받았어요: "
                                  + ", ".join(sorted(set(blocked_on))))
     elif cadence.is_due(basis_d, today):

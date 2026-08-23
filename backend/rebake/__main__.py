@@ -22,6 +22,18 @@
 
 `assumptions.json` 이 «기저를 설명하는 문서» 라서, 기저와 따로 쓰이면 그 순간
 서로 다른 빌드를 가리킬 수 있다. 그래서 같이 쓰고 같이 옮긴다.
+
+## 실패는 조용하지 않다 — `engine_status.json` **하나만** 앞으로 간다
+
+원자성은 「실패하면 아무것도 안 바뀐다」 인데, 그것만으로는 화면이 거짓말을
+한다. 굽기가 멈추면 어제 판이 그대로 남고 그 판의 `staleness.state` 는
+**`fresh`** 다 — 「막혔다」 가 아니라 「신선하다」 로 읽힌다(2026-08-21 P4
+진단 §C.7(a)).
+
+그래서 실패 경로가 이전 산출물을 되돌린 **뒤에**, 이전 기저의 날짜로
+`engine_status.json` 만 다시 써서 `blocked` 를 세운다. 기저와 가정은 손대지
+않는다 — 셋이 한 벌인 것은 **값**의 이야기이고, 신선도는 그 한 벌에 대한
+바깥의 판정이다.
 """
 from __future__ import annotations
 
@@ -71,6 +83,28 @@ def _run_engine(offline: bool) -> tuple[str, list[str]]:
     return basis["as_of"], fallbacks
 
 
+def _blocked_status(reason: str) -> bool:
+    """굽기가 멈춘 뒤, **이전** 산출물 위에 `blocked` 상태만 다시 쓴다.
+
+    이전 산출물이 아예 없으면(첫 굽기가 실패) 쓸 근거가 없다 — 그때는 아무것도
+    안 하고 `False` 를 돌려준다. 지어낸 상태를 남기느니 없는 편이 낫다.
+
+    여기서 나는 예외는 **삼킨다.** 이건 원래 실패를 화면에 알리려는 곁가지이고,
+    곁가지가 본 예외를 가리면 진짜 원인이 사라진다.
+    """
+    try:
+        basis = json.loads((OUT / "scenario_basis.json").read_text("utf-8"))
+        asm = json.loads((OUT / "assumptions.json").read_text("utf-8"))
+        st = status.build_status(basis["as_of"], asm, count_tests=False,
+                                 blocked_reason=reason)
+        (OUT / "engine_status.json").write_text(
+            json.dumps(st, ensure_ascii=False, indent=2) + "\n", "utf-8")
+        shutil.copy(OUT / "engine_status.json", FRONTEND / "engine_status.json")
+        return True
+    except Exception:                              # noqa: BLE001
+        return False
+
+
 def rebake(*, offline: bool = False, count_tests: bool = True) -> dict:
     with tempfile.TemporaryDirectory(prefix="rebake-", dir=str(BACKEND)) as tmp:
         staging = Path(tmp)
@@ -117,9 +151,13 @@ def rebake(*, offline: bool = False, count_tests: bool = True) -> dict:
             _mirror_to_frontend()
             return st
 
-        except Exception:
+        except Exception as e:
             for name, blob in prev.items():        # 되돌린다
                 (OUT / name).write_bytes(blob)
+            head = (str(e).strip().splitlines() or [""])[0][:200]
+            _blocked_status("굽다가 멈춰서 이전 판을 그대로 두었어요 — "
+                            "화면의 숫자는 그날 것이에요. "
+                            f"({type(e).__name__}: {head})")
             raise
 
 

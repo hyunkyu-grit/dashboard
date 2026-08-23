@@ -1,6 +1,6 @@
 {
   "module": "engine_status",
-  "basis_as_of": "2026-08-21",
+  "basis_as_of": "2026-08-24",
   "data_edge": {
     "per_series": {
       "국민계정 실질": "2026Q2",
@@ -116,8 +116,8 @@
     }
   ],
   "tests": {
-    "collected": 48,
-    "source": "pytest"
+    "collected": null,
+    "source": "이 빌드에서 안 셌어요"
   },
   "engine": {
     "home": "backend/bigfoot",

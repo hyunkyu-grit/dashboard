@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from bigfoot.conditional import ConditioningMapError, conditional_forecast  # noqa: E402
 from bigfoot.conditional.residuals import check_residual_selection  # noqa: E402
 from bigfoot.equations.us import USBlock  # noqa: E402
-from bigfoot.solve.phase3 import FINAL_EQ24, FINAL_OPTIONS  # noqa: E402
+from bigfoot.solve.config import FINAL_EQ24, FINAL_OPTIONS  # noqa: E402
 from bigfoot.solve.system import BigfootSystem  # noqa: E402
 
 TOL_FP = 5e-8      # the Korea solver's damped fixed point runs at tol 1e-8

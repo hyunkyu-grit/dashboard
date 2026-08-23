@@ -612,7 +612,7 @@ class _BindingLinearizer(Linearizer):
 
 # ── 엣지 조립 ────────────────────────────────────────────────────────────────
 def build() -> dict:
-    from bigfoot.solve.phase3 import (BETA_SYNC_ADOPTED, FINAL_EQ24,
+    from bigfoot.solve.config import (BETA_SYNC_ADOPTED, FINAL_EQ24,
                                       FINAL_OPTIONS)
     from bigfoot.solve.system import BigfootSystem
 

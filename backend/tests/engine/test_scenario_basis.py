@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT))
 
 from bigfoot.conditional import conditional_forecast  # noqa: E402
 from bigfoot.conditional.residuals import load_conditioning_map  # noqa: E402
-from bigfoot.solve.phase3 import FINAL_EQ24, FINAL_OPTIONS  # noqa: E402
+from bigfoot.solve.config import FINAL_EQ24, FINAL_OPTIONS  # noqa: E402
 from bigfoot.solve.system import BigfootSystem  # noqa: E402
 
 TOL = 5e-7      # damped-fixed-point tolerance headroom

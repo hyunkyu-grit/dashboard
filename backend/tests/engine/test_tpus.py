@@ -61,7 +61,7 @@ def test_tp_holdout_gate_locked():
 
 def test_sync_pin_conditions_locked():
     """Phase-4.8 FINAL adoption conditions: beta_sync = 1.05, interior."""
-    from bigfoot.solve.phase3 import BETA_SYNC_ADOPTED, SYNC_PIN_RESULT
+    from bigfoot.solve.config import BETA_SYNC_ADOPTED, SYNC_PIN_RESULT
     assert BETA_SYNC_ADOPTED == 1.05
     assert 0.1 < BETA_SYNC_ADOPTED < 1.5
     assert SYNC_PIN_RESULT["interior"] and not SYNC_PIN_RESULT["degenerate"]

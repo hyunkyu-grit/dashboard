@@ -36,13 +36,20 @@ import numpy as np
 from bigfoot.conditional.hfl import kr3y_eh
 from bigfoot.conditional.invert import conditional_forecast
 from bigfoot.irs_curve.assembler import PHI_I_TAIL, engine_contribution
-from bigfoot.solve.phase3 import BETA_SYNC_ADOPTED, FINAL_EQ24, FINAL_OPTIONS
-from bigfoot.solve.system import BigfootSystem
+from bigfoot.solve.config import BETA_SYNC_ADOPTED, FINAL_EQ24, FINAL_OPTIONS
+from bigfoot.solve.system import (BigfootSystem, RESIDUAL_TAIL,
+                                  RESIDUAL_TAIL_HALF_LIFE_Q,
+                                  RESIDUAL_TAIL_RHO,
+                                  RESIDUAL_TAIL_RHO_SE,
+                                  RESIDUAL_TAIL_SOURCE)
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "output"
 
 T = 24
+#: 화면이 못 박는 분기 수. `src/lab/model/strategy/path.ts::PINNED_Q` 와 같은
+#: 값이고, 여기서는 **꼬리가 어디서 자라는지**를 정한다 — 창의 마지막 분기다.
+PIN_WINDOW_Q = 8
 IRS_TENOR_Y = {"1y": 1, "2y": 2, "3y": 3, "5y": 5, "10y": 10}
 IRS_H = 13                      # quarterly IRS diff path, h = 0..12
 # 논문 Figure 18 의 여덟 칸을 화면이 그대로 세울 수 있게 담는다 [2026-08-21].
@@ -99,7 +106,8 @@ def build_bases() -> dict:
     for q in range(8):
         pinpath = np.full(T, np.nan)
         pinpath[q] = 0.25
-        out = sys_.solve({}, pin={"i_kr": pinpath})
+        out = sys_.solve({}, pin={"i_kr": pinpath},
+                         pin_window=PIN_WINDOW_Q)
         bases[f"policy_q{q + 1}"] = _extract(sys_, out)
         resids[f"policy_q{q + 1}"] = {
             "policy_rule": [round(float(x), 8)
@@ -171,7 +179,8 @@ def linearity_gate(sys_, bases, resids, M) -> dict:
     pinpath = np.full(T, np.nan)
     pinpath[:8] = target
     u_cpi = {k: 0.5 * np.array(v) for k, v in resids["cpi"].items()}
-    exact = sys_.solve({}, pin={"i_kr": pinpath}, residuals=u_cpi)
+    exact = sys_.solve({}, pin={"i_kr": pinpath}, residuals=u_cpi,
+                       pin_window=PIN_WINDOW_Q)
     gates["a_policy_cpi"] = _gate_diff(sys_, exact, rec)
 
     # (b) US +50bp x 2q & exports -3%
@@ -218,6 +227,19 @@ def main() -> dict:
         "bases": bases,
         "conditioning_residuals": resids,
         "domain": DOMAIN,
+        #: 못 창이 끝난 뒤 준칙 잔차를 어떻게 두는가. 화면이 이 이름을 그대로
+        #: 달고(`strategy/risk.ts::RESIDUAL_TREATMENT`), ρ 를 인용할 때
+        #: 표준오차를 같이 든다.
+        "residual_tail": {
+            "treatment": RESIDUAL_TAIL,
+            "rho": RESIDUAL_TAIL_RHO,
+            "rho_se_nw": RESIDUAL_TAIL_RHO_SE,
+            "half_life_q": RESIDUAL_TAIL_HALF_LIFE_Q,
+            "pin_window_q": PIN_WINDOW_Q,
+            "sample": "2000Q1–2026Q2 · n=106",
+            "source": RESIDUAL_TAIL_SOURCE,
+            "in_paper": False,
+        },
         "linearity_gate": gates,
         "caveats": [
             "LINEAR_BASIS: scenarios are exact linear combinations of unit "
@@ -227,6 +249,11 @@ def main() -> dict:
             "IRF-B anchor)",
             "US_6Q_BASIS_ADDED: a third US duration basis beyond the task "
             "sheet's two, so the duration knob {2,4,6}q stays exact",
+            "RESIDUAL_TAIL_DECAY: the pin-implied policy-rule residual does "
+            "NOT drop to zero when the 8q pin window ends — it decays "
+            "at AR(1) rho=0.801 (NW SE 0.0745, 2000Q1-2026Q2, n=106). "
+            "Not in the paper; our estimate off historical residuals. "
+            "rho=0 restores the hard break exactly",
         ],
     }
     (OUT / "scenario_basis.json").write_text(

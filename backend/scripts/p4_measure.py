@@ -151,7 +151,7 @@ def _peak(series, sign: float) -> float:
 
 
 def _final_opts():
-    from bigfoot.solve.phase3 import (BETA_SYNC_ADOPTED, FINAL_EQ24,
+    from bigfoot.solve.config import (BETA_SYNC_ADOPTED, FINAL_EQ24,
                                       FINAL_OPTIONS)
     return BETA_SYNC_ADOPTED, FINAL_EQ24, FINAL_OPTIONS
 

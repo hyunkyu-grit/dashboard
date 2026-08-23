@@ -29,6 +29,7 @@ import { PINNED_Q, solvePath } from '@/lab/model/strategy/path';
 import {
   RESIDUAL_TREATMENT,
   RULE_RESIDUAL_AR1,
+  RULE_RESIDUAL_AR1_SE,
   RULE_SIGMA_PP,
   RULE_SIGMA_SAMPLE,
   horizonExitBp,
@@ -36,6 +37,7 @@ import {
   ruleDeviationSigma,
 } from '@/lab/model/strategy/risk';
 import { decomposeTenor } from '@/lab/model/strategy/decompose';
+import BASIS from '@/lab/model/artifacts/scenario_basis.json';
 
 const CUT = solvePath(Array<number>(PINNED_Q).fill(-25));
 const HOLD = solvePath(Array<number>(PINNED_Q).fill(0));
@@ -105,10 +107,26 @@ describe('지평 이탈 줄', () => {
     expect(horizonExitBp(CUT)).toBeCloseTo((CUT.iKr[11] - CUT.iKr[7]) * 100, 10);
   });
 
-  /* 실측(진단 §C.2): 지속 −25×8 이면 q12 까지 +27.8bp 를 되돌린다. 25bp 인하를
-     세 분기 만에 전부 되돌리고 넘어선다 — 각주가 아니라 숫자의 몫이다. */
+  /* 실측(P4 D.4, `output/p4/d4_tail.json`): 지속 −25×8 이면 q12 까지
+     **+14.8bp** 를 되돌린다.
+
+     **D.4 전에는 +27.8bp 였다** — 25bp 인하를 세 분기 만에 전부 되돌리고
+     넘어서는 크기였다. 그게 그렇게 큰 이유는 「경로가 끝나면 완화 쪽 잔차가
+     그 순간 증발한다」 였기 때문이고, 그건 정한 것이 아니라 안 채운 것이었다.
+     ρ=0.801 로 잦아들게 하니 절반이 됐다. 각주가 아니라 숫자의 몫이다. */
   it('지속 −25×8 의 되돌림이 실측과 같다', () => {
-    expect(horizonExitBp(CUT)).toBeCloseTo(27.79, 1);
+    expect(horizonExitBp(CUT)).toBeCloseTo(14.79, 1);
+  });
+
+  /* 감쇠가 실제로 실렸나 — 이름만 바꾸고 숫자가 옛것이면 여기서 걸린다. */
+  it('기저가 감쇠를 싣고 왔고 화면이 그 이름을 쓴다', () => {
+    const tail = (BASIS as { residual_tail: Record<string, unknown> }).residual_tail;
+    expect(tail.treatment).toBe('decay');
+    expect(tail.rho).toBeCloseTo(RULE_RESIDUAL_AR1, 3);
+    expect(tail.rho_se_nw).toBeCloseTo(RULE_RESIDUAL_AR1_SE, 4);
+    expect(tail.pin_window_q).toBe(8);
+    expect(tail.in_paper).toBe(false);
+    expect(RESIDUAL_TREATMENT).toBe('감쇠');
   });
 
   it('동결이면 되돌릴 것이 없다고 말한다 — 0bp 라고 안 적는다', () => {
