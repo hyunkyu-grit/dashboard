@@ -64,14 +64,20 @@ export const ANCHORS = {
     basisIrf: 'model:irf:basis',
     equationRegister: 'model:register:equations',
     coefficientRegister: 'model:register:coefficients',
+    census: 'model:census:unprinted',
   },
   /** Method 면. */
   method: {
-    ledger: 'method:ledger:interpretations',
+    /** 「이 화면이 파는 것」. 예전에는 이 블록이 `limits:exogenous` 를 달고
+     *  있었는데, 그 id 는 이름 그대로 **아래 한계표**의 것이다. 둘이 자리를
+     *  바꾼 채로 서 있었다 [2026-08-24]. */
+    ships: 'method:ships:sells',
     seams: 'method:seams:known',
+    ledger: 'method:ledger:interpretations',
     limitations: 'method:limits:exogenous',
-    backtest: 'method:backtest:2021',
     scorecard: 'method:scorecard:irf',
+    freeParams: 'method:params:free',
+    backtest: 'method:backtest:2021',
   },
 } as const;
 

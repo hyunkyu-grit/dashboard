@@ -2579,16 +2579,83 @@ thead th {
  * 이 앱은 페이지가 안 흐른다(`.sr-page` 가 `height:100vh; overflow:hidden`).
  * 그래서 긴 면이 자기 스크롤러를 안 가지면 아래가 **그냥 잘린다** — 실측
  * 2026-08-21: 모형 면 높이 5,510px 이 911 창에서 720px 만 보였고 나머지는
- * 스크롤로도 못 갔다. 커브 표면 레인이 855 에서 겪은 그 클립과 같은 병이다. */
+ * 스크롤로도 못 갔다. 커브 표면 레인이 855 에서 겪은 그 클립과 같은 병이다.
+ *
+ * **2026-08-24 [OWNER]: 그 스크롤러가 카드 안으로 들어갔다.** 면이 직접 구르는
+ * 것은 Main/Backtest 의 문법이 아니다 — 거기서는 내용이 카드 안에 살고 카드가
+ * 자기 스크롤을 진다(`.sr-strat-scroll` 이 「전략」 면에서 이미 그렇다).
+ * 그래서 `.sr-model-surface`/`.sr-method-surface` 는 더 이상 스크롤러가 아니고,
+ * `SurfaceShell` 의 `.sr-surface-scroll` 이 그 일을 한다. */
 .sr-model-surface,
 .sr-method-surface {
-  min-height: 0;
-  flex-grow: 1;
+  /* 카드가 준 높이 안에서 산다. 스크롤은 `.sr-surface-scroll` 이 진다. */
+  flex-basis: 420px;
+  word-break: keep-all;
+}
+
+/* 카드 안의 스크롤러. `.sr-strat-scroll` 과 같은 규칙이고, 같은 이유로
+   `min-height: 0` 이 필수다 — 없으면 flex 자식이 내용 높이로 부풀어 스크롤이
+   아예 안 생긴다.
+
+   `overflow-x` 는 **손대지 않는다.** `hidden` 으로 잘라 두면 이 리포의 규칙을
+   어긴다(`guards/p2-parity.test.ts` — «잘린 채로 스크롤도 안 되면 그 뒤의
+   내용은 존재하지 않는 것이 된다»). 가로로 넘치는 것은 안쪽이 각자 진다
+   (`.sr-wire-scroll` · 표의 스크롤 상자). */
+.sr-surface-scroll {
   overflow-y: auto;
-  /* `overflow-x` 는 **손대지 않는다.** `hidden` 으로 잘라 두면 이 리포의 규칙을
-     어긴다(`guards/p2-parity.test.ts` — «잘린 채로 스크롤도 안 되면 그 뒤의
-     내용은 존재하지 않는 것이 된다»). 가로로 넘치는 것은 안쪽이 각자 진다
-     (`.sr-wire-scroll` · 표의 스크롤 상자). */
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+/* ── 읽기 폭 한 벌 ─────────────────────────────────────────────────────────
+ *
+ * 실측 2026-08-24: `<p>` 103개 중 **101개가 900px 초과**, 최댓값 1,851px.
+ * 13px 한글은 글자당 폭이 거의 13px 라 그건 한 줄 ~140자다. 눈이 줄 끝에서
+ * 다음 줄 앞을 못 찾는다. 게다가 같은 면 안에서 어떤 블록은 760 에 갇혀
+ * 있어서, 폭이 블록마다 바뀌는 것이 더 나빴다.
+ *
+ * 상한은 **글에만** 건다. 표·그래프·스크롤 상자는 폭을 다 써야 하고, 그것이
+ * 이 앱이 4모니터에서 얻는 이득이다. 그래서 선택자가 `p`·제목·문단 줄이고
+ * `table`·`.sr-*-scroll` 은 안 건드린다. */
+.sr-read :is(p, h3, h4, h5) {
+  max-width: 760px;
+}
+
+/* 문단처럼 읽히는 flex 줄(이음매 행 · 「그 열셋」 행)도 같은 폭에 선다.
+   `HStack` 이라 위 선택자가 못 잡는다 — 클래스로 표시한다. */
+.sr-read .sr-readrow {
+  max-width: 760px;
+  width: 100%;
+}
+
+/* ── 면 안 차례 ────────────────────────────────────────────────────────────
+ *
+ * 「전략」 면의 왼쪽이 손잡이인 자리에, 읽기 전용 두 면은 차례를 세운다.
+ * 활성 표시는 유도값이라 저장하지 않는다(`SurfaceShell` 의 IntersectionObserver).
+ *
+ * 채움은 RV 표의 행 강조(`.sr-rv-row[data-on]`)와 같은 낱말인 `--sr-control` 을
+ * 쓴다 — 이 앱에서 «지금 이것» 은 늘 그 색이다. */
+.sr-model-toc button {
+  display: block;
+  width: 100%;
+  text-align: start;
+}
+
+.sr-toc-item {
+  display: block;
+  padding: 4px 8px;
+  border-radius: 8px;
+  color: var(--color-fgMuted);
+  word-break: keep-all;
+}
+
+.sr-toc-item[data-on='true'] {
+  background: var(--sr-control);
+  color: var(--color-fg);
+}
+
+.sr-model-toc button:hover .sr-toc-item[data-on='false'] {
+  color: var(--color-fg);
 }
 
 .sr-wire-edge {
@@ -2685,20 +2752,31 @@ thead th {
   border-top: 2px solid var(--color-line);
 }
 
-.sr-eqreg-diff {
-  padding-left: 10px;
-  border-left: 2px solid var(--sr-down);
+/* ── 곁줄 두 종 — **세로 막대를 안 쓴다** [2026-08-24] ────────────────────
+ *
+ * 둘 다 `border-left: 2px solid var(--sr-down)` 이었다. 두 가지가 한꺼번에
+ * 틀렸다:
+ *
+ *   1. 색을 쓴 **사이드 스트라이프**는 이 리포가 따르는 디자인 규율의 절대
+ *      금지 항목이다. 「의도해서 그런 적이 없다」 는 쪽에 가깝다
+ *   2. `--sr-down` 은 이 앱에서 **「금리가 내렸다」 하나**를 뜻한다. 옆 표가
+ *      같은 파랑을 그 뜻으로 쓴다. 「인쇄된 식과 다른 자리」·「틀릴 수 있는
+ *      자리」는 방향이 아니다
+ *
+ * 대신 바탕을 깐다. `--sr-control` 은 이 앱에서 «지금 이것» 을 뜻하는 낱말이고
+ * (`.sr-freeparams` 가 이미 같은 자리에 쓴다), 곁줄은 정확히 그 성질이다.
+ * 두 곳 다 앞에 이름표(`<b>`)가 이미 서 있어서 무엇인지도 글자가 말한다. */
+.sr-eqreg-diff,
+.sr-ledger-risk {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--sr-control);
 }
 
 .sr-ledger-tag {
   display: inline-block;
   min-width: 92px;
   color: var(--color-fg);
-}
-
-.sr-ledger-risk {
-  padding-left: 10px;
-  border-left: 2px solid var(--sr-down);
 }
 
 .sr-freeparams {
@@ -2716,13 +2794,16 @@ thead th {
   white-space: nowrap;
 }
 
+/* 미달·핀도 **방향색을 안 쓴다** [2026-08-24]. 같은 이유다 — 파랑은 「내렸다」
+   한 낱말이고, 판정은 방향이 아니다. 잉크와 테두리가 위계를 진다. */
 .sr-verdict[data-v='miss'],
 .sr-verdict[data-v='shape_miss'] {
-  color: var(--sr-down);
+  color: var(--color-fg);
+  font-weight: 600;
 }
 
 .sr-verdict[data-v='pinned'] {
-  border: 1px solid var(--sr-down);
+  border: 1px solid var(--color-fgMuted);
 }
 
 .sr-coef-scroll {

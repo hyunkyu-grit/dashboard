@@ -31,6 +31,7 @@ import {
 import { Text } from '@coinbase/cds-web/typography';
 
 import { anchorProps, ANCHORS, eq as eqAnchor, hrefFor, ledgerRow } from '../anchors';
+import { SurfaceShell, type TocItem } from '../SurfaceShell';
 
 import { Emph } from '../model/emph';
 
@@ -164,10 +165,9 @@ const KIND_LABEL: Record<string, string> = {
 function Ships() {
   const l = M.limitations;
   return (
-    <VStack gap={1} maxWidth={760} {...anchorProps(ANCHORS.method.limitations)}>
-      <Text as="h3" font="label1">
-        이 화면이 파는 것
-      </Text>
+    <VStack gap={1} maxWidth={760} {...anchorProps(ANCHORS.method.ships)}>
+      {/* 소제목을 안 단다 — 바로 아래 큰 문장이 「이 화면이 파는 것은 …」 으로
+          시작해서 같은 말이 두 번 섰다. 이 블록은 차례가 이름을 준다. */}
       {/* **한 문장이다.** 「델타도 되고 레벨도 됩니다」 로 흐리면 트레이더가 레벨을
           읽고, 그러면 위의 외생 대체분이 조용히 청구된다. */}
       <Text as="p" font="title4">
@@ -214,16 +214,19 @@ function Seams() {
         </Text>
       </VStack>
 
+      {/* 라벨과 문장을 **한 줄에 안 둔다** [실측 2026-08-24]. `flexBasis` 280 이
+          문장을 좁게 잡아서 끝의 「요.」 가 홀로 다음 줄로 떨어졌다. 코드
+          플래그는 라벨이지 문장의 일부가 아니라, 위에 눕힌다. */}
       <VStack gap={0.75} width="100%" maxWidth={760}>
         {st.known_seams.map((sm) => (
-          <HStack key={sm.flag} gap={1} alignItems="baseline" flexWrap="wrap">
-            <Text as="span" font="legal" color="fgMuted" noWrap>
+          <VStack key={sm.flag} gap={0.25} className="sr-readrow">
+            <Text as="span" font="legal" color="fgMuted">
               <code>{sm.flag}</code>
             </Text>
-            <Text as="span" font="legal" flexGrow={1} flexBasis={280}>
+            <Text as="p" font="legal">
               <Emph t={sm.what} />
             </Text>
-          </HStack>
+          </VStack>
         ))}
       </VStack>
 
@@ -237,10 +240,7 @@ function Seams() {
         <HStack gap={1} flexWrap="wrap">
           {Object.entries(st.data_edge.per_series).map(([name, q]) => (
             <Text key={name} as="span" font="legal" color="fgMuted" noWrap>
-              {name}{' '}
-              <b className={q === st.data_edge.binding_quarter ? 'sr-down' : undefined}>
-                {q ?? '몰라요'}
-              </b>
+              {name} <b>{q ?? '몰라요'}</b>
             </Text>
           ))}
         </HStack>
@@ -346,7 +346,7 @@ function Ledger() {
 function Limitations() {
   const l = M.limitations;
   return (
-    <VStack gap={1.5} width="100%">
+    <VStack gap={1.5} width="100%" {...anchorProps(ANCHORS.method.limitations)}>
       <VStack gap={0.5}>
         <Text as="h3" font="label1">
           «자동» 이 아닌 자리
@@ -429,6 +429,7 @@ function Scorecard() {
             gap={1}
             alignItems="baseline"
             flexWrap="wrap"
+            className="sr-readrow"
           >
             <Text as="span" font="legal" color="fgMuted" noWrap>
               {r.irf} · <code>{r.metric}</code>
@@ -437,13 +438,11 @@ function Scorecard() {
               {r.value === null ? '모양만 봐요' : r.value.toFixed(4)}
               {r.band ? `  밴드 [${r.band[0]}, ${r.band[1]}]` : ''}
             </Text>
-            <Text
-              as="span"
-              font="legal"
-              noWrap
-              className={r.pass ? undefined : 'sr-down'}
-            >
-              {r.pass ? '통과' : '미달'}
+            {/* 판정에 **방향색을 안 쓴다** [2026-08-24]. 파랑은 이 앱에서
+                「금리가 내렸다」 하나만 뜻하고, 옆 표가 같은 파랑을 그 뜻으로
+                쓴다. 미달은 방향이 아니라 사실이라 굵기가 진다. */}
+            <Text as="span" font="legal" noWrap>
+              {r.pass ? '통과' : <b>미달</b>}
             </Text>
           </HStack>
         ))}
@@ -545,7 +544,13 @@ function Scorecard() {
 
 function FreeParams() {
   return (
-    <VStack gap={1.5} width="100%" className="sr-freeparams" padding={1.5}>
+    <VStack
+      gap={1.5}
+      width="100%"
+      className="sr-freeparams"
+      padding={1.5}
+      {...anchorProps(ANCHORS.method.freeParams)}
+    >
       <VStack gap={0.5}>
         <Text as="h3" font="label1">
           맞춘 값과 시험한 값
@@ -753,28 +758,26 @@ function Backtest() {
   );
 }
 
+/* 차례. 순서는 읽는 순서다 — 무엇을 파는지 → 어디가 이음매인지 → 무엇을
+   해석했는지 → 무엇을 못 하는지 → 얼마나 맞는지 → 무엇을 맞췄는지 → 왜
+   백테스트가 아닌지. */
+const TOC: TocItem[] = [
+  { id: ANCHORS.method.ships, label: '이 화면이 파는 것' },
+  { id: ANCHORS.method.seams, label: '알려진 이음매' },
+  { id: ANCHORS.method.ledger, label: '해석 원장' },
+  { id: ANCHORS.method.limitations, label: '«자동» 이 아닌 자리' },
+  { id: ANCHORS.method.scorecard, label: '스코어카드' },
+  { id: ANCHORS.method.freeParams, label: '맞춘 값과 시험한 값' },
+  { id: ANCHORS.method.backtest, label: '백테스트' },
+];
+
 export function MethodSurface() {
   return (
-    <VStack
-      gap={3}
-      width="100%"
-      paddingBottom={3}
-      paddingEnd={1}
-      minHeight={0}
-      flexGrow={1}
+    <SurfaceShell
+      items={TOC}
       className="sr-method-surface"
+      blurb="논문을 어디까지 따랐고 어디서 해석했는지예요. 자기 실패 방식을 부르는 도구가 흠 없어 보이는 도구보다 믿을 만하다고 봤어요."
     >
-      <VStack gap={0.5} maxWidth={720}>
-        <Text as="h2" font="title3">
-          방법
-        </Text>
-        <Text as="p" font="body" color="fgMuted">
-          논문을 어디까지 따랐고 어디서 해석했는지예요. 자기 실패 방식을 부르는
-          도구가 흠 없어 보이는 도구보다 믿을 만하다고 보고, 그래서 올림하지
-          않았어요.
-        </Text>
-      </VStack>
-
       <Ships />
       <Seams />
       <Ledger />
@@ -782,6 +785,6 @@ export function MethodSurface() {
       <Scorecard />
       <FreeParams />
       <Backtest />
-    </VStack>
+    </SurfaceShell>
   );
 }

@@ -203,6 +203,8 @@ export function StrategySurface() {
 
   const groups = useMemo(() => effectGroups(ASSUMPTIONS), []);
   const outside = outOfDomain(dots);
+  /** 여덟 점이 다 0 인가. 유도값이라 상태로 안 든다. */
+  const frozen = dots.every((v) => v === 0);
   const stale = ENGINE_STATUS.staleness;
 
   const setDot = (q: number, v: number) =>
@@ -332,6 +334,19 @@ export function StrategySurface() {
             <Text as="span" font="legal" color="fgMuted">
               논거 — 이 bp 가 무엇으로 이루어져 있나
             </Text>
+            {/* **동결은 표 위에서 말한다** [OWNER 2026-08-24]. 기본 경로가 동결
+                이라 처음 여는 사람이 보는 것은 다섯 테너 × 여섯 항 = 서른 칸의
+                `0.0` 이다. 이유(편차가 0 이면 통째로 0)는 표 **아래** 각주에만
+                있어서, 그때까지 화면은 고장난 것처럼 보였다.
+                기본값을 바꾸지는 않는다 — 아무것도 가정하지 않은 상태가 이
+                물건의 정직한 출발점이고, 그 말을 화면이 하면 된다. */}
+            {frozen ? (
+              <Text as="p" font="body" color="fgMuted">
+                아직 아무것도 가정하지 않았어요 — 왼쪽에 점을 하나라도 놓으면 이
+                표에 숫자가 서요. 지금 0 인 건 계산이 안 된 게 아니라 편차가 0
+                이라서예요.
+              </Text>
+            ) : null}
             {h === null ? (
               <Text as="p" font="body" color="fgMuted">
                 {MPC_NO_TERMS}
@@ -494,17 +509,24 @@ export function StrategySurface() {
                       : ANCHORS.strategy.ruleDeviation,
                 )}
               >
-                <a href={RISK_HREF[r.key]} title={r.source}>
-                  <Text as="span" font="body">
-                    {r.text}
-                  </Text>
-                </a>
-                <HStack gap={1} flexWrap="wrap">
+                {/* **문장 전체를 링크로 감싸지 않는다** [2026-08-24]. 세 줄이
+                    통째로 밑줄이라 링크 어포던스가 아니라 그냥 읽기 힘든 본문이
+                    됐고, 어디를 눌러야 할지도 몰랐다. 문장은 문장으로 두고,
+                    근거로 가는 문은 배지 줄 끝에 하나 단다. */}
+                <Text as="p" font="body">
+                  {r.text}
+                </Text>
+                <HStack gap={1} flexWrap="wrap" alignItems="baseline">
                   {r.badges.map((b) => (
                     <Text key={b} as="span" font="legal" color="fgMuted">
                       {b}
                     </Text>
                   ))}
+                  <a href={RISK_HREF[r.key]} title={r.source}>
+                    <Text as="span" font="legal">
+                      근거
+                    </Text>
+                  </a>
                 </HStack>
               </VStack>
             ))}

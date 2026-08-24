@@ -335,7 +335,7 @@ export function CoefficientTable() {
 export function Census() {
   const c = S.census;
   return (
-    <VStack gap={1.5} width="100%">
+    <VStack gap={1.5} width="100%" {...anchorProps(ANCHORS.model.census)}>
       <VStack gap={0.5}>
         <Text as="h3" font="label1">
           인쇄되지 않은 {c.unprinted}개

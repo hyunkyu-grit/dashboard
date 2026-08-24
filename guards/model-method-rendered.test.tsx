@@ -19,6 +19,8 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
+import { ThemeProvider } from '@coinbase/cds-web';
+import { defaultTheme } from '@coinbase/cds-web/themes/defaultTheme';
 
 import { MethodSurface } from '../src/lab/model/method/MethodSurface';
 import methodJson from '../src/lab/model/method/method_surface.json';
@@ -32,8 +34,16 @@ const M = methodJson as any;
 const ST = statusJson as any;
 const PAPER = (anchorsJson as any).paper;
 
+/* `ThemeProvider` 는 장식이 아니라 **필수**다. 차례의 `Pressable` 이 CDS
+   `Interactable` 을 타고 `useTheme` 를 부르고, 프로바이더가 없으면 그 자리에서
+   던진다 — 2026-08-24 에 골격을 카드 안으로 옮기면서 이 파일이 그렇게 여섯 개
+   다 빨개졌다. */
 function text(): string {
-  const { container } = render(<MethodSurface />);
+  const { container } = render(
+    <ThemeProvider theme={defaultTheme} activeColorScheme="light">
+      <MethodSurface />
+    </ThemeProvider>,
+  );
   return container.textContent ?? '';
 }
 
