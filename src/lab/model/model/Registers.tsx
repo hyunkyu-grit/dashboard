@@ -173,6 +173,15 @@ export function EquationRegister() {
         ))}
       </VStack>
 
+      {/* **정정표는 비워 두고 없애지 않는다** (D.3). 같은 일이 다시 생기면
+          여기 서야 하고, 그러려면 지금 비어 있다는 것도 화면이 말해야 한다 —
+          `map` 만 하면 «없다» 와 «안 봤다» 가 화면에서 같아진다. */}
+      {S.eq_no_corrections.length === 0 ? (
+        <Text as="p" font="legal" color="fgMuted">
+          <b>번호 라벨 어긋남</b> — 지금은 갈리는 자리가 없어요. 코드가 스스로를
+          부르는 번호와 인쇄 번호가 44개 식에서 다 같아요.
+        </Text>
+      ) : null}
       {S.eq_no_corrections.map((c) => (
         <Text key={c.where} as="p" font="legal" color="fgMuted">
           <b>번호 라벨 어긋남</b> — 코드의 <code>{c.where}</code> 가 스스로를 식 (

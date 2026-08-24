@@ -68,13 +68,19 @@ export const ANCHORS = {
   /** Method 면. */
   method: {
     ledger: 'method:ledger:interpretations',
+    seams: 'method:seams:known',
     limitations: 'method:limits:exogenous',
     backtest: 'method:backtest:2021',
     scorecard: 'method:scorecard:irf',
   },
 } as const;
 
-/** 방정식 앵커. 논문의 인쇄 번호를 그대로 쓴다(`"23-24"` 같은 묶음도 허용). */
+/** 방정식 앵커. 논문의 인쇄 번호를 그대로 쓴다.
+ *
+ *  **묶음(`"23-24"`)은 쓰지 마세요.** 예전 주석이 허용한다고 적어 놨는데,
+ *  등록부(`model/Registers.tsx`)는 번호를 **낱개**로만 답니다 — 묶음 주소는
+ *  만들 수는 있어도 착지할 자리가 없습니다. 2026-08-24 에 `eq('36-37')` 이
+ *  실제로 그렇게 죽어 있었습니다. */
 export function eq(no: string | number): string {
   return `model:equation:${no}`;
 }

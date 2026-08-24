@@ -96,19 +96,33 @@ const TENOR_LABEL: Record<Tenor, string> = {
   '10y': '10Y',
 };
 
-/** 논거 항이 가리키는 자리. 세션 3 이 지금 그 타깃을 세우는 중이라 아직 안 닿을
- *  수 있고, **그건 정상이다** — 내가 따로 타깃을 만들면 두 주소 체계가 선다. */
-const TERM_HREF: Record<Term['key'], string> = {
-  eh: hrefFor(eq('36-37')),
+/** 논거 항이 가리키는 자리.
+ *
+ * **여기 있던 주소 셋이 아무 데도 안 닿고 있었다** [2026-08-24 전수 확인].
+ * 세션 3 이 타깃을 세우는 중이라 그럴 수 있다고 적어 둔 주석이 그대로 남아
+ * 있었는데, 세 면이 다 찬 뒤에도 아무도 다시 안 봤다.
+ *
+ *     eq('36-37')                 등록부는 번호를 **낱개**로 단다 → 36
+ *     ledgerRow('r_star')         원장 키는 케밥이고, r* 행은 **없다**
+ *     ledgerRow('policy_conditioning')  실제 키는 `policy-conditioning`
+ *
+ * 링크가 안 닿는 것은 조용하다 — 해시가 없으면 브라우저가 그냥 면 맨 위에
+ * 선다. 그래서 `guards/model-anchor-targets.test.ts` 가 이제 이 두 표의
+ * 타깃을 실제 페이로드가 낳는 앵커 집합과 대조한다. 그러려고 export 한다. */
+export const TERM_HREF: Record<Term['key'], string> = {
+  /* 기대가설은 eq (36)(37) 두 식인데 등록부는 낱개로 단다. 첫 식에 세운다. */
+  eh: hrefFor(eq('36')),
   rule: hrefFor(eq('35')),
   cd: hrefFor(ANCHORS.model.channelPolicy),
   tp: hrefFor(ANCHORS.model.channelFinancial),
   spread: hrefFor(ANCHORS.model.channelFinancial),
 };
 
-const RISK_HREF: Record<string, string> = {
-  'r-star': hrefFor(ledgerRow('r_star')),
-  'horizon-exit': hrefFor(ledgerRow('policy_conditioning')),
+export const RISK_HREF: Record<string, string> = {
+  /* r* 줄이 답하는 것은 «왜 0 인가» 이고, 그 답이 사는 행이 편차 공간이다. */
+  'r-star': hrefFor(ledgerRow('deviation-space')),
+  /* 지평 이탈 줄은 이제 자기 행을 갖는다 — D.4 가 세운 `residual-tail`. */
+  'horizon-exit': hrefFor(ledgerRow('residual-tail')),
   'rule-deviation': hrefFor(ANCHORS.method.ledger),
 };
 

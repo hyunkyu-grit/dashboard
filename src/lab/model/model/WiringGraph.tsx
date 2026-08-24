@@ -391,6 +391,31 @@ export function WiringGraph() {
             <b><Emph t={u.var} /></b> — <Emph t={u.why} />
           </Text>
         ))}
+        {/* 아래 셋은 **비어 있을 때도 말한다.** 생성기가 못 푼 식이 없다는 것과
+            그걸 안 세어 봤다는 것은 다른 사실인데, 빈 배열을 `map` 만 하면 화면은
+            둘을 똑같이 «아무것도 없음» 으로 보여 준다. 지금은 셋 다 깨끗해서
+            더 그렇다 — 깨끗하다고 말할 자리가 있어야 더러워졌을 때 보인다. */}
+        <Text as="p" font="legal" color="fgMuted">
+          못 푼 식:{' '}
+          {GRAPH.unsupported_expressions.length === 0
+            ? '없어요 — 스캔한 대입문을 전부 미분했어요.'
+            : GRAPH.unsupported_expressions.join(' · ')}
+        </Text>
+        <Text as="p" font="legal" color="fgMuted">
+          이름 못 붙인 노드:{' '}
+          {GRAPH.missing_labels.length === 0
+            ? '없어요.'
+            : GRAPH.missing_labels.join(' · ')}
+        </Text>
+        <Text as="p" font="legal" color="fgMuted">
+          논문에 안 인쇄된 식:{' '}
+          {Object.entries(GRAPH.non_paper_equations).length === 0
+            ? '없어요.'
+            : Object.entries(GRAPH.non_paper_equations)
+                .map(([k, v]) => `${k}(${v})`)
+                .join(' · ')}
+          {' '}— 그래프에는 서지만 논문 쪽수를 못 달아요.
+        </Text>
         <Text as="p" font="legal" color="fgMuted">
           출처: <Emph t={GRAPH.generated_from} />
         </Text>

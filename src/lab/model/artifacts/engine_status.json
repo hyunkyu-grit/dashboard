@@ -116,8 +116,8 @@
     }
   ],
   "tests": {
-    "collected": null,
-    "source": "이 빌드에서 안 셌어요"
+    "collected": 62,
+    "source": "pytest"
   },
   "engine": {
     "home": "backend/bigfoot",

@@ -34,6 +34,8 @@ import { anchorProps, ANCHORS, eq as eqAnchor, hrefFor, ledgerRow } from '../anc
 
 import { Emph } from '../model/emph';
 
+import statusJson from '../artifacts/engine_status.json';
+import type { EngineStatus } from '../contracts';
 import backtestJson from './backtest_2021_cycle.json';
 import methodJson from './method_surface.json';
 
@@ -80,6 +82,16 @@ type Method = {
   scorecard: {
     engine_total: number;
     engine_passed: number;
+    /** 9/13 을 **만드는** 열세 칸. 수치 여덟 + 모양 다섯이다.
+     *  모양 칸은 값도 밴드도 `null` 이다 — 부호·꼴만 보는 자리라 그게 정상이고,
+     *  0 으로 채우면 «밴드 정중앙» 처럼 보인다. */
+    engine_rows: {
+      irf: string;
+      metric: string;
+      value: number | null;
+      band: [number, number] | null;
+      pass: boolean;
+    }[];
     anchor_rows: AnchorRow[];
     chain: string;
     root: string;
@@ -165,6 +177,88 @@ function Ships() {
         <a href={`#${ledgerRow(l.ledger_row)}`}>원장의 같은 행</a>에 같은 말이 적혀
         있어요.
       </Text>
+    </VStack>
+  );
+}
+
+/* ── 1b. 알려진 이음매 · 엔진의 출처 ────────────────────────────────────────── */
+
+/* 엔진이 **자기 입으로** 아는 이음매 셋이 `engine_status.json::known_seams` 로
+ * 실려 오는데, 2026-08-24 까지 어느 면도 그걸 렌더하지 않았다. 계약에 타입까지
+ * 있고(`contracts.ts::EngineStatus.known_seams`) 리베이크가 매번 옮기는데
+ * 화면에는 없었다 — 「믿어도 돼」 에 답하는 면에서 빠질 수 있는 것이 아니다.
+ *
+ * 셋 중 둘은 트레이더가 **당장** 알아야 하는 것이다. IRS 다리에 기간프리미엄이
+ * 안 오고, 국고 3년은 기대가설 평균만이다. 그걸 모르고 화면의 bp 를 읽으면
+ * «커브가 이만큼 움직인다» 를 «가격이 이만큼 움직인다» 로 읽는다.
+ *
+ * 같은 이유로 `tests` 와 `engine` 도 여기서 선다. 엔진이 어디서 왔고 몇 개의
+ * 시험을 지고 있는지는 이 면의 질문 그 자체다. */
+
+function Seams() {
+  const st = statusJson as unknown as EngineStatus;
+  const t = st.tests;
+  return (
+    <VStack gap={1.5} width="100%" {...anchorProps(ANCHORS.method.seams)}>
+      <VStack gap={0.25} maxWidth={760}>
+        <Text as="h3" font="label1">
+          알려진 이음매
+        </Text>
+        <Text as="p" font="legal" color="fgMuted">
+          엔진이 자기 입으로 아는 자리예요. 고쳐야 할 것으로 적어 둔 게 아니라,
+          지금 이렇게 돌고 있다는 사실이에요.
+        </Text>
+      </VStack>
+
+      <VStack gap={0.75} width="100%" maxWidth={760}>
+        {st.known_seams.map((sm) => (
+          <HStack key={sm.flag} gap={1} alignItems="baseline" flexWrap="wrap">
+            <Text as="span" font="legal" color="fgMuted" noWrap>
+              <code>{sm.flag}</code>
+            </Text>
+            <Text as="span" font="legal" flexGrow={1} flexBasis={280}>
+              <Emph t={sm.what} />
+            </Text>
+          </HStack>
+        ))}
+      </VStack>
+
+      {/* 빈티지. `as_of_sentence` 는 디플레이터만 이름을 대는데, 구속하는 것은
+          **가장 이른 분기**라 그게 어느 계열인지가 사실의 절반이다. 지금은
+          newest 2026Q2 · binding 2026Q1 로 한 분기 갈린다. */}
+      <VStack gap={0.5} width="100%" maxWidth={760}>
+        <Text as="h4" font="label2">
+          모형이 마지막으로 본 분기
+        </Text>
+        <HStack gap={1} flexWrap="wrap">
+          {Object.entries(st.data_edge.per_series).map(([name, q]) => (
+            <Text key={name} as="span" font="legal" color="fgMuted" noWrap>
+              {name}{' '}
+              <b className={q === st.data_edge.binding_quarter ? 'sr-down' : undefined}>
+                {q ?? '몰라요'}
+              </b>
+            </Text>
+          ))}
+        </HStack>
+        <Text as="p" font="legal" color="fgMuted">
+          제일 새 분기는 {st.data_edge.newest_quarter ?? '몰라요'} 인데 구속하는 것은{' '}
+          <b>{st.data_edge.binding_quarter ?? '몰라요'}</b> 예요 — 모형은 제일 이른
+          쪽에 맞춰 서요.
+        </Text>
+      </VStack>
+
+      <VStack gap={0.25} maxWidth={760}>
+        <Text as="p" font="legal" color="fgMuted">
+          엔진은 <code>{st.engine.home}</code> 에 살아요. <Emph t={st.engine.note} />{' '}
+          {st.engine.moved_on} 에 옮겼고 출처 커밋은 {st.engine.source_commits.join(' · ')}
+          예요.
+        </Text>
+        <Text as="p" font="legal" color="fgMuted">
+          {t.collected === null
+            ? `엔진 시험 수는 이 빌드에서 못 셌어요 (${t.source}).`
+            : `그 엔진이 지고 있는 시험은 ${t.collected}개예요 (${t.source}).`}
+        </Text>
+      </VStack>
     </VStack>
   );
 }
@@ -302,6 +396,45 @@ function Scorecard() {
         <Text as="p" font="legal" color="fgMuted">
           <Emph t={s.two_thirteens} /> <Emph t={s.horizon_rule} />
         </Text>
+      </VStack>
+
+      {/* **9/13 을 만드는 열세 칸 자체.**
+       *
+       * 2026-08-24 까지 이 면은 큰 숫자로 「9/13」 을 찍고 그 아래에 **다른**
+       * 열셋(논문 앵커)의 표를 놨다. 두 13 이 다른 것이라고 바로 위 문장이
+       * 말하기는 하는데, 그러면 화면에 실린 표 어디에서도 9/13 을 셀 수 없다.
+       * 헤드라인 숫자의 근거가 화면에 없는 것이라 채운다.
+       *
+       * 모양 다섯은 밴드가 없다 — 값이 아니라 부호·꼴을 보는 칸이라 `null` 이
+       * 정상이고, 0 으로 채우면 «밴드 정중앙» 처럼 보인다. */}
+      <VStack gap={0.5} width="100%" maxWidth={760}>
+        <Text as="h4" font="label2">
+          그 열셋
+        </Text>
+        {s.engine_rows.map((r) => (
+          <HStack
+            key={`${r.irf}-${r.metric}`}
+            gap={1}
+            alignItems="baseline"
+            flexWrap="wrap"
+          >
+            <Text as="span" font="legal" color="fgMuted" noWrap>
+              {r.irf} · <code>{r.metric}</code>
+            </Text>
+            <Text as="span" font="legal" tabularNumbers noWrap flexGrow={1}>
+              {r.value === null ? '모양만 봐요' : r.value.toFixed(4)}
+              {r.band ? `  밴드 [${r.band[0]}, ${r.band[1]}]` : ''}
+            </Text>
+            <Text
+              as="span"
+              font="legal"
+              noWrap
+              className={r.pass ? undefined : 'sr-down'}
+            >
+              {r.pass ? '통과' : '미달'}
+            </Text>
+          </HStack>
+        ))}
       </VStack>
 
       <Box overflow="auto" width="100%">
@@ -631,6 +764,7 @@ export function MethodSurface() {
       </VStack>
 
       <Ships />
+      <Seams />
       <Ledger />
       <Limitations />
       <Scorecard />

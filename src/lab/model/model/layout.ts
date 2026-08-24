@@ -37,6 +37,10 @@ export type Graph = {
   generated_from: string;
   uncovered: { var: string; why: string }[];
   unsupported_expressions: string[];
+  /** 생성기가 노드는 세웠는데 사람이 읽을 이름을 못 붙인 자리. **비어 있는
+   *  척하지 않는다** — 화면이 «없어요» 를 말할 수 있어야 한다.
+   *  2026-08-24 까지 이 칸이 타입에도 화면에도 없었다(페이로드에는 있었다). */
+  missing_labels: string[];
   nodes: Node[];
   edges: Edge[];
   flow_merges: { folded: string; into: string }[];
