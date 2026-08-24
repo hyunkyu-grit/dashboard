@@ -34,6 +34,7 @@ import { anchorProps, ANCHORS, eq as eqAnchor, hrefFor, ledgerRow } from '../anc
 
 import { Emph } from '../model/emph';
 
+import anchorsJson from '../artifacts/paper_anchors.json';
 import statusJson from '../artifacts/engine_status.json';
 import type { EngineStatus } from '../contracts';
 import backtestJson from './backtest_2021_cycle.json';
@@ -197,6 +198,9 @@ function Ships() {
 
 function Seams() {
   const st = statusJson as unknown as EngineStatus;
+  const paper = (anchorsJson as unknown as {
+    paper: { id: string; title: string; authors: string; published: string; pdf: string };
+  }).paper;
   const t = st.tests;
   return (
     <VStack gap={1.5} width="100%" {...anchorProps(ANCHORS.method.seams)}>
@@ -247,7 +251,15 @@ function Seams() {
         </Text>
       </VStack>
 
+      {/* 논문의 신원. 이 면은 「논문은 …」 을 수십 번 말하는데 **어느 논문인지**
+          한 번도 통째로 대지 않았다. Model 면 머리에 제목이 손으로 적혀 있던
+          것이 유일한 자리였고, 그건 페이로드와 갈릴 수 있는 두 번째 사본이다.
+          저자·연도·PDF 경로는 아예 화면에 없었다. */}
       <VStack gap={0.25} maxWidth={760}>
+        <Text as="p" font="legal" color="fgMuted">
+          <b>{paper.id}</b> · {paper.title} — {paper.authors} ({paper.published}).
+          PDF 는 <code>{paper.pdf}</code> 예요.
+        </Text>
         <Text as="p" font="legal" color="fgMuted">
           엔진은 <code>{st.engine.home}</code> 에 살아요. <Emph t={st.engine.note} />{' '}
           {st.engine.moved_on} 에 옮겼고 출처 커밋은 {st.engine.source_commits.join(' · ')}

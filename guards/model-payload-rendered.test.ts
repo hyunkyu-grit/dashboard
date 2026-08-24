@@ -89,3 +89,30 @@ describe('페이로드의 칸이 화면에 선다', () => {
     expect(new RegExp('\\.없는칸\\b').test(SOURCE)).toBe(false);
   });
 });
+
+/* ── 계수표의 「출처」 열이 진짜 출처를 낸다 ─────────────────────────────────
+ *
+ * 열 머리가 「출처」 인데 2026-08-24 까지 상태 낱말 하나만 찍고 있었다. 진짜
+ * 출처 문장(`basis`)은 132행 전부에 실려 오는데 화면에 없었다 — 표가 자기 열
+ * 이름으로 거짓말을 하던 자리다.
+ */
+describe('계수표의 출처', () => {
+  it('132행 전부가 출처 문장을 든다 — 빈 문자열이면 열이 비어 보인다', () => {
+    const j = JSON.parse(
+      readFileSync(join(LAB, 'model/model_surface.json'), 'utf8'),
+    ) as { coefficients: { slot: string; basis: string; candidates: string[] }[] };
+    expect(j.coefficients.length).toBeGreaterThan(100);
+    for (const c of j.coefficients) {
+      expect(String(c.basis ?? '').length, c.slot).toBeGreaterThan(3);
+    }
+  });
+
+  it('후보가 있는 슬롯은 하나가 아니다 — 후보 하나면 그건 후보가 아니라 값이다', () => {
+    const j = JSON.parse(
+      readFileSync(join(LAB, 'model/model_surface.json'), 'utf8'),
+    ) as { coefficients: { slot: string; candidates: string[] }[] };
+    for (const c of j.coefficients) {
+      if (c.candidates.length > 0) expect(c.candidates.length, c.slot).toBeGreaterThan(1);
+    }
+  });
+});

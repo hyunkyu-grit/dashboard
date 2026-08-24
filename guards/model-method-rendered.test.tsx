@@ -23,12 +23,14 @@ import { cleanup, render } from '@testing-library/react';
 import { MethodSurface } from '../src/lab/model/method/MethodSurface';
 import methodJson from '../src/lab/model/method/method_surface.json';
 import statusJson from '../src/lab/model/artifacts/engine_status.json';
+import anchorsJson from '../src/lab/model/artifacts/paper_anchors.json';
 
 afterEach(cleanup);
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const M = methodJson as any;
 const ST = statusJson as any;
+const PAPER = (anchorsJson as any).paper;
 
 function text(): string {
   const { container } = render(<MethodSurface />);
@@ -51,6 +53,13 @@ describe('Method 면이 실제로 그리는 것', () => {
     expect(t).toContain(ST.engine.home);
     for (const c of ST.engine.source_commits) expect(t).toContain(c);
     if (ST.tests.collected !== null) expect(t).toContain(String(ST.tests.collected));
+  });
+
+  it('어느 논문인지 통째로 댄다 — 저자·연도·PDF 까지', () => {
+    const t = text();
+    for (const k of ['id', 'title', 'authors', 'published', 'pdf'] as const) {
+      expect(t, k).toContain(PAPER[k]);
+    }
   });
 
   it('빈티지가 구속하는 분기를 이름과 함께 낸다', () => {

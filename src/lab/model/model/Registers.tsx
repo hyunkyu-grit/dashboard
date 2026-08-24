@@ -288,11 +288,27 @@ export function CoefficientTable() {
                     )}
                   </Text>
                 </TableCell>
+                {/* 이 칸의 머리는 「출처」 인데 2026-08-24 까지 상태 낱말
+                    하나(RESOLVED·CALIBRATED…)만 찍고 있었다. 진짜 출처 문장은
+                    `basis` 에 132행 전부 실려 오는데 화면에 없었다 — 머리가
+                    약속한 것을 칸이 안 내면 그 표는 자기 열 이름으로 거짓말을
+                    한다. 후보(`candidates`)도 같은 이유로 같이 낸다: 열다섯
+                    행은 「이 슬롯에 무엇이 올 수 있었나」 가 곧 그 값의 근거다. */}
                 <TableCell className="sr-label">
-                  <Text as="span" font="legal" color="fgMuted">
-                    {STATUS_LABEL[c.status]}
-                    {c.wired ? '' : ' · 배선 안 씀'}
-                  </Text>
+                  <VStack gap={0.25}>
+                    <Text as="span" font="legal" color="fgMuted">
+                      {STATUS_LABEL[c.status]}
+                      {c.wired ? '' : ' · 배선 안 씀'}
+                    </Text>
+                    <Text as="span" font="legal" color="fgMuted">
+                      {c.basis}
+                    </Text>
+                    {c.candidates.length > 0 ? (
+                      <Text as="span" font="legal" color="fgMuted">
+                        후보: {c.candidates.join(' · ')}
+                      </Text>
+                    ) : null}
+                  </VStack>
                 </TableCell>
               </TableRow>
             ))}
