@@ -34,6 +34,11 @@ import { useCallback, useMemo, useState } from 'react';
 
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Text } from '@coinbase/cds-web/typography';
+
+/* 스트립 문법은 **한 벌**이다 — `src/ui/Stat.tsx` 로 옮겼다.
+   「모형」 레인이 같은 것을 다시 만들려던 참이었고, 두 벌이 되면 한쪽만
+   낡는다. 모양은 한 글자도 안 바뀌었다. */
+import { Stat, StatColumn } from '@/ui/Stat';
 import {
   CartesianChart,
   Line,
@@ -250,34 +255,3 @@ export function ModelChart({ rows, asof }: { rows: ScenarioRow[]; asof: string }
   );
 }
 
-function StatColumn({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <VStack gap={1.5} paddingX={2} paddingY={2} flexGrow={1} minWidth={0} className="sr-statcol">
-      <Text as="h4" font="title3">
-        {title}
-      </Text>
-      <HStack gap={3} flexWrap="wrap">
-        {children}
-      </HStack>
-    </VStack>
-  );
-}
-
-function Stat({ label, value, tone }: { label: string; value: string; tone?: 'up' | 'down' }) {
-  return (
-    <VStack gap={0.25} minWidth={0}>
-      <Text as="span" font="caption" color="fgMuted" noWrap>
-        {label}
-      </Text>
-      <Text
-        as="span"
-        font="body"
-        tabularNumbers
-        noWrap
-        className={tone === 'up' ? 'sr-up' : tone === 'down' ? 'sr-down' : undefined}
-      >
-        {value}
-      </Text>
-    </VStack>
-  );
-}

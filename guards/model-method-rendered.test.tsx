@@ -98,7 +98,11 @@ describe('Method 면이 실제로 그리는 것', () => {
     const rows = M.scorecard.engine_rows;
     expect(rows.length).toBe(M.scorecard.engine_total);
     expect(rows.filter((r: any) => r.pass).length).toBe(M.scorecard.engine_passed);
-    for (const r of rows) expect(t, r.metric).toContain(r.metric);
+    /* 표는 `shape:` 접두사를 떼고 찍는다 — 충격 칸이 이미 A/B/C 를 말하고,
+       모양인지 수치인지는 밴드 칸의 「모양만 봐요」 가 말한다. */
+    for (const r of rows) {
+      expect(t, r.metric).toContain(String(r.metric).replace('shape:', ''));
+    }
   });
 
   it('모양 칸은 밴드를 지어내지 않는다 — null 을 0 으로 채우면 정중앙처럼 보인다', () => {

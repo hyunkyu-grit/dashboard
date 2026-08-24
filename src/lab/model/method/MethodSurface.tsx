@@ -32,6 +32,7 @@ import { Text } from '@coinbase/cds-web/typography';
 
 import { anchorProps, ANCHORS, eq as eqAnchor, hrefFor, ledgerRow } from '../anchors';
 import { SurfaceShell, type TocItem } from '../SurfaceShell';
+import { Stat, StatColumn } from '@/ui/Stat';
 
 import { Emph } from '../model/emph';
 
@@ -230,47 +231,48 @@ function Seams() {
         ))}
       </VStack>
 
-      {/* 빈티지. `as_of_sentence` 는 디플레이터만 이름을 대는데, 구속하는 것은
-          **가장 이른 분기**라 그게 어느 계열인지가 사실의 절반이다. 지금은
-          newest 2026Q2 · binding 2026Q1 로 한 분기 갈린다. */}
-      <VStack gap={0.5} width="100%" maxWidth={760}>
-        <Text as="h4" font="label2">
-          모형이 마지막으로 본 분기
-        </Text>
-        <HStack gap={1} flexWrap="wrap">
+      {/* 빈티지와 출처를 **문장이 아니라 칸으로** 낸다 [2026-08-24].
+          예전에는 「국민계정 실질 2026Q2 근원 CPI 2026Q2 …」 가 한 줄로 이어지고
+          그 아래 논문·엔진·시험이 회색 문단 셋이었다. 13px 회색이 화면의
+          대부분이라 무엇이 키고 무엇이 값인지가 안 보였다.
+
+          이 앱이 여러 사실을 눕히는 문법은 통계 스트립이다 — 백테스트 카드 아래
+          「이 구간·변화·52주」가 그것이고, 코인베이스 가격 페이지와 토스증권
+          종목 머리가 같은 것을 한다(실측). 산문을 안 쓰고, 작은 회색 키 위에
+          굵은 잉크 값을 올리고, 칸 사이는 헤어라인이다. */}
+      <HStack className="sr-stats" width="100%" flexWrap="wrap">
+        <StatColumn title="모형이 마지막으로 본 분기">
           {Object.entries(st.data_edge.per_series).map(([name, q]) => (
-            <Text key={name} as="span" font="legal" color="fgMuted" noWrap>
-              {name} <b>{q ?? '몰라요'}</b>
-            </Text>
+            <Stat key={name} label={name} value={q ?? '몰라요'} />
           ))}
-        </HStack>
-        <Text as="p" font="legal" color="fgMuted">
-          제일 새 분기는 {st.data_edge.newest_quarter ?? '몰라요'} 인데 구속하는 것은{' '}
-          <b>{st.data_edge.binding_quarter ?? '몰라요'}</b> 예요 — 모형은 제일 이른
-          쪽에 맞춰 서요.
-        </Text>
-      </VStack>
+        </StatColumn>
+      </HStack>
+      <Text as="p" font="legal" color="fgMuted">
+        제일 새 분기는 {st.data_edge.newest_quarter ?? '몰라요'} 인데 구속하는 것은{' '}
+        <b>{st.data_edge.binding_quarter ?? '몰라요'}</b> 예요 — 모형은 제일 이른 쪽에
+        맞춰 서요.
+      </Text>
 
       {/* 논문의 신원. 이 면은 「논문은 …」 을 수십 번 말하는데 **어느 논문인지**
-          한 번도 통째로 대지 않았다. Model 면 머리에 제목이 손으로 적혀 있던
-          것이 유일한 자리였고, 그건 페이로드와 갈릴 수 있는 두 번째 사본이다.
-          저자·연도·PDF 경로는 아예 화면에 없었다. */}
-      <VStack gap={0.25} maxWidth={760}>
-        <Text as="p" font="legal" color="fgMuted">
-          <b>{paper.id}</b> · {paper.title} — {paper.authors} ({paper.published}).
-          PDF 는 <code>{paper.pdf}</code> 예요.
-        </Text>
-        <Text as="p" font="legal" color="fgMuted">
-          엔진은 <code>{st.engine.home}</code> 에 살아요. <Emph t={st.engine.note} />{' '}
-          {st.engine.moved_on} 에 옮겼고 출처 커밋은 {st.engine.source_commits.join(' · ')}
-          예요.
-        </Text>
-        <Text as="p" font="legal" color="fgMuted">
-          {t.collected === null
-            ? `엔진 시험 수는 이 빌드에서 못 셌어요 (${t.source}).`
-            : `그 엔진이 지고 있는 시험은 ${t.collected}개예요 (${t.source}).`}
-        </Text>
-      </VStack>
+          한 번도 통째로 대지 않았다. */}
+      <HStack className="sr-stats" width="100%" flexWrap="wrap">
+        <StatColumn title="논문">
+          <Stat label="번호" value={paper.id} />
+          <Stat label="발표" value={paper.published} />
+        </StatColumn>
+        <StatColumn title="엔진">
+          <Stat label="사는 곳" value={st.engine.home} />
+          <Stat label="옮긴 날" value={st.engine.moved_on} />
+          <Stat
+            label="지고 있는 시험"
+            value={t.collected === null ? '못 셌어요' : `${t.collected}개`}
+          />
+        </StatColumn>
+      </HStack>
+      <Text as="p" font="legal" color="fgMuted">
+        {paper.title} — {paper.authors}. PDF 는 <code>{paper.pdf}</code> 예요.{' '}
+        <Emph t={st.engine.note} /> 출처 커밋은 {st.engine.source_commits.join(' · ')} 예요.
+      </Text>
     </VStack>
   );
 }
@@ -419,34 +421,64 @@ function Scorecard() {
        *
        * 모양 다섯은 밴드가 없다 — 값이 아니라 부호·꼴을 보는 칸이라 `null` 이
        * 정상이고, 0 으로 채우면 «밴드 정중앙» 처럼 보인다. */}
-      <VStack gap={0.5} width="100%" maxWidth={760}>
-        <Text as="h4" font="label2">
-          그 열셋
-        </Text>
-        {s.engine_rows.map((r) => (
-          <HStack
-            key={`${r.irf}-${r.metric}`}
-            gap={1}
-            alignItems="baseline"
-            flexWrap="wrap"
-            className="sr-readrow"
-          >
-            <Text as="span" font="legal" color="fgMuted" noWrap>
-              {r.irf} · <code>{r.metric}</code>
-            </Text>
-            <Text as="span" font="legal" tabularNumbers noWrap flexGrow={1}>
-              {r.value === null ? '모양만 봐요' : r.value.toFixed(4)}
-              {r.band ? `  밴드 [${r.band[0]}, ${r.band[1]}]` : ''}
-            </Text>
-            {/* 판정에 **방향색을 안 쓴다** [2026-08-24]. 파랑은 이 앱에서
-                「금리가 내렸다」 하나만 뜻하고, 옆 표가 같은 파랑을 그 뜻으로
-                쓴다. 미달은 방향이 아니라 사실이라 굵기가 진다. */}
-            <Text as="span" font="legal" noWrap>
-              {r.pass ? '통과' : <b>미달</b>}
-            </Text>
-          </HStack>
-        ))}
-      </VStack>
+      {/* **표로 세운다** [2026-08-24]. flex 줄로 눕혔더니 값이 `flexGrow` 를
+          먹어 판정이 화면 한가운데에 떠 있었고, 열세 줄의 실측값이 서로 칼럼을
+          안 이뤄 위아래로 못 비교했다. 숫자를 비교하라고 내놓은 표에서 그건
+          표가 아니다 — 이 앱의 다른 표들이 하는 대로 `tabular` + 우측정렬이다. */}
+      <Box className="sr-strat-table" width="100%" maxWidth={760}>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {['충격', '칸', '실측', '밴드', '판정'].map((h, i) => (
+                <TableCell
+                  as="th"
+                  scope="col"
+                  key={h}
+                  className={i === 2 ? 'sr-num' : 'sr-label'}
+                  justifyContent={i === 2 ? 'flex-end' : undefined}
+                >
+                  <Text as="span" font="legal" color="fgMuted" noWrap>
+                    {h}
+                  </Text>
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {s.engine_rows.map((r) => (
+              <TableRow key={`${r.irf}-${r.metric}`}>
+                <TableCell className="sr-label">
+                  <Text as="span" font="legal" color="fgMuted" noWrap>
+                    {r.irf}
+                  </Text>
+                </TableCell>
+                <TableCell className="sr-label">
+                  <Text as="span" font="legal" noWrap>
+                    <code>{r.metric.replace('shape:', '')}</code>
+                  </Text>
+                </TableCell>
+                <TableCell className="sr-num" justifyContent="flex-end">
+                  <Text as="span" font="legal" tabularNumbers noWrap>
+                    {r.value === null ? '—' : r.value.toFixed(4)}
+                  </Text>
+                </TableCell>
+                <TableCell className="sr-label">
+                  <Text as="span" font="legal" color="fgMuted" noWrap>
+                    {r.band ? `[${r.band[0]}, ${r.band[1]}]` : '모양만 봐요'}
+                  </Text>
+                </TableCell>
+                <TableCell className="sr-label">
+                  {/* 판정에 **방향색을 안 쓴다** — 파랑은 이 앱에서 「금리가
+                      내렸다」 하나만 뜻하고, 미달은 방향이 아니다. */}
+                  <Text as="span" font="legal" noWrap>
+                    {r.pass ? '통과' : <b>미달</b>}
+                  </Text>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
 
       <Box overflow="auto" width="100%">
         <Table tableLayout="auto">

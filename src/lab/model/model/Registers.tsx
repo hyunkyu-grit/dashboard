@@ -114,12 +114,24 @@ export function EquationRegister() {
   return (
     <VStack gap={1.5} width="100%" {...anchorProps(ANCHORS.model.equationRegister)}>
       <VStack gap={0.5}>
-        <Text as="h3" font="label1">
-          방정식 등록부 — 인쇄된 44개
-        </Text>
+        {/* **개수를 문장 안에 숨기지 않는다** [2026-08-24]. 「44개 중 N개」 가
+            회색 13px 문장 안에 있으면 아무도 안 읽는다. 이 앱은 스코어카드의
+            `9/13` 처럼 세는 숫자를 크게 세운다 — 백테스트 카드의 헤드라인
+            숫자, 코인베이스·토스의 종목 머리가 전부 같은 것을 한다(실측). */}
+        <HStack gap={1.5} alignItems="baseline" flexWrap="wrap">
+          <Text as="h3" font="label1">
+            방정식 등록부
+          </Text>
+          <Text as="span" font="display3" tabularNumbers noWrap>
+            {nWired}/{S.equations.length}
+          </Text>
+          <Text as="span" font="legal" color="fgMuted">
+            에 배선이 붙어 있어요
+          </Text>
+        </HStack>
         <Text as="p" font="legal" color="fgMuted">
-          논문 207개 식 중 인쇄된 것이 44개예요. 그중 <b>{nWired}개</b>에 배선이
-          붙어 있고, <b>{nDiffers}개</b>는 인쇄된 것과 우리가 계산하는 것이 달라요.
+          논문 207개 식 중 인쇄된 것이 {S.equations.length}개예요. 그중{' '}
+          <b>{nDiffers}개</b>는 인쇄된 것과 우리가 계산하는 것이 달라요.
         </Text>
       </VStack>
 
@@ -205,12 +217,19 @@ export function CoefficientTable() {
   return (
     <VStack gap={1.5} width="100%" {...anchorProps(ANCHORS.model.coefficientRegister)}>
       <VStack gap={0.5}>
-        <Text as="h3" font="label1">
-          계수 — 부록 D Table 1~17
-        </Text>
+        <HStack gap={1.5} alignItems="baseline" flexWrap="wrap">
+          <Text as="h3" font="label1">
+            계수
+          </Text>
+          <Text as="span" font="display3" tabularNumbers noWrap>
+            {S.coefficients.length}
+          </Text>
+          <Text as="span" font="legal" color="fgMuted">
+            슬롯 · 부록 D Table 1~17
+          </Text>
+        </HStack>
         <Text as="p" font="legal" color="fgMuted">
-          슬롯 {S.coefficients.length}개예요. 값 하나하나가 어디서 왔는지 배지가
-          말해요.
+          값 하나하나가 어디서 왔는지 「출처」 열이 말해요.
         </Text>
       </VStack>
 
@@ -337,11 +356,19 @@ export function Census() {
   return (
     <VStack gap={1.5} width="100%" {...anchorProps(ANCHORS.model.census)}>
       <VStack gap={0.5}>
-        <Text as="h3" font="label1">
-          인쇄되지 않은 {c.unprinted}개
-        </Text>
+        <HStack gap={1.5} alignItems="baseline" flexWrap="wrap">
+          <Text as="h3" font="label1">
+            인쇄되지 않은 식
+          </Text>
+          <Text as="span" font="display3" tabularNumbers noWrap>
+            {c.unprinted}
+          </Text>
+          <Text as="span" font="legal" color="fgMuted">
+            개 · 논문 {c.total}개 중 {c.printed}개만 인쇄돼요
+          </Text>
+        </HStack>
         <Text as="p" font="legal" color="fgMuted">
-          논문은 식 {c.total}개 중 {c.printed}개를 인쇄해요. <Emph t={c.note} />
+          <Emph t={c.note} />
         </Text>
       </VStack>
 
