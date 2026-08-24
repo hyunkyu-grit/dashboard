@@ -43,12 +43,22 @@ import { SegmentedTabs } from '@coinbase/cds-web/tabs';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@coinbase/cds-web/tables';
 import { Text } from '@coinbase/cds-web/typography';
 
-import { ControlCard, Field } from '@/ui/ControlCard';
+import { ControlCard } from '@/ui/ControlCard';
 import { ErrorState, LoadingState } from '@/ui/DataState';
 import { DROPDOWN_STYLES } from '@/ui/window/popup';
 
 import { ANCHORS, anchorProps, eq, hrefFor, ledgerRow } from '../anchors';
 import { useUrlState } from '@/ui/useUrlState';
+
+import {
+  STEP_CHOICES,
+  meetings,
+  paramToSteps,
+  runningLevels,
+  stepsToDots,
+  stepsToParam,
+  type Steps,
+} from './meetings';
 import { AnchorsUnavailable, fetchAnchors } from './anchors';
 import {
   ASSUMPTIONS,
@@ -83,8 +93,6 @@ import {
 
 /** 점 눈금. 전부 기저의 검증 영역(`domain.policy_bp_per_q`) 안이다 — 밖을 고를
  *  수 있게 두면 화면이 «여기부터 외삽» 이라고 말하기 전에 이미 밖에 나가 있다. */
-const DOT_STEPS = [50, 25, 0, -25, -50];
-
 /** 다섯 테너 전부 같은 등급이다 [진단 §C.5]. IRS 다리는 기간프리미엄을 안 받고
  *  OU 스프레드는 편차에서 상쇄되므로, 남는 것은 정책 경로의 산술뿐이다. */
 const PROVENANCE = '경로 산술';
@@ -134,71 +142,52 @@ const dirCls = (v: number | null) =>
 
 const HORIZON_TABS = HORIZONS.map((x) => ({ id: x.id, label: x.label }));
 
-const ZERO_DOTS = Array.from({ length: PINNED_Q }, () => 0);
-
-/* ── 경로는 URL 에 산다 ────────────────────────────────────────────────────
+/* ── 경로는 URL 에 산다, 그리고 «변화량» 이다 ────────────────────────────
  *
- * 예전에는 여덟 점이 컴포넌트 상태뿐이었다. 그래서 새로고침 한 번에 날아가고,
- * 「이 경로 봐」 를 메신저로 보낼 방법이 없었다 — 4모니터 데스크에서 그건
- * 기능이 없는 것과 같다. Lab 세입자가 URL 로 사는 것과 같은 이유다
- * (`ui/nav.ts`), 그리고 **새 상태를 만드는 게 아니라** 이미 있던 상태를 주소로
- * 옮기는 것이다.
+ * 예전에는 컴포넌트 상태뿐이라 새로고침에 날아갔고, 값이 **레벨(누적)** 이라
+ * 동결을 유지하려면 뒤의 칸을 전부 다시 골라야 했다 [OWNER 2026-08-24].
+ * 지금은 회의별 변화량이고, 안 건드린 회의는 0 이다. 표기와 검증은
+ * `meetings.ts` 가 진다.
  *
- * 표기는 쉼표로 이은 여덟 수다(`p=-25,-25,0,0,0,0,0,0`). 압축할 수도 있지만
- * 주소창에서 읽히는 편이 낫고, 이건 사람이 붙여 넣는 주소다.
+ *     ?g=lab&lab=model&view=strategy&p=2026-08-27:-25,2027-01:-25
  *
- * 동결이면 키를 **아예 안 쓴다** — 기본값을 주소에 적으면 「아무것도 안 한 것」
- * 과 「동결을 골랐다」 가 URL 에서 구별되지 않고, 공유된 주소가 전부 길어진다.
- *
- * 쓰기는 `replace` 다. 셀렉트 한 번은 목적지가 아니고, 여덟 번 누른 게 뒤로
- * 여덟 걸음이 되면 안 된다(`useUrlState` 머리글의 같은 판단). */
+ * 쓰기는 `replace` 다 — 셀렉트 한 번은 목적지가 아니다. */
 const PATH_KEY = 'p';
 
-function dotsToParam(dots: number[]): string | undefined {
-  return dots.every((v) => v === 0) ? undefined : dots.join(',');
-}
-
-/** 주소를 못 믿는다 — 사람이 손으로 고치는 자리다. 하나라도 이상하면 통째로
- *  버리고 동결로 간다. 반쯤 읽어 들이면 화면이 주소와 다른 것을 보여 준다. */
-function paramToDots(raw: string | undefined): number[] | null {
-  if (!raw) return null;
-  const parts = raw.split(',');
-  if (parts.length !== PINNED_Q) return null;
-  const out: number[] = [];
-  for (const t of parts) {
-    const v = Number(t);
-    if (!Number.isFinite(v) || !DOT_STEPS.includes(v)) return null;
-    out.push(v);
-  }
-  return out;
-}
-
-/** 손으로 여덟 번 누르지 않아도 되는 경로들.
+/** 손으로 여덟 번 누르지 않아도 되는 뷰들.
  *
- *  고른 다섯은 **이 모형이 답을 크게 달리하는 다섯**이다 — 아무것도 안 함,
- *  한 번 인하하고 지켜봄, 인하 사이클, 가팔라지는 인하, 인상 사이클. 「쓸 만한
- *  시나리오」 를 고른 게 아니라 **응답의 모양이 갈리는 자리**를 고른 것이라,
- *  여기서 시작해 손으로 다듬는 것이 셀렉트부터 여는 것보다 빠르다. */
-const PRESETS: { label: string; dots: number[] }[] = [
-  { label: '동결', dots: ZERO_DOTS },
-  { label: '한 번 −25', dots: [-25, -25, -25, -25, -25, -25, -25, -25] },
-  { label: '−25 두 번', dots: [-25, -50, -50, -50, -50, -50, -50, -50] },
-  { label: '계단 −25씩', dots: [-25, -50, -75, -100, -100, -100, -100, -100] },
-  { label: '인상 +25', dots: [25, 25, 25, 25, 25, 25, 25, 25] },
+ *  고른 넷은 **모형의 응답 모양이 갈리는 자리**다 — 아무것도 안 함, 다음 회의
+ *  한 번 인하, 두 회의 연속 인하, 인상 사이클. 「쓸 만한 시나리오」 를 고른 게
+ *  아니라 응답이 달라지는 자리를 골랐다. 회의 키를 모르므로 **순번으로** 적고,
+ *  누를 때 그날의 회의 목록에 붙인다. */
+const PRESETS: { label: string; at: Record<number, number> }[] = [
+  { label: '동결', at: {} },
+  { label: '다음 회의 −25', at: { 0: -25 } },
+  { label: '두 번 연속 −25', at: { 0: -25, 1: -25 } },
+  { label: '인상 +25 두 번', at: { 0: 25, 1: 25 } },
 ];
 
 export function StrategySurface() {
   const [pathParam, setPathParam] = useUrlState(PATH_KEY, undefined);
-  /* URL 이 정본이지만 **매 렌더에 다시 읽지는 않는다** — `useUrlState` 가
-     마운트와 `popstate` 에서만 읽는다. 여기서는 그 값을 점 여덟으로 편다. */
-  const dots = useMemo(() => paramToDots(pathParam) ?? ZERO_DOTS, [pathParam]);
-  const setDots = useCallback(
-    (next: number[] | ((prev: number[]) => number[])) => {
-      const v = typeof next === 'function' ? next(paramToDots(pathParam) ?? ZERO_DOTS) : next;
-      setPathParam(dotsToParam(v));
-    },
-    [pathParam, setPathParam],
-  );
+  /* 회의 목록은 **오늘**이 정한다. 마운트 뒤에 잡는다 — 서버에서 만든 목록과
+     클라이언트의 것이 자정 근처에서 갈리면 hydration 이 어긋난다. */
+  const [today, setToday] = useState<Date | null>(null);
+  useEffect(() => setToday(new Date()), []);
+  const ms = useMemo(() => (today ? meetings(today) : []), [today]);
+
+  const steps = useMemo(() => paramToSteps(pathParam, ms) ?? {}, [pathParam, ms]);
+  const dots = useMemo(() => stepsToDots(steps, ms), [steps, ms]);
+  const levels = useMemo(() => runningLevels(steps, ms), [steps, ms]);
+  const setStep = (key: string, v: number) =>
+    setPathParam(stepsToParam({ ...steps, [key]: v }));
+  const setPreset = (at: Record<number, number>) => {
+    const next: Steps = {};
+    for (const [i, v] of Object.entries(at)) {
+      const m = ms[Number(i)];
+      if (m) next[m.key] = v;
+    }
+    setPathParam(stepsToParam(next));
+  };
   const [horizon, setHorizon] = useState<HorizonId>(DEFAULT_HORIZON);
   const [anchors, setAnchors] = useState<StrategyAnchors | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -269,9 +258,6 @@ export function StrategySurface() {
   const frozen = dots.every((v) => v === 0);
   const stale = ENGINE_STATUS.staleness;
 
-  const setDot = (q: number, v: number) =>
-    setDots((prev) => prev.map((old, i) => (i === q ? v : old)));
-
   const onCopy = async () => {
     try {
       await navigator.clipboard.writeText(exportText);
@@ -291,32 +277,14 @@ export function StrategySurface() {
       <VStack className="sr-strat-controls" gap={1}>
         <ControlCard title="정책금리 경로">
           <Text as="p" font="legal" color="fgMuted">
-            여덟 점은 「레벨」이에요 — 「−25 · −25」는 한 번 인하하고 그대로 두는 거예요.
+            회의마다 무엇을 할지만 고르면 돼요 — 안 건드린 회의는 동결이에요.
           </Text>
-          <HStack gap={0.5} flexWrap="wrap">
-            {dots.map((v, q) => (
-              <Field key={q} label={`q${q + 1}`}>
-                <Select
-                  size="s"
-                  font="legal"
-                  styles={DROPDOWN_STYLES}
-                  accessibilityLabel={`${q + 1}분기 정책금리 편차`}
-                  value={String(v)}
-                  onChange={(nv) => nv != null && setDot(q, Number(nv))}
-                  options={DOT_STEPS.map((o) => ({
-                    value: String(o),
-                    label: o === 0 ? '0' : `${o > 0 ? '+' : '−'}${Math.abs(o)}`,
-                  }))}
-                />
-              </Field>
-            ))}
-          </HStack>
-          {/* 프리셋. 「동결로 되돌리기」 가 여기 첫 칸으로 들어왔다 — 되돌리기도
-              경로 하나라 따로 설 이유가 없다. 누른 것이 켜지는 것은 유도값이다
-              (URL 의 여덟 점과 같은지 본다). */}
+
+          {/* 프리셋. 회의 **순번**으로 적는다 — 회의 키는 날짜가 정하고 그건
+              오늘이 정하기 때문이다. 「동결」 이 되돌리기를 겸한다. */}
           <HStack gap={0.5} flexWrap="wrap">
             {PRESETS.map((ps) => {
-              const on = ps.dots.every((v, i) => v === dots[i]);
+              const on = ms.every((m, i) => (steps[m.key] ?? 0) === (ps.at[i] ?? 0));
               return (
                 <Chip
                   key={ps.label}
@@ -324,13 +292,75 @@ export function StrategySurface() {
                   className="sr-chip-toggle"
                   aria-pressed={on}
                   accessibilityLabel={`${ps.label} 경로를 놓아요`}
-                  onClick={() => setDots(ps.dots)}
+                  onClick={() => setPreset(ps.at)}
                 >
                   {ps.label}
                 </Chip>
               );
             })}
           </HStack>
+
+          {/* 회의 한 줄 = 날짜 · 무엇을 하나 · **그래서 얼마가 되나**.
+              오른쪽의 누적 레벨이 곧 경로 그림이다 — 「시각적으로 어떻게 될
+              거다」 가 없다는 지적이 이 열을 만들었다 [OWNER]. */}
+          <VStack gap={0} width="100%" className="sr-mpc-list">
+            {ms.map((m, i) => {
+              const v = steps[m.key] ?? 0;
+              const lv = levels[i] ?? 0;
+              const first = i === 0 || ms[i - 1]?.qLabel !== m.qLabel;
+              return (
+                <VStack key={m.key} gap={0} width="100%">
+                  {first ? (
+                    <Text as="span" font="caption" color="fgMuted" className="sr-mpc-q">
+                      {m.qLabel}
+                    </Text>
+                  ) : null}
+                  <HStack gap={0.5} alignItems="center" width="100%" className="sr-mpc-row">
+                    <Text
+                      as="span"
+                      font="legal"
+                      color={m.dated ? undefined : 'fgMuted'}
+                      noWrap
+                      className="sr-mpc-when"
+                      title={
+                        m.dated
+                          ? '한은이 낸 일정이에요'
+                          : '한은이 아직 일정을 안 내서 달까지만 세운 자리예요'
+                      }
+                    >
+                      {m.label}
+                    </Text>
+                    <Select
+                      size="s"
+                      font="legal"
+                      styles={DROPDOWN_STYLES}
+                      accessibilityLabel={`${m.label} 금통위 결정`}
+                      value={String(v)}
+                      onChange={(nv) => nv != null && setStep(m.key, Number(nv))}
+                      options={STEP_CHOICES.map((o) => ({
+                        value: String(o),
+                        label: o === 0 ? '동결' : `${o > 0 ? '+' : '−'}${Math.abs(o)}`,
+                      }))}
+                    />
+                    <Text
+                      as="span"
+                      font="legal"
+                      tabularNumbers
+                      noWrap
+                      color={lv === 0 ? 'fgMuted' : undefined}
+                      className={`sr-mpc-lv ${dirCls(lv) ?? ''}`}
+                    >
+                      {lv === 0 ? '0' : `${lv > 0 ? '+' : '−'}${Math.abs(lv)}`}
+                    </Text>
+                  </HStack>
+                </VStack>
+              );
+            })}
+          </VStack>
+          <Text as="p" font="caption" color="fgMuted">
+            날짜가 적힌 회의는 한은이 낸 일정이고, 달만 적힌 회의는 아직 안 냈어요
+            — 연 8회 규칙(1·2·4·5·7·8·10·11월)으로 달까지만 세웠어요.
+          </Text>
           {outside ? (
             <HStack gap={1} alignItems="center" flexWrap="wrap">
               <Chip size="xs" accessibilityLabel="검증 영역 밖 — 여기부터는 선형 외삽이에요">
