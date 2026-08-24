@@ -1,4 +1,4 @@
-# V2-LOCAL EDIT 3 of 5 — see ../BACKEND.md
+﻿# V2-LOCAL EDIT 3 of 5 — see ../BACKEND.md
 #
 # sauron-v2's own backend launcher. It binds :8200.
 #
