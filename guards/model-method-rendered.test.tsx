@@ -17,7 +17,7 @@
  *   3. 빈티지가 «구속하는 분기» 를 말한다. 제일 새 분기(2026Q2)와 구속하는
  *      분기(2026Q1)가 갈리는데, 요약 문장은 디플레이터만 이름을 댄다.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 import { ThemeProvider } from '@coinbase/cds-web';
 import { defaultTheme } from '@coinbase/cds-web/themes/defaultTheme';
@@ -28,6 +28,9 @@ import statusJson from '../src/lab/model/artifacts/engine_status.json';
 import anchorsJson from '../src/lab/model/artifacts/paper_anchors.json';
 
 afterEach(cleanup);
+afterAll(() => {
+  rendered = null;
+});
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const M = methodJson as any;
@@ -37,14 +40,25 @@ const PAPER = (anchorsJson as any).paper;
 /* `ThemeProvider` 는 장식이 아니라 **필수**다. 차례의 `Pressable` 이 CDS
    `Interactable` 을 타고 `useTheme` 를 부르고, 프로바이더가 없으면 그 자리에서
    던진다 — 2026-08-24 에 골격을 카드 안으로 옮기면서 이 파일이 그렇게 여섯 개
-   다 빨개졌다. */
+   다 빨개졌다.
+
+   ## 한 번만 그린다
+   면 하나가 6,500px 짜리라 렌더가 300~500ms 다. 테스트마다 다시 그리면 파일
+   하나가 2초에 육박하고, 전체 스위트와 같이 돌 때 **한 번 헛나갔다**
+   (2026-08-24, 재현 안 됨). 읽기만 하는 검사들이라 판 하나를 나눠 쓰면 된다 —
+   흔들리는 가드는 없는 가드보다 나쁘다. */
+let rendered: string | null = null;
+
 function text(): string {
-  const { container } = render(
-    <ThemeProvider theme={defaultTheme} activeColorScheme="light">
-      <MethodSurface />
-    </ThemeProvider>,
-  );
-  return container.textContent ?? '';
+  if (rendered === null) {
+    const { container } = render(
+      <ThemeProvider theme={defaultTheme} activeColorScheme="light">
+        <MethodSurface />
+      </ThemeProvider>,
+    );
+    rendered = container.textContent ?? '';
+  }
+  return rendered;
 }
 
 describe('Method 면이 실제로 그리는 것', () => {

@@ -2558,11 +2558,41 @@ thead th {
 
 /* 배선 그래프. **가로만 흐른다** — 세로로 흐르게 두면 카드가 페이지를 밀고,
    이 앱은 페이지가 안 흐른다는 전제 위에 서 있다. */
+/* ── 배선 그래프의 가로 스크롤 ─────────────────────────────────────────────
+ *
+ * 그림이 2,302px 이고 상자는 1,851px 이라 오른쪽이 늘 잘린다. 스크롤은 되는데
+ * **잘렸다는 사실이 화면에 없었다** — 오른쪽 끝에서 노드가 딱 끊기면 그림이
+ * 거기서 끝난 것처럼 보인다.
+ *
+ * 오른쪽 가장자리에 바탕색으로 페이드를 깔아서 «여기서 이어진다» 를 말한다.
+ * 색을 코드에서 조립하지 않고 여기서 `--sr-control` 로만 만든다
+ * (`guards/color-source.test.ts`). 끝까지 굴리면 페이드가 사라져야 하므로
+ * `animation-timeline: scroll()` 을 쓰고, 못 쓰는 브라우저에서는 페이드가 늘
+ * 보인다 — 그건 «더 있을 수 있다» 라 거짓말이 아니다. */
 .sr-wire-scroll {
   overflow-x: auto;
   overflow-y: hidden;
   border-radius: 10px;
   background: var(--sr-control);
+  position: relative;
+}
+
+.sr-wire-fade {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 48px;
+  pointer-events: none;
+  border-start-end-radius: 10px;
+  border-end-end-radius: 10px;
+  background: linear-gradient(to left, var(--sr-control), transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sr-wire-fade {
+    /* 페이드는 모션이 아니라 상태 표시라 그대로 둔다. */
+    opacity: 1;
+  }
 }
 
 .sr-wire-svg {
@@ -2657,6 +2687,30 @@ thead th {
 .sr-model-toc button:hover .sr-toc-item[data-on='false'] {
   color: var(--color-fg);
 }
+
+/* ── 가정 띠 — Main/Backtest 의 통계 스트립 문법 ──────────────────────────
+ *
+ * 예전에는 열두 줄이 전부 같은 회색 13px 로 이어진 글벽이었다. 이 앱에서 여러
+ * 묶음의 사실을 눕히는 문법은 **구분선으로 나뉜 칸**이다(백테스트 카드 아래의
+ * 「이 구간 · 변화 · 52주」). 같은 문법을 쓴다.
+ *
+ * 구분선은 칸 **사이에만** 선다 — 첫 칸 앞에 서면 띠가 왼쪽으로 열린 것처럼
+ * 보이고, 마지막 칸 뒤에 서면 끝나지 않은 것처럼 보인다. */
+.sr-assume-col {
+  flex: 1 1 260px;
+  min-width: 0;
+  padding-inline: 16px;
+  word-break: keep-all;
+}
+
+.sr-assume-col:first-child {
+  padding-inline-start: 0;
+}
+
+.sr-assume-col + .sr-assume-col {
+  border-inline-start: 1px solid var(--color-bgLine);
+}
+
 
 .sr-wire-edge {
   fill: none;
@@ -2806,8 +2860,19 @@ thead th {
   border: 1px solid var(--color-fgMuted);
 }
 
+/* ── 계수표는 **자기 스크롤러를 안 진다** [2026-08-24] ─────────────────────
+ *
+ * `max-height: 420px` 이던 시절에는 이 표가 카드 안에서 또 굴렀다 — 실측
+ * scrollHeight 7,966px 이 420px 창에 들어 있었고, 그 창이 다시 5,585px 짜리
+ * 카드 안에 있었다. 스크롤러가 둘이면 휠이 어디에 먹는지가 커서 위치로
+ * 갈리고, 안쪽이 끝에 닿아야 바깥이 움직인다.
+ *
+ * 이 앱의 규칙은 **카드 하나에 스크롤러 하나**다(Main 의 표 카드가 그렇다).
+ * 표는 카드가 준 높이 안에서 그냥 길게 서고, 132행을 줄이는 일은 **필터**가
+ * 한다 — 표 위 알약이 이미 그 일을 하고 있었는데 스크롤 상자가 그걸 가렸다. */
 .sr-coef-scroll {
-  max-height: 420px;
+  /* 가로만 자기가 진다. 세로는 카드가 진다. */
+  overflow-x: auto;
 }
 
 /* 켜고 끄는 알약. 이 리포의 CDS 판에는 `selected` prop 이 없어서(실측

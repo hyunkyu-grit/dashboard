@@ -48,6 +48,7 @@ import { ErrorState, LoadingState } from '@/ui/DataState';
 import { DROPDOWN_STYLES } from '@/ui/window/popup';
 
 import { ANCHORS, anchorProps, eq, hrefFor, ledgerRow } from '../anchors';
+import { useUrlState } from '@/ui/useUrlState';
 import { AnchorsUnavailable, fetchAnchors } from './anchors';
 import {
   ASSUMPTIONS,
@@ -135,8 +136,69 @@ const HORIZON_TABS = HORIZONS.map((x) => ({ id: x.id, label: x.label }));
 
 const ZERO_DOTS = Array.from({ length: PINNED_Q }, () => 0);
 
+/* ── 경로는 URL 에 산다 ────────────────────────────────────────────────────
+ *
+ * 예전에는 여덟 점이 컴포넌트 상태뿐이었다. 그래서 새로고침 한 번에 날아가고,
+ * 「이 경로 봐」 를 메신저로 보낼 방법이 없었다 — 4모니터 데스크에서 그건
+ * 기능이 없는 것과 같다. Lab 세입자가 URL 로 사는 것과 같은 이유다
+ * (`ui/nav.ts`), 그리고 **새 상태를 만드는 게 아니라** 이미 있던 상태를 주소로
+ * 옮기는 것이다.
+ *
+ * 표기는 쉼표로 이은 여덟 수다(`p=-25,-25,0,0,0,0,0,0`). 압축할 수도 있지만
+ * 주소창에서 읽히는 편이 낫고, 이건 사람이 붙여 넣는 주소다.
+ *
+ * 동결이면 키를 **아예 안 쓴다** — 기본값을 주소에 적으면 「아무것도 안 한 것」
+ * 과 「동결을 골랐다」 가 URL 에서 구별되지 않고, 공유된 주소가 전부 길어진다.
+ *
+ * 쓰기는 `replace` 다. 셀렉트 한 번은 목적지가 아니고, 여덟 번 누른 게 뒤로
+ * 여덟 걸음이 되면 안 된다(`useUrlState` 머리글의 같은 판단). */
+const PATH_KEY = 'p';
+
+function dotsToParam(dots: number[]): string | undefined {
+  return dots.every((v) => v === 0) ? undefined : dots.join(',');
+}
+
+/** 주소를 못 믿는다 — 사람이 손으로 고치는 자리다. 하나라도 이상하면 통째로
+ *  버리고 동결로 간다. 반쯤 읽어 들이면 화면이 주소와 다른 것을 보여 준다. */
+function paramToDots(raw: string | undefined): number[] | null {
+  if (!raw) return null;
+  const parts = raw.split(',');
+  if (parts.length !== PINNED_Q) return null;
+  const out: number[] = [];
+  for (const t of parts) {
+    const v = Number(t);
+    if (!Number.isFinite(v) || !DOT_STEPS.includes(v)) return null;
+    out.push(v);
+  }
+  return out;
+}
+
+/** 손으로 여덟 번 누르지 않아도 되는 경로들.
+ *
+ *  고른 다섯은 **이 모형이 답을 크게 달리하는 다섯**이다 — 아무것도 안 함,
+ *  한 번 인하하고 지켜봄, 인하 사이클, 가팔라지는 인하, 인상 사이클. 「쓸 만한
+ *  시나리오」 를 고른 게 아니라 **응답의 모양이 갈리는 자리**를 고른 것이라,
+ *  여기서 시작해 손으로 다듬는 것이 셀렉트부터 여는 것보다 빠르다. */
+const PRESETS: { label: string; dots: number[] }[] = [
+  { label: '동결', dots: ZERO_DOTS },
+  { label: '한 번 −25', dots: [-25, -25, -25, -25, -25, -25, -25, -25] },
+  { label: '−25 두 번', dots: [-25, -50, -50, -50, -50, -50, -50, -50] },
+  { label: '계단 −25씩', dots: [-25, -50, -75, -100, -100, -100, -100, -100] },
+  { label: '인상 +25', dots: [25, 25, 25, 25, 25, 25, 25, 25] },
+];
+
 export function StrategySurface() {
-  const [dots, setDots] = useState<number[]>(ZERO_DOTS);
+  const [pathParam, setPathParam] = useUrlState(PATH_KEY, undefined);
+  /* URL 이 정본이지만 **매 렌더에 다시 읽지는 않는다** — `useUrlState` 가
+     마운트와 `popstate` 에서만 읽는다. 여기서는 그 값을 점 여덟으로 편다. */
+  const dots = useMemo(() => paramToDots(pathParam) ?? ZERO_DOTS, [pathParam]);
+  const setDots = useCallback(
+    (next: number[] | ((prev: number[]) => number[])) => {
+      const v = typeof next === 'function' ? next(paramToDots(pathParam) ?? ZERO_DOTS) : next;
+      setPathParam(dotsToParam(v));
+    },
+    [pathParam, setPathParam],
+  );
   const [horizon, setHorizon] = useState<HorizonId>(DEFAULT_HORIZON);
   const [anchors, setAnchors] = useState<StrategyAnchors | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -249,23 +311,33 @@ export function StrategySurface() {
               </Field>
             ))}
           </HStack>
-          <HStack gap={1} alignItems="center" flexWrap="wrap">
-            <Pressable
-              as="button"
-              noScaleOnPress
-              accessibilityLabel="경로를 동결로 되돌려요"
-              onClick={() => setDots(ZERO_DOTS)}
-            >
-              <Text as="span" font="legal">
-                동결로 되돌리기
-              </Text>
-            </Pressable>
-            {outside ? (
+          {/* 프리셋. 「동결로 되돌리기」 가 여기 첫 칸으로 들어왔다 — 되돌리기도
+              경로 하나라 따로 설 이유가 없다. 누른 것이 켜지는 것은 유도값이다
+              (URL 의 여덟 점과 같은지 본다). */}
+          <HStack gap={0.5} flexWrap="wrap">
+            {PRESETS.map((ps) => {
+              const on = ps.dots.every((v, i) => v === dots[i]);
+              return (
+                <Chip
+                  key={ps.label}
+                  size="xs"
+                  className="sr-chip-toggle"
+                  aria-pressed={on}
+                  accessibilityLabel={`${ps.label} 경로를 놓아요`}
+                  onClick={() => setDots(ps.dots)}
+                >
+                  {ps.label}
+                </Chip>
+              );
+            })}
+          </HStack>
+          {outside ? (
+            <HStack gap={1} alignItems="center" flexWrap="wrap">
               <Chip size="xs" accessibilityLabel="검증 영역 밖 — 여기부터는 선형 외삽이에요">
                 검증 영역 밖
               </Chip>
-            ) : null}
-          </HStack>
+            </HStack>
+          ) : null}
         </ControlCard>
       </VStack>
 
@@ -540,19 +612,34 @@ export function StrategySurface() {
             <Text as="p" font="body">
               {CONDITIONAL_NOTE}
             </Text>
-            {groups.map((g) => (
-              <VStack key={g.effect} gap={0.25}>
-                <Text as="p" font="legal">
-                  {g.items.length === 0 && g.effect === 'delta' ? NO_DELTA_ITEMS : g.headline}
-                </Text>
-                {g.items.map((it) => (
-                  <Text key={it.key} as="p" font="legal" color="fgMuted">
-                    {it.label} {assumptionValue(it)} · {it.source}
-                    {it.as_of ? ` · ${it.as_of}` : ''}
+            {/* 세 묶음이 **칸으로** 눕는다 [2026-08-24].
+                예전에는 열두 줄이 전부 같은 회색 13px 로 이어져서 위계가 없는
+                글벽이었다 — 「무엇이 bp 를 움직이나」 와 「그 출처가 무엇인가」 가
+                한 줄에 섞여 있었다.
+                Main/Backtest 의 하단 통계 스트립이 이 앱에서 쓰는 문법이다:
+                구분선으로 나뉜 칸, 칸마다 굵은 라벨 + 작은 회색 키/값.
+                출처는 **숨기지 않는다** — 근거가 보이는 것이 이 물건의 값이라,
+                위계만 주고 자리는 지킨다. */}
+            <HStack className="sr-assume" gap={0} width="100%" flexWrap="wrap">
+              {groups.map((g) => (
+                <VStack key={g.effect} className="sr-assume-col" gap={0.5}>
+                  <Text as="p" font="label2">
+                    {g.items.length === 0 && g.effect === 'delta' ? NO_DELTA_ITEMS : g.headline}
                   </Text>
-                ))}
-              </VStack>
-            ))}
+                  {g.items.map((it) => (
+                    <VStack key={it.key} gap={0}>
+                      <Text as="p" font="legal">
+                        {it.label} <b>{assumptionValue(it)}</b>
+                      </Text>
+                      <Text as="p" font="legal" color="fgMuted">
+                        {it.source}
+                        {it.as_of ? ` · ${it.as_of}` : ''}
+                      </Text>
+                    </VStack>
+                  ))}
+                </VStack>
+              ))}
+            </HStack>
             <Text as="p" font="legal" color="fgMuted">
               {stale.why}
             </Text>
