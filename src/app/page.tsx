@@ -51,7 +51,14 @@ import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { StartFilter } from '@/ui/StartFilter';
 import { TopNav } from '@/ui/TopNav';
 import { useUrlState } from '@/ui/useUrlState';
-import { LAB_ITEMS, resolveLab, type LabId } from '@/ui/nav';
+import {
+  LAB_ITEMS,
+  STRATEGY_ITEMS,
+  resolveLab,
+  resolveStrategy,
+  type LabId,
+  type StrategyId,
+} from '@/ui/nav';
 import { Surface3D } from '@/ui/Surface3D';
 import { IssuancePage } from '@/lab/IssuancePage';
 import { ModelSpace } from '@/lab/model/ModelSpace';
@@ -123,6 +130,13 @@ export default function Home() {
      2026-08-21 에 「모형」으로 내려갔고, 그 주소를 공유해 둔 사람이 있다. */
   const lab: LabId = resolveLab(labParam);
 
+  /* Strategy 안에서 지금 보고 있는 전략 [OWNER 2026-08-24]. Lab 과 **같은
+     기계**다 — 탭이 아니라 URL 상태이고, 모르는 값은 기본 세입자로 떨어진다.
+     키가 아예 없는 예전 `?g=strategy` 링크도 여기로 떨어지는데, 지금 세입자가
+     하나뿐이라 그 링크들이 가리키던 화면 그대로다. */
+  const [stratParam, setStratParam] = useUrlState('s');
+  const strategy: StrategyId = resolveStrategy(stratParam);
+
 
   /* ONE value in the URL, and the section is derived from it (`ui/nav.ts`).
    * Splitting section and tab into two states makes combinations representable
@@ -151,7 +165,9 @@ export default function Home() {
     ? GROUP_LABEL[group]
     : section === 'lab'
       ? (LAB_ITEMS.find((i) => i.id === lab)?.label ?? 'Lab')
-      : (SECTIONS.find((s) => s.id === section)?.label ?? 'Main');
+      : section === 'strategy'
+        ? (STRATEGY_ITEMS.find((i) => i.id === strategy)?.label ?? 'Strategy')
+        : (SECTIONS.find((s) => s.id === section)?.label ?? 'Main');
 
   const load = useCallback(async () => {
     setError(undefined);
@@ -409,6 +425,12 @@ const BANNER_H = 34;
           /* Lab 을 떠나면 세입자 키를 URL 에서 걷는다 — 안 걷으면 Backtest 를
              보는 주소에 세입자 키가 남아 공유한 링크가 거짓을 말한다. */
           setLabParam(t === 'lab' ? (labId ?? lab) : undefined);
+          /* Strategy 도 같은 규칙이다 [2026-08-24]. 다만 세입자가 하나뿐이라
+             **기본값은 주소에 안 적는다** — 안 적어야 예전 `?g=strategy` 링크와
+             지금 주소가 같은 문자열이 되고, 「기본을 골랐다」와 「아무것도 안
+             골랐다」가 URL 에서 갈리지 않는다. 손으로 적어 둔 키는 Strategy 안에
+             있는 동안 지킨다. */
+          setStratParam(t === 'strategy' ? (stratParam ?? undefined) : undefined);
           setSelectedId(undefined);
           // a pending hover from the tab being left must not land on the new one
           clearTimeout(hoverTimer.current);
@@ -539,10 +561,18 @@ const BANNER_H = 34;
             <SettingView />
           </ErrorBoundary>
         ) : section === 'strategy' && !isGroupTab ? (
-          /* Strategy = RV Analysis [OWNER — "RV = v2 Strategy 섹션"]. 라이브
-             전용이라(민평이 SQL 에만) 데이터 로드와 무관하게 자기 fetch 로 선다. */
-          <ErrorBoundary region="RV 분석" fallback="RV 분석 화면을 그리지 못했어요.">
-            <RvPage />
+          /* Strategy 의 세입자 [OWNER 2026-08-24]. 지금은 **Credit RV** 하나이고,
+             곧 둘째 전략이 들어온다. Lab 과 같은 모양의 분기다 — 세입자가 늘면
+             여기 한 줄씩 붙고, `nav.ts::PANELED` 에 'strategy' 를 더하면 메가
+             패널이 저절로 열린다.
+
+             Credit RV 는 라이브 전용이라(민평이 SQL 에만) 데이터 로드와 무관하게
+             자기 fetch 로 선다. */
+          <ErrorBoundary
+            region={STRATEGY_ITEMS.find((i) => i.id === strategy)?.label ?? '전략'}
+            fallback="전략 화면을 그리지 못했어요."
+          >
+            {strategy === 'credit-rv' ? <RvPage /> : null}
           </ErrorBoundary>
         ) : section === 'lab' && !isGroupTab ? (
           /* Lab 의 세입자 = **커브 표면** [v1 2026-08-14]. v1 의 첫 세입자

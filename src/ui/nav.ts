@@ -40,7 +40,10 @@ export const SECTIONS: Section[] = [
   /* Strategy = RV Analysis [OWNER 2026-08-18 — "RV = v2 Strategy 섹션"]. 랭킹이지
    * 투자판단이 아니다 — blurb 도 그 문법을 지킨다(명령형·추천 금지). */
   /* 어휘는 사분면 라벨과 같은 결이다 [OWNER 2026-08-19 — "싸고 버팀" 계열 교체]. */
-  { id: 'strategy', label: 'Strategy', blurb: '평소 대비 얼마나 벌어졌고 버퍼가 얼마나 남는지 — RV 랭킹을 본다.', tab: 'strategy' },
+  /* **세입자를 두는 섹션이 됐다** [OWNER 2026-08-24] — 곧 둘째 전략이 들어온다.
+     blurb 는 이제 «이 섹션이 무엇을 하는 곳인가» 이고, 지금 보고 있는 전략의
+     이름은 `STRATEGY_ITEMS` 가 진다(Lab 이 세입자 이름을 h1 으로 쓰는 그 규칙). */
+  { id: 'strategy', label: 'Strategy', blurb: '상대가치를 재는 화면들.', tab: 'strategy' },
   /* Setting 은 데이터 화면이 아니라 **다른 화면들이 읽는 값을 정하는 자리**라
    * 최상위다 [OWNER, 2026-08-14]. 지금은 조달금리 하나뿐이고, 그 값은 Cash
    * Bond 백테스트가 읽는다.
@@ -192,6 +195,70 @@ export const LAB_ITEMS: { id: LabId; label: string; desc: string; glyph: string 
 
 export function isLabId(v: string | undefined): v is LabId {
   return v === 'surface' || v === 'issuance' || v === 'model';
+}
+
+/* ── Strategy 의 세입자들 [OWNER 2026-08-24] ─────────────────────────────────
+ *
+ * 「Strategy Tab에 곧 하나 다른 전략을 도입할 예정이라서 Credit RV라는 이름으로
+ * 지금 있던 탭을 분리해서 다른 Backtest나 Lab과 같은 형태로 분리해두자」.
+ *
+ * Lab 의 세입자 기계를 **그대로** 본떴다. 새 문법을 만들지 않는다 — 두 섹션이
+ * 같은 일(여러 화면을 한 섹션 아래 두기)을 다른 방식으로 하면, 셋째가 생기는
+ * 날 어느 쪽을 따를지가 취향 문제가 된다.
+ *
+ * 세입자는 **탭이 아니라 URL 상태**다(`?g=strategy&s=credit-rv`). 탭을 늘리면
+ * `sectionOf()` 가 드는 «섹션은 유도값» 규칙에 두 번째 상태가 끼어든다.
+ *
+ * ## 지금은 패널을 안 연다 [OWNER 선택]
+ *
+ * 세입자가 하나뿐인 동안 Strategy 는 `PANELED` 에 안 들어간다 — 이 파일 위쪽이
+ * 이미 적어 둔 규칙이다: **「목적지가 하나면 버튼이지 메뉴가 아니다」**. 구조
+ * (URL 키·해석·목록·기본값)는 지금 다 세우고, 둘째가 들어오는 날 `PANELED` 에
+ * 한 낱말을 더하면 패널이 저절로 열린다.
+ *
+ * ## 이름에 대해 [OWNER 확인]
+ *
+ * 유니버스 8섹터에 **국고채·통안채가 들어 있다**(산금채AAA·공사채AAA·은행채AAA·
+ * 회사채AAA·카드채AA+·캐피탈채AA- 와 함께). 그 둘은 벤치마크로 같이 서는 것이고,
+ * 데스크가 이 화면을 「크레딧 RV」로 부르는 것이 맞다는 판단이다. 화면이 그
+ * 사실을 한 줄로 말한다. */
+export type StrategyId = 'credit-rv';
+
+export const DEFAULT_STRATEGY: StrategyId = 'credit-rv';
+
+export const STRATEGY_ITEMS: {
+  id: StrategyId;
+  label: string;
+  desc: string;
+  glyph: string;
+}[] = [
+  {
+    id: 'credit-rv',
+    label: 'Credit RV',
+    desc: '평소 대비 얼마나 벌어졌고 버퍼가 얼마나 남는지 — 8섹터 랭킹',
+    /* 글리프는 v1 이 크레딧에 쓰던 것 그대로(`GROUP_GLYPH.credit`). 같은 것을
+       두 그림으로 부르지 않는다. */
+    glyph: '◈',
+  },
+];
+
+export function isStrategyId(v: string | undefined): v is StrategyId {
+  return v === 'credit-rv';
+}
+
+/** 내려간 세입자. 지금은 없지만 자리를 비워 둔다 — `RETIRED_LAB` 과 같은 이유로,
+ *  공유된 링크가 조용히 엉뚱한 데로 가면 링크를 준 사람이 거짓말을 한 셈이 된다. */
+export const RETIRED_STRATEGY: Record<string, StrategyId> = {};
+
+/**
+ * URL 의 세입자 키를 지금 사는 세입자로 옮긴다.
+ *
+ * 키가 아예 없는 경우(= 예전 `?g=strategy` 링크)도 기본 세입자로 떨어진다.
+ * 그 링크들은 **안 죽는다** — 지금 세입자가 하나뿐이라 가리키던 화면 그대로다.
+ */
+export function resolveStrategy(v: string | undefined): StrategyId {
+  if (isStrategyId(v)) return v;
+  return (v && RETIRED_STRATEGY[v]) || DEFAULT_STRATEGY;
 }
 
 /**
