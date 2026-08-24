@@ -11,17 +11,29 @@
 #  클론하므로 이 파일이 그 경로까지 막지는 못한다 — 그쪽에서도 `data/` 는
 #  `public/` 밖이라 공개되지 않고 빌드에 쓰이지도 않는다.)
 
-backend/
-data/
-design/
-.impeccable/
-backend.log
+# ── 경로는 **뿌리에 못 박는다** [2026-08-24] ────────────────────────────────
+#
+# 앞의 `/` 가 없으면 `.gitignore` 문법과 똑같이 **어느 깊이든** 걸린다.
+# `data/` 하나가 뿌리의 25MB 워크북뿐 아니라 **`src/data/` 까지** 지웠고,
+# 그래서 Vercel 빌드가 `Can't resolve '@/data/calendar.json'` 로 죽었다.
+#
+# 로컬 `next build` 는 멀쩡했다 — 이 파일은 **업로드 목록**만 자르지 빌드가
+# 읽는 트리를 안 자르기 때문이다. 그래서 이 결함은 배포에서만 보인다.
+#
+# 오늘까지 안 터진 이유는 `src/data/calendar.json` 을 **프런트에서 import 한
+# 파일이 오늘 처음 생겼기** 때문이다(`strategy/meetings.ts` 의 금통위 달력).
+# `guards/vercelignore-src.test.ts` 가 이제 `src/` 가 통째로 올라가는지 잰다.
+/backend/
+/data/
+/design/
+/.impeccable/
+/backend.log
 
 # 문서. 배포물에 필요 없다.
 *.md
 !README.md
 
 # 로컬 산출물
-.next/
-coverage/
-tsconfig.tsbuildinfo
+/.next/
+/coverage/
+/tsconfig.tsbuildinfo
