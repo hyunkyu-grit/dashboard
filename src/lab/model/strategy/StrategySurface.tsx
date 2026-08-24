@@ -49,11 +49,15 @@ import { DROPDOWN_STYLES } from '@/ui/window/popup';
 
 import { ANCHORS, anchorProps, eq, hrefFor, ledgerRow } from '../anchors';
 import { useUrlState } from '@/ui/useUrlState';
+import { ErrorBoundary } from '@/ui/ErrorBoundary';
+import { ModelChart } from '@/lab/scenario/ModelChart';
+import type { ScenarioRow } from '@/lab/scenario/assemble';
 
 import {
   STEP_CHOICES,
   meetings,
   paramToSteps,
+  marketSteps,
   runningLevels,
   stepsToDots,
   stepsToParam,
@@ -162,9 +166,9 @@ const PATH_KEY = 'p';
  *  누를 때 그날의 회의 목록에 붙인다. */
 const PRESETS: { label: string; at: Record<number, number> }[] = [
   { label: '동결', at: {} },
-  { label: '다음 회의 −25', at: { 0: -25 } },
-  { label: '두 번 연속 −25', at: { 0: -25, 1: -25 } },
-  { label: '인상 +25 두 번', at: { 0: 25, 1: 25 } },
+  { label: '−25 한 번', at: { 0: -25 } },
+  { label: '−25 두 번', at: { 0: -25, 1: -25 } },
+  { label: '+25 두 번', at: { 0: 25, 1: 25 } },
 ];
 
 export function StrategySurface() {
@@ -194,6 +198,13 @@ export function StrategySurface() {
   const [unavailable, setUnavailable] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  /** 각주를 펼쳤나. **유도값이 아니라 읽는 사람의 선택**이라 상태로 든다.
+   *  URL 에는 안 넣는다 — 공유한 링크가 남의 읽기 습관을 강요할 이유가 없다.
+   *
+   *  오너: 「여전히 내가 필요없는 정보가 너무 많음」. 각주를 지우지는 않는다 —
+   *  이 화면의 값은 못 하는 것을 이름으로 부르는 데 있고, 지우면 그게 사라진다.
+   *  기본으로 접고, 묻는 사람에게만 편다. */
+  const [showNotes, setShowNotes] = useState(false);
 
   const load = useCallback(async () => {
     setRetrying(true);
@@ -225,6 +236,34 @@ export function StrategySurface() {
      그 둘은 구운 기저만으로 나오니까. 자리 번호가 아니라 이름으로 찾는다. */
   const headDecomp = decomp.find((d) => d.tenor === HEADLINE_TENOR) ?? null;
   const cands = useMemo(() => (gaps ? candidates(gaps) : []), [gaps]);
+
+  /** 시장이 보는 12개월 정책 이동, bp. 호가에서 나온 **사실**이다. */
+  const marketBp = anchors?.irs['1y']?.carry12mBp ?? null;
+  /** 그것을 회의 결정으로 편 것. 총량은 시장, 배분은 우리 것. */
+  const mkt = useMemo(() => marketSteps(marketBp, ms), [marketBp, ms]);
+  /** 지금 놓은 경로의 12개월 이동 = 넷째 분기 말 레벨. */
+  const mineBp = dots[3] ?? 0;
+
+  /* 커브 셋을 그리는 데 필요한 것은 `ScenarioRow` 인데, 「전략」 면의 `TenorGap`
+     이 이미 그 값을 전부 갖고 있다. **차트를 새로 만들지 않는다** — 시나리오
+     면이 화면에서 내려갈 때 이 그림도 같이 내려갔을 뿐이고, 백테스트 종목
+     차트의 해부를 그대로 옮긴 판이라 이 앱의 표준이다(`ModelChart` 머리글). */
+  const curveRows = useMemo<ScenarioRow[] | null>(
+    () =>
+      gaps
+        ? gaps.gaps.map((g) => ({
+            tenor: g.tenor,
+            spot: g.spot,
+            market12m: g.marketPct,
+            scenario12m: g.modelPct,
+            deltaBp: g.deltaBp,
+            marketCarryBp: g.carry12mBp,
+            vsMarketBp: g.vsMarketBp,
+            live: g.live,
+          }))
+        : null,
+    [gaps],
+  );
   const risks = useMemo(() => riskLines(sol, headDecomp), [sol, headDecomp]);
   const note = useMemo(
     () =>
@@ -280,9 +319,51 @@ export function StrategySurface() {
             회의마다 무엇을 할지만 고르면 돼요 — 안 건드린 회의는 동결이에요.
           </Text>
 
+          {/* **시장이 보는 것**을 먼저 말한다 [OWNER 2026-08-24].
+              기준선이 없으면 내가 놓은 경로가 큰지 작은지 알 방법이 없다.
+              총량(bp)은 1Y1Y 포워드에서 나온 **사실**이고, 그것을 회의로 나누는
+              것은 **우리 배분**이다 — 그 둘을 갈라 말한다. */}
+          {marketBp !== null ? (
+            <VStack gap={0.25} width="100%">
+              <HStack gap={1} alignItems="baseline" flexWrap="wrap">
+                <Text as="span" font="caption" color="fgMuted" noWrap>
+                  시장
+                </Text>
+                <Text as="span" font="label2" tabularNumbers noWrap className={dirCls(marketBp) ?? ''}>
+                  {marketBp > 0 ? '+' : '−'}
+                  {Math.abs(marketBp).toFixed(0)}bp
+                </Text>
+                <Text as="span" font="caption" color="fgMuted" noWrap>
+                  내 경로
+                </Text>
+                <Text as="span" font="label2" tabularNumbers noWrap className={dirCls(mineBp) ?? ''}>
+                  {mineBp === 0 ? '0' : `${mineBp > 0 ? '+' : '−'}${Math.abs(mineBp)}`}bp
+                </Text>
+              </HStack>
+              <Text as="span" font="caption" color="fgMuted">
+                12개월 정책 이동이에요 — 시장 쪽은 1Y1Y 포워드에서 나온 값이고,
+                그걸 회의로 나눈 건 우리 배분이에요.
+              </Text>
+            </VStack>
+          ) : null}
+
           {/* 프리셋. 회의 **순번**으로 적는다 — 회의 키는 날짜가 정하고 그건
               오늘이 정하기 때문이다. 「동결」 이 되돌리기를 겸한다. */}
           <HStack gap={0.5} flexWrap="wrap">
+            {mkt ? (
+              <Chip
+                size="xs"
+                className="sr-chip-toggle"
+                aria-pressed={
+                  Object.keys(mkt).length > 0 &&
+                  ms.every((m) => (steps[m.key] ?? 0) === (mkt[m.key] ?? 0))
+                }
+                accessibilityLabel="시장이 프라이싱한 경로를 놓아요"
+                onClick={() => setPathParam(stepsToParam(mkt))}
+              >
+                시장대로
+              </Chip>
+            ) : null}
             {PRESETS.map((ps) => {
               const on = ms.every((m, i) => (steps[m.key] ?? 0) === (ps.at[i] ?? 0));
               return (
@@ -382,7 +463,20 @@ export function StrategySurface() {
             activeTab={HORIZON_TABS.find((t) => t.id === horizon) ?? null}
             onChange={(t) => t && setHorizon(t.id as HorizonId)}
           />
-          <Text as="span" font="legal" color="fgMuted" style={{ marginInlineStart: 'auto' }}>
+          {/* 각주·리스크·가정을 펴는 손잡이. 카드 머리 오른쪽은 백테스트 카드가
+              기간 세그먼트를 두는 자리이고, 이 카드에서 그 자리에 서는 손잡이가
+              이것 하나다. */}
+          <Chip
+            size="xs"
+            className="sr-chip-toggle"
+            aria-pressed={showNotes}
+            accessibilityLabel="각주와 리스크·가정을 펴요"
+            onClick={() => setShowNotes((v) => !v)}
+            style={{ marginInlineStart: 'auto' }}
+          >
+            근거
+          </Chip>
+          <Text as="span" font="legal" color="fgMuted">
             모형 기저 {ENGINE_STATUS.basis_as_of} · {STALENESS_LABEL[stale.state]}
             {anchors ? ` · 커브 ${anchors.asof}` : ''}
           </Text>
@@ -430,6 +524,21 @@ export function StrategySurface() {
               </Text>
             )}
           </VStack>
+
+          {/* 커브 셋 — 「내가 생각하는 경로면 커브가 이렇게 된다」.
+              오늘 · 모형 12개월 · 시장 12개월. 앞 둘의 간격이 트레이드고, 그 값이
+              바로 위 「함의」 줄이다.
+
+              **차트를 새로 안 만들었다** — 시나리오 면이 화면에서 내려갈 때 같이
+              내려간 판이고, 백테스트 종목 차트의 해부를 그대로 옮긴 것이라 이
+              앱의 표준이다(`lab/scenario/ModelChart.tsx` 머리글). */}
+          {h !== null && curveRows && anchors ? (
+            <VStack gap={0.5} width="100%" className="sr-strat-curve">
+              <ErrorBoundary region="커브" fallback="커브를 그리지 못했어요.">
+                <ModelChart rows={curveRows} asof={anchors.asof} />
+              </ErrorBoundary>
+            </VStack>
+          ) : null}
 
           {/* 논거 */}
           <VStack gap={0.5} {...anchorProps(ANCHORS.strategy.argument)}>
@@ -522,15 +631,19 @@ export function StrategySurface() {
                     </TableBody>
                   </Table>
                 </Box>
-                <Text as="p" font="legal" color="fgMuted">
-                  다섯 항의 합이 합계와 정확히 같아요. 기간프리미엄과 스왑 스프레드가 0 인
-                  건 안 잰 게 아니라 이 다리에 안 오기 때문이에요 — 열을 지우면 그 사실이
-                  같이 지워져요.
-                </Text>
-                <Text as="p" font="legal" color="fgMuted">
-                  다섯 테너뿐이에요 — 기저가 1Y·2Y·3Y·5Y·10Y 만 담아요. 나머지 만기는
-                  보간해서 세우지 않아요.
-                </Text>
+                {showNotes ? (
+                  <>
+                    <Text as="p" font="legal" color="fgMuted">
+                      다섯 항의 합이 합계와 정확히 같아요. 기간프리미엄과 스왑 스프레드가 0 인
+                      건 안 잰 게 아니라 이 다리에 안 오기 때문이에요 — 열을 지우면 그 사실이
+                      같이 지워져요.
+                    </Text>
+                    <Text as="p" font="legal" color="fgMuted">
+                      다섯 테너뿐이에요 — 기저가 1Y·2Y·3Y·5Y·10Y 만 담아요. 나머지 만기는
+                      보간해서 세우지 않아요.
+                    </Text>
+                  </>
+                ) : null}
               </>
             )}
           </VStack>
@@ -578,23 +691,32 @@ export function StrategySurface() {
                     ) : null}
                   </HStack>
                 ))}
-                {gaps.excluded.map((x) => (
-                  <Text key={x.tenor} font="legal" color="fgMuted" as="p">
-                    {TENOR_LABEL[x.tenor]} 는 후보에 없어요 — {x.why}
-                  </Text>
-                ))}
-                <Text as="p" font="legal" color="fgMuted">
-                  진입·목표·손절은 안 적어요 — 그건 트레이더 몫이에요.
-                </Text>
-                <Text as="p" font="legal" color="fgMuted">
-                  캐리는 커브가 함의하는 이동이지 정책 기대가 아니에요 — 기간프리미엄이
-                  섞여 있어요.
-                </Text>
+                {showNotes ? (
+                  <>
+                    {gaps.excluded.map((x) => (
+                      <Text key={x.tenor} font="legal" color="fgMuted" as="p">
+                        {TENOR_LABEL[x.tenor]} 는 후보에 없어요 — {x.why}
+                      </Text>
+                    ))}
+                    <Text as="p" font="legal" color="fgMuted">
+                      진입·목표·손절은 안 적어요 — 그건 트레이더 몫이에요.
+                    </Text>
+                    <Text as="p" font="legal" color="fgMuted">
+                      캐리는 커브가 함의하는 이동이지 정책 기대가 아니에요 —
+                      기간프리미엄이 섞여 있어요.
+                    </Text>
+                  </>
+                ) : null}
               </VStack>
             )}
           </VStack>
 
-          {/* 리스크 */}
+          {/* 리스크와 가정 띠도 같은 토글 뒤에 선다 [OWNER 2026-08-24].
+              「내가 필요없는 정보가 너무 많음」 — 매일 읽는 것은 위의 넷(뷰 ·
+              함의 · 커브 · 논거)이고, 아래 둘은 그 숫자를 **의심할 때** 읽는
+              것이다. 지우지 않고 접는다. */}
+          {showNotes ? (
+            <>
           <VStack gap={0.5} {...anchorProps(ANCHORS.strategy.risk)}>
             <Text as="span" font="legal" color="fgMuted">
               리스크
@@ -674,6 +796,8 @@ export function StrategySurface() {
               {stale.why}
             </Text>
           </VStack>
+            </>
+          ) : null}
 
           {/* 노트 내보내기 */}
           <VStack gap={0.5}>

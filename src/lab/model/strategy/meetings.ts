@@ -195,3 +195,39 @@ export function paramToSteps(raw: string | undefined, ms: readonly Meeting[]): S
 
 /** 한 회의에서 고를 수 있는 것. 25bp 배수 둘씩 — 그 이상은 이 화면의 뷰가 아니다. */
 export const STEP_CHOICES = [50, 25, 0, -25, -50];
+
+
+/* ── 시장이 프라이싱한 경로 ────────────────────────────────────────────────
+ *
+ * 오너: 「내가 생각하는 금리 커브가 이렇다면 시장 금리는 이럴거다」 의 반대쪽 —
+ * **시장은 지금 뭘 보고 있나**. 기준선이 있어야 내 뷰가 시장과 얼마나 다른지가
+ * 값이 된다.
+ *
+ * 재료는 이미 있다. `anchors.irs['1y'].carry12mBp` 는 「1Y1Y 포워드 − 1Y 스팟」
+ * 이고, 1Y IRS 가 향후 1년의 평균 CD 이므로 그 차이가 곧 **시장이 보는 12개월
+ * 정책 이동**이다. 백엔드를 새로 만들 필요가 없다.
+ *
+ * ## 어디까지가 사실이고 어디부터가 우리 배분인가
+ *
+ * 총량(bp)은 시장 호가에서 나온 **사실**이다. 그것을 «회의 몇 번» 으로 나누는
+ * 것은 **우리 배분**이다 — 시장은 회의별 확률을 우리에게 말해 주지 않는다.
+ * 그래서 25bp 단위로 반올림해 **가까운 회의부터** 채운다(시장은 보통 가까운
+ * 회의를 먼저 프라이싱한다). 화면이 그 둘을 갈라 말해야 한다. */
+
+/** 시장이 보는 12개월 정책 이동을 25bp 배수의 회의 결정으로 편다.
+ *
+ *  총량은 시장 호가, 배분은 우리 것. `carry` 가 없으면 `null` — 0 이 아니다. */
+export function marketSteps(carry12mBp: number | null, ms: readonly Meeting[]): Steps | null {
+  if (carry12mBp === null || !Number.isFinite(carry12mBp)) return null;
+  const n = Math.round(carry12mBp / 25);
+  if (n === 0) return {};
+  const dir = n > 0 ? 25 : -25;
+  const out: Steps = {};
+  /* 12개월 안의 회의 = 앞의 네 분기. 그 밖으로는 안 민다 — 캐리가 말하는 창이
+     12개월이라 그 밖에 놓으면 없는 정보를 지어내는 것이다. */
+  const within = ms.filter((m) => m.q < 4);
+  for (let i = 0; i < Math.abs(n) && i < within.length; i += 1) {
+    out[within[i]!.key] = dir;
+  }
+  return out;
+}
