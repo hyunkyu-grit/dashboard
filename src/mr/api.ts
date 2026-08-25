@@ -20,9 +20,13 @@ export interface MrState {
 export interface MrRow {
   id: string;
   label: string;
+  /** 계열 종류 — bss(국고−IRS) · fut(선물 내재금리) · fsw(퓨처스왑). */
+  kind: 'bss' | 'fut' | 'fsw';
+  /** 정의 문장 — 서브라인이 그대로 읽는다(혼합 유니버스의 «무엇인지»). */
+  defn: string;
   /** 순위 — |z| 내림차순, 서버가 매긴다(§16). */
   rank: number;
-  /** 값의 단위 — BSS 는 bp. */
+  /** 값의 단위 — 스프레드류 bp · 내재금리 %. */
   unit: string;
   v: number;
   /** 전일 대비 — %-계열은 서버가 bp 로 끝내서 준다(`dUnit`). */
@@ -42,8 +46,9 @@ export interface MrRow {
 }
 
 export interface MrBoard {
-  /** BSS 두 다리(민평×IRS)가 한 inner join 이라 as-of 도 하나다. */
-  asof: { bss: string | null };
+  /** 소스별 as-of — BSS(민평×IRS)와 선물(선물표×IRS)이 갈라질 수 있고,
+   * 갈라진 날은 화면이 그렇다고 말한다(rv 의 B-2). */
+  asof: { bss: string | null; fut: string | null };
   params: { window: number; k: number; recentN: number };
   rows: MrRow[];
   /** 못 읽은 테너 — 조용히 빼지 않는다(rv 의 exclusions 문법, 사유는 서버 것). */

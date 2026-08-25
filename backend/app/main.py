@@ -892,7 +892,7 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     기본(s16) 그대로다. warnZ 는 엔진엔 안 들어가고 오실레이터 가이드가 쓴다.
     캐시 없음 — 파라미터가 자유값이고 계산이 밀리초라 태울 이유가 없다.
     """
-    labels = dict(mr_mod.SERIES)
+    labels = {s: l for s, l, _ in mr_mod.SERIES}
     if id not in labels:
         raise HTTPException(status_code=404, detail=f"unknown mr series {id}")
     if not 2 <= lookback <= 600:
@@ -905,7 +905,8 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     if not 0.0 <= notional <= 1e12:
         raise HTTPException(status_code=422, detail=f"명목이 범위를 벗어나요: {notional} (0~1e12)")
 
-    body = universe_series(id)
+    # 보드와 같은 유도 창구 — 선물·퓨처스왑도 여기서 같은 환산을 지난다.
+    body = mr_mod.series_points(id)
     pts = [p for p in body["points"] if p.get("v") is not None]
     dates = [p["t"] for p in pts]
     vals = [float(p["v"]) for p in pts]

@@ -221,10 +221,20 @@ export function MrPage() {
       {/* ── 조건 바 — 어떤 밴드에서 나온 숫자인지가 카드보다 먼저 읽힌다 ──── */}
       <VStack className="sr-rv-bar" flexShrink={0} gap={0.5} width="100%">
         <HStack gap={2} alignItems="center" flexWrap="wrap">
-          {/* 순서는 언제 → 무엇으로(rv 의 판단). BSS 는 두 다리가 한 inner
-              join 이라 as-of 도 하나다 — 첫 판의 소스별 갈림 표기는 은퇴했다. */}
-          <Cond k="as-of" v={board.asof.bss ?? '—'} />
-          <Cond k="정의" v="국고 − IRS" />
+          {/* 순서는 언제 → 무엇으로(rv 의 판단). 소스가 둘이라 as-of 도 둘이고,
+              갈라진 날은 굵기+밑줄이 그 사실을 말한다(rv B-2). 계열 정의는
+              행의 서브라인이 진다 — 혼합 유니버스에서 바 한 칸으로는 거짓말이
+              된다. */}
+          <Cond
+            k="민평·IRS"
+            v={board.asof.bss ?? '—'}
+            strong={board.asof.bss !== board.asof.fut}
+          />
+          <Cond
+            k="선물"
+            v={board.asof.fut ?? '—'}
+            strong={board.asof.bss !== board.asof.fut}
+          />
           {/* 룩백·밴드 폭 선택지 [OWNER 2026-08-25 — "보통 사용하는 값들을
               선택지로"]. 알약은 rv 설정의 그 컨트롤, 근거는 라벨 툴팁이 진다. */}
           <HStack gap={0.5} alignItems="center">
@@ -276,6 +286,11 @@ export function MrPage() {
             </Text>
           </Box>
         </HStack>
+        {board.asof.bss !== board.asof.fut ? (
+          <Text font="legal" as="span" color="fgMuted">
+            두 소스의 종가 날짜가 달라요 — 각 행은 자기 소스의 날짜 기준이에요.
+          </Text>
+        ) : null}
         {board.excluded.length > 0 ? (
           /* 못 읽은 테너 — 조용히 빼지 않는다(rv 의 exclusions 문법). */
           <Text font="legal" as="span" color="fgMuted">
@@ -303,7 +318,7 @@ export function MrPage() {
             paddingBottom={0.5}
           >
             <Text font="label1" as="h2" noWrap>
-              BSS 전 테너 — 밴드 위치 랭킹
+              밴드 위치 랭킹
             </Text>
           </HStack>
           <VStack gap={0.75} width="100%" minHeight={0} flexGrow={1}>
@@ -352,7 +367,7 @@ export function MrPage() {
                           {/* 행 의미론은 표, 여는 것은 버튼(rv 의 a11y 규칙). */}
                           <button
                             type="button"
-                            className="sr-rv-linkbtn"
+                            className="sr-rv-linkbtn sr-rv-stack"
                             aria-label={`${r.label} 이력 보기`}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -360,6 +375,10 @@ export function MrPage() {
                             }}
                           >
                             <span className="sr-rv-name">{r.label}</span>
+                            {/* 정의 서브라인 — 국고−IRS 와 선물내재가 한 표에
+                                섞이므로, 숫자 옆에 무엇인지가 없으면 두 단위를
+                                같은 자로 읽게 된다(rv 랭킹 표의 그 판단). */}
+                            <span className="sr-rv-sub">{r.defn}</span>
                           </button>
                         </td>
                         <td className="sr-rv-td">
@@ -396,7 +415,7 @@ export function MrPage() {
                 {sel.label}
               </Text>
               <Text font="caption" as="span" color="fgMuted" noWrap>
-                국고 − IRS
+                {sel.defn}
               </Text>
             </HStack>
             <HStack gap={1} alignItems="center">

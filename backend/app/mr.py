@@ -21,6 +21,9 @@ from __future__ import annotations
 import math
 from typing import Any, Callable
 
+from sqlalchemy import text
+
+from .mysqldb import engine
 from .universe import universe_series
 
 # 기본은 검증 레인(mr_backtest.py)과 같은 창·배수 — 화면과 검증이 딴 밴드를
@@ -38,19 +41,104 @@ KS = (1.5, 2.0, 2.5)
 # 재진입 «최근» 판정 상한 — 검증 레인의 EXPIRE_N 과 같은 5영업일.
 RECENT_N = 5
 
-# (id, 라벨) — universe 의 BSS 전 테너. 검증이 잰 것은 3·5·10Y 셋이고 나머지는
-# 측정만 싣는 테너다(측정 화면이라 문제없되, 사실은 사실대로 적어 둔다).
-SERIES: list[tuple[str, str]] = [
-    ("BSS-6M", "BSS 6M"),
-    ("BSS-9M", "BSS 9M"),
-    ("BSS-1Y", "BSS 1Y"),
-    ("BSS-1.5Y", "BSS 1.5Y"),
-    ("BSS-2Y", "BSS 2Y"),
-    ("BSS-3Y", "BSS 3Y"),
-    ("BSS-5Y", "BSS 5Y"),
-    ("BSS-7Y", "BSS 7Y"),
-    ("BSS-10Y", "BSS 10Y"),
+# (id, 라벨, 종류) — BSS 전 테너 + 국채선물 내재금리 + 퓨처스왑 [OWNER
+# 2026-08-25 — "선물 들어왔는데 국채선물 롱숏이랑 선물 − IRS = 퓨처스왑 롱숏도
+# 반영하기"]. 검증이 잰 것은 BSS 3·5·10Y 셋이고 나머지는 측정만 싣는 계열이다
+# (측정 화면이라 문제없되, 사실은 사실대로 적어 둔다).
+#
+# 선물 값은 **내재수익률**이다 — 새 표(`mkt_futures_investor_close`)에는 종가만
+# 있고, «선물 − IRS» 가 성립하려면 금리끼리 빼야 하므로 KRX 표준 합성채
+# (표면 5%·반기 이표·3Y=6기/10Y=20기)로 종가를 환산한다(`_implied_yield`).
+# 이 화면의 낱말은 전부 금리 bp 다 — 가격 계열을 섞으면 전략 실험 창의
+# 명목(₩/bp)이 그 행에서만 거짓이 된다.
+SERIES: list[tuple[str, str, str]] = [
+    ("BSS-6M", "BSS 6M", "bss"),
+    ("BSS-9M", "BSS 9M", "bss"),
+    ("BSS-1Y", "BSS 1Y", "bss"),
+    ("BSS-1.5Y", "BSS 1.5Y", "bss"),
+    ("BSS-2Y", "BSS 2Y", "bss"),
+    ("BSS-3Y", "BSS 3Y", "bss"),
+    ("BSS-5Y", "BSS 5Y", "bss"),
+    ("BSS-7Y", "BSS 7Y", "bss"),
+    ("BSS-10Y", "BSS 10Y", "bss"),
+    ("FUT-KTB3", "KTB3 내재금리", "fut"),
+    ("FUT-KTB10", "KTB10 내재금리", "fut"),
+    ("FSW-3Y", "퓨처스왑 3Y", "fsw"),
+    ("FSW-10Y", "퓨처스왑 10Y", "fsw"),
 ]
+
+# 행의 정의 문장 — 화면 서브라인이 그대로 읽는다(혼합 유니버스에서 숫자 옆에
+# 무엇인지가 없으면 두 단위를 같은 자로 읽게 된다 — rv 랭킹 표의 그 판단).
+KIND_DEFN = {
+    "bss": "국고 − IRS",
+    "fut": "선물 종가의 내재수익률 (5% 합성)",
+    "fsw": "선물내재 − IRS",
+}
+
+# 퓨처스왑의 IRS 다리 — 선물 상장 만기와 같은 테너.
+FSW_IRS_COL = {"FSW-3Y": ("3Y", "irs_3y"), "FSW-10Y": ("10Y", "irs_10y")}
+
+
+def _implied_yield(price: float, years: int) -> float:
+    """KRX 국채선물 이론가의 역함수 — 표면 5%·반기 이표 합성채 가격 → 연 수익률(%).
+
+    P(r) = Σ_{t=1..2y} 2.5/(1+r/2)^t + 100/(1+r/2)^{2y}. 단조 감소라 이분법이면
+    충분하다(60회 ≈ 1e-16 폭). P(5%) = 100 이 자명한 핀이다(테스트가 잰다).
+    """
+    n = 2 * years
+
+    def pv(r: float) -> float:
+        d = 1.0 + r / 2.0
+        return sum(2.5 / d ** t for t in range(1, n + 1)) + 100.0 / d ** n
+
+    lo_r, hi_r = -0.05, 0.30
+    for _ in range(60):
+        mid = (lo_r + hi_r) / 2.0
+        if pv(mid) > price:
+            lo_r = mid
+        else:
+            hi_r = mid
+    return (lo_r + hi_r) / 2.0 * 100.0
+
+
+def _fut_bundle() -> dict[str, dict[str, Any]]:
+    """새 선물 표 + IRS 종가에서 넉 장을 한 번에 — 내재금리 2, 퓨처스왑 2.
+
+    두 표 모두 `sim_portfolio` 라 같은 커넥션의 두 스캔이고, 퓨처스왑은 BSS 와
+    같은 inner join 규율(양쪽 다 있는 날만, 보간·이월 없음)이다.
+    """
+    with engine().connect() as conn:
+        fut = conn.execute(text(
+            "SELECT deal_date, ktb_type, CLOSE FROM mkt_futures_investor_close "
+            "WHERE CLOSE IS NOT NULL ORDER BY deal_date ASC"
+        )).fetchall()
+        irs = conn.execute(text(
+            "SELECT irs_date, irs_3y, irs_10y FROM mkt_irs_close ORDER BY irs_date ASC"
+        )).fetchall()
+
+    yields: dict[str, list[tuple[str, float]]] = {"3Y": [], "10Y": []}
+    for d, typ, close in fut:
+        if typ not in yields or close is None:
+            continue
+        years = 3 if typ == "3Y" else 10
+        yields[typ].append((d.isoformat(), _implied_yield(float(close), years)))
+
+    irs_by_date: dict[str, dict[str, float]] = {}
+    for d, y3, y10 in irs:
+        irs_by_date[d.isoformat()] = {"irs_3y": y3, "irs_10y": y10}
+
+    out: dict[str, dict[str, Any]] = {}
+    for sid, typ in (("FUT-KTB3", "3Y"), ("FUT-KTB10", "10Y")):
+        out[sid] = {"unit": "%", "points": [{"t": t, "v": round(v, 4)} for t, v in yields[typ]]}
+    for sid, (typ, col) in FSW_IRS_COL.items():
+        pts = []
+        for t, v in yields[typ]:
+            leg = irs_by_date.get(t, {}).get(col)
+            if leg is None:
+                continue
+            pts.append({"t": t, "v": round((v - float(leg)) * 100.0, 4)})
+        out[sid] = {"unit": "bp", "points": pts}
+    return out
 
 # 히스토리 차트가 드는 길이 — 대략 1년.
 HISTORY_N = 260
@@ -112,7 +200,7 @@ def _state(vals: list[float], up: list, lo: list) -> dict[str, Any]:
     return {"kind": "inside", "days": None}
 
 
-def _assemble(sid: str, label: str, unit: str,
+def _assemble(sid: str, label: str, kind: str, unit: str,
               dates: list[str], vals: list[float],
               window: int = WINDOW, k: float = K) -> tuple[dict, dict]:
     """한 계열의 보드 행과 히스토리 조각. 반환 = (row, history)."""
@@ -130,7 +218,8 @@ def _assemble(sid: str, label: str, unit: str,
     scale = 100.0 if unit == "%" else 1.0
     d_unit = "bp" if unit == "%" else unit
     row = {
-        "id": sid, "label": label, "unit": unit,
+        "id": sid, "label": label, "kind": kind, "defn": KIND_DEFN[kind],
+        "unit": unit,
         "v": round(v, 4),
         "d1": round(d1 * scale, 4), "dUnit": d_unit,
         "ma": round(m, 4) if m is not None else None,
@@ -158,30 +247,51 @@ def _assemble(sid: str, label: str, unit: str,
     return row, history
 
 
+def series_points(sid: str, *, fut_bundle: dict | None = None) -> dict[str, Any]:
+    """한 계열의 원 시계열 — 보드와 전략 실험이 **같은 유도**를 쓰는 단일 창구."""
+    kinds = {s: kd for s, _, kd in SERIES}
+    kind = kinds.get(sid)
+    if kind is None:
+        raise KeyError(sid)
+    if kind == "bss":
+        return universe_series(sid)
+    bundle = fut_bundle if fut_bundle is not None else _fut_bundle()
+    return bundle[sid]
+
+
 def build_mr(dataset=None, *, window: int = WINDOW, k: float = K,
-             fetch_uni: Callable[[str], dict] | None = None) -> dict[str, Any]:
+             fetch_uni: Callable[[str], dict] | None = None,
+             fetch_fut: Callable[[], dict] | None = None) -> dict[str, Any]:
     """보드 + 히스토리 전부. 라우트는 이 페이로드를 썰어서만 답한다.
 
-    `dataset` 은 이제 안 읽는다 — BSS 두 다리가 전부 호출 시 SQL 이라 기동
-    스냅샷 의존이 없다. 자리는 남긴다: 라우트가 캐시 키로 `_dataset.data_key`
-    를 계속 쓰고(universe 와 같은 판단), 서명을 바꾸면 그 호출부가 흔들린다.
+    `dataset` 은 이제 안 읽는다 — 모든 다리가 호출 시 SQL 이라 기동 스냅샷
+    의존이 없다. 자리는 남긴다: 라우트가 캐시 키로 `_dataset.data_key` 를 계속
+    쓰고(universe 와 같은 판단), 서명을 바꾸면 그 호출부가 흔들린다.
 
     window·k 의 허용값 검증(WINDOWS·KS)은 라우트가 한다 — 여기는 계산만.
 
-    fetch_uni 는 시험 주입 자리 — 기본은 실제 SQL 을 읽는다. 못 읽은 테너는
-    조용히 빼지 않고 `excluded` 에 사유와 함께 선다(rv 의 exclusions 문법).
+    fetch_uni·fetch_fut 은 시험 주입 자리 — 기본은 실제 SQL 을 읽는다. 못 읽은
+    계열은 조용히 빼지 않고 `excluded` 에 사유와 함께 선다(rv exclusions 문법).
     """
     fetch_uni = fetch_uni or universe_series
 
     rows: list[dict] = []
     histories: dict[str, dict] = {}
     excluded: list[dict] = []
-    asof: str | None = None
-    for sid, label in SERIES:
+    # 소스별 as-of — BSS(민평×IRS)와 선물(선물표×IRS)이 갈라질 수 있고, 갈라진
+    # 날은 화면이 그렇다고 말해야 한다(rv 의 B-2).
+    asof: dict[str, str | None] = {"bss": None, "fut": None}
+    fut: dict | None = None
+    for sid, label, kind in SERIES:
         try:
-            body = fetch_uni(sid)
+            if kind == "bss":
+                body = fetch_uni(sid)
+            else:
+                if fut is None:
+                    fut = (fetch_fut or _fut_bundle)()
+                body = fut[sid]
             pts = [p for p in body["points"] if p.get("v") is not None]
-            row, history = _assemble(sid, label, body["unit"],
+            row, history = _assemble(sid, label, kind, body["unit"],
                                      [p["t"] for p in pts],
                                      [float(p["v"]) for p in pts],
                                      window, k)
@@ -190,8 +300,9 @@ def build_mr(dataset=None, *, window: int = WINDOW, k: float = K,
             continue
         rows.append(row)
         histories[sid] = history
-        if asof is None or row["asof"] > asof:
-            asof = row["asof"]
+        fam = "bss" if kind == "bss" else "fut"
+        if asof[fam] is None or row["asof"] > asof[fam]:
+            asof[fam] = row["asof"]
 
     # 늘어난 순서 — |z| 내림차순, 창 미달(None)은 끝. 랭킹과 순위 숫자까지
     # 여기서 끝난다(§16).
@@ -199,7 +310,7 @@ def build_mr(dataset=None, *, window: int = WINDOW, k: float = K,
     for i, r in enumerate(rows, start=1):
         r["rank"] = i
     return {
-        "asof": {"bss": asof},
+        "asof": asof,
         "params": {"window": window, "k": k, "recentN": RECENT_N},
         "rows": rows,
         "excluded": excluded,

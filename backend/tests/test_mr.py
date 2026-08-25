@@ -94,10 +94,10 @@ def _synthetic(unit: str, last_two=(3.50, 3.60), n=120, seed=3):
 
 
 def test_assemble_scales_percent_series_to_bp():
-    # BSS 는 bp 지만 단위 규칙은 함수의 것이다 — %-계열 환산이 살아 있는지 잰다.
+    # 선물 내재금리(%) 행이 이 환산을 실제로 쓴다 — d1·밴드폭은 bp 로 끝난다.
     body = _synthetic("%")
     pts = body["points"]
-    row, history = mr._assemble("IRS-3Y", "IRS 3Y", "%",
+    row, history = mr._assemble("FUT-KTB3", "KTB3 내재금리", "fut", "%",
                                 [p["t"] for p in pts], [p["v"] for p in pts])
     assert row["unit"] == "%" and row["dUnit"] == "bp"
     assert math.isclose(row["d1"], (pts[-1]["v"] - pts[-2]["v"]) * 100, abs_tol=1e-6)
@@ -109,34 +109,76 @@ def test_assemble_scales_percent_series_to_bp():
 
 def test_assemble_rejects_short_series():
     with pytest.raises(ValueError):
-        mr._assemble("BSS-3Y", "BSS 3Y", "bp",
+        mr._assemble("BSS-3Y", "BSS 3Y", "bss", "bp",
                      ["2026-01-01"] * mr.WINDOW, [1.0] * mr.WINDOW)
 
 
-def test_build_mr_bss_only_shape_rank_and_exclusion():
-    short = "BSS-9M"                          # 못 읽은 테너는 조용히 빠지지 않는다
+def _pv(r: float, years: int) -> float:
+    d = 1.0 + r / 2.0
+    n = 2 * years
+    return sum(2.5 / d ** t for t in range(1, n + 1)) + 100.0 / d ** n
+
+
+def test_implied_yield_par_and_roundtrip():
+    # 표면 5% 합성채는 r=5% 에서 정확히 100 — 자명한 핀.
+    assert abs(mr._implied_yield(100.0, 3) - 5.0) < 1e-9
+    assert abs(mr._implied_yield(100.0, 10) - 5.0) < 1e-9
+    # 왕복: 아무 금리에서나 이론가를 만들고 다시 풀면 그 금리다.
+    for years in (3, 10):
+        for r in (0.02, 0.038, 0.055, 0.12):
+            price = _pv(r, years)
+            assert abs(mr._implied_yield(price, years) - r * 100.0) < 1e-6
+    # 실측 규모 확인: 2026-08-24 KTB3 종가 103.22 → 3%대 후반 (IRS 3Y 근방).
+    y = mr._implied_yield(103.22, 3)
+    assert 3.5 < y < 4.1
+
+
+def _fake_fut():
+    return {
+        "FUT-KTB3": _synthetic("%", seed=101),
+        "FUT-KTB10": _synthetic("%", seed=102),
+        "FSW-3Y": _synthetic("bp", seed=103),
+        "FSW-10Y": _synthetic("bp", seed=104),
+    }
+
+
+def test_build_mr_universe_shape_rank_and_exclusion():
+    short = "BSS-9M"                          # 못 읽은 계열은 조용히 빠지지 않는다
 
     def fake_uni(sid):
         if sid == short:
             return _synthetic("bp", n=mr.WINDOW)   # 창 미달 → excluded
         return _synthetic("bp", seed=abs(hash(sid)) % 1000)
 
-    p = mr.build_mr(None, fetch_uni=fake_uni)
+    p = mr.build_mr(None, fetch_uni=fake_uni, fetch_fut=_fake_fut)
     assert set(p.keys()) == {"asof", "params", "rows", "excluded", "history"}
     assert p["params"] == {"window": mr.WINDOW, "k": mr.K, "recentN": mr.RECENT_N}
     # 파라미터가 페이로드를 관통한다 — 다른 창은 다른 밴드·다른 파라미터 응답.
-    p60 = mr.build_mr(None, window=60, k=1.5, fetch_uni=fake_uni)
+    p60 = mr.build_mr(None, window=60, k=1.5, fetch_uni=fake_uni, fetch_fut=_fake_fut)
     assert p60["params"]["window"] == 60 and p60["params"]["k"] == 1.5
     assert all(r["z"] is None or isinstance(r["z"], float) for r in p60["rows"])
-    # 유니버스는 BSS 전 테너뿐이다 [OWNER 2026-08-25 — "일단 본드스왑만"].
-    assert all(sid.startswith("BSS-") for sid, _ in mr.SERIES)
-    assert len(mr.SERIES) == 9
+    # 유니버스 = BSS 아홉 + 선물 내재 둘 + 퓨처스왑 둘 [OWNER 2026-08-25 —
+    # "선물 들어왔는데 국채선물 롱숏이랑 퓨처스왑 롱숏도 반영하기"].
+    assert len(mr.SERIES) == 13
+    kinds = [kd for _, _, kd in mr.SERIES]
+    assert kinds.count("bss") == 9 and kinds.count("fut") == 2 and kinds.count("fsw") == 2
     assert len(p["rows"]) == len(mr.SERIES) - 1 == len(p["history"])
     assert p["excluded"] == [{"id": short, "label": "BSS 9M",
                               "reason": f"{short}: 창({mr.WINDOW})보다 짧은 이력({mr.WINDOW})"}]
+    # 행마다 정의 문장이 실린다 — 혼합 유니버스에서 숫자 옆의 «무엇인지».
+    for r in p["rows"]:
+        assert r["defn"] == mr.KIND_DEFN[r["kind"]]
     # 랭킹과 순위 숫자는 서버가 끝낸다 — |z| 내림차순, rank 는 1부터 연속.
     zs = [abs(r["z"]) for r in p["rows"] if r["z"] is not None]
     assert zs == sorted(zs, reverse=True)
     assert [r["rank"] for r in p["rows"]] == list(range(1, len(p["rows"]) + 1))
-    assert p["asof"]["bss"] is not None
+    # 소스별 as-of 두 가족이 다 찬다(rv B-2 의 그 분리).
+    assert p["asof"]["bss"] is not None and p["asof"]["fut"] is not None
     assert {r["id"] for r in p["rows"]} == set(p["history"].keys())
+
+
+def test_series_points_dispatch():
+    bundle = {"FSW-3Y": {"unit": "bp", "points": []}}
+    assert mr.series_points("FSW-3Y", fut_bundle=bundle)["unit"] == "bp"
+    with pytest.raises(KeyError):
+        mr.series_points("없는계열")

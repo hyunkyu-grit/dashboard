@@ -62,7 +62,10 @@ DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache"
 # 셋에서 하나로 줄고, excluded 가 생겼다. 같은 SQL 이 **다른 모양**을 만든다는
 # 뜻이라 안 올리면 v9 의 12계열 캐시가 새 프런트에 그대로 서빙된다 — 이 파일
 # 머리가 적어 둔 바로 그 함정이다.
-SCHEMA_VERSION = 10
+# v11 (2026-08-25): `mr` 유니버스에 국채선물 내재금리·퓨처스왑이 들어왔다
+# [OWNER "선물 들어왔는데 … 반영하기"] — 행에 kind/defn 이 붙고 asof 가
+# {bss, fut} 두 소스로 갈라졌다. 같은 SQL 이 다른 모양을 만든다.
+SCHEMA_VERSION = 11
 
 
 def data_hash(path: Path, asof: "object | None" = None) -> str:
