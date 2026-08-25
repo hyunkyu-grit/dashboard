@@ -111,17 +111,33 @@ function partsOf(run: SimResponse) {
   const d = run.totalReturnDecomposition;
   /* splitKrw 의 수법 그대로, 성분이 일곱으로 늘었을 뿐이다: 합계와 여섯 성분이
      각각 한 번씩 반올림하고 **스왑캐리가 잔차**를 진다. 북에 채권이 없으면
-     채권 넷은 정확히 0 이라 예전의 3분해와 같은 숫자다. */
+     채권 넷은 정확히 0 이라 예전의 3분해와 같은 숫자다.
+
+     **제외된 스왑은 0 이 아니라 null 이다** [블랭크 정책 · 실측 2026-08-25:
+     «당일 IRS 호가 없음» 런에서 스왑 성분 null 을 0 으로 강등하니 반올림
+     잔차 +1만원이 «스왑캐리» 라벨을 뒤집어썼다 — 값이 안 매겨진 다리가
+     숫자를 가진 것처럼 보였다]. 스왑이 제외되면 스왑 셋은 null(화면 —)이고
+     잔차는 채권캐리가 진다. */
   const uPnl = manUnits(d.total);
-  const val = manUnits(d.swapMtm);
-  const roll = manUnits(d.swapRolldown ?? 0);
+  const hasSwap = d.swapMtm !== null && d.swapMtm !== undefined;
   const bondMtm = manUnits(d.bondMtm);
-  const bondCarry = manUnits(d.bondCarry);
   const bondRoll = manUnits(d.bondRolldown ?? 0);
   const fund = manUnits(d.fundingCost);
+  if (!hasSwap) {
+    const bondCarry = uPnl - bondMtm - bondRoll - fund;
+    return {
+      uPnl, val: null, carry: null, roll: null,
+      bondMtm, bondCarry, bondRoll, fund,
+      hasBond: bondMtm !== 0 || bondCarry !== 0 || bondRoll !== 0 || fund !== 0,
+      hasSwap,
+    };
+  }
+  const val = manUnits(d.swapMtm);
+  const roll = manUnits(d.swapRolldown ?? 0);
+  const bondCarry = manUnits(d.bondCarry);
   const carry = uPnl - val - roll - bondMtm - bondCarry - bondRoll - fund;
   const hasBond = bondMtm !== 0 || bondCarry !== 0 || bondRoll !== 0 || fund !== 0;
-  return { uPnl, val, carry, roll, bondMtm, bondCarry, bondRoll, fund, hasBond };
+  return { uPnl, val, carry, roll, bondMtm, bondCarry, bondRoll, fund, hasBond, hasSwap };
 }
 
 /** 엔진의 일별 대사 → 대사 스택. **시간순이 기본**(D+0 이 위) — 미래 경로에는
@@ -377,18 +393,23 @@ export function ResultsWindow({
                       {part.label}
                     </TextLegal>
                   </TableCell>
-                  {grid.map((g) => (
-                    <TableCell key={g.id} justifyContent="flex-end">
-                      <TextLabel2
-                        as="span"
-                        tabularNumbers
-                        noWrap
-                        style={{ color: g.parts ? directionVar(g.parts[part.key]) : undefined }}
-                      >
-                        {g.parts ? fmtKrwFromMan(g.parts[part.key]) : '—'}
-                      </TextLabel2>
-                    </TableCell>
-                  ))}
+                  {grid.map((g) => {
+                    /* null = 그 다리가 값매겨지지 않았다(스왑 제외) — 0 이 아니라
+                       공란이다. 제외 사실은 표 밑 «제외됨» 줄이 말한다. */
+                    const u = g.parts ? g.parts[part.key] : null;
+                    return (
+                      <TableCell key={g.id} justifyContent="flex-end">
+                        <TextLabel2
+                          as="span"
+                          tabularNumbers
+                          noWrap
+                          style={{ color: u === null ? undefined : directionVar(u) }}
+                        >
+                          {u === null ? '—' : fmtKrwFromMan(u)}
+                        </TextLabel2>
+                      </TableCell>
+                    );
+                  })}
                 </TableRow>
               ))}
               {/* 토탈만 굵다 — 나머지는 그 합의 구성이다. */}
@@ -490,9 +511,15 @@ export function ResultsWindow({
               <HStack gap={1.5} flexWrap="wrap">
                 {(
                   [
-                    ['스왑평가', p.val, 'var(--sr-up)'],
-                    ['스왑캐리', p.carry, 'var(--sr-down)'],
-                    ['스왑롤다운', p.roll, 'var(--color-fgMuted)'],
+                    // 제외된 스왑(null)은 줄 자체가 안 선다 — 값매겨지지 않은
+                    // 다리에 0원을 지어 주지 않는다(블랭크 정책).
+                    ...(p.hasSwap
+                      ? ([
+                          ['스왑평가', p.val, 'var(--sr-up)'],
+                          ['스왑캐리', p.carry, 'var(--sr-down)'],
+                          ['스왑롤다운', p.roll, 'var(--color-fgMuted)'],
+                        ] as const)
+                      : []),
                     ...(p.hasBond
                       ? ([
                           ['채권평가', p.bondMtm, 'var(--sr-ref-cd)'],
@@ -604,9 +631,15 @@ export function ResultsWindow({
  * 크기는 만-단위 정수로 잰다 — 화면의 숫자와 막대가 같은 값에서 나와야 한다. */
 function Waterfall({ parts }: { parts: ReturnType<typeof partsOf> }) {
   const steps = [
-    { label: '스왑평가', u: parts.val },
-    { label: '스왑캐리', u: parts.carry },
-    { label: '스왑롤다운', u: parts.roll },
+    // 제외된 스왑(hasSwap=false)은 막대가 안 선다 — null 을 0 막대로 그리면
+    // "값이 0 이었다" 는 없는 주장이 된다(블랭크 정책).
+    ...(parts.hasSwap
+      ? [
+          { label: '스왑평가', u: parts.val as number },
+          { label: '스왑캐리', u: parts.carry as number },
+          { label: '스왑롤다운', u: parts.roll as number },
+        ]
+      : []),
     ...(parts.hasBond
       ? [
           { label: '채권평가', u: parts.bondMtm },

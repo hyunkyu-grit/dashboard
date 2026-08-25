@@ -239,6 +239,26 @@ class TestTheRollLane:
         finally:
             bond_roll.set_sector_curve_provider(lambda: {"국채": list(UPWARD)})
 
+    def test_matrix_with_empty_bond_curves_estimates_zero(self, client):
+        """Δbp 는 엔진이 실제로 소비한 것만 말한다 [2026-08-25 실측 결함].
+
+        FE 가 bondCurves 를 비워 보내면 matrix 엔진은 채권에 0 을 적용한다 —
+        그때 이 표가 base_shock 램프를 «추정»으로 그리면, 엔진이 안 값매긴
+        250bp 가 표에 서고 평가 0 과의 다리가 없다(첫 판이 정확히 그랬다).
+        폴백 열은 라벨 «—» 에 Δbp 0 이어야 한다."""
+        req = _request([dict(BOND)])
+        req["shockCurves"]["bondCurves"] = {}
+        r = client.post("/api/simulate", json=req)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        tbl = body["bondDailyReconciliation"]
+        assert [c["label"] for g in tbl["groups"] for c in g["cols"]] == ["—"]
+        rows = [x for x in tbl["rows"] if not x.get("carryover")]
+        assert all(v == 0.0 for x in rows for v in x["dailyDbp"].values())
+        assert all(x["totalEstPnl"] == 0 for x in rows)
+        # 엔진도 실제로 0 을 값매겼다 — 표와 엔진이 같은 말을 한다.
+        assert body["totalReturnDecomposition"]["bondMtm"] == 0.0
+
     def test_no_provider_degrades_honestly(self, client):
         """공급자 부재 = 종전(unchanged-yields) 동작 + applied=False. 조용한 0 금지."""
         bond_roll.set_sector_curve_provider(None)

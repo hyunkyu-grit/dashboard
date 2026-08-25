@@ -72,4 +72,22 @@ describe('채권 성분 행', () => {
     const { container } = draw({ base: legacy });
     expect(container.textContent ?? '').not.toContain('채권롤다운');
   });
+
+  it('제외된 스왑 — 0원이 아니라 공란(—)이다 [블랭크 정책 · 실측 2026-08-25]', () => {
+    /* «당일 IRS 호가 없음» 런: 스왑 성분 null 을 0 으로 강등하면 반올림 잔차
+       +1만원이 «스왑캐리» 라벨을 뒤집어쓴다 — 값이 안 매겨진 다리가 숫자를
+       가진 것처럼 보인다. 케이스 표의 스왑 칸은 — 여야 한다. */
+    const r = response(true);
+    const d = r.totalReturnDecomposition as unknown as Record<string, number | null>;
+    d.swapMtm = null;
+    d.swapCarry = null;
+    d.swapRolldown = null;
+    d.total = 45_017_003; // 채권 몫만
+    const { container } = draw({ base: r });
+    const text = container.textContent ?? '';
+    expect(text).toMatch(/스왑캐리—/);
+    expect(text).toMatch(/스왑평가—/);
+    // 채권 성분은 여전히 숫자로 선다 — 제외된 것은 스왑이지 채권이 아니다.
+    expect(text).toContain('채권캐리');
+  });
 });

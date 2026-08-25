@@ -425,9 +425,19 @@ export interface ShockNode {
  * 금통위가 정한다. 짧은 끝을 같이 미는 것은 **다른 주장**이고, 그 주장은 금통위
  * 이벤트로 해야 한다.
  *
- * 채권 커브(`bondCurves`)는 비운다 — 이 화면의 범위가 스왑뿐이다
- * [v1 OWNER, 2026-08-06 · 실측: 채권을 빼도 스왑 손익이 바이트 그대로였고 채권
- * 성분과 조달비용은 정확히 0이었다].
+ * 채권 커브(`bondCurves`)도 **같은 시나리오로 채운다** [OWNER, 2026-08-25].
+ * v1 은 이 화면의 범위가 스왑뿐이라 비웠고("채권을 빼도 스왑 손익이 바이트
+ * 그대로" — 2026-08-06 실측), 2026-08-14 에 채권이 시뮬 포지션에 합류한 뒤에도
+ * 이 자리가 화석으로 남아 **채권이 시나리오 충격을 한 번도 받지 못했다**
+ * (실측 2026-08-25: 국고 3Y +250bp 시나리오에서 국고채 3Y 100억의 평가가
+ * 네 케이스 전부 0 — 엔진의 matrix 분기가 빈 커브를 보간해 0 을 얻었다).
+ * 조용한 0 의 정확히 그 결함이다.
+ *
+ * 채권 노드는 스왑과 같은 격자·같은 스프레드에서 나오되 두 항만 다르다:
+ * CD 추가(`cdSpreadBp`)는 스왑 픽싱의 것이라 안 붙고, `irsSpread`(IRS 가
+ * 국고 대비 더 움직이는 몫)도 안 붙는다 — 앵커가 국고이므로 채권 3Y 노드가
+ * 곧 목표 그 자체다. 열쇠는 «국채» 하나다: 엔진의 섹터 조회가 국채로
+ * 폴백하므로(`get_position_shock_bp`) 모든 채권 섹터를 이 한 커브가 덮는다.
  */
 export function generateShockCurves(
   baseShockBp: number,
@@ -436,7 +446,7 @@ export function generateShockCurves(
   shortEndBp = 0,
   cdSpreadBp = 0,
   irsSpread = 0,
-): { bondCurves: Record<string, never>; swapCurve: ShockNode[] } {
+): { bondCurves: Record<string, ShockNode[]>; swapCurve: ShockNode[] } {
   const shortSpread = shortEndBp - baseShockBp;
   /* CD 추가는 이 **터미널 커브**에서는 3M 마디에만 붙는다(1D 는 안 붙는다).
    *
@@ -468,8 +478,14 @@ export function generateShockCurves(
     [20, spread10y + (spread30y - spread10y) * 0.5],
     [30, spread30y],
   ];
+  // 채권의 짧은 끝: 3M 은 CD 가 아니라 기준금리를 따른다(shortSpread), 6M 은
+  // 그 3M 에서 1Y 로 보간 — 스왑 쪽과 같은 산술에서 CD 항만 뺀 것이다.
+  const sixMBond = shortSpread + ((spread1y - shortSpread) * (0.5 - 0.25)) / (1.0 - 0.25);
+  const bondNodes: [number, number][] = nodes.map(([t, s]) =>
+    t === 0.25 ? [t, shortSpread] : t === 0.5 ? [t, sixMBond] : [t, s],
+  );
   return {
-    bondCurves: {},
+    bondCurves: { 국채: bondNodes.map(([t, s]) => ({ t, val: baseShockBp + s })) },
     swapCurve: nodes.map(([t, s]) => ({ t, val: baseShockBp + s + irsSpread })),
   };
 }
@@ -671,7 +687,7 @@ export function pruneWaypoints(
 
 export interface SimulateBody {
   positions: EngineLeg[];
-  shockCurves: { bondCurves: Record<string, never>; swapCurve: ShockNode[] };
+  shockCurves: { bondCurves: Record<string, ShockNode[]>; swapCurve: ShockNode[] };
   dailyShockCurves: { bondCurves: Record<string, never>; swapCurve: never[] };
   fundingEvents: { date: string; shiftBp: number }[];
   simDays: number;

@@ -129,8 +129,29 @@ describe('충격 커브 — 짧은 끝은 금통위만 움직인다', () => {
     }
   });
 
-  it('채권 커브는 비운다 — 이 화면의 범위는 스왑뿐이다', () => {
-    expect(c.bondCurves).toEqual({});
+  it('채권 커브가 같은 시나리오로 선다 [OWNER, 2026-08-25] — 빈 커브는 조용한 0 이었다', () => {
+    /* v1 화석(bondCurves: {})은 채권이 시뮬에 합류한 08-14 이후로 채권 평가를
+     * 전 케이스 0 으로 만들고 있었다 — 실측 2026-08-25: 국고 3Y +250bp 에서
+     * 국고채 3Y 100억 평가 0. 엔진의 섹터 조회가 국채로 폴백하므로 «국채»
+     * 한 커브가 모든 채권 섹터를 덮는다. */
+    const bond = c.bondCurves['국채'];
+    expect(bond).toBeDefined();
+    expect(bond.map((n) => n.t)).toEqual(c.swapCurve.map((n) => n.t));
+    // 앵커가 국고이므로 채권 3Y 노드 = 목표 그 자체.
+    expect(bond.find((n) => n.t === 3)?.val).toBe(30);
+  });
+
+  it('채권 3M 은 CD 가 아니라 기준금리를 따른다 — CD 추가는 스왑 픽싱의 것이다', () => {
+    const withCd = generateShockCurves(30, 0, 0, -25, 10);
+    expect(withCd.swapCurve[1].val).toBe(-15); // 3M(CD) = 기준 −25 + CD 10
+    expect(withCd.bondCurves['국채'][1].val).toBe(-25); // 채권 3M = 기준금리만
+    expect(withCd.bondCurves['국채'][0].val).toBe(-25); // 1D 도 기준금리
+  });
+
+  it('irsSpread 는 스왑 커브에만 붙는다 — 채권 3Y 는 여전히 목표 그대로', () => {
+    const withIrs = generateShockCurves(30, 0, 0, 0, 0, 5);
+    expect(withIrs.swapCurve.find((n) => n.t === 3)?.val).toBe(35);
+    expect(withIrs.bondCurves['국채'].find((n) => n.t === 3)?.val).toBe(30);
   });
 });
 

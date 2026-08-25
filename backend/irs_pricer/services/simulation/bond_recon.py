@@ -97,21 +97,31 @@ def build_bond_daily_recon(
         return None
 
     # ── 격자: 섹터 그룹 × 그 섹터의 시나리오 커브 테너 ──────────────────────
+    #
+    # 폴백의 규율 [2026-08-25 실측으로 배웠다]: **Δbp 는 엔진이 실제로 소비한
+    # 것만 말한다.** 평행 모드의 엔진은 base_shock 를 전 만기에 쓰므로 «평행»
+    # 열이 그 값을 싣는 것이 참이지만, matrix 모드에서 섹터 커브가 비면 엔진은
+    # 빈 커브를 보간해 **0** 을 쓴다(`calculate_daily_mtm`). 첫 판은 그때도
+    # base_shock 램프를 그렸고 — FE 가 bondCurves 를 화석으로 비워 보내던
+    # 기간에 이 표가 엔진이 안 값매긴 250bp 를 «추정»으로 지어냈다(실측:
+    # 추정 −390만/일 대 평가 0, 다리 없는 잔차). 지어내지 않는다: matrix 에
+    # 커브가 없으면 Δbp 0, 라벨도 «평행» 이 아니라 «—» 다.
     sectors = sorted({get_sector_curve_key(p.sector) for p in bond_positions})
-    parallel = shock_mode == "parallel" or not shock_curves
+    parallel = shock_mode == "parallel"
     groups: list[dict] = []
     col_nodes: dict[str, tuple[str, float]] = {}   # key → (sector, years)
-    if parallel:
+    if parallel or not shock_curves:
+        flat_label = "평행" if parallel else "—"
         for s in sectors:
             key = f"{s}:∥"
-            groups.append({"label": s, "cols": [{"key": key, "label": "평행"}]})
+            groups.append({"label": s, "cols": [{"key": key, "label": flat_label}]})
             col_nodes[key] = (s, -1.0)
     else:
         for s in sectors:
             nodes = _sector_nodes(shock_curves, s)
             if not nodes:
                 key = f"{s}:∥"
-                groups.append({"label": s, "cols": [{"key": key, "label": "평행"}]})
+                groups.append({"label": s, "cols": [{"key": key, "label": "—"}]})
                 col_nodes[key] = (s, -1.0)
                 continue
             cols = []
@@ -146,8 +156,10 @@ def build_bond_daily_recon(
     def cum_bp(key: str, t_day: int) -> float:
         s, t_node = col_nodes[key]
         fac = factor_at(t_day)
-        if t_node < 0:   # 평행 열
-            return (base_shock_bp or 0.0) * fac
+        if t_node < 0:
+            # 평행 모드만 base_shock — matrix 에 커브가 없으면 엔진이 0 을
+            # 소비하므로 여기도 0 이다(모듈 상단 «지어내지 않는다» 주석).
+            return (base_shock_bp or 0.0) * fac if parallel else 0.0
         return _node_val(shock_curves, s, t_node) * fac
 
     # ── 누적 계열의 차분 — 2026-08-21 병합판과 같은 걸음, 표만 옮겼다 ───────
