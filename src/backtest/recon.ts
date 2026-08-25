@@ -58,6 +58,10 @@ export function backtestDays(recon: BacktestRecon): ReconStackDay[] {
     est: r.est,
     estTotal: r.estTotal,
     valuation: r.valuation === null ? null : r.valuation + (r.startup ?? 0),
+    /* 잔차 [OWNER, 2026-08-25 — 감사록 F4]: 서버 값 그대로. 개시를 평가에
+       접는 것과 무관하다 — 잔차의 정의(평가−추정)는 서버의 평가 기준이고,
+       개시는 추정의 대상이 아니라서 서버 잔차가 이미 옳은 수다. */
+    residual: r.residual,
     carry: r.carry,
     rolldown: r.rolldown,
     ...(r.funding === undefined ? {} : { funding: r.funding }),

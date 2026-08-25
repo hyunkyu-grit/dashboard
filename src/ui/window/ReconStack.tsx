@@ -59,10 +59,15 @@ export interface ReconStackDay {
   /** 이월 앵커 블록에서 null — 아직 오지 않은 날이다. */
   estTotal: number | null;
   valuation: number | null;
+  /** 잔차 = 평가 − 추정(합계) [OWNER, 2026-08-25 — 감사록 F4]. 서버가 행마다
+   * 보내던 값인데 화면에 자리가 없어, 추정과 평가가 어긋나는 이유를 표가
+   * 말하지 못했다. 숫자가 하나라도 있으면 열이 서고, 표 밑 각주가 뜻을
+   * 말한다. 가로합 항등식(평가+캐리+롤다운(+조달)=그날 손익)에는 안 든다. */
+  residual?: number | null;
   carry: number | null;
   rolldown: number | null;
   /** 조달 — 현금채권 대사에만 있다 [OWNER, 2026-08-14]. 필드가 하나라도 있으면
-   * 조달 열이 서고(꼬리 여섯), 없으면 IRS 모양 그대로다(꼬리 다섯). 서버가
+   * 조달 열이 서고, 없으면 IRS 모양 그대로다. 서버가
    * 이미 음수로 준다 — 여기서 부호를 다시 주지 않는다. */
   funding?: number | null;
   actual: number | null;
@@ -176,8 +181,15 @@ export function ReconStack({
      «필드 존재» 로 재면 그 표에 250줄짜리 «—» 조달 칸이 선다 — 스왑에는 조달이라는
      질문 자체가 없는데. 숫자로 재면 두 화면이 한 규칙으로 옳다. */
   const hasFunding = days.some((d) => typeof d.funding === 'number');
+  /* 잔차 열도 같은 규칙 [OWNER, 2026-08-25 — 감사록 F4]: 숫자가 하나라도
+     있을 때만 선다. 자리는 평가 바로 뒤 — 읽는 순서가 «합계(추정) → 평가 →
+     그 차(잔차)» 라서다. 뜻은 표 밑 각주가 말한다. */
+  const hasResidual = days.some((d) => typeof d.residual === 'number');
   const summaryCols: { label: string; get: (d: ReconStackDay) => number | null }[] = [
     { label: '평가', get: (d) => d.valuation },
+    ...(hasResidual
+      ? [{ label: '잔차', get: (d: ReconStackDay) => d.residual ?? null }]
+      : []),
     { label: '캐리', get: (d) => d.carry },
     { label: '롤다운', get: (d) => d.rolldown },
     ...(hasFunding
@@ -439,6 +451,13 @@ export function ReconStack({
           </tbody>
         </table>
       </div>
+      {hasResidual ? (
+        <p className="sr-recon-note">
+          잔차 = 평가 − 추정(합계) — 전일 감도의 선형 추정이 못 담는 몫이에요(감도의 하루
+          감쇠 × 서 있는 충격, 볼록성, 리픽싱). 가로 합계(평가+캐리+롤다운
+          {hasFunding ? '+조달' : ''})에는 안 들어가요.
+        </p>
+      ) : null}
       {note ? <p className="sr-recon-note">{note}</p> : null}
     </div>
   );

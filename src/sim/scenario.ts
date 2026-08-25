@@ -850,6 +850,8 @@ export interface SimReconRow {
   totalEstPnl: number | null;
   totalActual: number | null;
   valuationPnl: number | null;
+  /** 잔차 = 평가 − 추정 [OWNER, 2026-08-25 — 감사록 F4] — 화면 잔차 열의 원료. */
+  residual?: number | null;
   /** 구 캐시 응답에는 3분해가 없다 — 0 이 아니라 미정의(공란 정책). */
   carryPnl?: number | null;
   rolldownPnl?: number | null;
