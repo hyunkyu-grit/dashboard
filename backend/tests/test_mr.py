@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Mean Reversion 측정면 — 밴드 산술·상태 판정·페이로드 모양.
 
-SQL 을 안 만진다: `build_mr` 의 주입 자리(fetch_irs/fetch_uni)에 합성 계열을
-넣는다. 밴드 산술은 독립 구현(순수 파이썬 O(n) 누적합)이라 numpy rolling 과
-값으로 대조한다 — 검증 레인(bollinger-mr)이 pandas rolling 으로 낸 값과 같은
+SQL 을 안 만진다: `build_mr` 의 주입 자리(fetch_uni)에 합성 계열을 넣는다.
+밴드 산술은 독립 구현(순수 파이썬 O(n) 누적합)이라 numpy rolling 과 값으로
+대조한다 — 검증 레인(bollinger-mr)이 pandas rolling 으로 낸 값과 같은
 정의(ddof=1)여야 화면과 검증이 같은 밴드를 말한다.
 """
 import math
@@ -69,9 +69,9 @@ def test_state_reentry_and_expiry():
 
 def test_state_needs_full_window_of_history():
     # 창이 차기 전 구간(None 밴드)은 밖도 재진입도 아니다.
-    vals = [0.0] * 30
-    ma, up, lo = mr._bands(vals[: mr.WINDOW - 1] )
-    assert mr._state(vals[: mr.WINDOW - 1], up, lo)["kind"] == "inside"
+    vals = [0.0] * (mr.WINDOW - 1)
+    ma, up, lo = mr._bands(vals)
+    assert mr._state(vals, up, lo)["kind"] == "inside"
 
 
 def _synthetic(unit: str, last_two=(3.50, 3.60), n=120, seed=3):
@@ -85,9 +85,10 @@ def _synthetic(unit: str, last_two=(3.50, 3.60), n=120, seed=3):
 
 
 def test_assemble_scales_percent_series_to_bp():
+    # BSS 는 bp 지만 단위 규칙은 함수의 것이다 — %-계열 환산이 살아 있는지 잰다.
     body = _synthetic("%")
     pts = body["points"]
-    row, history = mr._assemble("IRS-3Y", "IRS 3Y", "outright", "%",
+    row, history = mr._assemble("IRS-3Y", "IRS 3Y", "%",
                                 [p["t"] for p in pts], [p["v"] for p in pts])
     assert row["unit"] == "%" and row["dUnit"] == "bp"
     assert math.isclose(row["d1"], (pts[-1]["v"] - pts[-2]["v"]) * 100, abs_tol=1e-6)
@@ -99,26 +100,30 @@ def test_assemble_scales_percent_series_to_bp():
 
 def test_assemble_rejects_short_series():
     with pytest.raises(ValueError):
-        mr._assemble("BSS-3Y", "BSS 3Y", "bss", "bp",
+        mr._assemble("BSS-3Y", "BSS 3Y", "bp",
                      ["2026-01-01"] * mr.WINDOW, [1.0] * mr.WINDOW)
 
 
-def test_build_mr_shape_sorting_and_asof():
-    def fake_irs(sid):
-        return _synthetic("%", seed=hash(sid) % 1000)
+def test_build_mr_bss_only_shape_rank_and_exclusion():
+    short = "BSS-9M"                          # 못 읽은 테너는 조용히 빠지지 않는다
 
     def fake_uni(sid):
-        u = "가격" if sid.startswith("FUT-") else "bp"
-        return _synthetic(u, seed=hash(sid) % 1000)
+        if sid == short:
+            return _synthetic("bp", n=mr.WINDOW)   # 창 미달 → excluded
+        return _synthetic("bp", seed=abs(hash(sid)) % 1000)
 
-    p = mr.build_mr(None, fetch_irs=fake_irs, fetch_uni=fake_uni)
-    assert set(p.keys()) == {"asof", "params", "rows", "history"}
+    p = mr.build_mr(None, fetch_uni=fake_uni)
+    assert set(p.keys()) == {"asof", "params", "rows", "excluded", "history"}
     assert p["params"] == {"window": mr.WINDOW, "k": mr.K, "recentN": mr.RECENT_N}
-    assert len(p["rows"]) == len(mr.SERIES) == len(p["history"])
-    # 랭킹은 서버가 끝낸다 — |z| 내림차순.
+    # 유니버스는 BSS 전 테너뿐이다 [OWNER 2026-08-25 — "일단 본드스왑만"].
+    assert all(sid.startswith("BSS-") for sid, _ in mr.SERIES)
+    assert len(mr.SERIES) == 9
+    assert len(p["rows"]) == len(mr.SERIES) - 1 == len(p["history"])
+    assert p["excluded"] == [{"id": short, "label": "BSS 9M",
+                              "reason": f"{short}: 창({mr.WINDOW})보다 짧은 이력({mr.WINDOW})"}]
+    # 랭킹과 순위 숫자는 서버가 끝낸다 — |z| 내림차순, rank 는 1부터 연속.
     zs = [abs(r["z"]) for r in p["rows"] if r["z"] is not None]
     assert zs == sorted(zs, reverse=True)
-    # 소스별 as-of 세 칸이 다 찬다.
-    assert all(p["asof"][k] for k in ("irs", "bss", "futures"))
-    # id 는 URL 에 드는 값 — 히스토리 키와 행 id 가 같은 사전이다.
+    assert [r["rank"] for r in p["rows"]] == list(range(1, len(p["rows"]) + 1))
+    assert p["asof"]["bss"] is not None
     assert {r["id"] for r in p["rows"]} == set(p["history"].keys())

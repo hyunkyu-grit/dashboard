@@ -1,24 +1,24 @@
 'use client';
 
-/* Mean Reversion — 밴드 위치 보드 (Strategy 둘째 세입자, 2026-08-25).
+/* Mean Reversion — BSS 전 테너 밴드 위치 랭킹 (Strategy 둘째 세입자, 2026-08-25).
  *
  * **측정이지 신호가 아니다.** 사전등록 검증(Desktop\bollinger-mr, 누적 108구성)이
  * 「볼린저 재진입」 신호 문법을 NO-GO 로 닫았고(REPORT.md), 이 화면은 그 결론
- * 위에 선다: 12계열이 평소 밴드(SMA20 ± 2σ) 대비 어디에 있는지를 재서 늘어난
- * 순서로 세울 뿐이다. 진입·청산·추천 문구는 없다 — Credit RV 의 「랭킹이지
- * 투자판단이 아니다」와 같은 명구 의무.
+ * 위에 선다: 본드스왑 스프레드(국고 − IRS) 전 테너가 평소 밴드(SMA20 ± 2σ)
+ * 대비 어디에 있는지를 재서 늘어난 순서로 세울 뿐이다. 진입·청산·추천 문구는
+ * 없다 — Credit RV 의 「랭킹이지 투자판단이 아니다」와 같은 명구 의무.
  *
- * 숫자는 전부 서버가 끝낸다(§16, `/api/mr/board`) — 밴드·z·%B·상태 판정·정렬
- * 까지. 이 파일은 조건 바와 카드 배치뿐이다.
+ * **유니버스는 BSS 뿐이다** [OWNER 2026-08-25 — "일단 본드스왑만"]. 첫 판의
+ * 비교군 12계열(선물·IRS)은 범위 오독이라 내려갔다 — 근거는 backend/app/mr.py.
  *
- * ── 배치: 조건 바 + [보드 표 | 상세] 2열, 페이지는 스크롤하지 않는다 ─────────
- * Main/Backtest 의 공간문법 그대로: 내용은 카드 안, 주인공(보드)이 남는 높이를
+ * 숫자는 전부 서버가 끝낸다(§16, `/api/mr/board`) — 밴드·z·%B·상태 판정·정렬·
+ * 순위까지. 이 파일은 조건 바와 카드 배치뿐이다.
+ *
+ * ── 배치: 조건 바 + [랭킹 표 | 상세] 2열, 페이지는 스크롤하지 않는다 ─────────
+ * Main/Backtest 의 공간문법 그대로: 내용은 카드 안, 주인공(랭킹)이 남는 높이를
  * 받고, 세부(값+밴드 이력 차트)는 행 클릭 뒤 오른쪽 카드가 진다. 표 문법은
- * rv 의 것을 그대로 쓴다(.sr-rv-table 계열) — Strategy 두 세입자가 같은 표를
- * 두 문법으로 말하지 않는다.
- *
- * as-of 는 소스별이다(rv 의 B-2 와 같은 판단): IRS 는 기동 스냅샷, BSS·선물은
- * 호출 시 SQL 이라 갈라질 수 있고, 갈라진 날은 그렇다고 말해야 한다.
+ * rv 의 것을 그대로 쓴다(.sr-rv-table 계열·순위 열 포함) — Strategy 두 세입자가
+ * 같은 표를 두 문법으로 말하지 않는다.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -176,20 +176,15 @@ export function MrPage() {
     return <LoadingState what="Mean Reversion" />;
   }
 
-  const asofs = [board.asof.irs, board.asof.bss, board.asof.futures].filter(
-    (x): x is string => x != null,
-  );
-  const split = new Set(asofs).size > 1;
-
   return (
     <VStack gap={1.5} width="100%" flexGrow={1} minHeight={0}>
       {/* ── 조건 바 — 어떤 밴드에서 나온 숫자인지가 카드보다 먼저 읽힌다 ──── */}
       <VStack className="sr-rv-bar" flexShrink={0} gap={0.5} width="100%">
         <HStack gap={2} alignItems="center" flexWrap="wrap">
-          {/* 순서는 언제 → 무엇으로 — 소스별 as-of 가 맨 앞이다(rv 의 판단). */}
-          <Cond k="IRS" v={board.asof.irs ?? '—'} strong={split} />
-          <Cond k="민평" v={board.asof.bss ?? '—'} strong={split} />
-          <Cond k="선물" v={board.asof.futures ?? '—'} strong={split} />
+          {/* 순서는 언제 → 무엇으로(rv 의 판단). BSS 는 두 다리가 한 inner
+              join 이라 as-of 도 하나다 — 첫 판의 소스별 갈림 표기는 은퇴했다. */}
+          <Cond k="as-of" v={board.asof.bss ?? '—'} />
+          <Cond k="정의" v="국고 − IRS" />
           <Cond k="밴드" v={`${board.params.window}일 ±${board.params.k}σ`} />
           <Cond k="재진입 표기" v={`${board.params.recentN}영업일`} />
           {refreshing ? (
@@ -204,9 +199,10 @@ export function MrPage() {
             </Text>
           </Box>
         </HStack>
-        {split ? (
+        {board.excluded.length > 0 ? (
+          /* 못 읽은 테너 — 조용히 빼지 않는다(rv 의 exclusions 문법). */
           <Text font="legal" as="span" color="fgMuted">
-            소스의 종가 날짜가 달라요 — 각 행은 자기 소스의 날짜 기준이에요.
+            {board.excluded.map((x) => `${x.label}: ${x.reason}`).join(' · ')}
           </Text>
         ) : null}
       </VStack>
@@ -230,7 +226,7 @@ export function MrPage() {
             paddingBottom={0.5}
           >
             <Text font="label1" as="h2" noWrap>
-              밴드 위치 — 랭킹
+              BSS 전 테너 — 밴드 위치 랭킹
             </Text>
           </HStack>
           <VStack gap={0.75} width="100%" minHeight={0} flexGrow={1}>
@@ -239,7 +235,9 @@ export function MrPage() {
                 <table className="sr-rv-table sr-rv-divided">
                   <thead>
                     <tr>
-                      <th className="sr-rv-th sr-rv-left">계열</th>
+                      {/* 순위 열 — rv 랭킹 표와 같은 문법 [OWNER 2026-08-25]. */}
+                      <th className="sr-rv-th">순위</th>
+                      <th className="sr-rv-th sr-rv-left">테너</th>
                       <th className="sr-rv-th">값</th>
                       <th className="sr-rv-th">전일</th>
                       <th className="sr-rv-th">
@@ -270,11 +268,12 @@ export function MrPage() {
                         data-on={r.id === sel.id || undefined}
                         onClick={() => setSelId(r.id)}
                       >
+                        <td className="sr-rv-td">{r.rank}</td>
                         <td className="sr-rv-td sr-rv-left">
                           {/* 행 의미론은 표, 여는 것은 버튼(rv 의 a11y 규칙). */}
                           <button
                             type="button"
-                            className="sr-rv-linkbtn sr-rv-stack"
+                            className="sr-rv-linkbtn"
                             aria-label={`${r.label} 이력 보기`}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -282,7 +281,6 @@ export function MrPage() {
                             }}
                           >
                             <span className="sr-rv-name">{r.label}</span>
-                            <span className="sr-rv-sub">{r.groupLabel}</span>
                           </button>
                         </td>
                         <td className="sr-rv-td">
@@ -319,7 +317,7 @@ export function MrPage() {
                 {sel.label}
               </Text>
               <Text font="caption" as="span" color="fgMuted" noWrap>
-                {sel.groupLabel}
+                국고 − IRS
               </Text>
             </HStack>
             <Text font="caption" as="span" color="fgMuted" noWrap>

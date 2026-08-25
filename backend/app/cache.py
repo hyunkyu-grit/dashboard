@@ -57,7 +57,12 @@ DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache"
 # 붙었다 — 시뮬레이션의 기준금리 이벤트가 읽는다. 같은 xlsx 가 **다른 모양**의
 # 요약을 만든다는 뜻이고, 안 바꾸면 v8 캐시가 그 필드 없는 요약을 계속 내준다.
 # 화면은 날짜 후보가 하나도 없는 빈 목록을 그리면서 아무 에러도 안 낸다.
-SCHEMA_VERSION = 9
+# v10 (2026-08-25): `mr` 페이로드가 12계열 → BSS 전 테너로 갈렸다 [OWNER "일단
+# 본드스왑만"] — 행에서 group/groupLabel 이 빠지고 rank 가 붙고, asof 가 소스별
+# 셋에서 하나로 줄고, excluded 가 생겼다. 같은 SQL 이 **다른 모양**을 만든다는
+# 뜻이라 안 올리면 v9 의 12계열 캐시가 새 프런트에 그대로 서빙된다 — 이 파일
+# 머리가 적어 둔 바로 그 함정이다.
+SCHEMA_VERSION = 10
 
 
 def data_hash(path: Path, asof: "object | None" = None) -> str:
