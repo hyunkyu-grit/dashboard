@@ -361,9 +361,11 @@ def build_chart_data(
 
     # ── s11 T4: 시간축 조달금리/캐리 스트립 ─────────────────────────────────
     def _weighted_position_rate(t: int, multiplier: float, cur_date: date) -> float | None:
-        """비만기 채권의 평가액가중 운용수익률(소수). calculate_daily_carry의
-        carry_rate(mtmYield + 경로 충격 bp/100)와 같은 정의를 써서 캐리 표기가
-        엔진의 캐리 계산과 어긋나지 않게 한다. 살아있는 채권이 없으면 None."""
+        """비만기 채권의 평가액가중 쿠폰(마크) 수익률(소수). calculate_daily_carry
+        와 같은 정의여야 캐리 표기가 엔진의 캐리 계산과 어긋나지 않는다 —
+        [OWNER, 2026-08-25 — "충격 미가산"] 캐리가 쿠폰 고정으로 정정되면서
+        여기서도 경로 충격 가산을 걷어냈다(감사록 F1). 살아있는 채권이 없으면
+        None. `multiplier` 인자는 호출부 계약 유지용으로 남는다."""
         tot_eval = 0.0
         acc = 0.0
         for p in bond_positions:
@@ -374,8 +376,7 @@ def build_chart_data(
             ev = p.evaluationAmount or 0.0
             if ev <= 0:
                 continue
-            shock_bp = get_position_shock_bp(p, shock_mode, shock_type, base_shock_bp, shock_curves, multiplier, t)
-            acc += ev * ((p.mtmYield or 0.0) + shock_bp / 100.0)
+            acc += ev * (p.mtmYield or 0.0)
             tot_eval += ev
         return (acc / tot_eval) / 100.0 if tot_eval > 0 else None
 

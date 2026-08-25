@@ -20,7 +20,10 @@ Two layers of numerical evidence:
 2. `test_bond_only_analytic` -- hand-derived closed-form numbers for a
    single-bond parallel/step scenario, independent of any golden file:
    day-t bond MTM = pvbp * (remaining-t)/remaining * (-shock_bp), and daily
-   carry = eval * ((mtmYield + shock/100) - funding*100)/100 / 365.
+   carry = eval * (mtmYield - funding*100)/100 / 365 — 쿠폰(마크) 고정
+   [OWNER, 2026-08-25 — "충격 미가산" · 감사록 F1]. 종전에는 mtmYield 에
+   시나리오 충격을 가산했는데 그건 보유 고정이표가 금리 상승에서 더 버는
+   팬텀 캐리였다.
 
 Contract note: the response shape is the frozen frontend contract
 (UIUX_test src/features/simulation/api/simulate-dto.ts). Key names are
@@ -285,11 +288,15 @@ def test_matches_source_backend_golden(representative_response: dict) -> None:
     # capture's finalMTM −254,095,011 / finalTotal −191,006,631: the bond MtM
     # leg now rides bond_risk's reval DV01 (derivation in the module comment
     # above); carry and swap legs are byte-identical to the source.
+    # [RE-PINNED 2026-08-25 — OWNER "충격 미가산" · 감사록 F1] 채권 캐리가
+    # 쿠폰(마크) 고정으로 정정되며 finalCarry 36,920,495 → 20,106,895
+    # (경로 충격 가산분 −16,813,600), finalTotal 도 같은 델타. MTM·swap 은
+    # 바이트 동일 — 캐리 항만 닿는 수정임이 이 두 핀의 불변으로 증명된다.
     assert representative_response["summary"] == {
         "finalMTM": -255_182_266,
-        "finalCarry": 36_920_495,
+        "finalCarry": 20_106_895,
         "finalSwap": 26_167_885,
-        "finalTotal": -192_093_885,
+        "finalTotal": -208_907_486,
         "breakEvenDay": -1,
     }
     assert len(representative_response["chartData"]) == 61
@@ -301,10 +308,13 @@ def test_bond_only_analytic(client: TestClient) -> None:
     """Single 1Y bond, parallel STEP shock of +10bp, 10 calendar days from
     Mon 2026-01-05 (8 KR business days: 1,2,3,4,7,8,9,10).
 
-    Closed forms (source main.py calculate_daily_mtm/calculate_daily_carry):
+    Closed forms — 캐리는 쿠폰 고정 [OWNER, 2026-08-25 — "충격 미가산"]:
       MTM(t)      = pvbp * (365-t)/365 * (-10)
-      carry/cal-d = eval*(mtmYield+0.10)/100/365 - eval*funding/365
-                  = 1e10 * 0.001/365          (mtmYield 3.0, funding 3.0%)
+      carry/cal-d = eval*mtmYield/100/365 - eval*funding/365
+                  = 0                        (mtmYield 3.0 == funding 3.0%)
+    이 픽스처가 이제 «마크 = 조달이면 순캐리 0» 이라는 정확 모형의 성질
+    자체를 시연한다 — 종전에는 충격 10bp 가 캐리로 새서 하루 27,397원이
+    찍혔었다(그 값이 곧 팬텀 캐리의 최소 재현이었다).
     accrued per CALENDAR day (each business day books dt_cal days of carry).
     """
     req = {
@@ -337,24 +347,22 @@ def test_bond_only_analytic(client: TestClient) -> None:
     # Day 0 anchor + 8 business days.
     assert [row["day"] for row in chart] == [0, 1, 2, 3, 4, 7, 8, 9, 10]
 
-    # Day 1: MTM = 1e6 * 364/365 * -10 = -9,972,602.74 ; carry = 27,397.26
+    # Day 1: MTM = 1e6 * 364/365 * -10 = -9,972,602.74 ; carry = 0 (마크=조달)
     day1 = chart[1]
     assert day1["mtmPnL"] == round(1_000_000 * 364 / 365 * -10) == -9_972_603
-    assert day1["cumulativeCarry"] == round(10_000_000_000 * 0.001 / 365) == 27_397
-    assert day1["totalPnL"] == round(1_000_000 * 364 / 365 * -10 + 10_000_000_000 * 0.001 / 365) == -9_945_205
+    assert day1["cumulativeCarry"] == 0
+    assert day1["totalPnL"] == round(1_000_000 * 364 / 365 * -10) == -9_972_603
     assert day1["swapPnL"] == 0
 
-    # Final day 10: MTM = 1e6 * 355/365 * -10. Carry accrues on CALENDAR days
-    # (each business day carries dt_cal days, so Monday carries the weekend):
-    # 10 calendar days' worth in total.
+    # Final day 10: MTM = 1e6 * 355/365 * -10, carry stays 0 all the way.
     final = chart[-1]
     assert final["mtmPnL"] == round(1_000_000 * 355 / 365 * -10) == -9_726_027
-    assert final["cumulativeCarry"] == round(10 * 10_000_000_000 * 0.001 / 365) == 273_973
+    assert final["cumulativeCarry"] == 0
     assert body["summary"] == {
         "finalMTM": -9_726_027,
-        "finalCarry": 273_973,
+        "finalCarry": 0,
         "finalSwap": 0,
-        "finalTotal": -9_452_055,
+        "finalTotal": -9_726_027,
         "breakEvenDay": -1,
     }
 

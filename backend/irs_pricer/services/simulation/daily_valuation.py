@@ -188,12 +188,18 @@ def calculate_daily_carry(
             # 조달의 연속성: 만기 후에도 Notional에 대한 Funding Cost 유지
             total -= (p.notional or 0.0) * active_funding_rate * dt_cal / 365.0
         else:
-            shock_bp   = get_position_shock_bp(p, shock_mode, shock_type, base_shock_bp, shock_curves, multiplier, t)
-            eval_amt   = p.evaluationAmount or 0.0
-            # 금리 경로에 따라 채권 운용수익률도 상승 (carry_rate = mtmYield + 경로상 bp 변동)
-            # 조달금리(active_funding_rate)는 금통위 이벤트 시 BOK bp만큼 이미 상승 반영됨
-            # → 두 효과가 서로 상쇄되어 순 carry 변화는 (금리경로 - BOK 인상) 차이만큼
-            carry_rate = (p.mtmYield or 0.0) + shock_bp / 100.0
+            eval_amt = p.evaluationAmount or 0.0
+            # [OWNER, 2026-08-25 — "충격 미가산"] 보유 고정이표 채권의 캐리는
+            # **쿠폰(마크 수익률) 고정**이다. 종전에는 시나리오 충격을 가산한
+            # 운용수익률(carry_rate = mtmYield + shock)로 액크루얼했는데, 그건
+            # 금리가 오르면 들고 있는 고정이표가 더 버는 모형이라 정확 모형
+            # (캐리 = 쿠폰 액크루얼, 가격 몫은 평가·롤다운) 대비 s×평가금액×t/365
+            # 를 지어냈다 — 실측 +6,170만원/180일·+250bp(감사록 F1). 문헌
+            # (Tuckman·Clarus·Nordea)과 백테스트 채권 캐리(cashbond.py, 쿠폰
+            # 고정)에 정렬한다. 이표·만기 원금의 재투자 수익은 별도 항
+            # (chart.py daily_cash_return)이 이미 센다. 시그니처의 shock 인자들은
+            # 만기 판정 경로와의 호환으로 남는다 — 이 분기에서는 더 안 쓴다.
+            carry_rate = p.mtmYield or 0.0
             total += (eval_amt * (carry_rate / 100.0)) * dt_cal / 365.0 - (eval_amt * active_funding_rate) * dt_cal / 365.0
     return total
 

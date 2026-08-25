@@ -94,9 +94,13 @@ def test_swap_carry_nonzero_and_pinned_on_fan_fixture(client) -> None:
     # swapMtm / swapCarry are BYTE-IDENTICAL — only the bond sensitivity leg
     # consumes the replaced pvbp (derivation: DV01_FIX_REPORT.md Phase B).
     assert d["bondMtm"] == pytest.approx(-50_977_444.638177246, abs=1e-3)
-    assert d["bondCarry"] == pytest.approx(285_483_035.32653785, abs=1e-3)
+    # [OWNER, 2026-08-25 — "충격 미가산" · 감사록 F1] 채권 캐리가 쿠폰(마크
+    # 수익률) 고정으로 정정되며 재핀: 285,483,035.33 → 280,913,104.02 (경로
+    # 충격 가산분 −4,569,931 이 정확히 빠졌다). total 도 같은 델타. swap
+    # 성분·bondMtm·fundingCost 는 바이트 동일 — 캐리 항만 닿는 수정이다.
+    assert d["bondCarry"] == pytest.approx(280_913_104.02410966, abs=1e-3)
     assert d["fundingCost"] == pytest.approx(-264_574_470.08219185, abs=1e-3)
-    assert d["total"] == pytest.approx(53_045_456.43572441, abs=1e-3)
+    assert d["total"] == pytest.approx(48_475_525.13329619, abs=1e-3)
 
 
 def test_swap_carry_pinned_on_representative_fixture(client) -> None:
