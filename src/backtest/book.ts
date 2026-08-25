@@ -25,10 +25,52 @@ export const MAX_POSITIONS = 12;
  * **서버가 거부하는 것을 화면이 제안하지 않는다** — 이 리포가 이름 붙여 둔
  * claim-vs-behaviour 결함이 정확히 그것이다.
  */
-export const BOOKABLE_GROUPS: Group[] = ["outright", "spread", "fly", "cashbond", "asw"];
+export const BOOKABLE_GROUPS: Group[] = [
+  "outright", "spread", "fly", "cashbond", "asw", "futures", "futuresswap",
+];
+
+/** 선물 카테고리의 그룹 — 아래 `bookIdOf` 에서 **id 어휘가 갈리는** 두 그룹. */
+const FUTURES_GROUPS: Group[] = ["futures", "futuresswap"];
+
+/**
+ * Main 표의 id -> **엔진의 id**. 두 어휘가 있고, 하나로 합칠 수 없다.
+ *
+ *   Main    `FUT-KTB3` · `FUT-KTB3-IY` · `FUT-KTB3-BS` · `FSW-KTB3`
+ *           출처 `infomax.daily_ktb_price` — 벤더 계약가·벤더 내재금리·저평가.
+ *   엔진    `FUT:3Y` · `FSW:3Y`
+ *           출처 `mkt_futures_investor_close`(조정가) + 같은 벤더 내재금리.
+ *
+ * **두 표는 같은 계열이 아니다**(조정가 대 계약가 — FUTURES_LANE_STATE §Phase 1).
+ * 그래서 이 사전은 «같은 상품» 만 잇는다: 어느 계약이냐만 옮기고 수는 하나도
+ * 옮기지 않는다. 담긴 뒤의 진입레벨·손익은 전부 엔진 쪽 규약을 탄다
+ * (수준 = 벤더 `implied`, 손익 = `price_adj` 의 차분).
+ *
+ * 가격 행과 내재금리 행이 **같은 곳으로 간다** — 한 계약을 두 단위로 읽은
+ * 것이지 두 상품이 아니다. **저평가(`-BS`) 행은 없다**: 그것은 계약이 아니라
+ * 벤더가 낸 베이시스 수치라 담을 포지션이 아니고, 사전에 없으면 그 줄은
+ * `isBookable` 이 false 로 답한다(서버가 거부하는 것을 화면이 제안하지 않는다).
+ */
+export const MAIN_TO_BOOK_ID: Readonly<Record<string, string>> = {
+  "FUT-KTB3": "FUT:3Y",
+  "FUT-KTB3-IY": "FUT:3Y",
+  "FUT-KTB10": "FUT:10Y",
+  "FUT-KTB10-IY": "FUT:10Y",
+  "FSW-KTB3": "FSW:3Y",
+  "FSW-KTB10": "FSW:10Y",
+};
+
+/** 이 줄을 북에 담으면 어떤 id 가 되나. 담을 수 없으면 null.
+ *
+ * 담을 수 있는지와 무엇으로 담기는지는 **한 질문**이다 — 둘로 나누면 «담을 수
+ * 있다» 고 답해 놓고 넣을 id 가 없는 상태가 생긴다. */
+export function bookIdOf(row: Row): string | null {
+  if (!BOOKABLE_GROUPS.includes(row.group)) return null;
+  if (FUTURES_GROUPS.includes(row.group)) return MAIN_TO_BOOK_ID[row.id] ?? null;
+  return row.id;
+}
 
 export function isBookable(row: Row): boolean {
-  return BOOKABLE_GROUPS.includes(row.group);
+  return bookIdOf(row) !== null;
 }
 
 /** 스왑만 담던 시절의 목록 — 종목 드롭다운이 이걸 쓴다. 현금채권·자산스왑은

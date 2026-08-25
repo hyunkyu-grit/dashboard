@@ -50,6 +50,7 @@ export type Group =
   | "credit"
   | "bss"
   | "futures"
+  | "futuresswap"
   | "cashbond"
   | "asw";
 
@@ -65,6 +66,7 @@ export const GROUP_LABEL: Record<Group, string> = {
   credit: "크레딧",
   bss: "본드스왑",
   futures: "국채선물",
+  futuresswap: "퓨처스왑",
   cashbond: "현금채권",
   asw: "자산스왑",
 };

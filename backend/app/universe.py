@@ -70,6 +70,11 @@ FUTURES = [
     ("daily_lktb_price", "KTB10", "10년 국채선물"),
 ]
 
+# 선물 계약 코드 -> (IRS 테너 라벨, 정렬용 연수). 퓨처스왑이 어느 IRS 다리와
+# 짝인지가 여기 한 번만 적힌다 [OWNER, 2026-08-25 — "3선이면 3년 IRS, 10선이면
+# 10년 IRS"]. 엔진(`futures.FSW_IRS_COL`)이 쓰는 그 짝과 같은 문장이다.
+FUT_TENOR = {"KTB3": ("3Y", 3.0), "KTB10": ("10Y", 10.0)}
+
 # A year of business days. The 52-week window is trailing 252 observations, the same
 # window v1 settled on after a 10-year window pinned every level at the 99th percentile.
 WINDOW = 252
@@ -260,7 +265,7 @@ def build_universe() -> dict[str, Any]:
             [v * 100 for v in spread], d, [yrs], yrs in (3, 5, 10),
         ))
 
-    # ── 국채선물 ────────────────────────────────────────────────────────────
+    # ── 국채선물 · 퓨처스왑 ──────────────────────────────────────────────────
     for tbl, code, name in FUTURES:
         raw = futures_raw[code]
         if not raw:
@@ -269,13 +274,26 @@ def build_universe() -> dict[str, Any]:
         close = [None if r[1] is None else float(r[1]) for r in raw]
         imp = [None if r[2] is None else float(r[2]) for r in raw]
         cheap = [None if r[3] is None else float(r[3]) for r in raw]
-        yrs = 3.0 if code == "KTB3" else 10.0
+        lbl, yrs = FUT_TENOR[code]
         rows.append(_row(f"FUT-{code}", f"{name} 가격", "futures", "가격", close, fdates, [yrs, 0], True))
         rows.append(_row(f"FUT-{code}-IY", f"{name} 내재금리", "futures", "%", imp, fdates, [yrs, 1], True))
         # 저평가 is the vendor's own basis figure, already in the right unit. It is read,
         # not derived — deriving it would need the CTD basket this contract does not have
         # (KTB futures are cash-settled against a synthetic basket).
         rows.append(_row(f"FUT-{code}-BS", f"{name} 저평가", "futures", "가격", cheap, fdates, [yrs, 2], True))
+
+        # 퓨처스왑 = **벤더 내재금리** − 같은 만기 IRS. 본드스왑과 같은 모양이고
+        # 같은 inner join 규율(양쪽이 다 프린트한 날만)이다. 내재금리는 유도하지
+        # 않고 읽는다 — 조정가(`mkt_futures_investor_close.CLOSE`)를 역산하면
+        # 수준이 무의미해진다(FUTURES_LANE_STATE §Phase 1·2). 이 표는 그 조정가
+        # 표를 아예 열지 않으므로 여기에 그 결함이 들어올 길이 없다.
+        d, spread = _align(fdates, imp, idates, irs[lbl])
+        if not spread:
+            continue
+        rows.append(_row(
+            f"FSW-{code}", f"퓨처스왑 {lbl}", "futuresswap", "bp",
+            [v * 100 for v in spread], d, [yrs], True,
+        ))
 
     asof = max(
         [cdates[-1] if cdates else dt.date.min, idates[-1] if idates else dt.date.min],
@@ -307,6 +325,9 @@ def build_universe() -> dict[str, Any]:
             d = rows_f[-1][0]
             d = d.date() if hasattr(d, "date") else d
             fut_asof = d if fut_asof is None else max(fut_asof, d)
+    idate_last = idates[-1] if idates else None
+    fsw_asof = (min(fut_asof, idate_last)
+                if (fut_asof is not None and idate_last is not None) else None)
     return {
         "asof": asof.isoformat(),
         "rows": rows,
@@ -334,6 +355,14 @@ def build_universe() -> dict[str, Any]:
                 "asof": fut_asof.isoformat() if fut_asof else None,
                 "ageBusinessDays": _age(fut_asof),
                 "level": _level(_age(fut_asof)),
+            },
+            # 두 다리 중 **늦은 쪽**이 이 행의 나이다 — 둘을 평균 내면 한쪽이
+            # 멈춘 날 화면이 조용히 신선해 보인다(이 파일 위 주석의 그 결함).
+            "futuresswap": {
+                "table": "daily_ktb_price × mkt_irs_close",
+                "asof": fsw_asof.isoformat() if fsw_asof else None,
+                "ageBusinessDays": _age(fsw_asof),
+                "level": _level(_age(fsw_asof)),
             },
         },
         # Named so the screen can say WHY a class is empty rather than just being bare.
@@ -371,6 +400,22 @@ def universe_series(rid: str) -> dict[str, Any]:
                 for r in rows if r[1] is not None
             ]
             return {"id": rid, "unit": unit, "points": pts}
+
+        if rid.startswith("FSW-"):
+            code = rid.split("-", 1)[1]
+            if code not in FUT_TENOR:
+                raise KeyError(rid)
+            lbl, _ = FUT_TENOR[code]
+            tbl = "daily_ktb_price" if code == "KTB3" else "daily_lktb_price"
+            frows = conn.execute(text(
+                f"SELECT 일자, 선물내재수익률 FROM infomax.`{tbl}` ORDER BY 일자"
+            )).fetchall()
+            fdates = [(r[0].date() if hasattr(r[0], "date") else r[0]) for r in frows]
+            imp = [None if r[1] is None else float(r[1]) for r in frows]
+            idates, irs = _fetch_irs(conn)
+            d, spread = _align(fdates, imp, idates, irs[lbl])
+            pts = [{"t": t.isoformat(), "v": v * 100} for t, v in zip(d, spread)]
+            return {"id": rid, "unit": "bp", "points": pts}
 
         cdates, curves = _fetch_curves(conn)
         ktb = curves.get("KTB", {})

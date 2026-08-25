@@ -9,6 +9,7 @@ import type { Row } from '../src/table/rows';
 import {
   BOOKABLE_GROUPS,
   SWAP_GROUPS,
+  bookIdOf,
   bookKindOf,
   decodeBook,
   directionLabel,
@@ -18,6 +19,7 @@ import {
   FUTURESSWAP_OPTIONS,
   isBookable,
   loadBacktestMemory,
+  MAIN_TO_BOOK_ID,
   MAX_POSITIONS,
   newRow,
   runnable,
@@ -40,8 +42,10 @@ const row = (id: string, group: Row['group']): Row =>
      sortKey: [1], movePct: null, key: false }) as Row;
 
 describe('담을 수 있는 것 — 엔진이 받는 것만', () => {
-  it('스왑 셋 + 채권 둘 [OWNER, 2026-08-21 — 한 북에 섞는다]', () => {
-    expect(BOOKABLE_GROUPS).toEqual(['outright', 'spread', 'fly', 'cashbond', 'asw']);
+  it('스왑 셋 + 채권 둘 + 선물 둘 [OWNER, 2026-08-21·08-25 — 한 북에 섞는다]', () => {
+    expect(BOOKABLE_GROUPS).toEqual([
+      'outright', 'spread', 'fly', 'cashbond', 'asw', 'futures', 'futuresswap',
+    ]);
   });
 
   it('종목 드롭다운이 쓰는 목록은 스왑 셋뿐이다', () => {
@@ -55,10 +59,9 @@ describe('담을 수 있는 것 — 엔진이 받는 것만', () => {
     expect(isBookable(row('1Yx1Y', 'forward'))).toBe(false);
   });
 
-  it('변동성·민평·선물도 아니다 — 스왑이 아니거나 포지션이 아니다', () => {
+  it('변동성·민평은 아니다 — 스왑이 아니거나 포지션이 아니다', () => {
     expect(isBookable(row('vol:1Y', 'vol'))).toBe(false);
     expect(isBookable(row('국고 3Y', 'govt'))).toBe(false);
-    expect(isBookable(row('3년 국채선물', 'futures'))).toBe(false);
     expect(isBookable(row('BSS 3Y', 'bss'))).toBe(false);
   });
 
@@ -68,6 +71,63 @@ describe('담을 수 있는 것 — 엔진이 받는 것만', () => {
     expect(isBookable(row('1Y-3Y-10Y', 'fly'))).toBe(true);
     expect(isBookable(row('CB:KTB:3Y', 'cashbond'))).toBe(true);
     expect(isBookable(row('ASW:KTB:3Y', 'asw'))).toBe(true);
+  });
+});
+
+/**
+ * **id 어휘가 둘이다** [2026-08-25 선물 레인 Phase 4].
+ *
+ * Main 표의 선물 행은 벤더 표(`infomax.daily_ktb_price`)에서 나고 id 가
+ * `FUT-KTB3` 다. 엔진이 받는 id 는 `FUT:3Y` 이고 그쪽은 조정가 표를 손익에
+ * 쓴다. 두 표는 **같은 계열이 아니다**. 그래서 다리를 놓되 «같은 상품» 만
+ * 잇는다 — 수를 옮기지 않는다.
+ *
+ * 이게 틀리면 조용히 틀린다: Main id 를 그대로 북에 심으면 `bookKindOf` 가
+ * 스왑으로 읽어(콜론이 없으니까) 실행할 때 422 가 난다.
+ */
+describe('Main 의 id 를 엔진의 id 로', () => {
+  it('가격 행과 내재금리 행은 같은 계약으로 간다 — 두 상품이 아니다', () => {
+    expect(bookIdOf(row('FUT-KTB3', 'futures'))).toBe('FUT:3Y');
+    expect(bookIdOf(row('FUT-KTB3-IY', 'futures'))).toBe('FUT:3Y');
+    expect(bookIdOf(row('FUT-KTB10', 'futures'))).toBe('FUT:10Y');
+    expect(bookIdOf(row('FUT-KTB10-IY', 'futures'))).toBe('FUT:10Y');
+  });
+
+  it('퓨처스왑도 잇는다', () => {
+    expect(bookIdOf(row('FSW-KTB3', 'futuresswap'))).toBe('FSW:3Y');
+    expect(bookIdOf(row('FSW-KTB10', 'futuresswap'))).toBe('FSW:10Y');
+  });
+
+  it('저평가는 계약이 아니다 — 담을 수 없다', () => {
+    /* 벤더가 낸 베이시스 수치이지 포지션이 아니다. 사전에 없으므로
+       `isBookable` 도 false 로 답한다 — 한 질문, 한 게이트. */
+    expect(bookIdOf(row('FUT-KTB3-BS', 'futures'))).toBeNull();
+    expect(isBookable(row('FUT-KTB3-BS', 'futures'))).toBe(false);
+  });
+
+  it('옮겨진 id 는 엔진 어휘로 읽힌다 — 여기가 깨지면 실행이 422 다', () => {
+    for (const r of [
+      row('FUT-KTB3', 'futures'), row('FUT-KTB10-IY', 'futures'),
+      row('FSW-KTB3', 'futuresswap'), row('FSW-KTB10', 'futuresswap'),
+    ]) {
+      const id = bookIdOf(r)!;
+      expect(bookKindOf(id)).toBe(r.group === 'futures' ? 'futures' : 'futuresswap');
+      expect(bookKindOf(r.id)).toBe('swap');   // 옮기지 않으면 스왑으로 읽힌다
+    }
+  });
+
+  it('사전이 가리키는 곳은 전부 실제 선택지다 — 죽은 id 를 심지 않는다', () => {
+    const live = new Set<string>([
+      ...FUTURES_OPTIONS.map((o) => o.value),
+      ...FUTURESSWAP_OPTIONS.map((o) => o.value),
+    ]);
+    for (const v of Object.values(MAIN_TO_BOOK_ID)) expect(live.has(v)).toBe(true);
+  });
+
+  it('스왑·채권 줄은 자기 id 그대로다', () => {
+    expect(bookIdOf(row('3Y-10Y', 'spread'))).toBe('3Y-10Y');
+    expect(bookIdOf(row('CB:KTB:3Y', 'cashbond'))).toBe('CB:KTB:3Y');
+    expect(bookIdOf(row('1Yx1Y', 'forward'))).toBeNull();
   });
 });
 
@@ -271,7 +331,9 @@ describe('차트를 눌러서 들어간다 [v1 계약, OWNER 2026-08-18 복원]'
   it('클릭 진입은 새로 심는다 — 기억된 북이 날짜 힌트를 가리지 않는다', () => {
     // 특정 차트의 특정 날짜를 눌렀다는 것은 명시적인 질문이다. seedBook 을
     // 지나면 기억된 북이 먼저 살아나서 짚은 날짜가 영영 안 먹는 것처럼 보인다.
-    expect(page).toMatch(/setBook\(\[newRow\(row\.id, entry\)\]\)/);
+    /* `row.id` 가 아니라 `bookId` 다 — Main 의 선물 행은 id 어휘가 달라서
+       한 번 옮겨 심는다(위 «Main 의 id 를 엔진의 id 로»). */
+    expect(page).toMatch(/setBook\(\[newRow\(bookId, entry\)\]\)/);
     // 그 `entry` 안에 짚은 날짜가 먼저 온다 — 없을 때만 상품별 기본으로 떨어진다.
     expect(page).toMatch(/const entry =[\s\S]{0,40}?from \?\?/);
   });

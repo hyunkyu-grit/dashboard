@@ -12,7 +12,7 @@ import type { Row } from './rows';
  * place that computes bp would be a second place to disagree.
  */
 
-export type UniverseKind = 'govt' | 'credit' | 'bss' | 'futures';
+export type UniverseKind = 'govt' | 'credit' | 'bss' | 'futures' | 'futuresswap';
 
 export type AbsentClass = {
   id: string;

@@ -335,7 +335,8 @@ def _expand_bond(
 
 
 def _expand_futures(
-    dataset: Dataset, series_id: str, direction: int, notional: float, base_date: dt.date
+    dataset: Dataset, series_id: str, direction: int, notional: float,
+    base_date: dt.date, entry_price: float | None = None,
 ) -> list[dict]:
     """`FUT:3Y` · `FSW:3Y` → 시뮬레이션이 받는 줄들 [OWNER, 2026-08-25].
 
@@ -343,6 +344,22 @@ def _expand_futures(
     고정 지평·캐리 0), 퓨처스왑은 **두 줄**이다 — 선물 다리 + 같은 만기 IRS
     다리(진입일 DV01 중립 [OWNER: "3선이면 3년 IRS"], +1 = 스프레드 롱 =
     선물 매도 + IRS 리시브 — app/futures.py 의 방향 관례 그대로).
+
+    ── `entry_price` [OWNER 결정 2, 2026-08-25 — 선물 진입가는 편집 가능하게] ──
+    None 이면 그 날 벤더 내재금리를 읽는다(기존 동작, 한 자도 안 바뀐다).
+    값이 오면 **그 가격이 진입 수준을 정한다**: 선물은 가격으로 거래되므로
+    사람이 아는 수는 «104.36 에 샀다» 이지 «3.4575% 에 샀다» 가 아니다.
+
+    환산은 **서버가 한다**(§16 — 브라우저는 계산하지 않는다). KRX 표준물의
+    폐형을 역함수로 한 번 통과시킬 뿐이고 새 산술이 아니다
+    (`futures_pricing.implied_yield` — 백테스트 엔진이 쓰는 그 함수).
+
+    이 자리는 «수준» 이다. **손익은 여전히 차분**이고 조정가 위에서 난다 —
+    FUTURES_LANE_STATE §Phase 2 의 계약 그대로다.
+
+    퓨처스왑에 오면 **선물 다리의 진입가**다(IRS 다리는 그 날 커브에서 나온다).
+    선물 다리의 y0 가 바뀌면 DV01 도 바뀌므로 중립 가중된 스왑 명목도 따라
+    움직인다 — 그게 «그 가격에 들어간 퓨처스왑» 의 뜻이다.
     """
     from . import futures as ft
     from irs_pricer.services.simulation.futures_pricing import (
@@ -372,10 +389,17 @@ def _expand_futures(
     # 폐형에 넣고 두 가격의 차를 손익으로 낸다). 그 y0 는 수준이므로 벤더 값을
     # 읽는다 — 조정가 역산이 아니다(FUTURES_LANE_STATE §Phase 1 항목 1).
     # 두 걸음이 갈리는 자리이기도 하다: **수준은 벤더**, **손익은 차분**.
-    try:
-        y0 = ft.implied_at_index(fs, i, tenor)
-    except ft.FuturesError as exc:
-        raise BacktestError(str(exc))
+    if entry_price is None:
+        try:
+            y0 = ft.implied_at_index(fs, i, tenor)
+        except ft.FuturesError as exc:
+            raise BacktestError(str(exc))
+    else:
+        # 폐형의 정의역 밖(가격 ≤ 0)은 금리를 말할 수 없다. 명문으로 죽는다 —
+        # 조용히 근사하면 시뮬이 없는 사실을 말한다(implied_at_index 와 같은 규율).
+        if not (entry_price > 0):
+            raise BacktestError("선물 진입가는 0보다 커야 해요.")
+        y0 = implied_yield(entry_price, years)
 
     fut_dir = -direction if kind == ft.KIND_FSW else direction
     # pvbp 는 롱이 양수 — 시뮬 채권 관행(MTM = pvbp × −Δbp)과 같은 부호.
@@ -444,7 +468,8 @@ def _add_years(d: dt.date, years: float) -> dt.date:
 
 
 def expand(
-    dataset: Dataset, series_id: str, direction: int, notional: float, base_date: dt.date
+    dataset: Dataset, series_id: str, direction: int, notional: float,
+    base_date: dt.date, entry_price: float | None = None,
 ) -> list[dict]:
     """상품 한 줄 → FrontendPosition 모양의 다리들.
 
@@ -456,7 +481,12 @@ def expand(
     if kind in ("cashbond", "assetswap"):
         return _expand_bond(dataset, series_id, direction, notional, base_date)
     if kind in ("futures", "futuresswap"):
-        return _expand_futures(dataset, series_id, direction, notional, base_date)
+        return _expand_futures(dataset, series_id, direction, notional, base_date,
+                               entry_price)
+    if entry_price is not None:
+        # 선물 말고는 «진입가» 라는 입력이 없다. 받아 놓고 버리면 화면이 먹히는
+        # 척하는 컨트롤을 갖게 된다 — 이 리포가 이름 붙인 claim-vs-behaviour.
+        raise BacktestError(f"{series_id}: 진입가는 국채선물·퓨처스왑에만 있어요.")
 
     i = _index_on_or_after(dataset.dates, base_date)
     as_of = dataset.dates[i]

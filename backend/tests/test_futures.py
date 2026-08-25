@@ -25,6 +25,7 @@ from fastapi.testclient import TestClient
 
 from app import futures as ft
 from app import instruments
+from app.backtest import BacktestError
 from app.dataset import Dataset
 from app.main import app
 from app import mixedbook
@@ -300,7 +301,7 @@ class TestSeriesPayload:
         root = pathlib.Path(__file__).resolve().parents[1]
         bad: list[str] = []
         for rel in ("app/futures.py", "app/mr.py", "app/instruments.py",
-                    "app/mixedbook.py",
+                    "app/mixedbook.py", "app/universe.py",
                     "irs_pricer/services/simulation/daily_valuation.py",
                     "irs_pricer/services/simulation/aggregates.py"):
             f = root / rel
@@ -318,6 +319,29 @@ class TestSeriesPayload:
             "`선물내재수익률` 을 읽습니다(app/futures.py::FuturesSeries 머리 주석).\n"
             + "\n".join(bad)
         )
+
+    def test_main_never_opens_the_adjusted_table(self):
+        """**가드 · Phase 4 인수 조건**: Main 목록이 내는 선물 파생 수는 전부
+        `implied`(벤더)이거나 `price_adj` 의 차분이어야 한다.
+
+        Main 쪽에서 그것을 지키는 가장 강한 방법은 조정가 표를 **아예 열지 않는
+        것**이다 — 열지 않으면 역산할 대상이 없다. `app/universe.py` 는 벤더
+        표(`infomax.daily_ktb_price`/`daily_lktb_price`)와 `mkt_irs_close` 만
+        읽는다. 퓨처스왑 행도 그 벤더 내재금리에서 난다.
+        """
+        import pathlib
+
+        src = (pathlib.Path(__file__).resolve().parents[1] / "app" / "universe.py"
+               ).read_text(encoding="utf-8")
+        # 주석은 안 센다. 줄은 붙이지 말고 그대로 둔다 — 이어 붙이면 줄
+        # 경계를 넘어선 우연한 일치가 생긴다.
+        code = [line.split("#", 1)[0] for line in src.splitlines()]
+        assert not any("mkt_futures_investor_close" in c for c in code), (
+            "Main 이 조정가 표를 열었어요 — 수준은 벤더 컬럼을 읽습니다."
+        )
+        # 그리고 퓨처스왑은 그 벤더 내재금리와 IRS 의 교집합이다(이월·보간 없음).
+        assert any("선물내재수익률" in c for c in code)
+        assert any("_align(fdates, imp, idates" in c for c in code)
 
     def test_route_serves_it(self):
         """`with TestClient(app)` 를 쓰지 않는다 — 이 파일의 아래쪽 관례와 같다.
@@ -559,3 +583,65 @@ class TestSimE2E:
         assert r["pvbp"] < 0                      # 숏은 음수 (롱 양수 관행)
         assert r["evaluationAmount"] == 0.0       # 현금 지출 없음
         assert r["krdMap"] == {"10Y": r["pvbp"]}
+
+
+# ── ⑥ 시뮬 선물 진입가 [OWNER 결정 2, 2026-08-25] ──────────────────────────
+
+class TestSimEntryPrice:
+    """선물은 가격으로 거래되므로 사람이 아는 진입 수준은 «104.36 에 샀다» 다.
+    그 가격을 서버가 내재금리로 환산한다(§16 — 브라우저는 계산하지 않는다)."""
+
+    def test_default_is_unchanged(self):
+        """`entry_price` 를 안 주면 한 자도 안 바뀐다 — 벤더 값을 읽는다."""
+        ft.set_data(_futdata([104.0] * len(DATES)))
+        ds = _dataset()
+        a = instruments.expand(ds, "FUT:3Y", 1, 1e10, DATES[0])
+        b = instruments.expand(ds, "FUT:3Y", 1, 1e10, DATES[0], None)
+        assert a == b
+        assert a[0]["mtmYield"] == pytest.approx(implied_yield(104.0, 3))
+
+    def test_price_sets_the_level_through_the_closed_form(self):
+        ft.set_data(_futdata([104.0] * len(DATES)))
+        ds = _dataset()
+        r = instruments.expand(ds, "FUT:3Y", 1, 1e10, DATES[0], 105.43)[0]
+        y = implied_yield(105.43, 3)
+        # 세 자리 전부 그 금리다 — 하나만 옮기면 화면이 두 수를 말한다.
+        assert r["mtmYield"] == pytest.approx(y)
+        assert r["entryYield"] == pytest.approx(y)
+        assert r["entryYieldPurchase"] == pytest.approx(y)
+        # DV01 도 그 수준의 것이다(pvbp 는 y0 의 함수).
+        assert r["pvbp"] == pytest.approx(1e10 / 100.0 * synth_pvbp(y, 3))
+        assert r["pvbp"] != pytest.approx(
+            1e10 / 100.0 * synth_pvbp(implied_yield(104.0, 3), 3)
+        )
+
+    def test_fsw_reweights_its_swap_leg(self):
+        """퓨처스왑에 오면 **선물 다리의** 진입가다 — DV01 이 바뀌므로 중립
+        가중된 스왑 명목도 따라 움직인다."""
+        ft.set_data(_futdata([104.0] * len(DATES)))
+        ds = _dataset()
+        base = instruments.expand(ds, "FSW:3Y", 1, 1e10, DATES[0])
+        edit = instruments.expand(ds, "FSW:3Y", 1, 1e10, DATES[0], 101.00)
+        y = implied_yield(101.00, 3)
+        assert edit[0]["mtmYield"] == pytest.approx(y)
+        assert edit[1]["notional"] != pytest.approx(base[1]["notional"])
+        from app.backtest import _build_legs
+
+        unit = _build_legs(ds, "3Y", 1.0, 0)[0].dv01
+        assert edit[1]["notional"] * unit * 1e-4 == pytest.approx(
+            1e10 / 100.0 * synth_pvbp(y, 3), rel=1e-9
+        )
+
+    def test_a_price_the_closed_form_cannot_read_says_so(self):
+        ft.set_data(_futdata([104.0] * len(DATES)))
+        ds = _dataset()
+        with pytest.raises(BacktestError):
+            instruments.expand(ds, "FUT:3Y", 1, 1e10, DATES[0], 0.0)
+
+    def test_only_futures_have_an_entry_price(self):
+        """스왑에 진입가를 주면 조용히 버리지 않고 거절한다 — 먹히는 척하는
+        컨트롤이 이 리포가 이름 붙인 claim-vs-behaviour 결함이다."""
+        ft.set_data(_futdata([104.0] * len(DATES)))
+        ds = _dataset()
+        with pytest.raises(BacktestError):
+            instruments.expand(ds, "3Y", 1, 1e10, DATES[0], 104.0)

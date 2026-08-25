@@ -65,7 +65,12 @@ DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache"
 # v11 (2026-08-25): `mr` 유니버스에 국채선물 내재금리·퓨처스왑이 들어왔다
 # [OWNER "선물 들어왔는데 … 반영하기"] — 행에 kind/defn 이 붙고 asof 가
 # {bss, fut} 두 소스로 갈라졌다. 같은 SQL 이 다른 모양을 만든다.
-SCHEMA_VERSION = 11
+# v12 (2026-08-26): `universe` 에 **퓨처스왑 행 둘**(FSW-KTB3·FSW-KTB10, 새
+# kind "futuresswap")과 `sources.futuresswap` 이 들어왔다 [OWNER "선물, 퓨처스왑도
+# 스왑·현금채권과 같은 분류에"]. 같은 SQL 이 다른 모양을 만든다 — 안 올리면 v11
+# 캐시가 그 행 없는 유니버스를 계속 내주고, 화면은 새로 살린 탭을 **빈 표**로
+# 그리면서 아무 에러도 안 낸다(이 파일 머리가 적어 둔 그 함정).
+SCHEMA_VERSION = 12
 
 
 def data_hash(path: Path, asof: "object | None" = None) -> str:

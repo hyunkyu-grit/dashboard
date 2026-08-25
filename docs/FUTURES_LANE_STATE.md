@@ -237,3 +237,99 @@ p .0003 · SR +0.61). 손익을 날짜로 가르면 그 이유가 한 줄이다:
 이유가 그것이다) — 제품 엔진의 손익은 `price_adj` 차분이라 롤 점프를 안 탄다.
 Phase 3 의 마스크는 **벤더 `implied` 계열**에만 필요한 규칙이고, 연구 레인이
 그 계열 위에서 손익을 셌기 때문에 생긴 것이다. 두 문장은 충돌하지 않는다.
+
+---
+
+## Phase 4 — ④ Main 합류
+
+오너 ④: 「선물/퓨처스왑이 스왑·현금채권과 같은 분류에 없다」. 맞았다 —
+`Group` 열거에 `futures` 는 있었지만 **탭이 없었고**(2026-08-19 축소), 퓨처스왑은
+아예 `Group` 에도 없었다. Main 표의 유니버스 행 어댑터(`toRows`)도 그날
+`page.tsx` 의 rows 메모에서 빠져 있었다. 그래서 백엔드가 옳은 수를 내고 있어도
+(§Phase 1 항목 6) **화면에 그 줄이 서는 자리가 없었다.**
+
+### 왜 되살려도 되는가
+
+2026-08-19 축소의 사유는 «가상 데이터» 였다. 이 분류에는 더 이상 해당하지 않는다:
+국채선물 여섯 줄은 벤더 표(`infomax.daily_ktb_price`/`daily_lktb_price`)의
+종가·선물내재수익률·저평가를 **읽은** 값이고, 퓨처스왑 두 줄은 그 벤더
+내재금리와 `mkt_irs_close` 의 **교집합**이다. 같이 내려간 국고·본드스왑·크레딧은
+그대로 둔다 — 이 레인의 질문이 아니다.
+
+### 한 것
+
+| 자리 | 무엇 |
+|---|---|
+| `backend/app/universe.py` | `FSW-KTB3`·`FSW-KTB10` 행 신설(kind `futuresswap`·bp) · `FUT_TENOR` 어휘 · `universe_series` 의 FSW 갈래 · `sources.futuresswap` |
+| `backend/app/cache.py` | `SCHEMA_VERSION` 11 → 12 (같은 SQL 이 **다른 모양**을 낸다) |
+| `src/table/rows.ts` | `Group` 에 `futuresswap` · `GROUP_LABEL` 「퓨처스왑」 |
+| `src/table/universeRows.ts` | `UniverseKind` 에 `futuresswap` |
+| `src/ui/nav.ts` | Backtest 카테고리 「국채선물」 신설(항목 둘) · 글리프·설명 |
+| `src/app/page.tsx` | `GROUPS` 에 둘 · 유니버스 행을 **GROUPS 게이트로 걸러** 잇기 · 신선도 출처 |
+| `src/backtest/book.ts` | `BOOKABLE_GROUPS` 에 둘 · **`MAIN_TO_BOOK_ID`·`bookIdOf`** |
+| `backend/app/instruments.py` | `expand(..., entry_price)` — 오너 결정 2 의 서버 절반 |
+
+### id 어휘가 둘이다 — 다리는 놓되 수는 안 옮긴다
+
+    Main    FUT-KTB3 · FUT-KTB3-IY · FUT-KTB3-BS · FSW-KTB3   (벤더 계약가 표)
+    엔진    FUT:3Y · FSW:3Y                                    (조정가 + 벤더 내재)
+
+두 표는 **같은 계열이 아니다**. `MAIN_TO_BOOK_ID` 는 «같은 상품» 만 잇는다 —
+어느 계약이냐만 옮기고 수는 하나도 옮기지 않는다. 가격 행과 내재금리 행이 같은
+곳으로 가고(한 계약을 두 단위로 읽은 것이다), **저평가 행은 사전에 없다**
+(계약이 아니라 벤더가 낸 베이시스 수치라 담을 포지션이 아니다).
+
+`isBookable` 을 `bookIdOf(row) !== null` 로 다시 정의했다 — 「담을 수 있나」와
+「무엇으로 담기나」는 한 질문이고, 둘로 나누면 «담을 수 있다» 고 답해 놓고 넣을
+id 가 없는 상태가 생긴다.
+
+### 인수 조건 — 「수준은 벤더, 손익은 차분」
+
+**Main 은 조정가 표를 아예 열지 않는다.** 열지 않으면 역산할 대상이 없다 —
+`universe.py` 는 벤더 표와 `mkt_irs_close` 만 읽는다. 가드
+`test_futures.py::TestSeriesPayload::test_main_never_opens_the_adjusted_table`
+가 그것을 잰다(`mkt_futures_investor_close` 문자열이 그 파일에 있으면 실패).
+기존 가드 `test_no_source_inverts_the_adjusted_price` 의 파일 목록에도
+`app/universe.py` 를 넣었다.
+
+### 라이브 실측 (2026-08-26, 재기동 후)
+
+    /api/universe   FSW-KTB3  0.8bp · FSW-KTB10 20.95bp
+                    → MR 보드·엔진과 **같은 수** (한 이름에 한 수)
+    /api/universe/series/FSW-KTB10  bp · 2,609점 · 마지막 2026-08-24 20.95
+    화면 「퓨처스왑」 탭 두 줄 · 「국채선물」 탭 여섯 줄
+    Main 퓨처스왑 3Y 줄 클릭 → bt=**FSW:3Y**,1,100억 → 실행
+        2026-02-02 → 2026-08-24  총손익 −4,024만원
+        (평가 −9,871 · 롤다운 +3,219 · 캐리 +2,628만원)
+        진입 레벨 3.3bp 「내재 − IRS」 · 방향 「선물 매도 · IRS 리시브」
+
+**두 탭의 날짜가 다르다 — 그리고 그게 맞다.** 벤더 표가 IRS 보다 하루 앞서
+있어서 국채선물 탭 머리는 08-25, 퓨처스왑 탭 머리는 08-24(「하루 늦음」)다.
+퓨처스왑의 신선도는 두 다리 중 **늦은 쪽**(`min`)으로 백엔드가 따로 낸다 —
+선물 항목을 가리켰다면 IRS 가 밀린 날 화면이 조용히 신선해 보였을 것이다.
+
+### 안 한 것 — 시뮬 선물 진입가 편집 (오너 결정 2)
+
+**서버 절반은 했고, 화면 절반은 못 했다.** `instruments.expand(...,
+entry_price)` 가 그 가격을 `futures_pricing.implied_yield` 로 한 번 통과시켜
+선물 다리의 `mtmYield`·`entryYield`·`pvbp` 를 정한다(퓨처스왑이면 IRS 다리의
+DV01 중립 명목도 따라 움직인다). 시험 다섯이 그것을 잰다.
+
+막힌 자리는 **라우트 한 줄**이다. `POST /api/instruments/expand` 가 `body` 에서
+네 필드만 읽고 넘기므로 다섯째를 받아야 하는데, 그 라우트는 `backend/app/main.py`
+에 있고 이 세션의 규칙은 **그 파일을 건드리지 않는 것**이다(지금 그 파일의
+변경은 전부 다른 레인의 `mr_strategy` 작업이다). `app/` 안에 라우터를 여는
+모듈은 `main.py` 뿐이라 우회로가 없다.
+
+필요한 변경은 이것뿐이다:
+
+    # main.py expand_instrument 안
+    entry_price = body.get("entryPrice")
+    entry_price = None if entry_price is None else float(entry_price)
+    ...
+    legs = instruments_mod.expand(_dataset, series_id, direction, notional, base,
+                                  entry_price)
+
+그 줄이 들어가면 `<Field>` 에 NumField 를 붙인다. **지금은 안 붙인다** — 서버가
+안 받는 컨트롤을 화면에 두면 먹히는 척하는 입력이 되고, 그게 이 리포가 이름
+붙여 둔 claim-vs-behaviour 결함이다.

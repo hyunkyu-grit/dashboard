@@ -66,9 +66,12 @@ describe('어댑터 — 두 kind 가 두 탭이다', () => {
 
 describe('내비 배치 [기본안, 2026-08-18]', () => {
   it('Backtest 메가 패널의 다섯 번째 카테고리가 현금채권이고, 항목은 두 탭이다', () => {
-    const cat = BACKTEST_CATEGORIES[BACKTEST_CATEGORIES.length - 1];
-    expect(cat.id).toBe('cashbond');
-    expect(cat.groups).toEqual(['cashbond', 'asw']);
+    /* **마지막이 아니라 이름으로 찾는다.** 2026-08-25 에 국채선물 카테고리가
+       뒤에 붙으면서 이 검사가 자리로 찾고 있었다는 게 드러났다 — 재는 것은
+       «현금채권 카테고리가 두 탭이다» 이지 «맨 끝이다» 가 아니었다. */
+    const cat = BACKTEST_CATEGORIES.find((c) => c.id === 'cashbond');
+    expect(cat).toBeDefined();
+    expect(cat!.groups).toEqual(['cashbond', 'asw']);
   });
 
   it('두 탭의 라벨 — 현금채권·자산스왑', () => {

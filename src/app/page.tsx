@@ -23,7 +23,7 @@ import { resolveStart, rowsFor, startPoints } from '@/table/forwardStarts';
 import { InstrumentTable } from '@/table/InstrumentTable';
 import { buildRows, GROUP_LABEL, type Group, type Row } from '@/table/rows';
 import { filterByType, toCashBondRows } from '@/table/cashbondRows';
-import { fetchUniverse, type UniversePayload } from '@/table/universeRows';
+import { fetchUniverse, toRows, type UniversePayload } from '@/table/universeRows';
 import { BottomStrip, useStripCollapsed } from '@/ui/BottomStrip';
 import { ChangeLog } from '@/ui/ChangeLog';
 import { CurveBanner } from '@/ui/CurveBanner';
@@ -42,7 +42,7 @@ import { PreviewPane } from '@/ui/PreviewPane';
 import { useFillHeight } from '@/ui/useFillHeight';
 import { BacktestWindow, encodeBook, seedBook } from '@/backtest/BacktestWindow';
 import type { BookRow } from '@/backtest/book';
-import { defaultEntry, isBookable, newRow } from '@/backtest/book';
+import { bookIdOf, defaultEntry, newRow } from '@/backtest/book';
 import { SettingView } from '@/ui/SettingView';
 import { BondTypeFilter } from '@/ui/BondTypeFilter';
 import { SimulationPage, type CaseRuns } from '@/sim/SimulationPage';
@@ -80,6 +80,12 @@ const GROUPS: Group[] = [
   'vol',
   'cashbond',
   'asw',
+  /* 국채선물·퓨처스왑이 **되돌아왔다** [OWNER, 2026-08-25 — "선물, 퓨처스왑도
+     스왑·현금채권과 같은 분류에"]. 2026-08-19 축소의 사유(가상 데이터)가 이
+     둘에는 더 이상 해당하지 않는다 — 근거와 되살린 범위는 `nav.ts` 의 같은
+     자리에 적었다. 국고·본드스왑·크레딧은 여전히 빠져 있다. */
+  'futures',
+  'futuresswap',
 ];
 
 /** Which feed each group's freshness comes from. The two close on the same day today,
@@ -88,6 +94,10 @@ const GROUPS: Group[] = [
 const SOURCE_OF: Record<Group, 'irs' | 'universe'> = {
   outright: 'irs', spread: 'irs', fly: 'irs', forward: 'irs', vol: 'irs',
   govt: 'universe', bss: 'universe', credit: 'universe', futures: 'universe',
+  /* 퓨처스왑은 두 피드의 교집합이라 백엔드가 **늦은 쪽**으로 자기 항목을 낸다
+   * (`universe.py` sources.futuresswap) — 여기서 선물 항목을 가리키면 IRS 가
+   * 하루 밀린 날 헤더가 조용히 신선해 보인다(아래 FRESH_KEY 가 고친 그 결함). */
+  futuresswap: 'universe',
   /* 현금채권 = credit_matrix, 자산스왑 = credit_matrix × mkt_irs_close —
    * 유니버스의 govt/bss 항목이 각각 정확히 그 피드다 (`FRESH_KEY`). */
   cashbond: 'universe', asw: 'universe',
@@ -97,9 +107,21 @@ const SOURCE_OF: Record<Group, 'irs' | 'universe'> = {
  * 위에 선다(`asw_series` 는 민평 날짜에 IRS 를 맞춘다 — backend/app/cashbond.py)
  * — bss(교집합의 max, IRS 가 하루 앞설 수 있다)를 가리키면 헤더 날짜와 표의
  * 마지막 관측이 어긋난다(실측 2026-08-18: 헤더 08-17, 값 08-14). */
-const FRESH_KEY: Partial<Record<Group, string>> = { cashbond: 'govt', asw: 'govt' };
+const FRESH_KEY: Partial<Record<Group, string>> = {
+  cashbond: 'govt', asw: 'govt', futuresswap: 'futuresswap',
+};
 
 const SOURCE_LABEL = { irs: 'IRS 종가', universe: '민평·선물 종가' } as const;
+
+/** 보이는 줄 중 처음으로 **담을 수 있는** 것의 엔진 id. 세 자리가 같은 폴백을
+ * 쓰므로 한 번만 적는다. */
+function firstBookId(rows: Row[]): string | null {
+  for (const r of rows) {
+    const id = bookIdOf(r);
+    if (id) return id;
+  }
+  return null;
+}
 
 type Loaded = {
   summary: WallSummary;
@@ -192,13 +214,15 @@ export default function Home() {
 
   const rows = useMemo(() => {
     if (!data) return [];
-    /* `toRows(data.universe)` 는 여기서 빠졌다(2026-08-19 그룹 축소) — 탭이
-     * 없는 행을 rows 에 남기면 커맨드 바 검색이 열 수 없는 화면으로 점프한다.
-     * 유니버스 페이로드 자체는 계속 받는다: 신선도 칩(SOURCE_OF)과 현금채권
-     * 헤더 날짜(FRESH_KEY)가 그 소스 항목을 읽는다. */
+    /* 유니버스는 **탭이 있는 그룹만** 잇는다(2026-08-19 축소의 규칙 그대로) —
+     * 탭이 없는 행을 rows 에 남기면 커맨드 바 검색이 열 수 없는 화면으로
+     * 점프한다. 그래서 `GROUPS` 를 그대로 게이트로 쓴다: 여기 목록과 탭 목록이
+     * 두 번 적히면 언젠가 갈라진다. 지금 통과하는 것은 국채선물·퓨처스왑
+     * 넷뿐이고, 국고·본드스왑·크레딧은 GROUPS 에 없으니 그대로 걸러진다. */
     return [
       ...buildRows(data.summary, data.forwards, data.vol),
       ...toCashBondRows(data.cashbond),
+      ...toRows(data.universe).filter((r) => GROUPS.includes(r.group)),
     ];
   }, [data]);
 
@@ -298,9 +322,13 @@ const BANNER_H = 34;
   );
 
   const openBacktest = useCallback(() => {
-    const seedId = previewRow && isBookable(previewRow)
-      ? previewRow.id
-      : (shown.find(isBookable)?.id ?? '10Y');
+    /* 씨앗은 **엔진의 id** 다. 선물 줄의 Main id(`FUT-KTB3`)를 그대로 심으면
+       북이 스왑으로 읽어 실행할 때 422 가 난다 — `bookIdOf` 가 그 자리를
+       한 번만 옮긴다. */
+    const seedId =
+      (previewRow ? bookIdOf(previewRow) : null) ??
+      firstBookId(shown) ??
+      '10Y';
     /* 진입일 기본은 **씨앗 상품**이 정한다(`defaultEntry`). 현금채권 탭에서
        이 버튼을 누르면 씨앗이 채권 줄인데, 거기 오늘을 심으면 캐리가 하루도
        안 쌓여 늘 «거의 0» 인 북이 뜬다. */
@@ -325,22 +353,25 @@ const BANNER_H = 34;
      담을 수 없는 행(포워드·변동성 등)이면 버튼과 같은 폴백으로 간다. */
   const openBacktestAt = useCallback(
     (row: Row, from?: string) => {
-      if (!isBookable(row)) {
+      /* 현금채권·자산스왑도 **같은 북**이다 [OWNER, 2026-08-21]. 진입일은 짚은
+         날짜가 먼저이고, 없으면 그 상품의 기본이다(`defaultEntry` — 채권은
+         캐리가 쌓여야 읽히는 화면이라 1년 전이다). 담을 수 없는 줄(포워드·
+         변동성·선물 저평가)이면 버튼과 같은 폴백으로 간다 — 「담을 수 있나」와
+         「무엇으로 담기나」가 한 질문이라 게이트도 하나다. */
+      const bookId = bookIdOf(row);
+      if (!bookId) {
         openBacktest();
         return;
       }
-      /* 현금채권·자산스왑도 **같은 북**이다 [OWNER, 2026-08-21]. 진입일은 짚은
-         날짜가 먼저이고, 없으면 그 상품의 기본이다(`defaultEntry` — 채권은
-         캐리가 쌓여야 읽히는 화면이라 1년 전이다). */
       const entry =
         from ??
         defaultEntry(
-          row.id,
+          bookId,
           data?.summary.asof ?? '',
           data?.cashbond.asof ?? '',
           data?.cashbond.from ?? '',
         );
-      setBook([newRow(row.id, entry)]);
+      setBook([newRow(bookId, entry)]);
     },
     [openBacktest, setBook, data],
   );
@@ -351,7 +382,7 @@ const BANNER_H = 34;
     setBookState(
       seedBook(
         btParam,
-        shown.find(isBookable)?.id ?? '10Y',
+        firstBookId(shown) ?? '10Y',
         data.summary.asof,
         data.cashbond.asof,
         data.cashbond.from,

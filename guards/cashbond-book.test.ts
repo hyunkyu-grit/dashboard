@@ -115,7 +115,9 @@ describe('진입일 기본은 **상품이** 정한다 — 부르는 자리마다
     // 창의 「줄 추가」 · 창을 열 때의 씨앗 · 차트 클릭 진입
     expect(win).toMatch(/newRow\(id, defaultEntry\(/);
     expect(win).toMatch(/newRow\(seedId, defaultEntry\(/);
-    expect(page).toMatch(/defaultEntry\([\s\S]{0,20}?row\.id/);
+    /* 페이지 쪽은 `row.id` 가 아니라 `bookId` 를 넘긴다 — Main 의 선물 행은
+       id 어휘가 달라 `bookIdOf` 로 한 번 옮긴다(2026-08-25 선물 레인). */
+    expect(page).toMatch(/defaultEntry\([\s\S]{0,20}?bookId/);
   });
 });
 

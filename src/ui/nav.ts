@@ -76,7 +76,7 @@ export type NavItem = {
  * 행·정렬·사다리가 전부 그 값을 읽기 때문이고, 유니버스 백엔드도 그대로다.
  * 탭을 되살리려면 여기 배열(과 `page.tsx` 의 GROUPS)에 도로 넣으면 된다.
  */
-export type CategoryId = 'swap' | 'cashbond';
+export type CategoryId = 'swap' | 'cashbond' | 'futures';
 
 export const BACKTEST_CATEGORIES: {
   id: CategoryId;
@@ -100,6 +100,18 @@ export const BACKTEST_CATEGORIES: {
     desc: '민평 커브에서 par 로 발행한 채권과 그 자산스왑',
     groups: ['cashbond', 'asw'],
   },
+  /* 국채선물은 2026-08-19 에 «가상 데이터» 로 내려갔다가 **되돌아온다**
+     [OWNER, 2026-08-25 — "선물, 퓨처스왑도 스왑·현금채권과 같은 분류에"].
+     그날 내려간 이유가 사라졌기 때문이다: 이 카테고리의 행은 전부 벤더
+     테이블(`infomax.daily_ktb_price`/`daily_lktb_price`)에서 **읽은** 값이고,
+     퓨처스왑은 그 내재금리와 `mkt_irs_close` 의 교집합이다. 유도가 없다.
+     같이 내려간 국고·본드스왑·크레딧은 그대로 둔다 — 이 레인의 질문이 아니다. */
+  {
+    id: 'futures',
+    label: '국채선물',
+    desc: '3년·10년 국채선물과 그 내재금리에서 나오는 퓨처스왑',
+    groups: ['futures', 'futuresswap'],
+  },
 ];
 
 /** v1 의 글리프를 그대로. 없는 그룹은 v1 에 없던 자산군이라 같은 계열에서 골랐다. */
@@ -113,6 +125,7 @@ const GROUP_GLYPH: Record<Group, string> = {
   bss: '◫',
   credit: '◈',
   futures: '◇',
+  futuresswap: '⇆',
   cashbond: '▣',
   asw: '⇄',
 };
@@ -126,7 +139,8 @@ const GROUP_DESC: Record<Group, string> = {
   govt: '국고채 수익률',
   bss: '국고 대비 스왑의 차',
   credit: '국고 대비 신용 스프레드',
-  futures: '3년·10년 선물',
+  futures: '3년·10년 선물 — 가격 · 내재금리 · 저평가',
+  futuresswap: '선물 내재금리 − IRS · 같은 만기',
   cashbond: '민평 수익률 · 3개월 이표채로 가정',
   asw: '민평 − IRS · 같은 만기 · 같은 명목',
 };
