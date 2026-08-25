@@ -7,6 +7,7 @@ import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import type { ForwardsPayload } from '@/lib/api';
+import { ROW_H } from '@/table/rowHeight';
 import {
   MATRIX_FLOOR,
   MATRIX_FULL,
@@ -143,11 +144,22 @@ describe('포워드 매트릭스', () => {
     expect(c.querySelectorAll('.sr-tintlegend-none').length).toBe(1);
   });
 
-  it('게이지는 범위가 있을 때만 선다', () => {
+  it('트랙은 범위가 있을 때만 선다', () => {
     const c = draw(<KeyForwardBlock payload={PAYLOAD} />);
     // 픽스처 둘 중 하나는 range 가 전부 null — 없는 자리를 지어내지 않는다.
-    expect(c.querySelectorAll('.sr-gauge').length).toBe(1);
-    expect(c.querySelectorAll('.sr-gauge-extreme').length).toBe(1); // pct 95
+    expect(c.querySelectorAll('.sr-track').length).toBe(1);
+    expect(c.querySelectorAll('[data-sr-extreme]').length).toBe(1); // pct 95
+  });
+
+  it('주요 포워드는 캐논 부품으로 선다 — 이 블록만의 표를 다시 만들지 않는다', () => {
+    const c = draw(<KeyForwardBlock payload={PAYLOAD} />);
+    // 손으로 짠 `.sr-keyfwd`/`.sr-gauge` 로 되돌아가면 여기서 걸린다.
+    expect(c.querySelectorAll('.sr-keyfwd, .sr-gauge').length).toBe(0);
+    // 이름 칸 두 줄 스택 · 변화 열 · 캐논 행 높이.
+    expect(c.querySelectorAll('.sr-name-stack').length).toBe(PAYLOAD.keyForwards.length);
+    expect(c.textContent).toContain('1D');
+    const row = c.querySelector('tbody tr') as HTMLElement;
+    expect(row.style.height).toBe(`${ROW_H}px`);
   });
 
   it('창으로 열린다 — 목록을 밀어내지 않는다', () => {

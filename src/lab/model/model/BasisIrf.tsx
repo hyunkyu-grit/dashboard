@@ -58,7 +58,14 @@ const OLD = oldBasisJson as unknown as {
 
 /** 논문 Figure 18 의 가로축에 맞춘다. 기저는 24 를 들고 있다. */
 const QUARTERS = 20;
-const INSET = { top: 10, right: 10, bottom: 20, left: 6 };
+/** 캐논 여백(`ui/PreviewPane.tsx::CHART_INSET`) — 나란히 서는 차트끼리 여백이
+ * 다르면 플롯 상자가 어긋나 보인다. 2026-08-25 감사 전까지 이 파일만 네 변이
+ * 전부 달랐다(`{10,10,20,6}`) — 근거 없는 이탈이었다.
+ *
+ * 바닥만 28 로 캐논(8)에서 벗어난다: 이 차트는 x 눈금에 라벨이 선다(분기).
+ * 같은 사정의 `lab/scenario/ModelChart.tsx` 가 이미 그 값을 실측해 뒀다 —
+ * 8 로 두면 y 축 맨 아래 눈금이 x 축 라벨과 같은 줄에 겹친다. */
+const INSET = { top: 16, right: 12, bottom: 28, left: 8 };
 
 const INK = 'var(--color-fg)';
 const AMBER = 'var(--sr-ref-cd)';

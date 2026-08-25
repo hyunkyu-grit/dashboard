@@ -1,11 +1,16 @@
 'use client';
 
-import { TextCaption, TextLabel2 } from '@coinbase/cds-web/typography';
+import { Box, VStack } from '@coinbase/cds-web/layout';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@coinbase/cds-web/tables';
+import { Text, TextCaption } from '@coinbase/cds-web/typography';
 
 import type { ForwardsPayload } from '@/lib/api';
-import { fmtLevel, levelHeadText, levelHeadTitle } from '@/lib/format';
+import { fmtDelta, fmtLevel, levelHeadText, levelHeadTitle } from '@/lib/format';
 import { rangePosition } from '@/lib/range';
-import { matrixTint } from '@/table/tint';
+import { rangeText } from '@/table/cells';
+import { BASIS_LABEL } from '@/table/InstrumentTable';
+import { HEADER_H, ROW_H } from '@/table/rowHeight';
+import { directionClass, directionGlyph, matrixTint, tintStyle, unsignedDelta } from '@/table/tint';
 
 import { TintLegend } from './TintLegend';
 
@@ -107,115 +112,159 @@ export function ForwardMatrix({ payload }: { payload: ForwardsPayload }) {
 /**
  * 주요 포워드 여섯 — 실제로 호가되는 것들.
  *
- * 여기서 보여주는 것은 **수준과 그 수준의 자리**다: 52주 최저↔최고 트랙 위에
- * 지금이 어디인지, 그리고 그 안에서 평균이 어디인지. v1 이 이 블록에서 기저별
- * 수준 열들을 걷어낸 이유가 기록돼 있다 — 그 열들이 본 표의 **변화** 열과 같은
- * 머리글(MTD·YTD)을 달고 다른 양(수준)을 보여주고 있었다.
+ * 여기서 보여주는 것은 **수준과 그 수준의 자리**다: 52주 최저↔최고 위에 지금이
+ * 어디인지. v1 이 이 블록에서 기저별 수준 열들을 걷어낸 이유가 기록돼 있다 —
+ * 그 열들이 본 표의 **변화** 열과 같은 머리글(MTD·YTD)을 달고 다른 양(수준)을
+ * 보여주고 있었다. 이제 그 자리에는 진짜 변화 열이 선다.
+ *
+ * ── 손으로 짠 표를 접었다 [감사 2026-08-25] ─────────────────────────────────
+ * 이 블록은 위의 격자와 달리 **좁은 표**(여섯 행·여덟 열)라 `ForwardMatrix` 의
+ * 면제 사유(셀당 32px × 열 열 개)가 적용되지 않는다. 그런데도 손으로 짠
+ * `<table class="sr-keyfwd">` 였고, 그래서 Main 목록과 다르게 늙어 있었다:
+ * 행 높이가 26(캐논 60)이고, 변화 열이 아예 없고, 52주 자리는 이 블록에만
+ * 있는 `.sr-gauge` 로 그려졌다. 셋 다 캐논에 이미 있는 부품이다. 지금은
+ * CDS `Table` + `ROW_H` + `.sr-name-stack` + 틴트 네 부품 + `.sr-track` 으로
+ * 서고, 이 파일이 새로 정의하는 것은 **없다**.
+ *
+ * 캐논에서 벗어나는 곳 하나: 변화는 **1D 만** 세운다. MTD·YTD 까지 세우면
+ * 서랍 폭(창 1080)에서 열이 밀린다 — 「말줄임 절대 금지」가 폭 문제를 글자
+ * 자르기로 풀지 말라고 하므로, 자르는 대신 열을 고른다.
  */
 export function KeyForwardBlock({ payload }: { payload: ForwardsPayload }) {
   return (
-    <table className="sr-keyfwd">
-      <thead>
-        <tr>
-          <th className="sr-keyfwd-name">
-            <TextLabel2 as="span">주요 포워드</TextLabel2>
-          </th>
-          <th className="sr-keyfwd-now">
-            <TextCaption as="span" color="fgMuted" title={levelHeadTitle(payload.asof)}>
+    <Table
+      variant="ruled"
+      bordered
+      /* 여섯 행이 전부라 스크롤 컨테이너가 필요 없다 — 머리 40 + 6×60. */
+      height={HEADER_H + ROW_H * payload.keyForwards.length}
+      accessibilityLabel="주요 포워드"
+    >
+      {/* 타이포는 `Text font="…"` — 이 블록은 새 코드라 CDS 가 폐기한 shorthand
+          (`TextCaption` 등)를 쓰지 않는다(`guards/typography-ratchet`). 위의 격자는
+          그 래칫이 세는 기존 사용이라 건드리지 않는다. */}
+      <TableHeader sticky>
+        <TableRow style={{ height: HEADER_H }}>
+          <TableCell as="th" scope="col">
+            <Text as="span" font="caption" color="fgMuted">주요 포워드</Text>
+          </TableCell>
+          <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
+            <Text as="span" font="caption" color="fgMuted" title={levelHeadTitle(payload.asof)}>
               {levelHeadText(payload.asof)}
-            </TextCaption>
-          </th>
-          {/* 트랙의 양 끝은 **한 번만** 이름을 얻는다 — 행마다 적으면 여섯 번
-              같은 말을 하게 되고, 그 반복이 트랙 자체를 안 보이게 만든다. */}
-          <th className="sr-keyfwd-track">
-            <span className="sr-keyfwd-ends">
-              <TextCaption as="span" color="fgMuted">
-                52주 최저
-              </TextCaption>
-              <TextCaption as="span" color="fgMuted">
-                52주 최고
-              </TextCaption>
-            </span>
-          </th>
-          <th className="sr-keyfwd-pct">
-            <TextCaption as="span" color="fgMuted">
-              백분위
-            </TextCaption>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
+            </Text>
+          </TableCell>
+          <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
+            <Text as="span" font="caption" color="fgMuted">{BASIS_LABEL.d1}</Text>
+          </TableCell>
+          <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
+            <Text as="span" font="caption" color="fgMuted">52주 저점</Text>
+          </TableCell>
+          <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
+            <Text as="span" font="caption" color="fgMuted">고점</Text>
+          </TableCell>
+          <TableCell as="th" scope="col" className="sr-num">
+            <Text as="span" font="caption" color="fgMuted">위치</Text>
+          </TableCell>
+          <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
+            <Text as="span" font="caption" color="fgMuted">백분위</Text>
+          </TableCell>
+        </TableRow>
+      </TableHeader>
+
+      <TableBody>
         {payload.keyForwards.map((kf) => {
           const { min, max, avg, pct } = kf.range1y;
           const now = kf.values.now;
-          /* 자리는 `lib/range.ts` 가 낸다 — 표의 트랙과 **같은 함수**다.
+          const d1 = kf.deltas.d1;
+          /* 자리는 `lib/range.ts` 가 낸다 — Main 목록의 트랙과 **같은 함수**다.
              둘이 각자 계산하던 시절에 하나가 순위 백분위로 새어 나갔다
-             (2026-08-20 수리). 여기 게이지는 처음부터 선형이었고, 그 산술이
-             옮겨 간 것뿐이다. */
+             (2026-08-20 수리). */
           const posPct = rangePosition(now, min, max);
-          const hasGauge = posPct != null && pct != null;
-          const frac = hasGauge ? posPct / 100 : 0;
-          const avgPct = rangePosition(avg, min, max);
-          const avgFrac = hasGauge && avgPct != null ? avgPct / 100 : null;
-          const extreme = hasGauge && isExtreme(pct);
+          const extreme = pct != null && isExtreme(pct);
           return (
-            <tr key={kf.label}>
-              <td className="sr-keyfwd-name">{kf.label}</td>
-              <td className="sr-keyfwd-now">{fmtLevel(now, '%')}</td>
-              <td className="sr-keyfwd-track">
-                {hasGauge ? (
-                  <GaugeTrack frac={frac} avgFrac={avgFrac} extreme={extreme} />
+            <TableRow
+              key={kf.label}
+              style={{ height: ROW_H }}
+              /* 「자기 52주 범위의 끝에 와 있다」는 **행의 사실**이다 — 백분위 칸의
+                 잉크가 그것을 말하고, 이 속성은 그 사실을 가드가 잴 수 있게 남긴다
+                 (`data-sr-row`·`data-sr-divider` 와 같은 용법). */
+              data-sr-extreme={extreme ? 'true' : undefined}
+            >
+              {/* 이름 칸은 두 줄 스택 — 둘째 줄은 목록과 **같은 문장**이다
+                  (`table/cells.ts::subText` 의 「1년 평균 …」). 평균이 여기 있으니
+                  트랙은 자리 하나만 말하면 된다. */}
+              <TableCell>
+                <VStack as="span" className="sr-name-stack">
+                  <Text as="span" font="label1" noWrap>{kf.label}</Text>
+                  <Text as="span" font="legal" color="fgMuted" noWrap>
+                    1년 평균 {rangeText(avg, '%')}%
+                  </Text>
+                </VStack>
+              </TableCell>
+              <TableCell className="sr-num" justifyContent="flex-end">
+                <Text as="span" font="label2" tabularNumbers noWrap>{fmtLevel(now, '%')}</Text>
+              </TableCell>
+              {/* 변화 셀 = 캐논 네 부품 한 벌(배경 틴트·방향 클래스·↗↘·무부호). */}
+              <TableCell className="sr-num" justifyContent="flex-end" style={tintStyle(d1)}>
+                <Text as="span" font="label2" tabularNumbers noWrap className={directionClass(d1)}>
+                  {directionGlyph(d1)}
+                  {directionGlyph(d1) ? ' ' : ''}
+                  {unsignedDelta(fmtDelta(d1, '%'))}
+                </Text>
+              </TableCell>
+              <TableCell className="sr-num" justifyContent="flex-end">
+                <Text as="span" font="label2" tabularNumbers noWrap>{rangeText(min, '%')}</Text>
+              </TableCell>
+              <TableCell className="sr-num" justifyContent="flex-end">
+                <Text as="span" font="label2" tabularNumbers noWrap>{rangeText(max, '%')}</Text>
+              </TableCell>
+              <TableCell className="sr-num">
+                {posPct == null ? (
+                  <Text as="span" font="label2" color="fgMuted" noWrap>—</Text>
                 ) : (
-                  <TextCaption as="span" color="fgMuted">
-                    —
-                  </TextCaption>
+                  /* `.sr-track` 은 폭 없는 블록이라(Main 에선 `.sr-range` 격자가
+                     폭을 준다) 여기서는 고정폭 상자가 트랙 길이를 진다 — 없으면
+                     2px 짜리 점으로 접힌다(2026-08-25 실측). */
+                  <Box as="span" width={96} display="block">
+                    <span
+                      className="sr-track"
+                      title={`52주 최저↔최고의 ${Math.round(posPct)}% 지점`}
+                      /* `.sr-track` 은 뒤쪽 여백 12px 을 달고 있다 — Main 의
+                         `.sr-range` 격자에서 다음 칸(세타)과 벌리려는 것이다.
+                         여기서는 트랙이 칸의 마지막이라 그 여백이 오른쪽 끝을
+                         12px 밀어 머리글 「위치」와 어긋난다(실측 2026-08-25).
+                         이 칸에서만 0 으로 둔다. */
+                      style={{ marginInlineEnd: 0 }}
+                    >
+                      <span className="sr-track-mark" style={{ left: `${posPct}%` }} />
+                    </span>
+                  </Box>
                 )}
-              </td>
-              <td className={`sr-keyfwd-pct${extreme ? ' sr-keyfwd-extreme' : ''}`}>
-                {hasGauge ? Math.round(pct) : '—'}
-              </td>
-            </tr>
+              </TableCell>
+              {/* 극단은 **밝기**로 말한다(색상이 아니라) — 방향색은 이 열의 뜻이
+                  아니고, 여기 빨강/파랑을 쓰면 상승·하락을 말하는 것처럼 보인다. */}
+              <TableCell className="sr-num" justifyContent="flex-end">
+                <Text
+                  as="span"
+                  font="label2"
+                  tabularNumbers
+                  noWrap
+                  color={extreme ? 'fg' : 'fgMuted'}
+                >
+                  {pct == null ? '—' : Math.round(pct)}
+                </Text>
+              </TableCell>
+            </TableRow>
           );
         })}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }
 
-/** 자기 52주 범위의 양 끝 근처면 "극단" 이다. 표시가 꽉 찬 잉크가 되므로
+/** 자기 52주 범위의 양 끝 근처면 "극단" 이다. 백분위가 꽉 찬 잉크가 되므로
  * 99분위 행이 72분위 행과 구별된다. */
 const GAUGE_EXTREME_PCT = 90;
 
 function isExtreme(pct: number): boolean {
   return pct >= GAUGE_EXTREME_PCT || pct <= 100 - GAUGE_EXTREME_PCT;
-}
-
-/** 52주 최저→최고 트랙, 지금까지의 채움, 그 위의 표시, 그리고 **평균 눈금** 하나.
- * 고저만으로는 범위가 얼마나 넓은지밖에 모른다 — 평균이 있어야 지금이 그 안에서
- * 어디인지 읽힌다.
- *
- * 극단인지 아닌지는 **밝기**로 구분한다(색상이 아니라) — 방향색은 이 트랙의
- * 뜻이 아니고, 여기에 빨강/파랑을 쓰면 상승·하락을 말하는 것처럼 보인다. */
-function GaugeTrack({
-  frac,
-  avgFrac,
-  extreme,
-}: {
-  frac: number;
-  avgFrac: number | null;
-  extreme: boolean;
-}) {
-  const pos = `${(frac * 100).toFixed(1)}%`;
-  return (
-    <div className="sr-gauge">
-      <div className="sr-gauge-fill" style={{ width: pos }} />
-      {avgFrac != null ? (
-        <div className="sr-gauge-avg" style={{ left: `${(avgFrac * 100).toFixed(1)}%` }} />
-      ) : null}
-      <div
-        className={`sr-gauge-dot${extreme ? ' sr-gauge-extreme' : ''}`}
-        style={{ left: pos }}
-      />
-    </div>
-  );
 }

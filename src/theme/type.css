@@ -1440,97 +1440,13 @@ thead th {
   background: var(--sr-card);
 }
 
-/* ── 주요 포워드 + 게이지 (`ui/ForwardMatrix.tsx`) ──────────────────────────*/
-.sr-keyfwd {
-  border-collapse: separate;
-  border-spacing: 0;
-  font-size: 13px;
-}
-
-.sr-keyfwd th,
-.sr-keyfwd td {
-  height: 26px;
-  padding: 0 2px;
-  white-space: nowrap;
-}
-
-.sr-keyfwd-name {
-  min-width: 72px;
-  text-align: left;
-  font-weight: 500;
-}
-
-.sr-keyfwd-now {
-  min-width: 96px;
-  padding-right: 12px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.sr-keyfwd-track {
-  min-width: 170px;
-  padding: 0 6px;
-}
-
-.sr-keyfwd-ends {
-  display: flex;
-  justify-content: space-between;
-}
-
-.sr-keyfwd-pct {
-  min-width: 40px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: var(--color-fgMuted);
-}
-
-/* 극단은 **밝기**로 말한다 — 색상이 아니라. 이 트랙에 방향색을 쓰면 상승·하락을
-   말하는 것처럼 보이는데, 여기 뜻은 "자기 범위 안의 자리" 다. */
-.sr-keyfwd-extreme {
-  color: var(--color-fg);
-  font-weight: 600;
-}
-
-.sr-gauge {
-  position: relative;
-  width: 100%;
-  min-width: 150px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--color-bgLine);
-}
-
-.sr-gauge-fill {
-  position: absolute;
-  inset-block: 0;
-  left: 0;
-  border-radius: 999px;
-  background: var(--color-fg);
-  opacity: 0.2;
-}
-
-.sr-gauge-avg {
-  position: absolute;
-  top: 50%;
-  width: 1px;
-  height: 10px;
-  transform: translate(-50%, -50%);
-  background: var(--color-fgMuted);
-}
-
-.sr-gauge-dot {
-  position: absolute;
-  top: 50%;
-  width: 10px;
-  height: 10px;
-  transform: translate(-50%, -50%);
-  border-radius: 999px;
-  background: var(--color-fgMuted);
-}
-
-.sr-gauge-extreme {
-  background: var(--color-fg);
-}
+/* ── 주요 포워드 [감사 2026-08-25 — `.sr-keyfwd` · `.sr-gauge` 삭제] ─────────
+   이 자리에 이 블록만의 표 스타일(26px 행)과 게이지 부품 다섯이 있었다. 둘 다
+   캐논에 이미 있는 것의 중복이었다 — 표는 CDS `Table` + `ROW_H`, 52주 자리는
+   `.sr-track`/`.sr-track-mark`. `ui/ForwardMatrix.tsx::KeyForwardBlock` 은 이제
+   그 부품들을 임포트해서 서고, 이 파일에 자기 몫의 CSS 를 두지 않는다.
+   (위의 격자 `.sr-matrix*` 는 남는다 — 열 열 개짜리 숫자 면이라 CDS 셀 여백을
+   감당할 수 없고, 그 사유는 컴포넌트 머리 주석에 적혀 있다.) */
 
 /* ── 하단 기준점 띠 (`ui/BottomStrip.tsx`) ──────────────────────────────────
    페이지 기둥의 **마지막 flex 아이템**이다(`fixed` 아님 — 컴포넌트 주석 참조).

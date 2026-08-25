@@ -34,7 +34,9 @@ import { byAbsChange, byTenor, unmappedRows } from './sortKey';
 import { directionClass, directionGlyph, tintStyle, unsignedDelta } from './tint';
 import { ROW_ATTR, ROW_SELECTOR, useFlipReorder } from './useFlipReorder';
 
-const BASIS_LABEL: Record<BasisKey, string> = { d1: '1D', mtd: 'MTD', ytd: 'YTD' };
+/** 변화 열의 머리글 — **앱 하나에 한 벌**이다(캐논). 다른 표가 같은 양을 보여줄
+ * 때 여기서 가져다 쓴다. 손으로 다시 적으면 한쪽만 낡는다. */
+export const BASIS_LABEL: Record<BasisKey, string> = { d1: '1D', mtd: 'MTD', ytd: 'YTD' };
 
 /**
  * 52주 레인지 안에서 오늘이 어디인지 — 낮은 쪽에서 높은 쪽으로 그은 선 위의 표식.
