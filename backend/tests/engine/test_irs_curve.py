@@ -54,17 +54,33 @@ def test_cd_avg_terminal_extension():
 
 @needs_data
 def test_ou_fit_sane_and_json_locked():
-    """OU parameters are stationary and the shipped json matches a refit."""
+    """OU parameters are stationary and the shipped json matches a refit
+    **on the data it was baked from**.
+
+    [개조 2026-08-25 — 감사록 F2] 종전에는 «오늘 데이터 전량» 재적합과
+    비교했다 — 데이터는 아침마다 전진하고 산출물 JSON 은 동결이라, 산출물이
+    옳아도 하루만 지나면 적색이 되는 설계였다(실측: 10y μ 0.10bp 드리프트로
+    상시 실패). 락은 산출물에 박힌 워터마크(`quotes_as_of`)까지 데이터를
+    잘라 재적합해야 정확 대조가 되고, 데이터 전진에 면역이 된다. 신선도는
+    별도 단언이 진다 — 90일 넘게 재베이크가 없으면 그때는 진짜로 소리친다.
+    """
+    import datetime as dt
+
     from bigfoot.irs_curve.data import load_clean, spreads
-    sp = spreads(load_clean())
-    ou = satellite.fit_ou(sp)
     j = json.loads((OUT / "irs_curve_forecast.json").read_text("utf-8"))
+    wm = j["quotes_as_of"]
+    sp = spreads(load_clean()).loc[:wm]
+    assert len(sp), f"데이터가 워터마크({wm})까지 없다 — 베이크와 데이터를 같이 커밋했는가"
+    ou = satellite.fit_ou(sp)
     for tenor, p in ou.items():
         assert 0.0 < p["phi_daily"] < 1.0
         assert 0.0 < p["phi_quarterly"] < 1.0
         shipped = j["spread_satellite"]["ou"][tenor]
         assert abs(shipped["mu_bp"] - p["mu_bp"]) < 0.05, tenor
         assert abs(shipped["phi_daily"] - p["phi_daily"]) < 1e-3, tenor
+    # 신선도 — 워터마크가 90일 뒤처지면 산출물이 죽은 것이다(락 면역과 별개).
+    staleness = (dt.date.today() - dt.date.fromisoformat(wm)).days
+    assert staleness < 90, f"forecast 산출물이 {staleness}일 낡았다 — 재베이크 필요"
 
 
 @needs_data
