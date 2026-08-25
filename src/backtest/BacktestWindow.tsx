@@ -51,6 +51,7 @@ import {
   BacktestUnavailable,
   fetchBacktest,
   fetchCashBondSeries,
+  fetchFuturesSeries,
   isBondKind,
   isFuturesKind,
   runErrorMessage,
@@ -138,8 +139,9 @@ export function pointOnOrAfter(
  *
  * 채권 id 는 **다른 경로**다(민평은 SQL 에만 있다). 캐시가 하나인 이유는 id 가
  * 하나이기 때문이다 — `CB:KTB:3Y` 는 어느 경로로 왔든 같은 계열이다. */
-const seriesCache = new Map<string, Promise<{ t: string; v: number }[] | null>>();
-function loadSeriesPoints(id: string): Promise<{ t: string; v: number }[] | null> {
+type SeriesPoint = { t: string; v: number; y?: number | null };
+const seriesCache = new Map<string, Promise<SeriesPoint[] | null>>();
+function loadSeriesPoints(id: string): Promise<SeriesPoint[] | null> {
   let hit = seriesCache.get(id);
   if (!hit) {
     hit = (async () => {
@@ -148,9 +150,17 @@ function loadSeriesPoints(id: string): Promise<{ t: string; v: number }[] | null
           const s = await fetchCashBondSeries(id);
           return s.points;
         }
+        /* 선물·퓨처스왑도 자기 길이다 [OWNER, 2026-08-25]. 여기가 없던 동안
+           `FUT:3Y` 는 아래 `/api/series` 로 떨어져 **404** 였고(실측), 그래서
+           진입 레벨이 «—» 로 서고 「종목 추이」 차트가 안 그려져 커서 리드아웃
+           까지 같이 죽었다. 선물 점은 `y`(내재금리)를 더 지고 온다. */
+        if (isFuturesKind(bookKindOf(id))) {
+          const s = await fetchFuturesSeries(id);
+          return s.points;
+        }
         const r = await fetch(seriesUrl(id, 'full'));
         if (!r.ok) return null;
-        const j = (await r.json()) as { points?: { t: string; v: number }[] };
+        const j = (await r.json()) as { points?: SeriesPoint[] };
         return j.points ?? null;
       } catch {
         return null;
@@ -159,6 +169,34 @@ function loadSeriesPoints(id: string): Promise<{ t: string; v: number }[] | null
     seriesCache.set(id, hit);
   }
   return hit;
+}
+
+/** 이 줄의 진입 레벨 칸이 적을 것 — 한 곳에서 정한다.
+ *
+ * 스왑·채권은 «값 + CD», 선물은 «가격 + 내재금리» 다 [OWNER 선택, 2026-08-25 —
+ * "가격 + 내재금리 둘 다"]. 선물 줄에 CD 를 적지 않는 이유는 CD 가 그 줄의
+ * 기준이 아니기 때문이다 — 선물을 읽을 때 옆에 있어야 하는 수는 자기 내재금리다.
+ * 퓨처스왑은 가격이 아니라 스프레드(bp)라 둘째 줄이 없다. */
+function entryLevelLines(
+  id: string,
+  unit: Unit,
+  p: SeriesPoint | null,
+  cd: { t: string; v: number } | null,
+): { main: string; sub: string } {
+  const kind = bookKindOf(id);
+  if (kind === 'futures') {
+    return {
+      main: p ? `${fmtLevel(p.v, '가격')}` : '—',
+      sub: p?.y != null ? `내재 ${fmtLevel(p.y, '%')}%` : '내재 —',
+    };
+  }
+  if (kind === 'futuresswap') {
+    return { main: p ? `${fmtLevel(p.v, 'bp')}bp` : '—', sub: '내재 − IRS' };
+  }
+  return {
+    main: p ? `${fmtLevel(p.v, unit)}${unitSuffix(unit)}` : '—',
+    sub: cd ? `CD ${fmtLevel(cd.v, '%')}%` : 'CD —',
+  };
 }
 
 /** 서버가 실제로 가격한 다리로 만든 문장. 실행 뒤에는 추론할 이유가 없다 —
@@ -726,18 +764,24 @@ export function BacktestWindow({
                           2026-08-25: 977/986) 폭을 늘리는 길은 없었다. */}
                       <VStack height={32} justifyContent="center">
                         {(() => {
-                          const p = pointOnOrAfter(points[r.id], r.entry);
-                          const c = pointOnOrAfter(cdPoints ?? undefined, r.entry);
+                          /* 무엇을 적을지는 `entryLevelLines` 하나가 정한다 —
+                             선물은 «가격 + 내재금리», 나머지는 «값 + CD». */
+                          const line = entryLevelLines(
+                            r.id,
+                            unit,
+                            pointOnOrAfter(points[r.id], r.entry),
+                            pointOnOrAfter(cdPoints ?? undefined, r.entry),
+                          );
                           return (
                             <>
                               {/* 값 13px — 이 행의 나머지 다섯 컨트롤과 같은 크기다
                                   (`window/popup.ts` 의 그 규칙이 「진입 레벨」을
                                   이름으로 부르는데 여기만 14px 였다). */}
                               <Text as="span" font="legal" tabularNumbers noWrap>
-                                {p ? `${fmtLevel(p.v, unit)}${unitSuffix(unit)}` : '—'}
+                                {line.main}
                               </Text>
                               <Text as="span" font="legal" color="fgMuted" tabularNumbers noWrap>
-                                {c ? `CD ${fmtLevel(c.v, '%')}%` : 'CD —'}
+                                {line.sub}
                               </Text>
                             </>
                           );
@@ -905,8 +949,19 @@ export function BacktestWindow({
                 return (
                   <LinkedCharts
                     points={win}
+                    /* 선물은 «가격», 퓨처스왑은 스프레드 «bp» 다 [OWNER 선택,
+                       2026-08-25]. id 에 '-' 가 없어 예전 규칙으로는 둘 다 '%'
+                       로 읽혔는데, 그 축에 103.22 를 그리면 눈금이 «103.22%» 가
+                       된다 — 계열이 오기 시작한 지금에야 보이는 자리다. */
                     unit={
-                      bondById.get(firstId)?.unit ?? (firstId.includes('-') ? 'bp' : '%')
+                      bondById.get(firstId)?.unit ??
+                      (bookKindOf(firstId) === 'futures'
+                        ? '가격'
+                        : bookKindOf(firstId) === 'futuresswap'
+                          ? 'bp'
+                          : firstId.includes('-')
+                            ? 'bp'
+                            : '%')
                     }
                     result={result}
                     policy={policy}

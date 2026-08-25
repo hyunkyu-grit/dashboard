@@ -180,6 +180,81 @@ def as_position(series_id: str, direction: int, notional: float,
     return FuturesPosition(kind, tenor, direction, notional, entry, exit)
 
 
+# ── 계열 (화면이 읽는 히스토리) ─────────────────────────────────────────────
+
+def instrument_label(kind: str, tenor: str) -> str:
+    return (FUT_LABELS if kind == KIND_FUT else FSW_LABELS)[tenor]
+
+
+def series_payload(fut: FuturesData, dataset, series_id: str, res: str = "full") -> dict:
+    """한 선물·퓨처스왑 계열의 전 기간 — `/api/series/{id}` 와 **같은 몸통**.
+
+    ── 왜 이 함수가 생겼나 [OWNER, 2026-08-25] ────────────────────────────────
+    백테스트 창의 진입 레벨이 선물 줄에서만 «—» 였고, 커서를 대도 손익이 안
+    따라왔다. 원인은 하나였다: 창이 종목 히스토리를 `/api/series/{id}` 로 받는데
+    **`FUT:3Y` 는 그 카탈로그에 없어 404** 였다(실측 2026-08-25). 히스토리가
+    비면 진입 레벨이 «—» 로 서고, 「종목 추이 ↔ 누적 손익」 한 쌍 중 위 차트가
+    아예 안 그려져서 스크러버·리드아웃까지 같이 사라진다. 데이터가 없어서가
+    아니라 닿는 길이 없어서였다 — 같은 종가로 시뮬레이션은 이미 내재금리를
+    찍고 있었다.
+
+    `cashbond.series_for` 와 같은 규율이다: 몸통은 `derive.series_history` 를
+    쓴다. 같은 차트 부품이 먹을 모양이어야 하기 때문이다(점마다 전일 대비 `d`,
+    52주 min/max/avg).
+
+    ── 두 단위를 한 번에 [OWNER 선택, 2026-08-25 — "가격 + 내재금리 둘 다"] ──
+    선물은 **가격으로 거래되고 금리로 읽힌다**. 둘 중 하나만 실으면 한쪽 화면이
+    딴 말을 한다(Main 국채선물 행은 「가격」 단위이고 백테스트 결과 줄은 이미
+    내재금리로 적는다). 그래서 `points` 는 가격이고, 점마다 `y` 에 그 날의
+    내재금리를 같이 싣는다 — 진입 레벨 칸이 두 줄로 그 둘을 적는다.
+    다운샘플(res=preview)을 지나도 어긋나지 않게 **날짜로** 맞춘다.
+
+    퓨처스왑은 가격이 아니라 **스프레드**(내재 − IRS, bp)라 `y` 가 없다. 그
+    다리 결합은 MR 보드(`app/mr.py::_fut_bundle`)와 같은 정의이고, 같은 inner
+    join 규율이다 — 양쪽 다 마킹이 있는 날만, 보간·이월 없음.
+    """
+    from .derive import series_history
+    from .payloads import series_pairs
+
+    kind, tenor = parse_id(series_id)
+    fs = fut.series.get(tenor)
+    if fs is None or not fs.dates:
+        raise FuturesError(f"{tenor} 선물 종가가 없습니다.")
+    years = FUT_YEARS[tenor]
+
+    if kind == KIND_FUT:
+        pairs = [(d.isoformat(), float(c)) for d, c in zip(fs.dates, fs.close)]
+        unit = "가격"
+        ylut = {t: round(implied_yield(v, years), 4) for t, v in pairs}
+    else:
+        # IRS 다리는 데이터셋의 그 테너 — 엔진이 다리를 세울 때 읽는 것과
+        # 같은 출처다(두 번째 정의 금지).
+        irs_pairs, _u = series_pairs(dataset, tenor)
+        irs_by = dict(irs_pairs)
+        pairs = []
+        for d, c in zip(fs.dates, fs.close):
+            t = d.isoformat()
+            leg = irs_by.get(t)
+            if leg is None:
+                continue
+            pairs.append((t, round((implied_yield(float(c), years) - float(leg)) * 100.0, 4)))
+        unit = "bp"
+        ylut = None
+    if not pairs:
+        raise FuturesError(f"{series_id}: 그릴 수 있는 날이 없습니다.")
+
+    body = series_history(pairs, unit, res)
+    if ylut is not None:
+        for p in body["points"]:
+            p["y"] = ylut.get(p["t"])
+    return {
+        "id": series_id,
+        "label": instrument_label(kind, tenor),
+        "asof": pairs[-1][0],
+        **body,
+    }
+
+
 # ── 달력 ────────────────────────────────────────────────────────────────────
 
 def calendar_of(fut: FuturesData, dataset, pos: FuturesPosition) -> list[dt.date]:

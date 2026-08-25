@@ -173,6 +173,70 @@ def _spec():
     return fd.FundingSpec(basis="call", spread_bp=0.0)
 
 
+# ── ②-b 계열 (진입 레벨·종목 추이 차트가 읽는 것) ───────────────────────────
+
+class TestSeriesPayload:
+    """`/api/futures/series/{id}` [OWNER, 2026-08-25].
+
+    이 표면이 없던 동안 백테스트 창은 선물 히스토리를 `/api/series/{id}` 로
+    찾다가 **404** 를 받았고, 그래서 진입 레벨이 «—» 로 서고 「종목 추이」
+    차트가 통째로 안 그려져 커서 리드아웃까지 죽었다. 여기서 잠그는 것은
+    그 회귀다: 선물은 가격 + 내재금리 둘 다, 퓨처스왑은 스프레드 bp.
+    """
+
+    def test_fut_carries_price_and_implied_yield(self):
+        path = [104.0, 104.2, 104.5, 104.1, 103.8, 103.9,
+                104.0, 104.3, 104.6, 104.4, 104.2, 104.0]
+        body = ft.series_payload(_futdata(path), _dataset(), "FUT:3Y")
+        assert body["unit"] == "가격"
+        assert body["label"] == "KTB3 선물"
+        assert len(body["points"]) == len(DATES)
+        # 값은 종가 그대로, y 는 그 종가의 내재금리 — 두 번째 수학 금지.
+        for p, close in zip(body["points"], path):
+            assert p["v"] == pytest.approx(close)
+            assert p["y"] == pytest.approx(round(implied_yield(close, 3), 4))
+        # 가격은 %가 아니므로 전일 대비를 ×100 하지 않는다(bp 로 뻥튀기 금지).
+        assert body["points"][1]["d"] == pytest.approx(path[1] - path[0], abs=5e-3)
+
+    def test_fsw_is_spread_in_bp_without_yield(self):
+        path = [104.0] * len(DATES)
+        body = ft.series_payload(_futdata(path), _dataset(), "FSW:3Y")
+        assert body["unit"] == "bp"
+        assert body["label"] == "퓨처스왑 3Y"
+        # 평평한 IRS(3.00) 대비 — 내재 − IRS, bp.
+        want = round((implied_yield(104.0, 3) - FLAT) * 100.0, 4)
+        assert body["points"][-1]["v"] == pytest.approx(want, abs=1e-3)
+        assert "y" not in body["points"][-1]
+
+    def test_fsw_drops_days_without_an_irs_mark(self):
+        """inner join 규율 — 보간도 이월도 없다(MR 보드와 같은 규칙)."""
+        rates = {n: [FLAT] * len(DATES) for n in NODES}
+        short = Dataset(dates=DATES[:5], series={n: v[:5] for n, v in rates.items()},
+                        tenor_order=list(NODES), source="test")
+        body = ft.series_payload(_futdata([104.0] * len(DATES)), short, "FSW:3Y")
+        assert len(body["points"]) == 5
+
+    def test_unknown_id_is_a_futures_error(self):
+        with pytest.raises(ft.FuturesError):
+            ft.series_payload(_futdata([104.0] * len(DATES)), _dataset(), "FUT:7Y")
+
+    def test_route_serves_it(self):
+        """`with TestClient(app)` 를 쓰지 않는다 — 이 파일의 아래쪽 관례와 같다.
+
+        컨텍스트 매니저는 **lifespan 을 띄우고**, 이 앱의 기동은 SQL 을 읽고
+        `backend/output/` 의 굽기 산출물을 다시 쓴다. 그러면 같은 세션의
+        `test_rebake` 넷이 어제 것을 보고 실패한다 — 파일 단독으로는 통과하고
+        전체 실행에서만 빨개지는 오염이었다(실측 2026-08-25). 라우트만 재는 데
+        기동은 필요 없다.
+        """
+        ft.set_data(_futdata([104.0] * len(DATES)))
+        c = TestClient(app)
+        r = c.get("/api/futures/series/FUT:3Y")
+        assert r.status_code == 200
+        assert r.json()["unit"] == "가격"
+        assert c.get("/api/futures/series/FUT:7Y").status_code == 422
+
+
 # ── ③ FSW ──────────────────────────────────────────────────────────────────
 
 class TestFsw:

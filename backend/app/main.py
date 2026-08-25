@@ -697,6 +697,22 @@ def cashbond_instruments() -> dict:
         raise HTTPException(status_code=422, detail=str(exc))
 
 
+@router.get("/api/futures/series/{series_id}")
+def futures_series(series_id: str, res: str = "full") -> dict:
+    """국채선물·퓨처스왑 한 계열의 전 기간 — 백테스트 창의 진입 레벨과
+    「종목 추이」 차트가 읽는다 [OWNER, 2026-08-25].
+
+    `/api/cashbond/series/{id}` 와 같은 자리의 같은 규율이다: 현금채권도 선물도
+    `/api/series/{id}`(IRS 카탈로그)에 없는 계열이라 자기 길을 가지되, **몸통은
+    같은 `derive.series_history`** 를 쓴다. 사유와 단위 규약은 `futures.py::
+    series_payload` 머리에 있다.
+    """
+    try:
+        return futures.series_payload(futures.load(), _dataset, series_id, res)
+    except futures.FuturesError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
 @router.get("/api/cashbond/series/{series_id}")
 def cashbond_series(series_id: str) -> dict:
     """한 종목의 전 기간 시계열 — 표를 눌렀을 때 뜨는 차트가 읽는다.

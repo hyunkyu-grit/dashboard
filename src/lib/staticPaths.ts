@@ -157,6 +157,11 @@ export const universeUrl = () => liveUrl("/api/universe");
 export const universeSeriesUrl = (id: string) =>
   liveUrl(`/api/universe/series/${encodeURIComponent(id)}`);
 
+/** 국채선물·퓨처스왑 한 계열의 히스토리 [2026-08-25]. `/api/series` 와 달리
+ * 정적 쌍둥이가 없다(선물 종가가 SQL 에만 있다 — 현금채권과 같은 사정). */
+export const futuresSeriesUrl = (id: string) =>
+  liveUrl(`/api/futures/series/${encodeURIComponent(id)}`);
+
 export const rvAnalysisUrl = (query: string) => liveUrl("/api/rv/analysis", query);
 export const rvHistoryUrl = (query: string) => liveUrl("/api/rv/history", query);
 

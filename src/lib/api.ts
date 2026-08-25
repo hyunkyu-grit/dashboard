@@ -15,6 +15,7 @@ import {
   dv01Url,
   forwardsUrl,
   fundingSettingsUrl,
+  futuresSeriesUrl,
   healthUrl,
   IS_STATIC,
   manifestUrl,
@@ -850,6 +851,28 @@ export interface CashBondSeries {
 
 export async function fetchCashBondSeries(id: string): Promise<CashBondSeries> {
   return liveJson(cashbondSeriesUrl(id), "cashbond/series");
+}
+
+/**
+ * 국채선물·퓨처스왑 한 계열 [OWNER, 2026-08-25]. 현금채권과 같은 이유로 자기
+ * 길이 있다 — `/api/series/{id}`(IRS 카탈로그)에 `FUT:3Y` 가 없어 **404** 였고,
+ * 그래서 백테스트 창의 진입 레벨이 «—» 로 서고 「종목 추이」 차트가 통째로
+ * 안 그려졌다(커서 리드아웃이 그 차트에 붙어 있다).
+ *
+ * `points[].y` 는 **선물만** 있는 내재금리(%)다. 선물은 가격으로 거래되고
+ * 금리로 읽히므로 둘 다 싣는다 [OWNER 선택] — 퓨처스왑은 가격이 아니라
+ * 스프레드(bp)라 `y` 가 없다.
+ */
+export interface FuturesSeries {
+  id: string;
+  label: string;
+  unit: Unit;
+  points: (HistoryPoint & { y?: number | null })[];
+  stats: SeriesStats | null;
+}
+
+export async function fetchFuturesSeries(id: string): Promise<FuturesSeries> {
+  return liveJson(futuresSeriesUrl(id), "futures/series");
 }
 
 /* 현금채권 전용 백테스트 fetcher 는 은퇴했다 [2026-08-21]. 북이 하나가 되면서
