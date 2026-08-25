@@ -29,9 +29,11 @@ import {
 } from '../src/ui/nav';
 
 describe('Strategy 세입자', () => {
-  it('지금은 Credit RV 하나다', () => {
-    expect(STRATEGY_ITEMS.map((i) => i.id)).toEqual(['credit-rv']);
+  it('세입자 둘 — Credit RV 와 Mean Reversion(2026-08-25 입주)이다', () => {
+    expect(STRATEGY_ITEMS.map((i) => i.id)).toEqual(['credit-rv', 'mean-reversion']);
     expect(STRATEGY_ITEMS[0]!.label).toBe('Credit RV');
+    expect(STRATEGY_ITEMS[1]!.label).toBe('Mean Reversion');
+    /* 기본은 첫 세입자 그대로 — 예전 `?g=strategy` 링크가 가리키던 화면이다. */
     expect(DEFAULT_STRATEGY).toBe('credit-rv');
   });
 

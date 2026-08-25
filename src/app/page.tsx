@@ -46,6 +46,7 @@ import { defaultEntry, isBookable, newRow } from '@/backtest/book';
 import { SettingView } from '@/ui/SettingView';
 import { BondTypeFilter } from '@/ui/BondTypeFilter';
 import { SimulationPage, type CaseRuns } from '@/sim/SimulationPage';
+import { MrPage } from '@/mr/MrPage';
 import { RvPage } from '@/rv/RvPage';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { StartFilter } from '@/ui/StartFilter';
@@ -419,18 +420,19 @@ const BANNER_H = 34;
       <TopNav
         tab={tab}
         lab={lab}
+        strategy={strategy}
         lastGroup={group}
-        onNavigate={(t, labId) => {
+        onNavigate={(t, labId, stratId) => {
           setGroupParam(t);
           /* Lab 을 떠나면 세입자 키를 URL 에서 걷는다 — 안 걷으면 Backtest 를
              보는 주소에 세입자 키가 남아 공유한 링크가 거짓을 말한다. */
           setLabParam(t === 'lab' ? (labId ?? lab) : undefined);
-          /* Strategy 도 같은 규칙이다 [2026-08-24]. 다만 세입자가 하나뿐이라
-             **기본값은 주소에 안 적는다** — 안 적어야 예전 `?g=strategy` 링크와
-             지금 주소가 같은 문자열이 되고, 「기본을 골랐다」와 「아무것도 안
-             골랐다」가 URL 에서 갈리지 않는다. 손으로 적어 둔 키는 Strategy 안에
-             있는 동안 지킨다. */
-          setStratParam(t === 'strategy' ? (stratParam ?? undefined) : undefined);
+          /* Strategy 도 같은 기계다 [2026-08-24 → 2026-08-25 둘째 입주로 Lab 과
+             완전히 같아졌다]: 패널에서 고른 세입자를 적고, 섹션 버튼이면 지금
+             세입자를 유지한다. 「기본값은 주소에 안 적는다」던 한-세입자 시절
+             규칙은 선택이 상태가 되면서 은퇴했다 — 예전 `?g=strategy` 링크는
+             여전히 기본 세입자로 떨어진다(resolveStrategy). */
+          setStratParam(t === 'strategy' ? (stratId ?? strategy) : undefined);
           setSelectedId(undefined);
           // a pending hover from the tab being left must not land on the new one
           clearTimeout(hoverTimer.current);
@@ -561,18 +563,18 @@ const BANNER_H = 34;
             <SettingView />
           </ErrorBoundary>
         ) : section === 'strategy' && !isGroupTab ? (
-          /* Strategy 의 세입자 [OWNER 2026-08-24]. 지금은 **Credit RV** 하나이고,
-             곧 둘째 전략이 들어온다. Lab 과 같은 모양의 분기다 — 세입자가 늘면
-             여기 한 줄씩 붙고, `nav.ts::PANELED` 에 'strategy' 를 더하면 메가
-             패널이 저절로 열린다.
+          /* Strategy 의 세입자 [OWNER 2026-08-24 분리 → 2026-08-25 둘째 입주].
+             Credit RV 와 Mean Reversion — Lab 과 같은 모양의 분기이고, 예고대로
+             둘째가 들어오며 `nav.ts::PANELED` 에 'strategy' 가 붙어 메가 패널이
+             열렸다.
 
-             Credit RV 는 라이브 전용이라(민평이 SQL 에만) 데이터 로드와 무관하게
-             자기 fetch 로 선다. */
+             둘 다 라이브 전용이라(민평·BSS·선물이 SQL 에만) 데이터 로드와
+             무관하게 자기 fetch 로 선다. */
           <ErrorBoundary
             region={STRATEGY_ITEMS.find((i) => i.id === strategy)?.label ?? '전략'}
             fallback="전략 화면을 그리지 못했어요."
           >
-            {strategy === 'credit-rv' ? <RvPage /> : null}
+            {strategy === 'credit-rv' ? <RvPage /> : <MrPage />}
           </ErrorBoundary>
         ) : section === 'lab' && !isGroupTab ? (
           /* Lab 의 세입자 = **커브 표면** [v1 2026-08-14]. v1 의 첫 세입자

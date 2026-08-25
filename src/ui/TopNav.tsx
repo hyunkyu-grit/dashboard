@@ -15,12 +15,14 @@ import {
   BACKTEST_CATEGORIES,
   LAB_ITEMS,
   PANELED,
+  STRATEGY_ITEMS,
   itemsOf,
   SECTIONS,
   sectionOf,
   tabForSection,
   type LabId,
   type SectionId,
+  type StrategyId,
   type TabId,
 } from './nav';
 
@@ -58,6 +60,7 @@ import {
 export function TopNav({
   tab,
   lab,
+  strategy,
   lastGroup,
   onNavigate,
   right,
@@ -65,8 +68,10 @@ export function TopNav({
   tab: TabId;
   /** Lab 안에서 지금 보고 있는 세입자. Lab 이 아닐 때는 의미가 없다. */
   lab: LabId;
+  /** Strategy 안에서 지금 보고 있는 세입자 — Lab 과 같은 기계다 [2026-08-25]. */
+  strategy: StrategyId;
   lastGroup: Group;
-  onNavigate: (t: TabId, lab?: LabId) => void;
+  onNavigate: (t: TabId, lab?: LabId, strategy?: StrategyId) => void;
   /** 오른쪽에 서는 것 — 지금은 신선도 칩. 참조의 Sign in / Sign up 자리다. */
   right?: React.ReactNode;
 }) {
@@ -97,8 +102,8 @@ export function TopNav({
   }, [open, close]);
 
   const go = useCallback(
-    (t: TabId, labId?: LabId) => {
-      onNavigate(t, labId);
+    (t: TabId, labId?: LabId, strategyId?: StrategyId) => {
+      onNavigate(t, labId, strategyId);
       close();
     },
     [onNavigate, close],
@@ -115,6 +120,7 @@ export function TopNav({
     target: TabId,
     on: boolean,
     labId?: LabId,
+    strategyId?: StrategyId,
   ) => (
     <ListCell
       key={key}
@@ -132,7 +138,7 @@ export function TopNav({
           {desc}
         </TextLabel2>
       }
-      onClick={() => go(target, labId)}
+      onClick={() => go(target, labId, strategyId)}
     />
   );
 
@@ -144,11 +150,12 @@ export function TopNav({
         </TextHeadline>
 
         <HStack className="sr-navitems" alignItems="center" gap={0.5} flexGrow={1}>
-          {/* 패널은 **Backtest 에만** 열린다 [OWNER 승인 2026-08-18 점검].
-              나머지 네 섹션은 항목이 하나뿐이라, hover 만으로 전 화면 스크림이
-              덮이는 것은 목록 없는 메뉴를 여는 셈이었다 — 목적지가 하나면
-              버튼이지 메뉴가 아니다. hover 로 다른 섹션에 들어오면 열린 패널은
-              닫는다(안 닫으면 Backtest 패널이 이웃 위에 계속 떠 있다). */}
+          {/* 패널은 **PANELED 섹션에만** 열린다(처음엔 Backtest 뿐 [OWNER 승인
+              2026-08-18 점검], Lab 2026-08-20 · Strategy 2026-08-25 합류).
+              항목이 하나뿐인 섹션에서 hover 만으로 전 화면 스크림이 덮이는 것은
+              목록 없는 메뉴를 여는 셈이다 — 목적지가 하나면 버튼이지 메뉴가
+              아니다. hover 로 다른 섹션에 들어오면 열린 패널은 닫는다(안 닫으면
+              이웃 위에 계속 떠 있다). */}
           {SECTIONS.map((s) => (
             <Pressable
               key={s.id}
@@ -218,6 +225,22 @@ export function TopNav({
                       it.desc,
                       'lab',
                       tab === 'lab' && it.id === lab,
+                      it.id,
+                    ),
+                  )}
+                </VStack>
+              ) : open === 'strategy' ? (
+                /* Strategy 세입자 — Lab 과 같은 기계, 같은 무위계 [2026-08-25]. */
+                <VStack className="sr-mega-col" gap={0.25}>
+                  {STRATEGY_ITEMS.map((it) =>
+                    item(
+                      it.id,
+                      it.glyph,
+                      it.label,
+                      it.desc,
+                      'strategy',
+                      tab === 'strategy' && it.id === strategy,
+                      undefined,
                       it.id,
                     ),
                   )}

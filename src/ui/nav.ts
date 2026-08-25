@@ -209,12 +209,11 @@ export function isLabId(v: string | undefined): v is LabId {
  * 세입자는 **탭이 아니라 URL 상태**다(`?g=strategy&s=credit-rv`). 탭을 늘리면
  * `sectionOf()` 가 드는 «섹션은 유도값» 규칙에 두 번째 상태가 끼어든다.
  *
- * ## 지금은 패널을 안 연다 [OWNER 선택]
+ * ## 둘째 세입자가 들어와 패널이 열렸다 [2026-08-25]
  *
- * 세입자가 하나뿐인 동안 Strategy 는 `PANELED` 에 안 들어간다 — 이 파일 위쪽이
- * 이미 적어 둔 규칙이다: **「목적지가 하나면 버튼이지 메뉴가 아니다」**. 구조
- * (URL 키·해석·목록·기본값)는 지금 다 세우고, 둘째가 들어오는 날 `PANELED` 에
- * 한 낱말을 더하면 패널이 저절로 열린다.
+ * 「지금은 패널을 안 연다」던 자리다 — 목적지가 둘이 되어 `PANELED` 에
+ * 'strategy' 가 들어갔고, 예고대로 가드(nav-strategy-tenants)가 먼저 빨개져서
+ * 이 이동을 요구했다.
  *
  * ## 이름에 대해 [OWNER 확인]
  *
@@ -222,7 +221,7 @@ export function isLabId(v: string | undefined): v is LabId {
  * 회사채AAA·카드채AA+·캐피탈채AA- 와 함께). 그 둘은 벤치마크로 같이 서는 것이고,
  * 데스크가 이 화면을 「크레딧 RV」로 부르는 것이 맞다는 판단이다. 화면이 그
  * 사실을 한 줄로 말한다. */
-export type StrategyId = 'credit-rv';
+export type StrategyId = 'credit-rv' | 'mean-reversion';
 
 export const DEFAULT_STRATEGY: StrategyId = 'credit-rv';
 
@@ -240,10 +239,23 @@ export const STRATEGY_ITEMS: {
        두 그림으로 부르지 않는다. */
     glyph: '◈',
   },
+  /* 둘째 세입자 [OWNER 2026-08-25]. **측정이지 신호가 아니다** — 사전등록 검증
+     (Desktop\bollinger-mr, 누적 108구성)이 「볼린저 재진입」 신호 문법을 NO-GO 로
+     닫았고, 이 화면은 그 결론 위에 선다: 밴드 대비 위치를 재서 세울 뿐 진입·
+     청산·추천을 말하지 않는다(Credit RV 의 「랭킹이지 투자판단이 아니다」와
+     같은 명구 의무). desc 도 그 문법이다 — 명령형·추천 금지. */
+  {
+    id: 'mean-reversion',
+    label: 'Mean Reversion',
+    desc: '평소 밴드 대비 얼마나 늘어났고 어디서 돌아섰는지 — 12계열 측정',
+    /* 진동 곡선 — 기존 글리프 계열(도형·화살)에 같은 뜻의 그림이 없어 새로
+       골랐다. vol 의 '〜'(상대 변동성)와는 딴 것이라 같은 그림을 안 쓴다. */
+    glyph: '∿',
+  },
 ];
 
 export function isStrategyId(v: string | undefined): v is StrategyId {
-  return v === 'credit-rv';
+  return v === 'credit-rv' || v === 'mean-reversion';
 }
 
 /** 내려간 세입자. 지금은 없지만 자리를 비워 둔다 — `RETIRED_LAB` 과 같은 이유로,
@@ -273,8 +285,10 @@ export function resolveLab(v: string | undefined): LabId {
   return (v && RETIRED_LAB[v]) || DEFAULT_LAB;
 }
 
-/** 메가 패널을 여는 섹션. 나머지는 목적지가 하나뿐이라 버튼이다. */
-export const PANELED: SectionId[] = ['backtest', 'lab'];
+/** 메가 패널을 여는 섹션. 나머지는 목적지가 하나뿐이라 버튼이다.
+ * Strategy 는 2026-08-25 둘째 세입자(Mean Reversion)와 함께 들어왔다 —
+ * 가드(nav-strategy-tenants)의 «세입자 수 ↔ 패널» 불변식이 요구한 이동이다. */
+export const PANELED: SectionId[] = ['backtest', 'lab', 'strategy'];
 
 /** 그 그룹이 속한 카테고리. 메가 패널에서 지금 자리를 표시할 때 쓴다. */
 export function categoryOf(g: Group): CategoryId | undefined {

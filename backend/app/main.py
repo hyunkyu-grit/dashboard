@@ -66,6 +66,7 @@ from irs_pricer.engine import curve_cache
 from . import instruments as instruments_mod
 from . import calendar_cache
 from . import df_cache
+from . import mr as mr_mod
 from . import payloads
 from . import rv as rv_mod
 from . import schedule_cache
@@ -805,6 +806,29 @@ def rv_history(sector: str, tenor: str, window: str = "52w") -> dict:
         return rv_mod.credit_history(creditmatrix.load(), sector, tenor, window)
     except creditmatrix.CreditMatrixError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("/api/mr/board")
+def mr_board() -> dict:
+    """Mean Reversion 측정면의 보드 — 12계열의 밴드 위치·상태·랭킹(§16).
+
+    universe 캐시와 같은 판단으로 `_dataset.data_key` 에 태운다: BSS·선물은
+    호출 시 SQL 이지만 하루 한 번 움직이는 입력이고, 캐시가 IRS 스냅샷과 같은
+    날 안에 두 소스를 묶는다. 히스토리는 무겁고 행마다 필요하지도 않아
+    `/api/mr/history` 가 따로 썬다.
+    """
+    p = cached("mr", _dataset.data_key, lambda: mr_mod.build_mr(_dataset))
+    return {k: v for k, v in p.items() if k != "history"}
+
+
+@router.get("/api/mr/history/{series_id:path}")
+def mr_history(series_id: str) -> dict:
+    """한 계열의 값+밴드 이력(약 1년) — 클릭 상세 차트의 재료."""
+    p = cached("mr", _dataset.data_key, lambda: mr_mod.build_mr(_dataset))
+    body = p["history"].get(series_id)
+    if body is None:
+        raise HTTPException(status_code=404, detail=f"unknown mr series {series_id}")
+    return body
 
 
 @router.get("/api/volatility")
