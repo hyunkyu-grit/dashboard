@@ -51,6 +51,7 @@ import { fmtLevel, unitSuffix } from '@/lib/format';
 import { fmtKrw } from '@/lib/krw';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { ReadoutCard, ReadoutLevel, ReadoutMoney, placeReadout } from '@/ui/ReadoutCard';
+import { Stat, StatColumn } from '@/ui/Stat';
 
 import {
   MR_STRATEGY_DEFAULTS,
@@ -111,20 +112,6 @@ function NumInput({
         if (e.key === 'Enter') commit();
       }}
     />
-  );
-}
-
-/** KPI 타일 — 작은 회색 라벨 + 굵은 숫자(공간문법). */
-function Kpi({ k, v, cls }: { k: string; v: string; cls?: string }) {
-  return (
-    <VStack gap={0.25}>
-      <Text font="caption" as="span" color="fgMuted" noWrap>
-        {k}
-      </Text>
-      <Text font="headline" as="span" tabularNumbers noWrap className={cls}>
-        {v}
-      </Text>
-    </VStack>
   );
 }
 
@@ -248,7 +235,7 @@ export function StrategyWindow({
                 <button
                   key={w}
                   type="button"
-                  className="sr-rv-pillbtn"
+                  className="sr-pillbtn"
                   data-on={knobs.lookback === w || undefined}
                   aria-pressed={knobs.lookback === w}
                   onClick={() => set({ lookback: w })}
@@ -295,7 +282,7 @@ export function StrategyWindow({
           </Box>
           <button
             type="button"
-            className="sr-rv-pillbtn"
+            className="sr-pillbtn"
             disabled={running}
             onClick={exec}
           >
@@ -321,23 +308,35 @@ export function StrategyWindow({
           </Text>
         ) : (
           <>
-            {/* ── KPI 타일 — 원본 다섯 그대로, 표기는 이 리포 문법(억/만). ── */}
-            <HStack gap={4} alignItems="flex-end" flexWrap="wrap">
-              <Kpi
-                k="총손익"
-                v={fmtKrw(run.summary.totalPnl)}
-                cls={run.summary.totalPnl > 0 ? 'sr-up' : run.summary.totalPnl < 0 ? 'sr-down' : undefined}
-              />
-              <Kpi k="최대 낙폭" v={fmtKrw(-run.summary.maxDrawdown)} />
-              <Kpi
-                k="승률"
-                v={run.summary.winRate == null ? '—' : `${Math.round(run.summary.winRate * 100)}%`}
-              />
-              <Kpi k="Sharpe" v={run.summary.sharpe == null ? '—' : run.summary.sharpe.toFixed(2)} />
-              <Kpi k="거래" v={String(run.summary.numTrades)} />
-              <Text font="legal" as="span" color="fgMuted" noWrap>
-                {run.asof} 까지 · 비용 편도 {run.params.costBp}bp · 명목 ₩{run.params.notional.toLocaleString()}/bp
-              </Text>
+            {/* ── 성과 — 원본 KPI 다섯, 부품은 이 앱의 스트립(`ui/Stat.tsx`).
+                   첫 판은 같은 모양을 손으로 다시 만들었다(중복). 표기는 이 리포
+                   문법(억/만), 방향색은 손익에만 — 낙폭은 늘 음수라 색이 정보를
+                   더하지 않는다. */}
+            <HStack className="sr-stats" alignItems="stretch" width="100%">
+              <StatColumn title="성과">
+                <Stat
+                  label="총손익"
+                  value={fmtKrw(run.summary.totalPnl)}
+                  tone={
+                    run.summary.totalPnl > 0 ? 'up' : run.summary.totalPnl < 0 ? 'down' : undefined
+                  }
+                />
+                <Stat label="최대 낙폭" value={fmtKrw(-run.summary.maxDrawdown)} />
+                <Stat
+                  label="승률"
+                  value={run.summary.winRate == null ? '—' : `${Math.round(run.summary.winRate * 100)}%`}
+                />
+                <Stat
+                  label="Sharpe"
+                  value={run.summary.sharpe == null ? '—' : run.summary.sharpe.toFixed(2)}
+                />
+                <Stat label="거래" value={String(run.summary.numTrades)} />
+              </StatColumn>
+              <StatColumn title="조건">
+                <Stat label="비용" value={`편도 ${run.params.costBp}bp`} />
+                <Stat label="명목" value={`₩${run.params.notional.toLocaleString()}/bp`} />
+                <Stat label="종가" value={run.asof ?? '—'} />
+              </StatColumn>
             </HStack>
 
             {/* ── 2×2 패널 — 원본 결과 그리드의 배치. ───────────────────── */}

@@ -25,6 +25,39 @@
      **새 코드에서 추가 사용 금지**, 일괄 마이그레이션(`Text font=…`)은 CDS 메이저
      승급 전에 별도 레인으로(HANDOFF-2026-08-18c §8.14).
 
+## 화면 문법의 캐논 [OWNER 2026-08-25 — "이 요청 진짜 자주 하고 있는데 뭐가 문제인거임?"]
+
+**「Main/Backtest 를 참고한다」= 그 화면의 부품과 함수를 임포트한다**는 뜻이다.
+클래스 이름이나 색 하나를 옮겨 적는 것은 참고가 아니다 — 그렇게 세 번 어긋났고
+오너가 세 번 같은 지적을 했다. 새 화면을 만들 때 아래를 **먼저 임포트**하고,
+없을 때만 새로 만든다.
+
+| 무엇 | 캐논 | 어디 |
+|---|---|---|
+| 표 | CDS `Table/TableRow/TableCell` + `ROW_H`(60) | `table/InstrumentTable.tsx`·`table/rowHeight.ts` |
+| 이름 칸 | 2줄 스택 `sr-name-stack`(label1 + legal 뮤트) | 같은 파일 |
+| 레벨 값 | `fmtLevel` (표·리드아웃 한 벌) | `lib/format.ts`·`table/cells.ts` |
+| 레벨 열 **머리** | `levelHeadText`/`levelHeadTitle` — **날짜**이지 「값」이 아니다 | `lib/format.ts` |
+| 변화 열 머리 | `1D`/`MTD`/`YTD`(BASIS_LABEL) | `table/InstrumentTable.tsx` |
+| 변화 셀 | **네 부품 한 벌**: `tintStyle` 배경 + `directionClass` + `directionGlyph`(↗↘) + `unsignedDelta`(무부호) | `table/tint.ts` |
+| 범위 위치 | `.sr-track`/`.sr-track-mark`(폭은 바깥이 준다) | `table/InstrumentTable.tsx`·`lib/range.ts` |
+| 사실 스트립 | `StatColumn`+`Stat`, 감싸는 `.sr-stats` — 차트 **아래** | `ui/Stat.tsx` |
+| 커서 리드아웃 | `ReadoutCard`+`ReadoutLevel`/`ReadoutMoney`+`placeReadout`, 상자는 `.sr-plot` | `ui/ReadoutCard.tsx` |
+| 시계열 차트 | 주선 = **보이는 구간 순변화 방향색**(`--sr-up`/`--sr-down`/뮤트) + `showArea areaType="dotted"` + `CHART_INSET{16,12,8,8}` + `animate={false}` + 축 `showGrid={false}`·y 오른쪽 | `ui/PreviewPane.tsx` |
+| 손익 차트 | 부호 방향색 + 면 | `backtest/LinkedCharts.tsx` |
+| 화면 컨트롤 | `.sr-pillbtn`(32px·14/600 알약) — **앱 공용**이다 | `theme/type.css` |
+| 떠 있는 창 | `FloatingWindow`(windowKey 등록) | `ui/window/` |
+| 대사 표 | `ReconStack` | `ui/window/ReconStack.tsx` |
+
+규칙 셋:
+1. **새로 만들기 전에 찾는다.** 위 표에 있으면 그것을 쓴다. 같은 모양을 손으로
+   다시 만들면 한쪽만 낡는다(실측: 전략 실험 창의 KPI 타일이 `ui/Stat.tsx` 의
+   중복이었다).
+2. **클래스 이름은 소유권이 아니다.** `.sr-rv-*` 중 일부는 앱 공용이다. 판단은
+   이름이 아니라 **그 파일의 머리 주석**이 한다.
+3. 캐논에서 벗어나야 하면 **왜인지를 주석으로 남긴다**(시뮬 케이스 색·Lab 3D 처럼
+   정당한 예외가 있다). 근거 없는 이탈은 결함이다.
+
 ## 얼라인 [OWNER 2026-08-25 — "얼라인 맞추는 것도 규칙에 박아두자"]
 
 한 행에 서는 것들은 자로 잰 듯 맞아야 한다. 어긋난 행은 결함이다.
@@ -46,6 +79,19 @@
 5. 같은 위계의 카드 머리는 같은 패딩 리듬(paddingX 2 · paddingTop 1.5 ·
    paddingBottom 0.5) — 한 화면에서 카드마다 머리 높이가 다르면 안 된다.
 6. 새 행·새 카드를 만들면 **스크린샷으로 실측**한다 — 눈이 마지막 가드다.
+
+## 낱말 중간 줄바꿈 금지 [OWNER 2026-08-25 — "국고, 줄 바꾸고 채 뭐 이딴게 비일비재하네"]
+
+한글은 **낱말 사이에서만** 접힌다. 「국고채」가 「국고 / 채」로 갈리면 결함이다.
+
+1. 뿌리에 `body { word-break: keep-all }` 이 있다(`theme/type.css`). 상속되므로
+   새 컴포넌트가 각자 다시 적을 필요가 없다 — 그렇게 여덟 곳에 흩어져 있었다.
+2. `word-break: break-all`·`break-word`·`overflow-wrap: anywhere` 금지. 낱말을
+   쪼갠다.
+3. `overflow-wrap: break-word` 는 **허용**이다 — 끊을 자리가 없는 긴 토큰
+   (URL·id)이 상자를 넘는 것만 막고 낱말은 안 쪼갠다.
+4. 가드: `guards/no-midword-break.test.ts` 가 ①과 ②를 잰다.
+5. 좁아서 접히는 것 자체가 문제면 폭을 고친다 — 「얼라인」·「말줄임」 절과 한 몸이다.
 
 ## 말줄임 절대 금지 [OWNER 2026-08-25 — "진짜 눈에 안 들어오면 안 돼"]
 

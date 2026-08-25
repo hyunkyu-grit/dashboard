@@ -631,7 +631,7 @@ export function RvPage() {
           <Box style={{ marginLeft: 'auto' }}>
             <button
               type="button"
-              className="sr-rv-pillbtn"
+              className="sr-pillbtn"
               data-on={mpcOpen || undefined}
               aria-expanded={mpcOpen}
               onClick={() => setMpcOpen((v) => !v)}
@@ -672,7 +672,7 @@ export function RvPage() {
               <SetRow label="이력 창">
                 <button
                   type="button"
-                  className="sr-rv-pillbtn"
+                  className="sr-pillbtn"
                   data-on={window === '52w' || undefined}
                   aria-pressed={window === '52w'}
                   onClick={() => setWindowParam(undefined)}
@@ -681,7 +681,7 @@ export function RvPage() {
                 </button>
                 <button
                   type="button"
-                  className="sr-rv-pillbtn"
+                  className="sr-pillbtn"
                   data-on={window === 'all' || undefined}
                   aria-pressed={window === 'all'}
                   onClick={() => setWindowParam('all')}
@@ -713,7 +713,7 @@ export function RvPage() {
                   <button
                     key={mo}
                     type="button"
-                    className="sr-rv-pillbtn"
+                    className="sr-pillbtn"
                     data-on={hMonths === mo || undefined}
                     aria-pressed={hMonths === mo}
                     onClick={() => setHMonths(mo)}
@@ -730,7 +730,7 @@ export function RvPage() {
                   <button
                     key={mode}
                     type="button"
-                    className="sr-rv-pillbtn"
+                    className="sr-pillbtn"
                     data-on={reinvest === mode || undefined}
                     aria-pressed={reinvest === mode}
                     onClick={() => setReinvest(mode)}
@@ -906,7 +906,7 @@ export function RvPage() {
             {/* "커브 레인" → "상세 분석" [OWNER 2026-08-19 — 어휘 순화 컨펌]. */}
             <button
               type="button"
-              className="sr-rv-pillbtn"
+              className="sr-pillbtn"
               data-fill="true"
               onClick={() => setLanesOpen(true)}
             >

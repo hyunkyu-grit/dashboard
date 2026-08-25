@@ -63,7 +63,7 @@ describe('critique repairs, 2026-08-19', () => {
     // 제목 줄 우측의 창 트리거는 CDS Button(36)이 아니라 32px pill 문법이다.
     const page = read('src/app/page.tsx');
     expect(page).not.toMatch(/<Button[^>]*>\s*백테스트/);
-    expect(page).toMatch(/className="sr-rv-pillbtn"[\s\S]{0,200}백테스트/);
-    expect(page).toMatch(/className="sr-rv-pillbtn"[\s\S]{0,80}표로 보기/);
+    expect(page).toMatch(/className="sr-pillbtn"[\s\S]{0,200}백테스트/);
+    expect(page).toMatch(/className="sr-pillbtn"[\s\S]{0,80}표로 보기/);
   });
 });

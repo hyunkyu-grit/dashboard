@@ -37,7 +37,7 @@ import { stripComments } from './_source';
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SRC = path.join(ROOT, 'src');
 
-/** 이 앱의 기본 행 컨트롤 높이. `.sr-date`·`.sr-rv-pillbtn`·`.sr-naviconbtn`·
+/** 이 앱의 기본 행 컨트롤 높이. `.sr-date`·`.sr-pillbtn`·`.sr-naviconbtn`·
  * `.sr-clog-trigger`·`.sr-window-close` 가 CSS 로 적는 값과 같은 수다. */
 export const CONTROL_H = 32;
 
@@ -94,7 +94,7 @@ function cssControlHeights(): { sel: string; h: number }[] {
     const s = line.match(/^(\.[a-z0-9-]+(?:\s*[>,+~]\s*[a-z0-9.-]+)*)\s*\{/i);
     if (s) sel = s[1].trim();
     const h = line.match(/^\s*height:\s*(\d+)px/);
-    if (h && /^\.sr-(date|rv-pillbtn|naviconbtn|clog-trigger|window-close)$/.test(sel)) {
+    if (h && /^\.sr-(date|pillbtn|naviconbtn|clog-trigger|window-close)$/.test(sel)) {
       out.push({ sel, h: Number(h[1]) });
     }
   }

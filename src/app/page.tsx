@@ -482,7 +482,7 @@ const BANNER_H = 34;
                     나란히 두기 위해서다. */}
                 {/* 제목 줄 우측 창 트리거 — 아래 "백테스트" 와 같은 32px pill
                     문법(주석 참조). */}
-                <button type="button" className="sr-rv-pillbtn" onClick={() => setMatrix('1')}>
+                <button type="button" className="sr-pillbtn" onClick={() => setMatrix('1')}>
                   표로 보기
                 </button>
               </>
@@ -506,12 +506,12 @@ const BANNER_H = 34;
                 현금채권 탭은 자기 창을 연다 — 엔진이 다르다. */}
             {isGroupTab && data ? (
               /* 카드-머리 우측의 창 트리거는 앱 전체가 한 문법이다 — RV 의
-                 "설정"·"커브 레인"과 같은 32px pill(.sr-rv-pillbtn, Main 기간
+                 "설정"·"커브 레인"과 같은 32px pill(.sr-pillbtn, Main 기간
                  셀렉터 실측에서 온 14/600/32). CDS Button size s 는 36 이라 이
                  자리만 4px 튀어 있었다(전체 앱 크리틱 실측 2026-08-19). */
               <button
                 type="button"
-                className="sr-rv-pillbtn"
+                className="sr-pillbtn"
                 onClick={openBacktest}
               >
                 백테스트

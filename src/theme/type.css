@@ -60,6 +60,19 @@
  * 이건 상속으로 내려가는 실제 face 다. 둘 다 있어야 화면의 서체가 하나가 된다. */
 body {
   font-family: var(--sr-font-sans);
+  /* **낱말 중간에서 접지 않는다** [OWNER 2026-08-25 — "단어에서 줄바꿈 금지.
+     국고, 줄 바꾸고 채 뭐 이딴게 비일비재하네"].
+
+     브라우저 기본(`word-break: normal`)은 한글을 **음절 아무 데서나** 끊는다 —
+     영문에는 없는 병이라 컴포넌트마다 따로 발견됐고, 이 파일에만 같은 수리가
+     여덟 곳에 흩어져 있었다(2026-08-21 주석: 「인하하고」가 「인 / 하하고」로).
+     뿌리에서 한 번 끊으면 새 화면이 그 발견을 반복하지 않는다. 상속되므로
+     아래 개별 `keep-all` 들은 이제 중복이지만, 지우면 그 자리가 왜 그런지가
+     같이 지워지므로 둔다.
+
+     끊을 데가 없는 긴 토큰(URL·id)은 `overflow-wrap: break-word` 가 따로
+     맡는다 — 그건 낱말을 쪼개는 게 아니라 넘침을 막는 것이다. */
+  word-break: keep-all;
 }
 
 /* CDS resolves its own faces through `--fontFamily-*`; pointing those at the
@@ -2084,8 +2097,13 @@ thead th {
 /* 화면 컨트롤 pill — **Main 기간 셀렉터의 실측값**(14/600 · 높이 32 · 알약)
    [OWNER 2026-08-19 — "커브 레인·52주/전체 폰트가 너무 크다"]. CDS
    SegmentedTabs(16/36)와 Button(s) 대신 이 pill 이 화면 컨트롤의 크기 위계다.
-   data-on = 선택(이력 창 토글) 또는 상시 채움(커브 레인 — 채움 컨트롤 규칙). */
-.sr-rv-pillbtn {
+   data-on = 선택(이력 창 토글) 또는 상시 채움(커브 레인 — 채움 컨트롤 규칙).
+
+   **이름이 `.sr-rv-*` 가 아니다** [2026-08-25]. rv 에서 태어났지만 page.tsx·
+   Strategy·Lab 이 다 쓰는 앱 공용이고, `sr-rv-` 접두사 때문에 «저건 rv 방언»
+   으로 읽혀 새 화면이 제 알약을 또 만들 뻔했다(오너 지적의 뿌리). 이름은
+   자기가 무엇인지 말해야 한다. */
+.sr-pillbtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2105,7 +2123,7 @@ thead th {
     color var(--sr-motion-fast) var(--sr-ease-out);
 }
 
-.sr-rv-pillbtn:hover {
+.sr-pillbtn:hover {
   background: var(--sr-control);
   color: var(--color-fg);
 }
@@ -2114,19 +2132,19 @@ thead th {
    서는 조건 바의 배경이 같은 --sr-page 라 라이트에서 채움이 투명했다(3차
    크리틱 실측: 238,240,243 == 238,240,243). 잉크 채움은 어느 면 위에서든
    보인다 — SegmentedTabs 활성 pill 의 그 look. */
-.sr-rv-pillbtn[data-on='true'] {
+.sr-pillbtn[data-on='true'] {
   background: var(--color-fg);
   color: var(--sr-card);
 }
 
 /* 액션 pill(커브 레인) — 상시 회색 채움(Backtest 의 secondary 버튼 look).
    카드(흰) 위에 서므로 --sr-control 이 보인다. */
-.sr-rv-pillbtn[data-fill] {
+.sr-pillbtn[data-fill] {
   background: var(--sr-control);
   color: var(--color-fg);
 }
 
-.sr-rv-pillbtn:focus-visible {
+.sr-pillbtn:focus-visible {
   outline: 2px solid var(--color-fg);
   outline-offset: 2px;
 }

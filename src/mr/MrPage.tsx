@@ -31,10 +31,11 @@ import { Text } from '@coinbase/cds-web/typography';
 
 import type { Unit } from '@/lib/api';
 import { BacktestUnavailable } from '@/lib/api';
-import { fmtDelta, fmtLevel, unitSuffix } from '@/lib/format';
+import { fmtDelta, fmtLevel, levelHeadText, levelHeadTitle, unitSuffix } from '@/lib/format';
 import { ROW_H } from '@/table/rowHeight';
 import { directionClass, directionGlyph, tintStyle, unsignedDelta } from '@/table/tint';
 import { ErrorState, LoadingState } from '@/ui/DataState';
+import { Stat, StatColumn } from '@/ui/Stat';
 import { useUrlState } from '@/ui/useUrlState';
 
 import {
@@ -204,6 +205,11 @@ export function MrPage() {
     setHistErr(undefined);
   }, [params]);
 
+  /* 레벨 열 머리가 이름할 날짜. 두 소스가 갈리면 하루를 못 고르므로 null 로
+     보내 `levelHeadText` 의 폴백(「현재」)에 맡긴다 — 조건 바가 소스별 날짜를
+     이미 말하고 있다. */
+  const headAsof =
+    board && board.asof.bss === board.asof.fut ? board.asof.bss : null;
   const rows = board?.rows ?? [];
   const sel: MrRow | undefined = rows.find((r) => r.id === selId) ?? rows[0];
   const selHist = sel ? histories[sel.id] : undefined;
@@ -272,7 +278,7 @@ export function MrPage() {
               <button
                 key={w}
                 type="button"
-                className="sr-rv-pillbtn"
+                className="sr-pillbtn"
                 data-on={bandWindow === w || undefined}
                 aria-pressed={bandWindow === w}
                 onClick={() => setMwParam(w === MR_WINDOWS[0] ? undefined : String(w))}
@@ -290,7 +296,7 @@ export function MrPage() {
               <button
                 key={kk}
                 type="button"
-                className="sr-rv-pillbtn"
+                className="sr-pillbtn"
                 data-on={bandK === kk || undefined}
                 aria-pressed={bandK === kk}
                 onClick={() => setMkParam(kk === 2.0 ? undefined : String(kk))}
@@ -366,11 +372,19 @@ export function MrPage() {
                       <TableCell as="th" scope="col">
                         <Text font="caption" as="span" color="fgMuted">계열</Text>
                       </TableCell>
+                      {/* 레벨 열 머리는 **날짜**다(levelHeadText) — Main·Backtest·
+                          매트릭스가 다 그렇다. 「값」 같은 낱말은 그 열이 어느 날
+                          종가인지를 안 말한다. 두 소스 as-of 가 갈린 날은 이
+                          함수의 문서화된 폴백(「현재」)으로 떨어지고, 조건 바가
+                          어느 소스가 언제인지 말한다. */}
                       <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
-                        <Text font="caption" as="span" color="fgMuted">값</Text>
+                        <Text font="caption" as="span" color="fgMuted" title={levelHeadTitle(headAsof)}>
+                          {levelHeadText(headAsof)}
+                        </Text>
                       </TableCell>
+                      {/* 변화 열 이름도 형제 것이다 — BASIS_LABEL 의 `1D`. */}
                       <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
-                        <Text font="caption" as="span" color="fgMuted">전일</Text>
+                        <Text font="caption" as="span" color="fgMuted">1D</Text>
                       </TableCell>
                       <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
                         {/* 창을 상수로 적으면 컨트롤을 바꾼 날 화면이 거짓말을
@@ -500,7 +514,7 @@ export function MrPage() {
               {/* rv 「상세 분석」 자리의 문법 — 세부(전략 재현)는 버튼 뒤 창. */}
               <button
                 type="button"
-                className="sr-rv-pillbtn"
+                className="sr-pillbtn"
                 data-on={stratOpen || undefined}
                 aria-pressed={stratOpen}
                 onClick={() => setStratOpen((v) => !v)}
@@ -520,19 +534,6 @@ export function MrPage() {
                 <HeroDelta d={sel.d1} unit={sel.dUnit} />
               </Text>
             </HStack>
-            <HStack gap={3} alignItems="baseline" flexWrap="wrap">
-              <Cond k="늘어남" v={fmtZ(sel.z)} />
-              <Cond k="%B" v={sel.pctB == null ? '—' : sel.pctB.toFixed(0)} />
-              <Cond
-                k="밴드 전폭"
-                v={
-                  sel.width == null
-                    ? '—'
-                    : `${fmtLevel(sel.width, sel.dUnit as Unit)}${unitSuffix(sel.dUnit as Unit)}`
-                }
-              />
-              <Cond k="상태" v={stateText(sel.state)} />
-            </HStack>
             {selHist ? (
               <BandChart history={selHist} />
             ) : histErr ? (
@@ -544,6 +545,29 @@ export function MrPage() {
                 이력을 불러오는 중이에요…
               </Text>
             )}
+            {/* 사실 줄은 **차트 아래**, 그리고 이 앱의 유일한 스트립 문법이다
+                (`ui/Stat.tsx` — 그 파일 머리가 코인베이스 가격 페이지·토스증권
+                종목 머리 실측을 적어 두었다). Main 미리보기의 「이 구간 · 변화 ·
+                52주」와 같은 자리·같은 부품. 방향색은 안 쓴다 — z 는 방향이
+                아니라 자리다. */}
+            <HStack className="sr-stats" alignItems="stretch" width="100%">
+              <StatColumn title="밴드">
+                <Stat label="늘어남" value={fmtZ(sel.z)} />
+                <Stat label="%B" value={sel.pctB == null ? '—' : sel.pctB.toFixed(0)} />
+                <Stat
+                  label="전폭"
+                  value={
+                    sel.width == null
+                      ? '—'
+                      : `${fmtLevel(sel.width, sel.dUnit as Unit)}${unitSuffix(sel.dUnit as Unit)}`
+                  }
+                />
+              </StatColumn>
+              <StatColumn title="지금">
+                <Stat label="상태" value={stateText(sel.state)} />
+                <Stat label="종가" value={sel.asof} />
+              </StatColumn>
+            </HStack>
           </VStack>
         </VStack>
       </HStack>

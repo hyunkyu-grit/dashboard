@@ -752,13 +752,19 @@ export function PreviewPane({
                 있다: 같은 차트를 크게, 그리고 자리를 잡아두고 본다. */}
             {/* 확대 중일 때만 나오는 되돌리기 — 그리고 이제 **유일한** 되돌리기다
                 (더블클릭 리셋은 차트 클릭 = 백테스트 복원과 함께 내렸다). */}
+            {/* `.sr-enlarge` 는 **CSS 가 없는 클래스였다** [실측 2026-08-25 감사]
+                — 이 둘이 브라우저 기본 버튼(UA 회색 베벨·13.3px 시스템 폰트)으로
+                그려지고 있었고, 바로 옆 `PeriodSelector` 와 높이도 활자도 안
+                맞았다. 이 앱의 카드-머리 컨트롤은 `.sr-pillbtn`(32px 알약)이고
+                page.tsx·rv·Strategy 가 다 그것을 쓴다. 문법을 정의하는 파일이
+                자기 문법 밖에 있었던 셈이다. */}
             {zoom ? (
-              <button type="button" className="sr-enlarge" onClick={() => setZoom(null)}>
+              <button type="button" className="sr-pillbtn" onClick={() => setZoom(null)}>
                 구간 전체
               </button>
             ) : null}
             {onEnlarge ? (
-              <button type="button" className="sr-enlarge" onClick={onEnlarge}>
+              <button type="button" className="sr-pillbtn" onClick={onEnlarge}>
                 확대
               </button>
             ) : null}
