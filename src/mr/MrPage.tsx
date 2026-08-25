@@ -22,7 +22,7 @@
  * 같은 표를 두 문법으로 말하지 않는다.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Tooltip } from '@coinbase/cds-web/overlays';
@@ -142,17 +142,27 @@ export function MrPage() {
     [bandWindow, bandK],
   );
 
+  /* 딥링크 경합 가드 — 마운트 직후 URL 훅이 아직 기본값일 때의 fetch 와 실제
+     파라미터의 fetch 가 경주한다(라이브 실측 2026-08-25: mw=252 링크가 20일
+     보드를 그렸다). 늦게 온 옛 응답이 이기지 못하게 순번으로 버린다. */
+  const loadSeq = useRef(0);
   const load = useCallback(() => {
+    const my = ++loadSeq.current;
     setError(undefined);
     setUnavailable(false);
     setRefreshing(true);
     fetchMrBoard(params)
-      .then(setBoard)
+      .then((b) => {
+        if (loadSeq.current === my) setBoard(b);
+      })
       .catch((e: unknown) => {
+        if (loadSeq.current !== my) return;
         if (e instanceof BacktestUnavailable) setUnavailable(true);
         else setError(e instanceof Error ? e.message : String(e));
       })
-      .finally(() => setRefreshing(false));
+      .finally(() => {
+        if (loadSeq.current === my) setRefreshing(false);
+      });
   }, [params]);
 
   useEffect(() => {
