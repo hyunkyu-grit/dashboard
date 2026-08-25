@@ -60,13 +60,24 @@ def _dataset(rates: dict[str, list[float]] | None = None) -> Dataset:
 
 
 def _futdata(path_3y: list[float], path_10y: list[float] | None = None) -> ft.FuturesData:
+    """페이크 시장. 조정가 = 계약가 = 벤더 금리의 폐형가격 — **오프셋 0 인 세계**.
+
+    실장에서 그 셋은 갈린다(조정가는 과거로 갈수록 계약가와 벌어진다). 여기서
+    같게 두는 이유는 **다른 것을 재려는 것이 아니기 때문**이다: 엔진의 산술과
+    역할 배선을 재는 픽스처이고, 갈라짐 자체는 `TestVendorLevels` 가 따로 잰다.
+    """
     p10 = path_10y or [120.0] * len(DATES)
     assert len(path_3y) == len(DATES) and len(p10) == len(DATES)
+
+    def mk(path: list[float], years: int) -> ft.FuturesSeries:
+        imp = [implied_yield(p, years) for p in path]
+        return ft.FuturesSeries(
+            dates=list(DATES), price_adj=list(path),
+            implied=list(imp), price_ctr=list(path),
+        )
+
     return ft.FuturesData(
-        series={
-            "3Y": ft.FuturesSeries(dates=list(DATES), close=list(path_3y)),
-            "10Y": ft.FuturesSeries(dates=list(DATES), close=list(p10)),
-        },
+        series={"3Y": mk(path_3y, 3), "10Y": mk(p10, 10)},
         watermark=("test", len(DATES)),
     )
 
@@ -184,29 +195,59 @@ class TestSeriesPayload:
     그 회귀다: 선물은 가격 + 내재금리 둘 다, 퓨처스왑은 스프레드 bp.
     """
 
-    def test_fut_carries_price_and_implied_yield(self):
+    def test_fut_level_is_the_vendor_yield_price_rides_along(self):
         path = [104.0, 104.2, 104.5, 104.1, 103.8, 103.9,
                 104.0, 104.3, 104.6, 104.4, 104.2, 104.0]
         body = ft.series_payload(_futdata(path), _dataset(), "FUT:3Y")
-        assert body["unit"] == "가격"
+        # **수준은 금리다** — 조정가는 수준이 없다(back-adjusted).
+        assert body["unit"] == "%"
         assert body["label"] == "KTB3 선물"
+        assert body["levelNote"] == "롤 시점 불연속 포함"
         assert len(body["points"]) == len(DATES)
-        # 값은 종가 그대로, y 는 그 종가의 내재금리 — 두 번째 수학 금지.
         for p, close in zip(body["points"], path):
-            assert p["v"] == pytest.approx(close)
-            assert p["y"] == pytest.approx(round(implied_yield(close, 3), 4))
-        # 가격은 %가 아니므로 전일 대비를 ×100 하지 않는다(bp 로 뻥튀기 금지).
-        assert body["points"][1]["d"] == pytest.approx(path[1] - path[0], abs=5e-3)
+            assert p["v"] == pytest.approx(round(implied_yield(close, 3), 4))
+            assert p["price"] == pytest.approx(close)
+        # %-계열이라 전일 대비는 bp 다(derive.series_history 의 규약).
+        d1 = (implied_yield(path[1], 3) - implied_yield(path[0], 3)) * 100.0
+        assert body["points"][1]["d"] == pytest.approx(d1, abs=0.01)
 
-    def test_fsw_is_spread_in_bp_without_yield(self):
+    def test_fsw_is_spread_in_bp(self):
         path = [104.0] * len(DATES)
         body = ft.series_payload(_futdata(path), _dataset(), "FSW:3Y")
         assert body["unit"] == "bp"
         assert body["label"] == "퓨처스왑 3Y"
-        # 평평한 IRS(3.00) 대비 — 내재 − IRS, bp.
+        # 평평한 IRS(3.00) 대비 — 벤더 내재 − IRS, bp.
         want = round((implied_yield(104.0, 3) - FLAT) * 100.0, 4)
         assert body["points"][-1]["v"] == pytest.approx(want, abs=1e-3)
-        assert "y" not in body["points"][-1]
+        assert "price" not in body["points"][-1]
+
+    def test_price_is_withheld_when_it_disagrees_with_the_vendor_yield(self):
+        """계약가와 벤더 금리가 안 맞는 날은 **가격을 안 싣는다**.
+
+        실장의 KTB3 이 그렇다(2021 이전 최대 5 가격점 어긋남). 나란히 적으면
+        한 줄이 서로 다른 두 수를 말하므로, 못 싣는 날은 정직하게 빈다.
+        """
+        path = [104.0] * len(DATES)
+        fut = _futdata(path)
+        fs = fut.series["3Y"]
+        broken = ft.FuturesSeries(
+            dates=fs.dates, price_adj=fs.price_adj, implied=fs.implied,
+            price_ctr=[None] * len(fs.dates),      # 로더가 문턱에서 거른 모습
+        )
+        data = ft.FuturesData(series={**fut.series, "3Y": broken}, watermark=fut.watermark)
+        body = ft.series_payload(data, _dataset(), "FUT:3Y")
+        assert all(p["price"] is None for p in body["points"])
+        # 금리는 그대로 선다 — 가격이 없다고 수준까지 잃지 않는다.
+        assert body["points"][-1]["v"] == pytest.approx(round(implied_yield(104.0, 3), 4))
+
+    def test_missing_vendor_yield_fails_loudly(self):
+        path = [104.0] * len(DATES)
+        fut = _futdata(path)
+        fs = fut.series["3Y"]
+        blank = ft.FuturesSeries(dates=fs.dates, price_adj=fs.price_adj,
+                                 implied=[None] * len(fs.dates), price_ctr=fs.price_ctr)
+        with pytest.raises(ft.FuturesError):
+            ft.implied_at_index(blank, 0, "3Y")
 
     def test_fsw_drops_days_without_an_irs_mark(self):
         """inner join 규율 — 보간도 이월도 없다(MR 보드와 같은 규칙)."""
@@ -219,6 +260,64 @@ class TestSeriesPayload:
     def test_unknown_id_is_a_futures_error(self):
         with pytest.raises(ft.FuturesError):
             ft.series_payload(_futdata([104.0] * len(DATES)), _dataset(), "FUT:7Y")
+
+    def test_main_and_mr_report_the_same_implied_yield(self):
+        """Main 목록과 MR 보드가 **같은 날 같은 수**를 말한다.
+
+        이 레인이 고친 결함이 바로 그 둘의 불일치였다 — Main(`universe.py`)은
+        벤더 컬럼을 읽고 MR 보드(`mr._fut_bundle`)는 조정가를 역산해서, 한
+        이름(「KTB3 내재금리」)에 최대 182bp 벌어진 두 수가 있었다. 이제 둘 다
+        같은 로더의 `implied` 를 지난다.
+        """
+        from app import mr
+
+        path3 = [104.0 + i * 0.05 for i in range(len(DATES))]
+        path10 = [120.0 - i * 0.07 for i in range(len(DATES))]
+        ft.set_data(_futdata(path3, path10))
+        bundle = mr._fut_bundle()
+        fut = ft.load()
+        for sid, tenor in (("FUT-KTB3", "3Y"), ("FUT-KTB10", "10Y")):
+            fs = fut.series[tenor]
+            pts = {p["t"]: p["v"] for p in bundle[sid]["points"]}
+            for d, y in zip(fs.dates, fs.implied):
+                # 보드가 내는 수 == 로더가 든 벤더 값(반올림만 다르다).
+                assert pts[d.isoformat()] == pytest.approx(y, abs=5e-5)
+
+    def test_no_source_inverts_the_adjusted_price(self):
+        """**가드**: 조정가를 역산해 금리를 만드는 코드가 다시 생기면 실패한다.
+
+        이 레인의 결함이 정확히 그것이었다 — `implied_yield(CLOSE)`. 조정가는
+        분기 롤마다 상수 오프셋이 얹힌 연속 계열이라 차분에만 뜻이 있고, 그
+        위에서 낸 금리는 벤더 값 대비 최대 182bp 틀렸다. 사람이 규칙을 기억하는
+        대신 파일이 기억하게 둔다.
+
+        재는 방법: `price_adj` 를 첨자한 표현이 `implied_yield(`/`synth_pvbp(`
+        의 인자로 들어가는 줄을 소스에서 찾는다. 주석은 세지 않는다.
+        """
+        import pathlib
+        import re
+
+        root = pathlib.Path(__file__).resolve().parents[1]
+        bad: list[str] = []
+        for rel in ("app/futures.py", "app/mr.py", "app/instruments.py",
+                    "app/mixedbook.py",
+                    "irs_pricer/services/simulation/daily_valuation.py",
+                    "irs_pricer/services/simulation/aggregates.py"):
+            f = root / rel
+            if not f.exists():
+                continue
+            for n, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+                code = line.split("#", 1)[0]
+                if re.search(r"(implied_yield|synth_pvbp)\s*\([^)]*price_adj", code):
+                    bad.append(f"{rel}:{n}: {line.strip()}")
+                # 옛 이름으로 되돌아가는 것도 막는다 — `.close[` 는 이제 없다.
+                if re.search(r"\bfs\.close\b|\.series\[[^\]]+\]\.close\b", code):
+                    bad.append(f"{rel}:{n}: (옛 이름 .close) {line.strip()}")
+        assert bad == [], (
+            "조정가에서 금리를 유도하는 코드가 있어요 — 수준은 벤더 "
+            "`선물내재수익률` 을 읽습니다(app/futures.py::FuturesSeries 머리 주석).\n"
+            + "\n".join(bad)
+        )
 
     def test_route_serves_it(self):
         """`with TestClient(app)` 를 쓰지 않는다 — 이 파일의 아래쪽 관례와 같다.
@@ -233,7 +332,7 @@ class TestSeriesPayload:
         c = TestClient(app)
         r = c.get("/api/futures/series/FUT:3Y")
         assert r.status_code == 200
-        assert r.json()["unit"] == "가격"
+        assert r.json()["unit"] == "%"          # 수준은 금리다
         assert c.get("/api/futures/series/FUT:7Y").status_code == 422
 
 

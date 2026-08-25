@@ -368,8 +368,14 @@ def _expand_futures(
     i = _index_on_or_before(fs.dates, base_date)
     as_of = fs.dates[i]
     years = FUT_YEARS[tenor]
-    price0 = fs.close[i]
-    y0 = implied_yield(price0, years)
+    # 시뮬의 선물 충격은 **금리 공간**에서 걸린다(daily_valuation: y0 + shock 을
+    # 폐형에 넣고 두 가격의 차를 손익으로 낸다). 그 y0 는 수준이므로 벤더 값을
+    # 읽는다 — 조정가 역산이 아니다(FUTURES_LANE_STATE §Phase 1 항목 1).
+    # 두 걸음이 갈리는 자리이기도 하다: **수준은 벤더**, **손익은 차분**.
+    try:
+        y0 = ft.implied_at_index(fs, i, tenor)
+    except ft.FuturesError as exc:
+        raise BacktestError(str(exc))
 
     fut_dir = -direction if kind == ft.KIND_FSW else direction
     # pvbp 는 롱이 양수 — 시뮬 채권 관행(MTM = pvbp × −Δbp)과 같은 부호.

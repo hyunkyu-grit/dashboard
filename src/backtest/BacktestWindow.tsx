@@ -139,7 +139,7 @@ export function pointOnOrAfter(
  *
  * 채권 id 는 **다른 경로**다(민평은 SQL 에만 있다). 캐시가 하나인 이유는 id 가
  * 하나이기 때문이다 — `CB:KTB:3Y` 는 어느 경로로 왔든 같은 계열이다. */
-type SeriesPoint = { t: string; v: number; y?: number | null };
+type SeriesPoint = { t: string; v: number; price?: number | null };
 const seriesCache = new Map<string, Promise<SeriesPoint[] | null>>();
 function loadSeriesPoints(id: string): Promise<SeriesPoint[] | null> {
   let hit = seriesCache.get(id);
@@ -173,10 +173,17 @@ function loadSeriesPoints(id: string): Promise<SeriesPoint[] | null> {
 
 /** 이 줄의 진입 레벨 칸이 적을 것 — 한 곳에서 정한다.
  *
- * 스왑·채권은 «값 + CD», 선물은 «가격 + 내재금리» 다 [OWNER 선택, 2026-08-25 —
- * "가격 + 내재금리 둘 다"]. 선물 줄에 CD 를 적지 않는 이유는 CD 가 그 줄의
- * 기준이 아니기 때문이다 — 선물을 읽을 때 옆에 있어야 하는 수는 자기 내재금리다.
- * 퓨처스왑은 가격이 아니라 스프레드(bp)라 둘째 줄이 없다. */
+ * 스왑·채권은 «값 + CD», 선물은 «거래된 가격 + 내재금리» 다 [OWNER 선택,
+ * 2026-08-25 — "가격 + 내재금리 둘 다"]. 선물 줄에 CD 를 적지 않는 이유는 CD 가
+ * 그 줄의 기준이 아니기 때문이다 — 선물을 읽을 때 옆에 있어야 하는 수는 자기
+ * 내재금리다. 퓨처스왑은 가격이 아니라 스프레드(bp)라 둘째 줄이 없다.
+ *
+ * ── 첫 줄에 «조정가» 를 적지 않는다 [2026-08-25 수정가 수리] ────────────────
+ * 첫 판은 `p.v`(그때는 조정가)를 가격으로 찍었다. 그건 **거래된 적 없는 수**다
+ * — 뒤로 조정된 연속 계열이라 과거로 갈수록 실제 체결가와 벌어진다(KTB3 은
+ * 2016 년에 1.84 가격점). 지금 `p.price` 는 벤더 계약별 종가이고, 그 종가가
+ * 같은 날 내재금리와 폐형으로 안 맞으면 서버가 `null` 로 준다 — 그런 날은
+ * **«가격 없음»** 으로 비운다. 없는 것을 있는 척하지 않는다. */
 function entryLevelLines(
   id: string,
   unit: Unit,
@@ -186,8 +193,8 @@ function entryLevelLines(
   const kind = bookKindOf(id);
   if (kind === 'futures') {
     return {
-      main: p ? `${fmtLevel(p.v, '가격')}` : '—',
-      sub: p?.y != null ? `내재 ${fmtLevel(p.y, '%')}%` : '내재 —',
+      main: p?.price != null ? fmtLevel(p.price, '가격') : p ? '가격 없음' : '—',
+      sub: p ? `내재 ${fmtLevel(p.v, '%')}%` : '내재 —',
     };
   }
   if (kind === 'futuresswap') {
@@ -949,16 +956,18 @@ export function BacktestWindow({
                 return (
                   <LinkedCharts
                     points={win}
-                    /* 선물은 «가격», 퓨처스왑은 스프레드 «bp» 다 [OWNER 선택,
-                       2026-08-25]. id 에 '-' 가 없어 예전 규칙으로는 둘 다 '%'
-                       로 읽혔는데, 그 축에 103.22 를 그리면 눈금이 «103.22%» 가
-                       된다 — 계열이 오기 시작한 지금에야 보이는 자리다. */
+                    /* 선물의 「종목 추이」는 **내재금리(%)** 다 [2026-08-25 수정가
+                       수리] — 조정가는 수준이 없어 선으로 그릴 것이 아니다.
+                       %-계열이라 CD·기준금리가 같은 축에 서고(`referenceMode`
+                       의 `shared`), 그건 오히려 읽을 값이 있는 배치다: 선물
+                       내재금리를 정책·CD 옆에 놓고 본다. 퓨처스왑은 스프레드라
+                       'bp' 이고 기준선은 자기 %축으로 간다. */
                     unit={
                       bondById.get(firstId)?.unit ??
-                      (bookKindOf(firstId) === 'futures'
-                        ? '가격'
-                        : bookKindOf(firstId) === 'futuresswap'
-                          ? 'bp'
+                      (bookKindOf(firstId) === 'futuresswap'
+                        ? 'bp'
+                        : bookKindOf(firstId) === 'futures'
+                          ? '%'
                           : firstId.includes('-')
                             ? 'bp'
                             : '%')

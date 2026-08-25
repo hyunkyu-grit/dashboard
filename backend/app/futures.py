@@ -74,15 +74,52 @@ class FuturesError(Exception):
     """선물 백테스트를 실행할 수 없다 — 라우트가 422 로 옮긴다."""
 
 
+#: 벤더 표 — 계약별 종가와 **그 벤더가 낸 내재금리**. 조정가 표와 달리 2012 부터다.
+VENDOR_TABLE = {"3Y": "infomax.daily_ktb_price", "10Y": "infomax.daily_lktb_price"}
+
+#: 벤더 종가를 «거래 가능한 가격» 으로 화면에 실을지 가르는 문턱(가격점).
+#: 그 종가가 같은 행의 벤더 내재금리와 폐형으로 맞는 날만 싣는다 — 둘이 어긋난
+#: 날에 나란히 적으면 한 줄이 서로 다른 두 수를 말한다. 근거는 실측이다
+#: (FUTURES_LANE_STATE §Phase 1 항목 2): 10Y 는 전 구간 잔차 중앙 0.002~0.003,
+#: 3Y 는 2012 년 5.110 에서 2026 년 0.001 로 수렴한다. 0.10 은 그 둘을 가르는
+#: 자리이고, 못 싣는 날은 «가격 없음» 으로 정직하게 빈다.
+PRICE_RECONCILE_TOL = 0.10
+
+
 @dataclass(frozen=True)
 class FuturesSeries:
+    """한 테너의 세 계열 — **역할이 이름에 있다.**
+
+    ── 이 구분이 왜 있는가 [OWNER, 2026-08-25] ────────────────────────────────
+    `mkt_futures_investor_close.CLOSE` 는 **뒤로 조정된 연속 계열**이다(실측:
+    분기 롤마다 상수 오프셋이 계단으로 바뀌고 현재 계약에서 0 — KTB3 41 구간·
+    KTB10 43 구간). 그런 계열은 **차분에는 정확하고**(그게 존재 이유다 — 롤갭이
+    없다) **수준에는 무의미하다**. 그런데 그 위에서 내재금리를 역산하고 있었고,
+    벤더 값 대비 중앙 28.5bp(10Y)·89.5bp(3Y), 최대 182bp 까지 틀렸다.
+
+    폐형 산술은 옳다 — 현재 계약에서 벤더와 ±0.05bp 로 맞는다. 틀린 것은
+    **입력**이었다. 그래서 규약을 이름으로 못 박는다:
+
+        price_adj   조정가. **차분에만** 쓴다(손익·일별 변화). 절대 역산 금지.
+        implied     벤더 `선물내재수익률`. **수준·스프레드·백분위·표시**는 전부
+                    이것이다. 유도하지 않고 읽는다 — `universe.py` 가 저평가에
+                    대해 이미 적어 둔 그 규칙("read, not derived")과 같다.
+        price_ctr   벤더 계약별 종가. 화면에 «그날 거래된 가격» 으로 실을 수 있는
+                    유일한 것. `implied` 와 폐형으로 안 맞는 날은 None 이다.
+
+    `guards`(test_futures.py::TestNoInversionOfAdjusted)가 `price_adj` 를
+    역산하는 코드가 다시 생기면 실패한다.
+    """
+
     dates: list[dt.date]
-    close: list[float]
+    price_adj: list[float]
+    implied: list[float | None]
+    price_ctr: list[float | None]
 
 
 @dataclass(frozen=True)
 class FuturesData:
-    series: dict[str, FuturesSeries]     # tenor → 연결 종가
+    series: dict[str, FuturesSeries]     # tenor → 세 계열
     watermark: tuple[str, int]
 
 
@@ -108,22 +145,58 @@ def watermark() -> tuple[str, int]:
 
 
 def _fetch() -> FuturesData:
+    """조정가(차분용) + 벤더 내재금리·계약별 종가(수준용)를 한 번에.
+
+    달력은 **조정가 표**가 진다 — 손익이 그 위에서 나므로 그 날짜들이 곧 이
+    상품의 거래일이다. 벤더 표는 2012 부터라 더 길지만, 조정가가 없는 날은
+    손익을 셀 수 없어 여기서는 버린다(그 이력을 쓰려면 별도 판단이 필요하다).
+    벤더 값은 날짜로 붙인다 — 두 표의 행 순서를 믿지 않는다.
+    """
+    from irs_pricer.services.simulation.futures_pricing import synth_price
+
     with engine().connect() as conn:
         rows = conn.execute(text(
             "SELECT deal_date, ktb_type, CLOSE FROM mkt_futures_investor_close "
             "WHERE CLOSE IS NOT NULL ORDER BY deal_date ASC"
         )).fetchall()
+        vendor: dict[str, dict[dt.date, tuple[float, float]]] = {}
+        for tenor, tbl in VENDOR_TABLE.items():
+            vrows = conn.execute(text(
+                f"SELECT 일자, 종가, 선물내재수익률 FROM {tbl} "
+                "WHERE 종가 IS NOT NULL AND 선물내재수익률 IS NOT NULL"
+            )).fetchall()
+            vendor[tenor] = {
+                (d.date() if hasattr(d, "date") else d): (float(p), float(y))
+                for d, p, y in vrows
+            }
+
     series: dict[str, tuple[list[dt.date], list[float]]] = {t: ([], []) for t in FUT_TENORS}
     for d, typ, close in rows:
         if typ not in series or close is None:
             continue
         ds, cs = series[typ]
-        ds.append(d)
+        ds.append(d.date() if hasattr(d, "date") else d)
         cs.append(float(close))
-    return FuturesData(
-        series={t: FuturesSeries(dates=ds, close=cs) for t, (ds, cs) in series.items()},
-        watermark=watermark(),
-    )
+
+    out: dict[str, FuturesSeries] = {}
+    for t, (ds, cs) in series.items():
+        vt = vendor.get(t, {})
+        years = FUT_YEARS[t]
+        imp: list[float | None] = []
+        ctr: list[float | None] = []
+        for d in ds:
+            hit = vt.get(d)
+            if hit is None:
+                imp.append(None)
+                ctr.append(None)
+                continue
+            p_v, y_v = hit
+            imp.append(y_v)
+            # 그 종가가 같은 행의 내재금리와 폐형으로 맞는 날만 «가격» 으로 싣는다.
+            ctr.append(p_v if abs(p_v - synth_price(y_v, years)) <= PRICE_RECONCILE_TOL else None)
+        out[t] = FuturesSeries(dates=ds, price_adj=cs, implied=imp, price_ctr=ctr)
+
+    return FuturesData(series=out, watermark=watermark())
 
 
 def load() -> FuturesData:
@@ -186,6 +259,26 @@ def instrument_label(kind: str, tenor: str) -> str:
     return (FUT_LABELS if kind == KIND_FUT else FSW_LABELS)[tenor]
 
 
+def implied_at_index(fs: FuturesSeries, i: int, tenor: str) -> float:
+    """그 날의 내재금리(%) — **벤더가 낸 값을 읽는다.**
+
+    `price_adj` 를 역산하지 않는다(그건 조정가라 수준이 없다 — 클래스 머리 주석).
+    벤더 값이 없는 날은 손익은 셀 수 있어도 «금리» 를 말할 수 없으므로 명문으로
+    죽는다 — 조용히 0 이나 근사로 때우면 화면이 없는 사실을 말하게 된다.
+    """
+    y = fs.implied[i] if 0 <= i < len(fs.implied) else None
+    if y is None:
+        raise FuturesError(
+            f"{tenor} {fs.dates[i] if 0 <= i < len(fs.dates) else '?'}: "
+            "벤더 선물내재수익률이 없습니다."
+        )
+    return y
+
+
+def implied_on_or_before(fs: FuturesSeries, d: dt.date, tenor: str) -> float:
+    return implied_at_index(fs, _index_on_or_before(fs.dates, d), tenor)
+
+
 def series_payload(fut: FuturesData, dataset, series_id: str, res: str = "full") -> dict:
     """한 선물·퓨처스왑 계열의 전 기간 — `/api/series/{id}` 와 **같은 몸통**.
 
@@ -223,34 +316,53 @@ def series_payload(fut: FuturesData, dataset, series_id: str, res: str = "full")
     years = FUT_YEARS[tenor]
 
     if kind == KIND_FUT:
-        pairs = [(d.isoformat(), float(c)) for d, c in zip(fs.dates, fs.close)]
-        unit = "가격"
-        ylut = {t: round(implied_yield(v, years), 4) for t, v in pairs}
+        # **수준 계열은 내재금리다** — 조정가는 차분에만 쓴다(클래스 머리 주석).
+        # 첫 줄에 적을 «거래된 가격» 은 벤더 계약별 종가이고, 그 종가가 같은
+        # 행의 내재금리와 안 맞는 날은 None 으로 빈다(PRICE_RECONCILE_TOL).
+        pairs = []
+        plut: dict[str, float | None] = {}
+        for d, y, pc in zip(fs.dates, fs.implied, fs.price_ctr):
+            if y is None:
+                continue
+            t = d.isoformat()
+            pairs.append((t, round(y, 4)))
+            plut[t] = pc
+        unit = "%"
+        ylut = None
     else:
         # IRS 다리는 데이터셋의 그 테너 — 엔진이 다리를 세울 때 읽는 것과
         # 같은 출처다(두 번째 정의 금지).
         irs_pairs, _u = series_pairs(dataset, tenor)
         irs_by = dict(irs_pairs)
         pairs = []
-        for d, c in zip(fs.dates, fs.close):
+        plut = None
+        for d, y in zip(fs.dates, fs.implied):
+            if y is None:
+                continue
             t = d.isoformat()
             leg = irs_by.get(t)
             if leg is None:
                 continue
-            pairs.append((t, round((implied_yield(float(c), years) - float(leg)) * 100.0, 4)))
+            pairs.append((t, round((y - float(leg)) * 100.0, 4)))
         unit = "bp"
         ylut = None
     if not pairs:
         raise FuturesError(f"{series_id}: 그릴 수 있는 날이 없습니다.")
 
     body = series_history(pairs, unit, res)
-    if ylut is not None:
+    if plut is not None:
+        # `p.v` 는 내재금리(%), `p.price` 는 그날 거래된 계약 가격(없으면 null).
+        # 다운샘플을 지나도 어긋나지 않게 **날짜로** 맞춘다.
         for p in body["points"]:
-            p["y"] = ylut.get(p["t"])
+            p["price"] = plut.get(p["t"])
     return {
         "id": series_id,
         "label": instrument_label(kind, tenor),
         "asof": pairs[-1][0],
+        # 52주 통계·백분위는 이제 내재금리 위에서 난다 — **롤 불연속을 그대로
+        # 담고 있다**(실측: KTB3 중앙 5.70bp·최대 27.2bp, KTB10 3.40/16.3bp).
+        # 매끄럽게 만들거나 이어붙이지 않는다. 읽는 사람이 알도록 문구를 준다.
+        "levelNote": "롤 시점 불연속 포함",
         **body,
     }
 
@@ -299,9 +411,10 @@ def fsw_swap_leg(
     entry_i, _exit_i = _span_on(cal, pos)
     entry_date = cal[entry_i]
     fs = fut.series[pos.tenor]
-    price0 = fs.close[fs.dates.index(entry_date)]
     years = FUT_YEARS[pos.tenor]
-    y0 = implied_yield(price0, years)
+    # 진입 내재금리는 **벤더 값을 읽는다** — 조정가 역산이 아니다. DV01 산정이
+    # 이 금리에 달려 있어서, 종전 값(최대 182bp 오차)은 헤지 비율까지 틀렸다.
+    y0 = implied_at_index(fs, fs.dates.index(entry_date), pos.tenor)
     fut_dv01_won = (pos.notional / 100.0) * synth_pvbp(y0, years)
 
     j = _index_on_or_after(dataset.dates, entry_date)
@@ -375,7 +488,9 @@ def run_one(
         swap_rec, swap_ser, _swap_prev = _run_one(dataset, swap_pos, ds_sample, cache)
 
     entry_date, exit_date = cal[entry_i], cal[exit_i]
-    p_entry = fs.close[idx_of[entry_date]]
+    # 손익은 **조정가의 차분**이다 — 롤갭이 없는 것이 조정 계열의 존재 이유이고,
+    # 상수 오프셋은 차분에서 상쇄된다. 여기서 역산하지 않는다.
+    p_entry = fs.price_adj[idx_of[entry_date]]
 
     def fut_pnl_at(d: dt.date) -> float:
         """자기 달력 밖 날짜는 직전 자기 거래일 마크로 — 얼린 값."""
@@ -386,7 +501,7 @@ def run_one(
         if i is None:
             k = _index_on_or_before(fs.dates, mark)
             i = k
-        return fut_dir * (pos.notional / 100.0) * (fs.close[i] - p_entry)
+        return fut_dir * (pos.notional / 100.0) * (fs.price_adj[i] - p_entry)
 
     def swap_pnl_at(d: dt.date) -> float:
         if swap_rec is None:
@@ -407,9 +522,10 @@ def run_one(
             prev[d] = 0.0
 
     last = own[sample_dates[-1]] if sample_dates else 0.0
-    p_exit = fs.close[idx_of[exit_date]]
-    y_entry = implied_yield(p_entry, years)
-    y_exit = implied_yield(p_exit, years)
+    p_exit = fs.price_adj[idx_of[exit_date]]
+    # 표시용 금리는 벤더 값 — 손익(위의 p_exit − p_entry)만 조정가로 센다.
+    y_entry = implied_at_index(fs, idx_of[entry_date], pos.tenor)
+    y_exit = implied_at_index(fs, idx_of[exit_date], pos.tenor)
     fut_leg_pnl = fut_dir * (pos.notional / 100.0) * (p_exit - p_entry)
 
     legs: list[dict] = [{
@@ -548,7 +664,7 @@ def book_recon(fut: FuturesData, dataset, positions: list[FuturesPosition]) -> d
     years = {t: FUT_YEARS[t] for t in tenors}
 
     def implied_at(fs: FuturesSeries, d: dt.date, t: str) -> float:
-        return implied_yield(fs.close[_index_on_or_before(fs.dates, d)], years[t])
+        return implied_on_or_before(fs, d, t)
 
     prev_krd = {t: 0.0 for t in tenors}
     for k in range(max(start - 1, 0), len(window)):
@@ -561,13 +677,15 @@ def book_recon(fut: FuturesData, dataset, positions: list[FuturesPosition]) -> d
             fs, t = info["fs"], info["pos"].tenor
             i = _index_on_or_before(fs.dates, d)
             # 평가(백워드): 진입일 행은 0 (그날 종가로 struck — 스왑 표 규칙).
+            # **차분**이라 조정가가 맞다.
             if d > info["entry_d"]:
-                p_prev = fs.close[max(i - 1, 0)]
-                day_val += info["dir"] * (info["pos"].notional / 100.0) * (fs.close[i] - p_prev)
+                p_prev = fs.price_adj[max(i - 1, 0)]
+                day_val += info["dir"] * (info["pos"].notional / 100.0) * (fs.price_adj[i] - p_prev)
             # KRD (내일 아침 들고 갈 리스크): 청산 마크면 0 — 스왑 표 규칙.
+            # PVBP 는 **수준**에 달렸으므로 벤더 내재금리를 읽는다.
             alive_fwd = d < info["exit_d"] or (d == window[-1] and info["open_end"])
             if alive_fwd:
-                y = implied_yield(fs.close[i], years[t])
+                y = implied_at_index(fs, i, t)
                 krd[t] += info["dir"] * (info["pos"].notional / 100.0) * synth_pvbp(y, years[t])
 
         if k >= start:
@@ -577,8 +695,11 @@ def book_recon(fut: FuturesData, dataset, positions: list[FuturesPosition]) -> d
                 fs = fut.series[t]
                 i = _index_on_or_before(fs.dates, d)
                 if i >= 1:
-                    dy = (implied_yield(fs.close[i], years[t])
-                          - implied_yield(fs.close[i - 1], years[t])) * 100.0
+                    # 두 **수준**의 차다. 조정가 역산의 차로 내면 상수 오프셋이
+                    # 비선형을 지나 안 상쇄된다 — 벤더 값의 차로 낸다.
+                    # 롤일에는 계약이 바뀌므로 여기 Δbp 가 진짜로 튄다(실측
+                    # KTB3 중앙 5.70bp·최대 27.2bp). 그건 사실이라 안 지운다.
+                    dy = (implied_at_index(fs, i, t) - implied_at_index(fs, i - 1, t)) * 100.0
                     dbp[t] = round(dy, 2)
                     est[t] = -prev_krd[t] * dy
                 else:

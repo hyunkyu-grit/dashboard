@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Mean Reversion 측정면 — BSS 전 테너 밴드 위치 랭킹 (Strategy 둘째 세입자).
 
 **측정이지 신호가 아니다.** `Desktop\\bollinger-mr` 의 사전등록 검증(누적 108구성)이
@@ -94,21 +94,28 @@ def _fut_bundle() -> dict[str, dict[str, Any]]:
     두 표 모두 `sim_portfolio` 라 같은 커넥션의 두 스캔이고, 퓨처스왑은 BSS 와
     같은 inner join 규율(양쪽 다 있는 날만, 보간·이월 없음)이다.
     """
+    from . import futures as ft
+
     with engine().connect() as conn:
-        fut = conn.execute(text(
-            "SELECT deal_date, ktb_type, CLOSE FROM mkt_futures_investor_close "
-            "WHERE CLOSE IS NOT NULL ORDER BY deal_date ASC"
-        )).fetchall()
         irs = conn.execute(text(
             "SELECT irs_date, irs_3y, irs_10y FROM mkt_irs_close ORDER BY irs_date ASC"
         )).fetchall()
 
+    # ── 내재금리는 **벤더 값을 읽는다** [OWNER, 2026-08-25] ────────────────────
+    # 종전에는 `mkt_futures_investor_close.CLOSE` 를 역산했는데 그 계열은 뒤로
+    # 조정된 연속 가격이라 **수준이 없다**(FUTURES_LANE_STATE §Phase 1). 벤더
+    # 값 대비 중앙 28.5bp(10Y)·89.5bp(3Y), 최대 182bp 까지 틀린 계열을 이 보드와
+    # 전략 실험 창이 함께 쓰고 있었다. 로더(`futures.load`)가 이미 두 역할을
+    # 갈라 들고 있으므로 여기서 SQL 을 또 읽지 않는다 — 한 출처.
+    fut = ft.load()
     yields: dict[str, list[tuple[str, float]]] = {"3Y": [], "10Y": []}
-    for d, typ, close in fut:
-        if typ not in yields or close is None:
+    for typ in ("3Y", "10Y"):
+        fs = fut.series.get(typ)
+        if fs is None:
             continue
-        years = 3 if typ == "3Y" else 10
-        yields[typ].append((d.isoformat(), _implied_yield(float(close), years)))
+        for d, y in zip(fs.dates, fs.implied):
+            if y is not None:
+                yields[typ].append((d.isoformat(), y))
 
     irs_by_date: dict[str, dict[str, float]] = {}
     for d, y3, y10 in irs:

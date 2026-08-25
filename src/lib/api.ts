@@ -859,16 +859,25 @@ export async function fetchCashBondSeries(id: string): Promise<CashBondSeries> {
  * 그래서 백테스트 창의 진입 레벨이 «—» 로 서고 「종목 추이」 차트가 통째로
  * 안 그려졌다(커서 리드아웃이 그 차트에 붙어 있다).
  *
- * `points[].y` 는 **선물만** 있는 내재금리(%)다. 선물은 가격으로 거래되고
- * 금리로 읽히므로 둘 다 싣는다 [OWNER 선택] — 퓨처스왑은 가격이 아니라
- * 스프레드(bp)라 `y` 가 없다.
+ * ── 수준은 금리다 [2026-08-25 수정가 수리] ──────────────────────────────────
+ * 첫 판은 `v` 에 **조정가**를 실었다. 그 계열(`mkt_futures_investor_close`)은
+ * 뒤로 조정된 연속 가격이라 차분에만 뜻이 있고 수준이 없다 — 그 위에서 낸
+ * 내재금리는 벤더 값 대비 최대 182bp 틀렸다(FUTURES_LANE_STATE §Phase 1).
+ * 지금은:
+ *
+ *   `v`      선물 = 벤더 내재금리(%) · 퓨처스왑 = 스프레드(bp)
+ *   `price`  그날 **거래된 계약 가격**. 선물에만 있고, 그 종가가 같은 날의
+ *            내재금리와 폐형으로 안 맞으면 `null` 이다(조정가를 거래 가능한
+ *            가격인 척 싣지 않는다).
+ *   `levelNote` 52주 통계가 롤 불연속을 담고 있다는 고지 — 지우지 않는다.
  */
 export interface FuturesSeries {
   id: string;
   label: string;
   unit: Unit;
-  points: (HistoryPoint & { y?: number | null })[];
+  points: (HistoryPoint & { price?: number | null })[];
   stats: SeriesStats | null;
+  levelNote?: string | null;
 }
 
 export async function fetchFuturesSeries(id: string): Promise<FuturesSeries> {
