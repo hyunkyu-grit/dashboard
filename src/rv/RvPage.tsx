@@ -50,7 +50,6 @@ import { Collapsible as CdsCollapsible } from '@coinbase/cds-web/collapsible';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Divider } from '@coinbase/cds-web/layout/Divider';
 import { TextInput } from '@coinbase/cds-web/controls';
-import { Button } from '@coinbase/cds-web/buttons';
 import {
   Text,
   TextBody,
@@ -760,11 +759,15 @@ export function RvPage() {
                 label="금통위"
                 align="flex-end"
                 note="분석 시작일 이후 회의만 일할로 반영해요"
+                /* 되돌리기 알약 — CDS `Button size="s"` 는 **36px** 이라 이 줄의
+                   이웃(32px 알약·입력)과 4px 어긋났다 [감사 2026-08-25]. 앱의
+                   행 컨트롤은 `.sr-pillbtn` 이고, `data-fill` 이 secondary 의
+                   회색 채움을 진다(CSS 주석의 그 자리). */
                 action={
                   mpcEncoded ? (
-                    <Button size="s" variant="secondary" onClick={() => setMpc({})}>
+                    <button type="button" className="sr-pillbtn" data-fill onClick={() => setMpc({})}>
                       전부 0으로
-                    </Button>
+                    </button>
                   ) : null
                 }
               >
@@ -793,9 +796,14 @@ export function RvPage() {
                 note="테너마다 다르게 움직이는 경우예요 · 비워 두면 열이 안 생겨요"
                 action={
                   pathsEncoded ? (
-                    <Button size="s" variant="secondary" onClick={() => setPaths([{}, {}])}>
+                    <button
+                      type="button"
+                      className="sr-pillbtn"
+                      data-fill
+                      onClick={() => setPaths([{}, {}])}
+                    >
                       전부 0으로
-                    </Button>
+                    </button>
                   ) : null
                 }
               >

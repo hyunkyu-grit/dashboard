@@ -56,7 +56,9 @@ import { Stat, StatColumn } from '@/ui/Stat';
 import {
   MR_STRATEGY_DEFAULTS,
   MR_STRATEGY_LOOKBACKS,
+  MR_STRATEGY_PRESETS,
   fetchMrStrategy,
+  fmtSigma,
   type MrStrategyParams,
   type MrStrategyRun,
 } from './api';
@@ -65,14 +67,65 @@ import {
  * 컨트롤 **옆**에 붙였고, 라벨 폭이 제각각이라 컨트롤 시작점이 계단이 졌다
  * ("아주 얼라인이 개판이야"). 백테스트·시뮬 창의 Field 문법(라벨 위·바닥 정렬·
  * 등고 32px)으로 다시 세운다. */
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  help,
+  children,
+}: {
+  label: string;
+  /** 값의 출처. 프리셋 알약은 «왜 이 숫자인가» 를 라벨이 지고 있어야 한다. */
+  help?: string;
+  children: React.ReactNode;
+}) {
   return (
     <VStack gap={0.25} minWidth={0}>
-      <Text font="caption" as="span" color="fgMuted" noWrap>
+      <Text font="caption" as="span" color="fgMuted" noWrap title={help}>
         {label}
       </Text>
       {children}
     </VStack>
+  );
+}
+
+/** σ 문턱 하나 — 근거 있는 셋 중 고른다(`MR_STRATEGY_PRESETS`).
+ *
+ * 자유 입력을 안 두는 이유는 보드와 같다: 근거 없는 조합을 화면이 권하는 셈이
+ * 되고, 재현 도구가 원본에 없던 조합을 그럴듯하게 만들어 준다. 프리셋 밖의
+ * 값이 들어오면(딥링크 등) **아무 알약도 안 눌린 상태**로 선다 — 원본 PMS 의
+ * `SegmentedButtons` 가 하던 그 처리다. */
+function SigmaPick({
+  label,
+  help,
+  value,
+  options,
+  onPick,
+}: {
+  label: string;
+  help: string;
+  value: number;
+  options: readonly number[];
+  onPick: (v: number) => void;
+}) {
+  return (
+    <Field label={label} help={help}>
+      <HStack gap={0.5} alignItems="center" height={32}>
+        {options.map((o) => (
+          <button
+            key={o}
+            type="button"
+            className="sr-pillbtn"
+            data-on={value === o || undefined}
+            aria-pressed={value === o}
+            aria-label={`${label} ${fmtSigma(o)}`}
+            onClick={() => onPick(o)}
+          >
+            {/* σ 는 **라벨이 진다** — 알약마다 붙이면 넷이 한 줄에 안 서고
+                「실행」이 혼자 다음 줄로 밀린다(실측). 접근성 이름에는 남는다. */}
+            {Number(o.toFixed(1))}
+          </button>
+        ))}
+      </HStack>
+    </Field>
   );
 }
 
@@ -249,40 +302,55 @@ export function StrategyWindow({
               </Box>
             </HStack>
           </Field>
+          <SigmaPick
+            label="진입 σ"
+            help="볼린저 밴드의 통상 배수예요 — 2σ가 기본, 1.5σ는 민감하게, 2.5σ는 보수적으로 잡아요."
+            value={knobs.entryZ}
+            options={MR_STRATEGY_PRESETS.entryZ}
+            onPick={(v) => set({ entryZ: v })}
+          />
+          <SigmaPick
+            label="관찰 σ"
+            help="경보 문턱이에요 — 진입보다 낮아야 뜻이 있어요. 첫 PMS 기본은 1.5σ예요."
+            value={knobs.warnZ}
+            options={MR_STRATEGY_PRESETS.warnZ}
+            onPick={(v) => set({ warnZ: v })}
+          />
+          <SigmaPick
+            label="청산 σ"
+            help="0은 중심선까지 완전히 되돌아올 때 청산이고, 0.5σ가 첫 PMS 기본이에요."
+            value={knobs.exitZ}
+            options={MR_STRATEGY_PRESETS.exitZ}
+            onPick={(v) => set({ exitZ: v })}
+          />
+          <SigmaPick
+            label="손절 σ"
+            help="z가 더 벌어지면 접는 발산 손절이에요. 진입의 1.5~2배가 통상이고 3.5σ가 첫 PMS 기본이에요."
+            value={knobs.stopZ}
+            options={MR_STRATEGY_PRESETS.stopZ}
+            onPick={(v) => set({ stopZ: v })}
+          />
+          {/* 비용·명목은 **프리셋이 아니라 실제 값**이다 — 그날 그 종목의
+              호가폭이고 이 데스크의 포지션 크기다(api.ts 의 근거 주석). */}
           <Box width={64}>
-            <Field label="진입 σ">
-              <NumInput label="진입 σ" value={knobs.entryZ} onCommit={(v) => set({ entryZ: v })} />
-            </Field>
-          </Box>
-          <Box width={64}>
-            <Field label="관찰 σ">
-              <NumInput label="관찰 σ" value={knobs.warnZ} onCommit={(v) => set({ warnZ: v })} />
-            </Field>
-          </Box>
-          <Box width={64}>
-            <Field label="청산 σ">
-              <NumInput label="청산 σ" value={knobs.exitZ} onCommit={(v) => set({ exitZ: v })} />
-            </Field>
-          </Box>
-          <Box width={64}>
-            <Field label="손절 σ">
-              <NumInput label="손절 σ" value={knobs.stopZ} onCommit={(v) => set({ stopZ: v })} />
-            </Field>
-          </Box>
-          <Box width={64}>
-            <Field label="비용 (bp)">
+            <Field label="비용 (bp)" help="왕복이 아니라 편도예요. 그날 그 종목의 호가폭을 넣으세요.">
               <NumInput label="비용(bp)" value={knobs.costBp} onCommit={(v) => set({ costBp: v })} />
             </Field>
           </Box>
           <Box width={96}>
-            <Field label="명목 (₩/bp)">
+            <Field label="명목 (₩/bp)" help="1bp 움직일 때의 손익이에요. 포지션 크기라 프리셋이 없어요.">
               <NumInput label="명목(₩/bp)" value={knobs.notional}
                 onCommit={(v) => set({ notional: v })} />
             </Field>
           </Box>
+          {/* 실행은 이 줄의 유일한 **액션**이라 채움 알약이다(`data-fill` —
+              CSS 주석의 «액션 pill = 상시 회색 채움, Backtest secondary 의 look»).
+              투명 알약으로 두면 옆의 라벨들과 같은 무게로 읽혀 눌리는 것처럼
+              안 보인다(실측). */}
           <button
             type="button"
             className="sr-pillbtn"
+            data-fill
             disabled={running}
             onClick={exec}
           >
@@ -494,7 +562,8 @@ export function StrategyWindow({
                     우측, 손익만 방향색 글자 [OWNER 2026-08-25 «기준을 Backtest 에»]. */}
                 <Box style={{ position: 'relative', height: CHART_H, overflow: 'auto' }} width="100%">
                   <Table bordered={false}>
-                    <TableHeader>
+                    {/* 거래가 수십 줄이라 머리가 따라와야 한다(Main 규칙). */}
+                    <TableHeader sticky>
                       <TableRow>
                         <TableCell as="th" scope="col">
                           <Text font="caption" as="span" color="fgMuted">진입</Text>

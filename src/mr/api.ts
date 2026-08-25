@@ -97,6 +97,30 @@ export const MR_STRATEGY_DEFAULTS: MrStrategyParams = {
 /** PMS 룩백 프리셋 그대로 — 20/60/120 + 자유 입력. */
 export const MR_STRATEGY_LOOKBACKS = [20, 60, 120] as const;
 
+/** σ 문턱의 선택지 [OWNER 2026-08-25 — "선택지로 다 줄 수 있는거야?"].
+ *
+ * 보드(MR_WINDOWS·MR_KS)와 같은 규율이다: **근거 있는 값만** 늘어놓는다.
+ * 가운데가 PMS s16 기본이고 양옆이 문헌·데스크의 통상 변형이다.
+ *
+ *   진입 1.5 / 2.0 / 2.5 — 볼린저 밴드의 통상 배수(2가 기본, 1.5 민감·2.5 보수)
+ *   관찰 1.0 / 1.5 / 2.0 — 경보 문턱. 진입보다 낮아야 뜻이 있다
+ *   청산 0 / 0.5 / 1.0   — 0 은 완전 평균회귀(중심선), 0.5 가 PMS 기본
+ *   손절 3.0 / 3.5 / 4.0 — z-발산 손절. 진입의 대략 1.5~2배가 통상
+ *
+ * **비용·명목은 프리셋이 없다** — 그 둘은 「보통 쓰는 값」이 아니라 그날 그
+ * 종목의 호가폭이고 이 데스크의 포지션 크기다. 세 개를 늘어놓으면 근거가
+ * 아니라 지어낸 기준이 된다. 자유 입력이 정직하다.
+ */
+export const MR_STRATEGY_PRESETS = {
+  entryZ: [1.5, 2.0, 2.5],
+  warnZ: [1.0, 1.5, 2.0],
+  exitZ: [0, 0.5, 1.0],
+  stopZ: [3.0, 3.5, 4.0],
+} as const;
+
+/** σ 표기 — 2.0 은 「2」로. 알약 넷이 한 줄에 서므로 자릿수가 곧 폭이다. */
+export const fmtSigma = (v: number): string => `${Number(v.toFixed(1))}σ`;
+
 export interface MrStrategyPoint {
   t: string;
   v: number;

@@ -364,7 +364,10 @@ export function MrPage() {
             <div className="sr-rv-rank-fill">
               <div className="sr-rv-rank-scroll">
                 <Table bordered={false}>
-                  <TableHeader>
+                  {/* 머리는 스크롤을 따라온다 — Main 의 `<TableHeader sticky>`
+                      그대로. 13행이 스크롤하는 표에서 「어느 열이 늘어남이었지」를
+                      기억으로 들게 하지 않는다 [감사 2026-08-25]. */}
+                  <TableHeader sticky>
                     <TableRow>
                       <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
                         <Text font="caption" as="span" color="fgMuted">순위</Text>

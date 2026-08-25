@@ -576,7 +576,7 @@ export function StrategySurface() {
                           </Text>
                         </TableCell>
                         {decomp[0]?.terms.map((t) => (
-                          <TableCell key={t.key} align="right">
+                          <TableCell key={t.key} className="sr-num" justifyContent="flex-end">
                             <a href={TERM_HREF[t.key]} title={t.note}>
                               <Text as="span" font="legal">
                                 {t.label}
@@ -584,12 +584,12 @@ export function StrategySurface() {
                             </a>
                           </TableCell>
                         ))}
-                        <TableCell align="right">
+                        <TableCell className="sr-num" justifyContent="flex-end">
                           <Text as="span" font="legal">
                             합계
                           </Text>
                         </TableCell>
-                        <TableCell align="right">
+                        <TableCell className="sr-num" justifyContent="flex-end">
                           <Text as="span" font="legal">
                             준칙 몫
                           </Text>
@@ -604,11 +604,14 @@ export function StrategySurface() {
                               {TENOR_LABEL[d.tenor]}
                             </Text>
                           </TableCell>
+                          {/* 숫자는 등폭이어야 세로로 비교된다 — 이 표의 목적이
+                              테너별 성분을 위아래로 훑는 것이다 [감사 2026-08-25]. */}
                           {d.terms.map((t) => (
-                            <TableCell key={t.key} align="right">
+                            <TableCell key={t.key} className="sr-num" justifyContent="flex-end">
                               <Text
                                 as="span"
                                 font="legal"
+                                tabularNumbers
                                 color={t.structuralZero ? 'fgMuted' : undefined}
                                 className={t.structuralZero ? undefined : dirCls(t.value)}
                               >
@@ -616,13 +619,13 @@ export function StrategySurface() {
                               </Text>
                             </TableCell>
                           ))}
-                          <TableCell align="right">
-                            <Text as="span" font="label1" className={dirCls(d.totalBp)}>
+                          <TableCell className="sr-num" justifyContent="flex-end">
+                            <Text as="span" font="label1" tabularNumbers className={dirCls(d.totalBp)}>
                               {bpTxt(d.totalBp)}
                             </Text>
                           </TableCell>
-                          <TableCell align="right">
-                            <Text as="span" font="legal" color="fgMuted">
+                          <TableCell className="sr-num" justifyContent="flex-end">
+                            <Text as="span" font="legal" tabularNumbers color="fgMuted">
                               {d.ruleShare === null ? '—' : `${Math.round(d.ruleShare * 100)}%`}
                             </Text>
                           </TableCell>
