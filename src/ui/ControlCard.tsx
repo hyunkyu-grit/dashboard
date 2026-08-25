@@ -96,11 +96,48 @@ export function ControlCollapsible({
   );
 }
 
-/** 라벨 + 컨트롤 한 칸. 라벨은 13/500 muted 고 바닥 정렬 행에서 쓰인다. */
-export function Field({ label, children }: { label: string; children: React.ReactNode }) {
+/**
+ * 라벨 + 컨트롤 한 칸 — **앱에 하나뿐인 그것** [OWNER 2026-08-25 — "전체적인
+ * 사이트에서의 «얼라인» 이 없다"].
+ *
+ * 2026-08-25 까지 이 컴포넌트는 **네 번** 따로 정의돼 있었다(`ControlCard`(이것,
+ * 유일하게 export) · `backtest/BacktestWindow` · `sim/SimulationPage` ·
+ * `mr/StrategyWindow`). 넷은 서로 라벨 타이포가 달랐다 — `TextCaption` ·
+ * `TextLegal` · `Text font="legal"` · `Text font="caption"`. 화면마다 같은 칸이
+ * 조금씩 다르게 생겼다는 뜻이고, 그게 오너가 본 「사이트 전체에 얼라인이 없다」의
+ * 정체다. 캐논 규칙 1(«새로 만들기 전에 찾는다»)이 정확히 이 경우다.
+ *
+ * ── `flexGrow` 가 이 수리의 핵심이다 ────────────────────────────────────────
+ * 넷 다 `VStack` 에 폭 규약이 없었다. **CDS `Box` 는 `display: flex; row` 다**
+ * (실측 2026-08-25). 그래서 `<Box width={128}>` 안의 `Field` 는 주축 위의 flex
+ * 아이템이 되어 **내용만큼**만 넓어지고, 안쪽 컨트롤의 `width: 100%` 가 그
+ * 좁아진 폭에 걸린다. 실측: 백테스트 진입일 칸이 `Box width={128}` 인데 날짜
+ * 입력은 **117** 이었다 — 11px 이 조용히 샜고, 그런 칸이 한 행에 여럿이면
+ * 컨트롤 사이 빈틈이 제각각이 된다(그 행의 빈틈은 62·97·12·23px 였다).
+ *
+ * `width: "100%"` 로도 128 은 나오지만 그건 **틀린 낱말**이다. 폭을 안 준 행에
+ * 놓이면 100% 가 «행 전체» 가 되어 칸마다 줄이 바뀐다(전략 실험 창에서 실측 —
+ * 컨트롤 여덟이 세로로 늘어섰다). `flexGrow` 는 «준 상자를 채운다» 만 뜻한다.
+ *
+ * 따라서 규약은 하나다: **`Field` 는 감싸는 `<Box width={N}>` 이 폭을 준다.**
+ * 상자 없이 행에 바로 놓지 않는다 — 그러면 그 칸만 자기 내용 폭이 되어 형제와
+ * 어긋난다(전략 실험 창이 그랬고, 2026-08-25 에 상자를 둘렀다).
+ *
+ * `help` 는 `StrategyWindow` 가 갖고 있던 것 — 값의 출처를 라벨이 진다.
+ */
+export function Field({
+  label,
+  help,
+  children,
+}: {
+  label: string;
+  /** 값의 출처·근거. 라벨의 native title 로 붙는다. */
+  help?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <VStack gap={0.25} minWidth={0}>
-      <Text as="span" font="legal" color="fgMuted" noWrap>
+    <VStack gap={0.25} minWidth={0} flexGrow={1}>
+      <Text as="span" font="legal" color="fgMuted" noWrap title={help}>
         {label}
       </Text>
       {children}

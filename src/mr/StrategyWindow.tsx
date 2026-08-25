@@ -49,6 +49,7 @@ import type { Unit } from '@/lib/api';
 import { BacktestUnavailable } from '@/lib/api';
 import { fmtLevel, unitSuffix } from '@/lib/format';
 import { fmtKrw } from '@/lib/krw';
+import { Field } from '@/ui/ControlCard';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { ReadoutCard, ReadoutLevel, ReadoutMoney, placeReadout } from '@/ui/ReadoutCard';
 import { Stat, StatColumn } from '@/ui/Stat';
@@ -67,25 +68,13 @@ import {
  * 컨트롤 **옆**에 붙였고, 라벨 폭이 제각각이라 컨트롤 시작점이 계단이 졌다
  * ("아주 얼라인이 개판이야"). 백테스트·시뮬 창의 Field 문법(라벨 위·바닥 정렬·
  * 등고 32px)으로 다시 세운다. */
-function Field({
-  label,
-  help,
-  children,
-}: {
-  label: string;
-  /** 값의 출처. 프리셋 알약은 «왜 이 숫자인가» 를 라벨이 지고 있어야 한다. */
-  help?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <VStack gap={0.25} minWidth={0}>
-      <Text font="caption" as="span" color="fgMuted" noWrap title={help}>
-        {label}
-      </Text>
-      {children}
-    </VStack>
-  );
-}
+/* `Field` 는 여기서 정의하지 않는다 — 앱에 하나뿐인 것을 임포트한다
+   (`ui/ControlCard`). 이 파일이 갖고 있던 `help`(값의 출처를 라벨이 진다)는
+   그 공용 것으로 올라갔다 [OWNER 2026-08-25]. */
+
+/** σ 알약 칸 넷의 공통 폭. 가장 넓은 것(진입 σ = 1.5·2·2.5)의 자연폭 127 을
+ * 담고 한 칸 여유 — 넷이 같아야 알약 열이 세로로 맞는다. */
+const SIGMA_W = 132;
 
 /** σ 문턱 하나 — 근거 있는 셋 중 고른다(`MR_STRATEGY_PRESETS`).
  *
@@ -106,8 +95,12 @@ function SigmaPick({
   options: readonly number[];
   onPick: (v: number) => void;
 }) {
+  /* 넷이 같은 폭이어야 눈이 격자로 읽는다 — 자연폭은 113~127 로 제각각이었고
+     (실측 2026-08-25) 그만큼 알약 열이 칸마다 어긋나 있었다. 상자를 두르는 것은
+     형제 화면의 규약이기도 하다(`<Box width={N}><Field>` — 백테스트·시뮬). */
   return (
-    <Field label={label} help={help}>
+    <Box width={SIGMA_W}>
+      <Field label={label} help={help}>
       <HStack gap={0.5} alignItems="center" height={32}>
         {options.map((o) => (
           <button
@@ -125,7 +118,8 @@ function SigmaPick({
           </button>
         ))}
       </HStack>
-    </Field>
+      </Field>
+    </Box>
   );
 }
 
@@ -273,35 +267,45 @@ export function StrategyWindow({
             한 행의 컨트롤은 전부 32px 등고(control-parity 의 그 등고)라
             실행도 알약이다(rv 「상세 분석」 자리의 그 컨트롤). */}
         <HStack gap={1.5} alignItems="flex-end" flexWrap="wrap">
-          <Field label="종목">
-            {/* 컨트롤이 아닌 값도 같은 32px 상자에 담는다 — 백테스트 「진입
-                레벨」 칸의 판례(안 담으면 이 블록만 바닥에서 어긋난다). */}
-            <HStack height={32} alignItems="center">
-              <Text font="label2" as="span" noWrap>
-                {label}
-              </Text>
-            </HStack>
-          </Field>
-          <Field label="룩백 (일)">
-            <HStack gap={0.5} alignItems="center">
-              {MR_STRATEGY_LOOKBACKS.map((w) => (
-                <button
-                  key={w}
-                  type="button"
-                  className="sr-pillbtn"
-                  data-on={knobs.lookback === w || undefined}
-                  aria-pressed={knobs.lookback === w}
-                  onClick={() => set({ lookback: w })}
-                >
-                  {w}
-                </button>
-              ))}
-              <Box width={56}>
-                <NumInput label="룩백(일)" value={knobs.lookback}
-                  onCommit={(v) => set({ lookback: Math.max(2, Math.round(v)) })} />
-              </Box>
-            </HStack>
-          </Field>
+          {/* 폭은 감싸는 `Box` 가 준다 — `Field` 규약(`ui/ControlCard` 머리
+              주석). 상자 없이 행에 바로 놓으면 그 칸만 자기 내용 폭이 되어
+              형제와 어긋난다. 160 은 최장 계열명(「KTB10 내재금리」)이 안 잘리는
+              폭이다 — 말줄임 금지. */}
+          <Box width={160}>
+            <Field label="종목">
+              {/* 컨트롤이 아닌 값도 같은 32px 상자에 담는다 — 백테스트 「진입
+                  레벨」 칸의 판례(안 담으면 이 블록만 바닥에서 어긋난다). */}
+              <HStack height={32} alignItems="center">
+                <Text font="label2" as="span" noWrap>
+                  {label}
+                </Text>
+              </HStack>
+            </Field>
+          </Box>
+          {/* 208 = 알약 넷(20·60·120·252) + 자유 입력 56 + 간격. 자연폭 199 에
+              한 칸 여유. */}
+          <Box width={208}>
+            <Field label="룩백 (일)">
+              <HStack gap={0.5} alignItems="center">
+                {MR_STRATEGY_LOOKBACKS.map((w) => (
+                  <button
+                    key={w}
+                    type="button"
+                    className="sr-pillbtn"
+                    data-on={knobs.lookback === w || undefined}
+                    aria-pressed={knobs.lookback === w}
+                    onClick={() => set({ lookback: w })}
+                  >
+                    {w}
+                  </button>
+                ))}
+                <Box width={56}>
+                  <NumInput label="룩백(일)" value={knobs.lookback}
+                    onCommit={(v) => set({ lookback: Math.max(2, Math.round(v)) })} />
+                </Box>
+              </HStack>
+            </Field>
+          </Box>
           <SigmaPick
             label="진입 σ"
             help="볼린저 밴드의 통상 배수예요 — 2σ가 기본, 1.5σ는 민감하게, 2.5σ는 보수적으로 잡아요."
