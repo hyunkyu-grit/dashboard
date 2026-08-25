@@ -588,7 +588,11 @@ export function SimulationPage({
             return (
               <VStack key={r.key} gap={0.5} width="100%">
                 <HStack gap={1} alignItems="flex-end" flexWrap="wrap">
-                  <Box width={150}>
+                  {/* 폭 = 최장 라벨 실측 + 컨트롤 크롬 82px(백테스트 종류 칸의
+                      실측) — 말줄임 금지 [OWNER 2026-08-25, CLAUDE.md]. 종류의
+                      최장 «아웃라이트/버터플라이» 5자 ≈ 65px → 82+65=147, 여유
+                      13px. 150 이던 시절 여유가 3px 라 폰트가 흔들리면 잘렸다. */}
+                  <Box width={160}>
                     <Field label="종류">
                       {/* font legal(13) — 컨트롤 값 13px 규칙(popup.ts 의 근거). */}
                       <Select
@@ -622,7 +626,12 @@ export function SimulationPage({
                       />
                     </Field>
                   </Box>
-                  <Box width={112}>
+                  {/* 112 이던 칸 — 글자 자리가 30px 라 «국고채 3Y» 가 «국고…» 로
+                      잘렸다(오너 신고 2026-08-25, 이 화면의 그 칸). 최장 라벨
+                      «캐피탈채 AA- 10Y» ≈ 115px → 82+115=197. 열이 좁은 날은
+                      flexWrap 이 명목 칸을 다음 줄로 접는다 — 접히는 건 되고
+                      잘리는 건 안 된다. */}
+                  <Box width={200}>
                     <Field label="상품">
                       <Select
                         size="s"

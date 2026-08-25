@@ -108,8 +108,11 @@ export const LEVEL_GLYPHS = Math.max(
  * a change to the width model rather than to a cushion — recorded here rather
  * than done quietly as part of a type pass.
  *
- * The SUBTITLE is allowed to truncate at the tail; `.sr-name-stack > *` sets up
- * the ellipsis. The column is sized so the NAME never does. */
+ * 말줄임은 이제 어디에도 없다 [OWNER 2026-08-25 — CLAUDE.md «말줄임 절대
+ * 금지»]. 한때 서브라인은 꼬리 잘림을 허용했고 `.sr-name-stack > *` 이
+ * ellipsis 를 세웠는데, 그 안전판이 걷히면서 이 폭 모델이 유일한 방어선이다 —
+ * 이름·서브라인 모두 여기 실측 폭 안에 들어가야 하고, 넘치면 잘리는 대신
+ * 이웃 위로 넘쳐 보인다(시끄러운 실패). */
 /* `level: 22`, MEASURED 2026-08-14 and not the old 18. The cell's own inset is
  * 16px per side (32 total), so a column of `6ch + pad` offers `6ch + pad − 32`
  * of text. The header `08-13` renders ~40px at 13px/600, and 6×8.6 + 22 − 32 =

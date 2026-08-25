@@ -152,13 +152,36 @@ export function LinkedCharts({
   const pctAxis = refs != null && mode === 'own';
   const refAxis = pctAxis ? PCT_AXIS : TOP_AXIS;
 
-  const markIdx = useMemo(
-    () =>
-      (marks ?? [])
-        .map((m) => ({ ...m, i: points.findIndex((p) => p.t >= m.date) }))
-        .filter((m) => m.i >= 0),
-    [marks, points],
-  );
+  const markIdx = useMemo(() => {
+    const raw = (marks ?? [])
+      .map((m) => ({ ...m, i: points.findIndex((p) => p.t >= m.date) }))
+      .filter((m) => m.i >= 0)
+      .sort((a, b) => a.i - b.i);
+    /* 근접 마크 병합 [OWNER 2026-08-25 — 겹침 금지, CLAUDE.md «말줄임 절대
+       금지» §3]. CDS ReferenceLine 라벨엔 충돌 회피가 없어, 며칠 차이로
+       레그인한 두 진입이 몇 년 x 도메인에서 같은 픽셀에 떨어지면 «진입» 두
+       장이 포개진다. 도메인의 ~2% 안에 든 마크는 선 하나로 합치고 라벨이
+       센다 — «진입 ×2», 섞이면 «진입·청산». */
+    const gap = Math.max(1, Math.round(points.length * 0.02));
+    const out: { i: number; label: string }[] = [];
+    let bucket: typeof raw = [];
+    const flush = () => {
+      if (bucket.length === 0) return;
+      const byLabel = new Map<string, number>();
+      for (const b of bucket) byLabel.set(b.label, (byLabel.get(b.label) ?? 0) + 1);
+      const label = [...byLabel.entries()]
+        .map(([l, n]) => (n > 1 ? `${l} ×${n}` : l))
+        .join('·');
+      out.push({ i: bucket[0]!.i, label });
+      bucket = [];
+    };
+    for (const m of raw) {
+      if (bucket.length > 0 && m.i - bucket[bucket.length - 1]!.i > gap) flush();
+      bucket.push(m);
+    }
+    flush();
+    return out;
+  }, [marks, points]);
 
   /* 자리는 상자의 CSS 변수 — 상태가 아니다(`placeReadout` 머리글). 이 창은
      차트 둘과 표를 함께 들고 있어 픽셀마다 다시 그리면 값이 실하다. */

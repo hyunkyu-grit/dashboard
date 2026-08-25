@@ -509,10 +509,12 @@ export function BacktestWindow({
             return (
               <VStack key={r.key} gap={0.5} width="100%">
                 <HStack gap={1.5} alignItems="flex-end" flexWrap="wrap">
-                  {/* 종류 132 — 가장 긴 라벨 "현금채권" 이 13px legal 로 ~52px 이고
+                  {/* 종류 140 — 가장 긴 라벨 "현금채권" 이 13px legal 로 ~52px 이고
                       CDS 컨트롤의 크롬(좌우 패딩 + 셰브론)이 82px 을 먹는다(이 창의
-                      다른 칸들과 같은 실측 산술). */}
-                  <Box width={132}>
+                      다른 칸들과 같은 실측 산술). 132 이던 시절 그 합(134)이 상자보다
+                      2px 컸다 — 자기 주석의 산술이 이미 어긋나 있었다
+                      [OWNER 2026-08-25 말줄임 금지]. */}
+                  <Box width={140}>
                     <Field label="종류">
                       {/* font legal(13) — 컨트롤 값 13px 통일(popup.ts 의 근거). */}
                       <Select
@@ -534,7 +536,10 @@ export function BacktestWindow({
                       />
                     </Field>
                   </Box>
-                  <Box width={160}>
+                  {/* 160 → 168 [OWNER 2026-08-25 말줄임 금지]: 최장 «캐피탈채
+                      AA-» ≈ 76px + 크롬 82 = 158 — 2px 모자라 잘렸다. 같은
+                      라벨에 BondTypeFilter 는 200 을 준다(다른 크롬). */}
+                  <Box width={168}>
                     <Field label="종목">
                       <Select
                         size="s"
@@ -556,7 +561,9 @@ export function BacktestWindow({
                   {/* 만기 칸은 채권에만 선다 [OWNER — "Cash Bond에서는 종목, 테너로"].
                       스왑은 종목 이름이 이미 만기를 말한다(3s10s 의 두 다리). */}
                   {bond ? (
-                    <Box width={92}>
+                    /* 92 → 116 [OWNER 2026-08-25 말줄임 금지]: 크롬 82 를 빼면
+                       글자 자리가 10px 라 «10Y»·«1.5Y» 도 잘렸다. */
+                    <Box width={116}>
                       <Field label="만기">
                         <Select
                           size="s"

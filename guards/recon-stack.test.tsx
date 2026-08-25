@@ -214,12 +214,13 @@ describe('범례는 사방 고정 [v1 OWNER, 2026-08-12 2차]', () => {
      * 단언한다. */
     expect(ths[0].style.left).toBe('0px'); // 날짜
     expect(ths[1].style.left).toMatch(/calc\(7\.53\d*ch\)/); // 구분 = 7ch·14/13
+    /* 꼬리 트랙 15ch [OWNER 2026-08-25 겹침 금지 — ReconStack.TAIL_CH 머리]. */
     const tail = ths.slice(-5);
     expect(tail.map((th) => th.style.right)).toEqual([
-      expect.stringMatching(/calc\(47\.38\d*ch\)/), // 합계   = 44ch·14/13
-      expect.stringMatching(/calc\(35\.53\d*ch\)/), // 평가   = 33ch·14/13
-      expect.stringMatching(/calc\(23\.69\d*ch\)/), // 캐리   = 22ch·14/13
-      expect.stringMatching(/calc\(11\.84\d*ch\)/), // 롤다운 = 11ch·14/13
+      expect.stringMatching(/calc\(64\.61\d*ch\)/), // 합계   = 60ch·14/13
+      expect.stringMatching(/calc\(48\.46\d*ch\)/), // 평가   = 45ch·14/13
+      expect.stringMatching(/calc\(32\.30\d*ch\)/), // 캐리   = 30ch·14/13
+      expect.stringMatching(/calc\(16\.15\d*ch\)/), // 롤다운 = 15ch·14/13
       '0px',
     ]);
     // 본문의 rowSpan 셀도 고정 + **불투명 배경** — 밑을 지나는 히트맵이 비치면 안 된다.
@@ -235,10 +236,10 @@ describe('범례는 사방 고정 [v1 OWNER, 2026-08-12 2차]', () => {
     const table = container.querySelector('table') as HTMLElement;
     const cols = [...container.querySelectorAll('col')] as HTMLElement[];
     expect(cols).toHaveLength(2 + TENORS.length + 5);
-    /* CSSOM 이 상수항을 접는다: 날짜 7 + 구분 5 + 꼬리 5×11 = **67ch**, 그리고
+    /* CSSOM 이 상수항을 접는다: 날짜 7 + 구분 5 + 꼬리 5×15 = **87ch**, 그리고
        테너 트랙은 개수 × 폭으로 남는다. 접힌 값으로 단언하는 편이 낫다 — 소스의
        수식이 아니라 브라우저가 실제로 쓰는 폭을 재는 것이다. */
-    expect(table.style.width).toMatch(/calc\(67ch \+ 4 \* \(calc\(\d+ch \+ 8px\)\)\)/);
+    expect(table.style.width).toMatch(/calc\(87ch \+ 4 \* \(calc\(\d+ch \+ 8px\)\)\)/);
   });
 });
 

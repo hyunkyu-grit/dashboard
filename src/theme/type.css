@@ -718,8 +718,7 @@ thead th {
  * settled it is recorded in `table/cells.ts` — do not re-derive it.
  *
  * `min-width: 0` matters and is easy to lose: a flex child defaults to
- * `min-width: auto` and refuses to shrink below its content, so the ellipsis
- * never appears without it. */
+ * `min-width: auto` and refuses to shrink below its content. */
 .sr-name-stack {
   display: flex;
   flex-direction: column;
@@ -728,9 +727,12 @@ thead th {
   line-height: 1.3;
 }
 
+/* 말줄임 금지 [OWNER 2026-08-25 — CLAUDE.md 같은 이름 절]. 여기 있던
+   `text-overflow: ellipsis` 는 죽은 안전판이었다 — 열 폭이 최장 라벨로 실측돼
+   있어(columns.ts) 발동할 일이 없어야 하고, 발동하면 «국고…» 가 된다. 이제
+   너무 긴 문자열은 조용히 잘리는 대신 이웃 위로 **시끄럽게 넘친다** — 즉시
+   눈에 띄어 폭을 고치게 되는 쪽이 이 리포의 실패 문법이다(조용한 강등 금지). */
 .sr-name-stack > * {
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -1727,12 +1729,20 @@ thead th {
   /* 값 라벨은 막대 **위**에 앉는다. 위쪽 여백이 없으면 첫 막대(가장 높은 것)의
      라벨이 컨테이너 밖으로 나가 위 설명 문장과 겹친다(실측 2026-08-14). */
   padding-top: 20px;
+  /* 채권 섞인 북은 열이 여덟이다 — 아래 열 최소폭이 값을 다 담으므로 좁은
+     창에서는 이 상자가 가로로 스크롤한다. 자르는 것도 겹치는 것도 금지라
+     남는 길은 스크롤뿐이다 [OWNER 2026-08-25 — CLAUDE.md 말줄임 절대 금지]. */
+  overflow-x: auto;
 }
 
 .sr-wf-col {
   position: relative;
   flex: 1 1 0;
-  min-width: 56px;
+  /* 56 → 120 [OWNER 2026-08-25 겹침 금지]: 값 라벨(`−12억 3,456만원` ≈ 108px
+     @12px)이 절대배치 nowrap 로 가운데 정렬이라, 열이 값보다 좁으면 이웃 열의
+     값 위에 그대로 앉는다 — 8열 혼합 북에서 실측된 겹침. 최소폭이 최장 값을
+     담는다. */
+  min-width: 120px;
 }
 
 .sr-wf-bar {
@@ -2424,10 +2434,11 @@ thead th {
   min-width: 0;
 }
 
+/* 말줄임 금지 [OWNER 2026-08-25] — 긴 일정 이름은 잘리는 대신 단어 사이에서
+   줄을 넘긴다(keep-all — 툴팁 .sr-rv-tiptext 와 같은 판단). 칸은 세로로 자란다. */
 .sr-cal-ev {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: keep-all;
 }
 
 /* ── 공시 지평 밖 [2026-08-21] ───────────────────────────────────────────────
