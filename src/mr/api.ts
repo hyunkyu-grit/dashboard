@@ -75,10 +75,18 @@ async function get<T>(url: string, what: string): Promise<T> {
   return r.json();
 }
 
-export function fetchMrBoard(): Promise<MrBoard> {
-  return get<MrBoard>(mrBoardUrl(), 'mr board');
+/** 룩백·밴드 폭 — 서버 허용값(mr.py WINDOWS·KS)과 같은 목록. 근거는 서버 쪽
+ * 주석이 진다: 20·2σ 볼린저 기본, 60/120/252 채권 RV 관례 창, 1.5/2.5σ 문헌 변형. */
+export const MR_WINDOWS = [20, 60, 120, 252] as const;
+export const MR_KS = [1.5, 2.0, 2.5] as const;
+export type MrParams = { window: number; k: number };
+
+const qs = (p: MrParams) => `window=${p.window}&k=${p.k}`;
+
+export function fetchMrBoard(p: MrParams): Promise<MrBoard> {
+  return get<MrBoard>(mrBoardUrl(qs(p)), 'mr board');
 }
 
-export function fetchMrHistory(id: string): Promise<MrHistory> {
-  return get<MrHistory>(mrHistoryUrl(id), 'mr history');
+export function fetchMrHistory(id: string, p: MrParams): Promise<MrHistory> {
+  return get<MrHistory>(mrHistoryUrl(id, qs(p)), 'mr history');
 }

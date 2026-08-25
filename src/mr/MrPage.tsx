@@ -4,9 +4,10 @@
  *
  * **측정이지 신호가 아니다.** 사전등록 검증(Desktop\bollinger-mr, 누적 108구성)이
  * 「볼린저 재진입」 신호 문법을 NO-GO 로 닫았고(REPORT.md), 이 화면은 그 결론
- * 위에 선다: 본드스왑 스프레드(국고 − IRS) 전 테너가 평소 밴드(SMA20 ± 2σ)
- * 대비 어디에 있는지를 재서 늘어난 순서로 세울 뿐이다. 진입·청산·추천 문구는
- * 없다 — Credit RV 의 「랭킹이지 투자판단이 아니다」와 같은 명구 의무.
+ * 위에 선다: 본드스왑 스프레드(국고 − IRS) 전 테너가 평소 밴드(SMA ± σ배수,
+ * 룩백·폭은 근거 있는 선택지 — MR_WINDOWS·MR_KS) 대비 어디에 있는지를 재서
+ * 늘어난 순서로 세울 뿐이다. 진입·청산·추천 문구는 없다 — Credit RV 의
+ * 「랭킹이지 투자판단이 아니다」와 같은 명구 의무.
  *
  * **유니버스는 BSS 뿐이다** [OWNER 2026-08-25 — "일단 본드스왑만"]. 첫 판의
  * 비교군 12계열(선물·IRS)은 범위 오독이라 내려갔다 — 근거는 backend/app/mr.py.
@@ -21,7 +22,7 @@
  * 같은 표를 두 문법으로 말하지 않는다.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Tooltip } from '@coinbase/cds-web/overlays';
@@ -31,12 +32,16 @@ import type { Unit } from '@/lib/api';
 import { BacktestUnavailable } from '@/lib/api';
 import { fmtDelta, fmtLevel, unitSuffix } from '@/lib/format';
 import { ErrorState, LoadingState } from '@/ui/DataState';
+import { useUrlState } from '@/ui/useUrlState';
 
 import {
+  MR_KS,
+  MR_WINDOWS,
   fetchMrBoard,
   fetchMrHistory,
   type MrBoard,
   type MrHistory,
+  type MrParams,
   type MrRow,
   type MrState,
 } from './api';
@@ -121,22 +126,44 @@ export function MrPage() {
   const [histories, setHistories] = useState<Record<string, MrHistory>>({});
   const [histErr, setHistErr] = useState<string>();
 
+  /* 룩백·밴드 폭 — URL 상태(rv 의 이력 창과 같은 문법: 기본값은 주소에 안
+     적는다). 모르는 값은 기본으로 떨어진다(딥링크 게이트). 선택지 근거는
+     서버(mr.py) 주석과 열 머리 툴팁이 진다. */
+  const [mwParam, setMwParam] = useUrlState('mw');
+  const [mkParam, setMkParam] = useUrlState('mk');
+  const bandWindow = (MR_WINDOWS as readonly number[]).includes(Number(mwParam))
+    ? Number(mwParam)
+    : MR_WINDOWS[0];
+  const bandK = (MR_KS as readonly number[]).includes(Number(mkParam))
+    ? Number(mkParam)
+    : 2.0;
+  const params = useMemo<MrParams>(
+    () => ({ window: bandWindow, k: bandK }),
+    [bandWindow, bandK],
+  );
+
   const load = useCallback(() => {
     setError(undefined);
     setUnavailable(false);
     setRefreshing(true);
-    fetchMrBoard()
+    fetchMrBoard(params)
       .then(setBoard)
       .catch((e: unknown) => {
         if (e instanceof BacktestUnavailable) setUnavailable(true);
         else setError(e instanceof Error ? e.message : String(e));
       })
       .finally(() => setRefreshing(false));
-  }, []);
+  }, [params]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  /* 파라미터가 바뀌면 밴드도 바뀐다 — 옛 창의 이력 캐시는 통째로 무효다. */
+  useEffect(() => {
+    setHistories({});
+    setHistErr(undefined);
+  }, [params]);
 
   const rows = board?.rows ?? [];
   const sel: MrRow | undefined = rows.find((r) => r.id === selId) ?? rows[0];
@@ -147,7 +174,7 @@ export function MrPage() {
     if (!id || histories[id]) return;
     let dead = false;
     setHistErr(undefined);
-    fetchMrHistory(id)
+    fetchMrHistory(id, params)
       .then((h) => {
         if (!dead) setHistories((prev) => ({ ...prev, [id]: h }));
       })
@@ -157,7 +184,7 @@ export function MrPage() {
     return () => {
       dead = true;
     };
-  }, [sel?.id, histories]);
+  }, [sel?.id, histories, params]);
 
   if (unavailable) {
     return (
@@ -185,7 +212,44 @@ export function MrPage() {
               join 이라 as-of 도 하나다 — 첫 판의 소스별 갈림 표기는 은퇴했다. */}
           <Cond k="as-of" v={board.asof.bss ?? '—'} />
           <Cond k="정의" v="국고 − IRS" />
-          <Cond k="밴드" v={`${board.params.window}일 ±${board.params.k}σ`} />
+          {/* 룩백·밴드 폭 선택지 [OWNER 2026-08-25 — "보통 사용하는 값들을
+              선택지로"]. 알약은 rv 설정의 그 컨트롤, 근거는 라벨 툴팁이 진다. */}
+          <HStack gap={0.5} alignItems="center">
+            <ThHelp
+              label="룩백"
+              help="20일은 볼린저 밴드의 관례 기본값이에요. 60·120·252일은 채권 RV 리서치가 흔히 쓰는 분기·반기·1년 창이에요."
+            />
+            {MR_WINDOWS.map((w) => (
+              <button
+                key={w}
+                type="button"
+                className="sr-rv-pillbtn"
+                data-on={bandWindow === w || undefined}
+                aria-pressed={bandWindow === w}
+                onClick={() => setMwParam(w === MR_WINDOWS[0] ? undefined : String(w))}
+              >
+                {w}일
+              </button>
+            ))}
+          </HStack>
+          <HStack gap={0.5} alignItems="center">
+            <ThHelp
+              label="밴드 폭"
+              help="2σ가 볼린저 기본이에요. 1.5σ는 벗어남을 민감하게, 2.5σ는 보수적으로 잡는 문헌의 통상 변형이에요."
+            />
+            {MR_KS.map((kk) => (
+              <button
+                key={kk}
+                type="button"
+                className="sr-rv-pillbtn"
+                data-on={bandK === kk || undefined}
+                aria-pressed={bandK === kk}
+                onClick={() => setMkParam(kk === 2.0 ? undefined : String(kk))}
+              >
+                {`${kk}σ`}
+              </button>
+            ))}
+          </HStack>
           <Cond k="재진입 표기" v={`${board.params.recentN}영업일`} />
           {refreshing ? (
             <Text font="legal" as="span" color="fgMuted" noWrap>
@@ -241,9 +305,11 @@ export function MrPage() {
                       <th className="sr-rv-th">값</th>
                       <th className="sr-rv-th">전일</th>
                       <th className="sr-rv-th">
+                        {/* 창을 상수로 적으면 컨트롤을 바꾼 날 화면이 거짓말을
+                            한다(rv 「버퍼 3개월」 실측의 같은 자리). */}
                         <ThHelp
                           label="늘어남"
-                          help="지금 값이 20일 평균에서 σ 몇 개만큼 떨어져 있는지예요. 이 표의 정렬 축이에요."
+                          help={`지금 값이 ${bandWindow}일 평균에서 σ 몇 개만큼 떨어져 있는지예요. 이 표의 정렬 축이에요.`}
                         />
                       </th>
                       <th className="sr-rv-th">

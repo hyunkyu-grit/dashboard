@@ -838,23 +838,43 @@ def rv_history(sector: str, tenor: str, window: str = "52w") -> dict:
         raise HTTPException(status_code=422, detail=str(exc))
 
 
-@router.get("/api/mr/board")
-def mr_board() -> dict:
-    """Mean Reversion 측정면의 보드 — 12계열의 밴드 위치·상태·랭킹(§16).
+def _mr_payload(window: int, k: float) -> dict:
+    """검증된 (window, k) 조합의 페이로드 — 조합마다 캐시 이름이 다르다.
 
-    universe 캐시와 같은 판단으로 `_dataset.data_key` 에 태운다: BSS·선물은
-    호출 시 SQL 이지만 하루 한 번 움직이는 입력이고, 캐시가 IRS 스냅샷과 같은
-    날 안에 두 소스를 묶는다. 히스토리는 무겁고 행마다 필요하지도 않아
-    `/api/mr/history` 가 따로 썬다.
+    universe 캐시와 같은 판단으로 `_dataset.data_key` 에 태운다: BSS 는 호출 시
+    SQL 이지만 하루 한 번 움직이는 입력이다. 조합은 WINDOWS×KS 로 유한하므로
+    캐시 파일도 유한하다.
     """
-    p = cached("mr", _dataset.data_key, lambda: mr_mod.build_mr(_dataset))
-    return {k: v for k, v in p.items() if k != "history"}
+    if window not in mr_mod.WINDOWS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"알 수 없는 룩백입니다: {window}일 ({', '.join(map(str, mr_mod.WINDOWS))})",
+        )
+    if k not in mr_mod.KS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"알 수 없는 밴드 폭입니다: {k}σ ({', '.join(map(str, mr_mod.KS))})",
+        )
+    return cached(f"mr-w{window}-k{k}", _dataset.data_key,
+                  lambda: mr_mod.build_mr(_dataset, window=window, k=k))
+
+
+@router.get("/api/mr/board")
+def mr_board(window: int = mr_mod.WINDOW, k: float = mr_mod.K) -> dict:
+    """Mean Reversion 측정면의 보드 — BSS 전 테너의 밴드 위치·상태·랭킹(§16).
+
+    룩백·밴드 폭은 화면 선택지(WINDOWS·KS — 근거는 mr.py 머리)이고, 히스토리는
+    무겁고 행마다 필요하지도 않아 `/api/mr/history` 가 따로 썬다.
+    """
+    p = _mr_payload(window, k)
+    return {key: v for key, v in p.items() if key != "history"}
 
 
 @router.get("/api/mr/history/{series_id:path}")
-def mr_history(series_id: str) -> dict:
-    """한 계열의 값+밴드 이력(약 1년) — 클릭 상세 차트의 재료."""
-    p = cached("mr", _dataset.data_key, lambda: mr_mod.build_mr(_dataset))
+def mr_history(series_id: str, window: int = mr_mod.WINDOW, k: float = mr_mod.K) -> dict:
+    """한 계열의 값+밴드 이력(약 1년) — 클릭 상세 차트의 재료. 밴드가 룩백·폭을
+    따라가므로 보드와 같은 파라미터를 받는다."""
+    p = _mr_payload(window, k)
     body = p["history"].get(series_id)
     if body is None:
         raise HTTPException(status_code=404, detail=f"unknown mr series {series_id}")

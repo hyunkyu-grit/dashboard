@@ -160,9 +160,11 @@ export const universeSeriesUrl = (id: string) =>
 export const rvAnalysisUrl = (query: string) => liveUrl("/api/rv/analysis", query);
 export const rvHistoryUrl = (query: string) => liveUrl("/api/rv/history", query);
 
-/** Mean Reversion 측정면(Strategy 둘째 세입자) — 라이브 전용(BSS·선물이 SQL 에만). */
-export const mrBoardUrl = () => liveUrl("/api/mr/board");
-export const mrHistoryUrl = (id: string) => liveUrl(`/api/mr/history/${encodeURIComponent(id)}`);
+/** Mean Reversion 측정면(Strategy 둘째 세입자) — 라이브 전용(BSS 가 SQL 에만).
+ * query = `window=..&k=..`(rv 페처들과 같은 문법). */
+export const mrBoardUrl = (query: string) => liveUrl("/api/mr/board", query);
+export const mrHistoryUrl = (id: string, query: string) =>
+  liveUrl(`/api/mr/history/${encodeURIComponent(id)}`, query);
 
 export const simInstrumentsUrl = () => liveUrl("/api/instruments");
 export const simExpandUrl = () => liveUrl("/api/instruments/expand");

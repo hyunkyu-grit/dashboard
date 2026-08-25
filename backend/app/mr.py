@@ -23,10 +23,18 @@ from typing import Any, Callable
 
 from .universe import universe_series
 
-# 검증 레인(mr_backtest.py)과 같은 창·배수 — 화면과 검증이 딴 밴드를 말하면
-# 안 된다. 바꾸려면 두 곳을 같이 바꾼다.
+# 기본은 검증 레인(mr_backtest.py)과 같은 창·배수 — 화면과 검증이 딴 밴드를
+# 말하면 안 된다. 기본을 바꾸려면 두 곳을 같이 바꾼다.
 WINDOW = 20
 K = 2.0
+# 화면 선택지 [OWNER 2026-08-25 — "외부 리서치로 보통 사용하는 값들을 선택지로"].
+# 근거 있는 값만 둔다: 20일·2σ 는 볼린저의 관례 기본값(그의 문헌 표준 조합).
+# 60·120·252 는 채권 RV 리서치가 흔히 쓰는 분기·반기·1년 창이고, 252 는 이
+# 리포의 universe·rv 화면 52주 창과 같은 낱말이다. 1.5σ·2.5σ 는 볼린저 문헌의
+# 통상 변형(민감/보수 밴드). 자유 입력을 안 두는 이유: 근거 없는 조합을 화면이
+# 권하는 셈이 되고, 검증 레인의 시행 장부와도 어긋난다.
+WINDOWS = (20, 60, 120, 252)
+KS = (1.5, 2.0, 2.5)
 # 재진입 «최근» 판정 상한 — 검증 레인의 EXPIRE_N 과 같은 5영업일.
 RECENT_N = 5
 
@@ -48,26 +56,26 @@ SERIES: list[tuple[str, str]] = [
 HISTORY_N = 260
 
 
-def _bands(vals: list[float]) -> tuple[list, list, list]:
-    """SMA(WINDOW) ± K·SD(ddof=1). 창이 차기 전은 None — 0 이 아니다."""
+def _bands(vals: list[float], window: int = WINDOW, k: float = K) -> tuple[list, list, list]:
+    """SMA(window) ± k·SD(ddof=1). 창이 차기 전은 None — 0 이 아니다."""
     n = len(vals)
     ma: list[float | None] = [None] * n
     up: list[float | None] = [None] * n
     lo: list[float | None] = [None] * n
-    if n < WINDOW:
+    if n < window:
         return ma, up, lo
-    s = sum(vals[:WINDOW])
-    s2 = sum(x * x for x in vals[:WINDOW])
-    for i in range(WINDOW - 1, n):
-        if i >= WINDOW:
-            old, new = vals[i - WINDOW], vals[i]
+    s = sum(vals[:window])
+    s2 = sum(x * x for x in vals[:window])
+    for i in range(window - 1, n):
+        if i >= window:
+            old, new = vals[i - window], vals[i]
             s += new - old
             s2 += new * new - old * old
-        m = s / WINDOW
+        m = s / window
         # ddof=1. 수치 오차로 음수가 될 수 있어 0 에서 자른다.
-        var = max(0.0, (s2 - WINDOW * m * m) / (WINDOW - 1))
+        var = max(0.0, (s2 - window * m * m) / (window - 1))
         sd = math.sqrt(var)
-        ma[i], up[i], lo[i] = m, m + K * sd, m - K * sd
+        ma[i], up[i], lo[i] = m, m + k * sd, m - k * sd
     return ma, up, lo
 
 
@@ -105,13 +113,14 @@ def _state(vals: list[float], up: list, lo: list) -> dict[str, Any]:
 
 
 def _assemble(sid: str, label: str, unit: str,
-              dates: list[str], vals: list[float]) -> tuple[dict, dict]:
+              dates: list[str], vals: list[float],
+              window: int = WINDOW, k: float = K) -> tuple[dict, dict]:
     """한 계열의 보드 행과 히스토리 조각. 반환 = (row, history)."""
-    if len(vals) < WINDOW + 1:
-        raise ValueError(f"{sid}: 창({WINDOW})보다 짧은 이력({len(vals)})")
-    ma, up, lo = _bands(vals)
+    if len(vals) < window + 1:
+        raise ValueError(f"{sid}: 창({window})보다 짧은 이력({len(vals)})")
+    ma, up, lo = _bands(vals, window, k)
     v, m, u, l = vals[-1], ma[-1], up[-1], lo[-1]
-    sd = (u - m) / K if (u is not None and m is not None) else None
+    sd = (u - m) / k if (u is not None and m is not None) else None
     z = (v - m) / sd if sd else None
     pct_b = (v - l) / (u - l) * 100.0 if (u is not None and u != l) else None
     d1 = v - vals[-2]
@@ -149,13 +158,15 @@ def _assemble(sid: str, label: str, unit: str,
     return row, history
 
 
-def build_mr(dataset=None, *,
+def build_mr(dataset=None, *, window: int = WINDOW, k: float = K,
              fetch_uni: Callable[[str], dict] | None = None) -> dict[str, Any]:
     """보드 + 히스토리 전부. 라우트는 이 페이로드를 썰어서만 답한다.
 
     `dataset` 은 이제 안 읽는다 — BSS 두 다리가 전부 호출 시 SQL 이라 기동
     스냅샷 의존이 없다. 자리는 남긴다: 라우트가 캐시 키로 `_dataset.data_key`
     를 계속 쓰고(universe 와 같은 판단), 서명을 바꾸면 그 호출부가 흔들린다.
+
+    window·k 의 허용값 검증(WINDOWS·KS)은 라우트가 한다 — 여기는 계산만.
 
     fetch_uni 는 시험 주입 자리 — 기본은 실제 SQL 을 읽는다. 못 읽은 테너는
     조용히 빼지 않고 `excluded` 에 사유와 함께 선다(rv 의 exclusions 문법).
@@ -172,7 +183,8 @@ def build_mr(dataset=None, *,
             pts = [p for p in body["points"] if p.get("v") is not None]
             row, history = _assemble(sid, label, body["unit"],
                                      [p["t"] for p in pts],
-                                     [float(p["v"]) for p in pts])
+                                     [float(p["v"]) for p in pts],
+                                     window, k)
         except (KeyError, ValueError) as exc:
             excluded.append({"id": sid, "label": label, "reason": str(exc)})
             continue
@@ -188,7 +200,7 @@ def build_mr(dataset=None, *,
         r["rank"] = i
     return {
         "asof": {"bss": asof},
-        "params": {"window": WINDOW, "k": K, "recentN": RECENT_N},
+        "params": {"window": window, "k": k, "recentN": RECENT_N},
         "rows": rows,
         "excluded": excluded,
         "history": histories,

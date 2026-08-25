@@ -15,32 +15,41 @@ import pytest
 from app import mr
 
 
-def _numpy_bands(vals):
+def _numpy_bands(vals, window, k):
     v = np.asarray(vals, dtype=float)
     n = len(v)
     ma = np.full(n, np.nan)
     sd = np.full(n, np.nan)
-    for i in range(mr.WINDOW - 1, n):
-        w = v[i - mr.WINDOW + 1 : i + 1]
+    for i in range(window - 1, n):
+        w = v[i - window + 1 : i + 1]
         ma[i] = w.mean()
         sd[i] = w.std(ddof=1)
-    return ma, ma + mr.K * sd, ma - mr.K * sd
+    return ma, ma + k * sd, ma - k * sd
 
 
-def test_bands_match_numpy_rolling():
+@pytest.mark.parametrize("window,k", [(mr.WINDOW, mr.K), (60, 1.5), (252, 2.5)])
+def test_bands_match_numpy_rolling(window, k):
     rng = random.Random(11)
     vals = [50.0]
     for _ in range(300):
         vals.append(vals[-1] + rng.gauss(0, 1))
-    ma, up, lo = mr._bands(vals)
-    nma, nup, nlo = _numpy_bands(vals)
+    ma, up, lo = mr._bands(vals, window, k)
+    nma, nup, nlo = _numpy_bands(vals, window, k)
     for i in range(len(vals)):
-        if i < mr.WINDOW - 1:
+        if i < window - 1:
             assert ma[i] is None and up[i] is None and lo[i] is None
         else:
             assert math.isclose(ma[i], nma[i], abs_tol=1e-9)
             assert math.isclose(up[i], nup[i], abs_tol=1e-9)
             assert math.isclose(lo[i], nlo[i], abs_tol=1e-9)
+
+
+def test_options_carry_their_provenance_defaults():
+    # 선택지는 근거 있는 값만 — 기본(볼린저 20·2σ)이 목록의 첫 자리다.
+    assert mr.WINDOWS[0] == mr.WINDOW == 20
+    assert mr.K == 2.0 and mr.K in mr.KS
+    assert mr.WINDOWS == (20, 60, 120, 252)
+    assert mr.KS == (1.5, 2.0, 2.5)
 
 
 def _flat_bands(n, lo_v=-1.0, up_v=1.0):
@@ -115,6 +124,10 @@ def test_build_mr_bss_only_shape_rank_and_exclusion():
     p = mr.build_mr(None, fetch_uni=fake_uni)
     assert set(p.keys()) == {"asof", "params", "rows", "excluded", "history"}
     assert p["params"] == {"window": mr.WINDOW, "k": mr.K, "recentN": mr.RECENT_N}
+    # 파라미터가 페이로드를 관통한다 — 다른 창은 다른 밴드·다른 파라미터 응답.
+    p60 = mr.build_mr(None, window=60, k=1.5, fetch_uni=fake_uni)
+    assert p60["params"]["window"] == 60 and p60["params"]["k"] == 1.5
+    assert all(r["z"] is None or isinstance(r["z"], float) for r in p60["rows"])
     # 유니버스는 BSS 전 테너뿐이다 [OWNER 2026-08-25 — "일단 본드스왑만"].
     assert all(sid.startswith("BSS-") for sid, _ in mr.SERIES)
     assert len(mr.SERIES) == 9
