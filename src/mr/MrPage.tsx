@@ -26,11 +26,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Tooltip } from '@coinbase/cds-web/overlays';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@coinbase/cds-web/tables';
 import { Text } from '@coinbase/cds-web/typography';
 
 import type { Unit } from '@/lib/api';
 import { BacktestUnavailable } from '@/lib/api';
 import { fmtDelta, fmtLevel, unitSuffix } from '@/lib/format';
+import { ROW_H } from '@/table/rowHeight';
+import { directionClass, directionGlyph, tintStyle, unsignedDelta } from '@/table/tint';
 import { ErrorState, LoadingState } from '@/ui/DataState';
 import { useUrlState } from '@/ui/useUrlState';
 
@@ -107,14 +110,37 @@ function fmtZ(z: number | null): string {
   return z > 0 ? `+${s}σ` : `${MINUS}${s}σ`;
 }
 
-/** 전일 변화 한 칸 — 부호 있는 변화만 방향색을 가진다(ReadoutCard 의 규칙). */
-function DeltaCell({ d, unit }: { d: number; unit: string }) {
-  const cls = d > 0 ? 'sr-up' : d < 0 ? 'sr-down' : undefined;
+/** 히어로의 전일 변화 — Main 미리보기 히어로의 그 문법: 방향 글리프 + 부호
+ * 있는 변화 + 방향색 글자(PreviewPane 의 `↗ +4.3bp`). */
+function HeroDelta({ d, unit }: { d: number; unit: string }) {
   return (
-    <span className={cls}>
-      {fmtDelta(d, unit as Unit)}
+    <span className={directionClass(d)}>
+      {directionGlyph(d) || '→'} {fmtDelta(d, unit as Unit)}
       {unitSuffix(unit as Unit)}
     </span>
+  );
+}
+
+/** 밴드 위치 트랙 — Main 52주 「위치」 열의 그 부품(sr-track). 숫자(%B)는
+ * title 로 물러나고 그림이 말한다: 하단↔상단 트랙 위의 지금 자리. 밖이면
+ * 끝에 붙는다(클램프) — 상태 열이 «밖 n일째» 로 그 사실을 말한다. */
+function BandTrack({ pctB }: { pctB: number | null }) {
+  if (pctB == null) {
+    return (
+      <Text font="label2" as="span" color="fgMuted" noWrap>
+        —
+      </Text>
+    );
+  }
+  const pos = Math.max(0, Math.min(100, pctB));
+  return (
+    /* sr-track 은 폭 없는 블록이라(Main 에선 sr-range 격자가 폭을 줌) 여기선
+       고정폭 상자가 트랙 길이를 진다 — 없으면 2px 짜리 점으로 접힌다(실측). */
+    <Box as="span" width={72} display="block">
+      <span className="sr-track" title={`밴드 하단↔상단의 ${Math.round(pctB)}% 지점 (%B)`}>
+        <span className="sr-track-mark" style={{ left: `${pos}%` }} />
+      </span>
+    </Box>
   );
 }
 
@@ -321,80 +347,129 @@ export function MrPage() {
               밴드 위치 랭킹
             </Text>
           </HStack>
-          <VStack gap={0.75} width="100%" minHeight={0} flexGrow={1}>
+          {/* 표는 Main/Backtest 의 그 방언이다 [OWNER 2026-08-25 — "값, 전일,
+              늘어남 이런것도 전부 기준을 Backtest 에 맞춰서"]: CDS Table ·
+              60px 행 · 이름은 label1 + legal 2줄 스택 · 숫자는 label2 tabular
+              우측 · **전일은 틴트 셀**(배경 = 방향 워시, 글자 = 방향색, 부호는
+              ↗↘ 글리프가 지고 숫자는 무부호 — `table/tint.ts` 그대로) ·
+              위치는 트랙(코인베이스 52주 «위치» 의 그 부품). 첫 판의 rv 방언
+              (.sr-rv-table)은 Strategy 이웃이지 Main 형제가 아니었다. */}
+          <VStack gap={0} width="100%" minHeight={0} flexGrow={1}>
             <div className="sr-rv-rank-fill">
               <div className="sr-rv-rank-scroll">
-                <table className="sr-rv-table sr-rv-divided">
-                  <thead>
-                    <tr>
-                      {/* 순위 열 — rv 랭킹 표와 같은 문법 [OWNER 2026-08-25]. */}
-                      <th className="sr-rv-th">순위</th>
-                      <th className="sr-rv-th sr-rv-left">테너</th>
-                      <th className="sr-rv-th">값</th>
-                      <th className="sr-rv-th">전일</th>
-                      <th className="sr-rv-th">
+                <Table bordered={false}>
+                  <TableHeader>
+                    <TableRow>
+                      <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
+                        <Text font="caption" as="span" color="fgMuted">순위</Text>
+                      </TableCell>
+                      <TableCell as="th" scope="col">
+                        <Text font="caption" as="span" color="fgMuted">계열</Text>
+                      </TableCell>
+                      <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
+                        <Text font="caption" as="span" color="fgMuted">값</Text>
+                      </TableCell>
+                      <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
+                        <Text font="caption" as="span" color="fgMuted">전일</Text>
+                      </TableCell>
+                      <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
                         {/* 창을 상수로 적으면 컨트롤을 바꾼 날 화면이 거짓말을
                             한다(rv 「버퍼 3개월」 실측의 같은 자리). */}
                         <ThHelp
                           label="늘어남"
                           help={`지금 값이 ${bandWindow}일 평균에서 σ 몇 개만큼 떨어져 있는지예요. 이 표의 정렬 축이에요.`}
                         />
-                      </th>
-                      <th className="sr-rv-th">
+                      </TableCell>
+                      <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
                         <ThHelp
-                          label="%B"
-                          help="밴드 안 위치예요. 0 이 하단, 100 이 상단이고 밖이면 범위를 벗어나요."
+                          label="위치"
+                          help="밴드 하단↔상단 트랙 위의 지금 자리예요. 밖이면 끝에 붙고, 상태 열이 며칠째인지 말해요."
                         />
-                      </th>
-                      <th className="sr-rv-th sr-rv-left">
+                      </TableCell>
+                      <TableCell as="th" scope="col">
                         <ThHelp
                           label="상태"
                           help="밴드 밖이면 며칠째인지, 안으로 돌아왔으면 며칠째인지예요."
                         />
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                      </TableCell>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {rows.map((r) => (
-                      <tr
+                      <TableRow
                         key={r.id}
-                        className="sr-rv-row"
-                        data-on={r.id === sel.id || undefined}
+                        tabIndex={0}
+                        /* Main 의 선택 문법 그대로 — aria-current 가 곧 핀 채움
+                           (`tr[aria-current='true']` 의 --sr-control). */
+                        aria-current={r.id === sel.id ? 'true' : undefined}
+                        style={{ height: ROW_H, cursor: 'pointer' }}
                         onClick={() => setSelId(r.id)}
+                        onKeyDown={(e: React.KeyboardEvent) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelId(r.id);
+                          }
+                        }}
                       >
-                        <td className="sr-rv-td">{r.rank}</td>
-                        <td className="sr-rv-td sr-rv-left">
-                          {/* 행 의미론은 표, 여는 것은 버튼(rv 의 a11y 규칙). */}
-                          <button
-                            type="button"
-                            className="sr-rv-linkbtn sr-rv-stack"
-                            aria-label={`${r.label} 이력 보기`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelId(r.id);
-                            }}
+                        <TableCell className="sr-num" justifyContent="flex-end">
+                          <Text font="label2" as="span" tabularNumbers noWrap>
+                            {r.rank}
+                          </Text>
+                        </TableCell>
+                        <TableCell>
+                          {/* 이름 + 정의 — Main 의 2줄 스택(label1/legal) 그대로.
+                              국고−IRS 와 선물내재가 한 표에 섞이므로 숫자 옆의
+                              «무엇인지» 는 서브라인이 진다. */}
+                          <VStack as="span" className="sr-name-stack">
+                            <Text font="label1" as="span" noWrap>
+                              {r.label}
+                            </Text>
+                            <Text font="legal" as="span" color="fgMuted" noWrap>
+                              {r.defn}
+                            </Text>
+                          </VStack>
+                        </TableCell>
+                        <TableCell className="sr-num" justifyContent="flex-end">
+                          <Text font="label2" as="span" tabularNumbers noWrap>
+                            {fmtLevel(r.v, r.unit as Unit)}
+                          </Text>
+                        </TableCell>
+                        {/* 전일 = Main 변화 셀: 틴트 워시 + 방향색 글자 + 글리프,
+                            숫자는 무부호(tabular 정렬 — 부호 폭이 흔든다). */}
+                        <TableCell
+                          className="sr-num"
+                          justifyContent="flex-end"
+                          style={tintStyle(r.d1)}
+                        >
+                          <Text
+                            font="label2"
+                            as="span"
+                            tabularNumbers
+                            noWrap
+                            className={directionClass(r.d1)}
                           >
-                            <span className="sr-rv-name">{r.label}</span>
-                            {/* 정의 서브라인 — 국고−IRS 와 선물내재가 한 표에
-                                섞이므로, 숫자 옆에 무엇인지가 없으면 두 단위를
-                                같은 자로 읽게 된다(rv 랭킹 표의 그 판단). */}
-                            <span className="sr-rv-sub">{r.defn}</span>
-                          </button>
-                        </td>
-                        <td className="sr-rv-td">
-                          {fmtLevel(r.v, r.unit as Unit)}
-                          {unitSuffix(r.unit as Unit)}
-                        </td>
-                        <td className="sr-rv-td">
-                          <DeltaCell d={r.d1} unit={r.dUnit} />
-                        </td>
-                        <td className="sr-rv-td">{fmtZ(r.z)}</td>
-                        <td className="sr-rv-td">{r.pctB == null ? '—' : r.pctB.toFixed(0)}</td>
-                        <td className="sr-rv-td sr-rv-left">{stateText(r.state)}</td>
-                      </tr>
+                            {directionGlyph(r.d1)}
+                            {directionGlyph(r.d1) ? ' ' : ''}
+                            {unsignedDelta(fmtDelta(r.d1, r.dUnit as Unit))}
+                          </Text>
+                        </TableCell>
+                        <TableCell className="sr-num" justifyContent="flex-end">
+                          <Text font="label2" as="span" tabularNumbers noWrap>
+                            {fmtZ(r.z)}
+                          </Text>
+                        </TableCell>
+                        <TableCell className="sr-num" justifyContent="flex-end">
+                          <BandTrack pctB={r.pctB} />
+                        </TableCell>
+                        <TableCell>
+                          <Text font="label2" as="span" color="fgMuted" noWrap>
+                            {stateText(r.state)}
+                          </Text>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </div>
           </VStack>
@@ -442,7 +517,7 @@ export function MrPage() {
                 {unitSuffix(sel.unit as Unit)}
               </Text>
               <Text font="body" as="span" tabularNumbers>
-                <DeltaCell d={sel.d1} unit={sel.dUnit} />
+                <HeroDelta d={sel.d1} unit={sel.dUnit} />
               </Text>
             </HStack>
             <HStack gap={3} alignItems="baseline" flexWrap="wrap">

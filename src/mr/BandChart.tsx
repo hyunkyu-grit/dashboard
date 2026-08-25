@@ -36,6 +36,11 @@ export function BandChart({ history }: { history: MrHistory }) {
   const lo = history.points.map((p) => p.lo);
   const cur = idx != null ? history.points[idx] : undefined;
   const unit = history.unit as Unit;
+  /* 주선 색 = **보이는 구간의 순변화 방향** — Main 미리보기(PreviewPane)의
+     그 규칙이다. 잉크로 칠했던 판은 시뮬 시나리오 커브의 문법을 잘못 가져온
+     것이었다 [OWNER 2026-08-25 — "진짜 Backtest 랑 Main 을 참고한 게 맞는지"]. */
+  const net = v.length > 1 ? v[v.length - 1]! - v[0]! : 0;
+  const hue = net === 0 ? 'var(--color-fgMuted)' : net > 0 ? 'var(--sr-up)' : 'var(--sr-down)';
 
   return (
     <Box
@@ -53,12 +58,13 @@ export function BandChart({ history }: { history: MrHistory }) {
         animate={false}
         height={240}
         accessibilityLabel={`${history.label} 값과 밴드 이력`}
-        inset={{ top: 12, right: 12, bottom: 8, left: 8 }}
-        /* 색은 Main/Backtest 차트 문법 그대로 [OWNER 2026-08-25 — "그래프
-           모양부터 너무 다르다"]: 주선은 잉크, 보조선(밴드·중심)은 뮤트.
-           CDS 기본 팔레트(파랑)를 그대로 두면 이 화면만 딴 제품처럼 보인다. */
+        /* Main 미리보기와 같은 여백(PreviewPane CHART_INSET) — 여백이 다르면
+           나란히 선 두 화면이 어긋나 보인다. */
+        inset={{ top: 16, right: 12, bottom: 8, left: 8 }}
+        /* 주선 = 구간 방향색(hue), 보조선(밴드·중심)은 뮤트 — Main 미리보기의
+           종목 선 + 기준선 위계 그대로. */
         series={[
-          { id: 'v', data: v, color: 'var(--color-fg)', yAxisId: 'y' },
+          { id: 'v', data: v, color: hue, yAxisId: 'y' },
           { id: 'ma', data: ma, color: 'var(--color-fgMuted)', yAxisId: 'y' },
           { id: 'up', data: up, color: 'var(--color-fgMuted)', yAxisId: 'y' },
           { id: 'lo', data: lo, color: 'var(--color-fgMuted)', yAxisId: 'y' },
@@ -72,7 +78,8 @@ export function BandChart({ history }: { history: MrHistory }) {
         <Line seriesId="up" strokeWidth={1} strokeOpacity={0.45} connectNulls={false} />
         <Line seriesId="lo" strokeWidth={1} strokeOpacity={0.45} connectNulls={false} />
         <Line seriesId="ma" strokeWidth={1.5} strokeOpacity={0.7} connectNulls={false} />
-        <Line seriesId="v" curve="linear" connectNulls={false} />
+        {/* 점선 면 — Main 미리보기 종목 선의 그 채움(areaType="dotted"). */}
+        <Line seriesId="v" curve="linear" showArea areaType="dotted" connectNulls={false} />
         <Scrubber accessibilityLabel={`${history.label} 이력 짚기`} seriesIds={['v']} />
       </CartesianChart>
       {cur ? (

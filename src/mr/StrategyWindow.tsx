@@ -34,6 +34,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { TextInput } from '@coinbase/cds-web/controls';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@coinbase/cds-web/tables';
 import { Text } from '@coinbase/cds-web/typography';
 import {
   CartesianChart,
@@ -207,6 +208,13 @@ export function StrategyWindow({
   const unit = (run?.unit ?? 'bp') as Unit;
   const set = (patch: Partial<MrStrategyParams>) => setKnobs((k) => ({ ...k, ...patch }));
 
+  /* 가격 주선 색 = 구간 순변화 방향(Main 미리보기의 규칙). */
+  const priceHue = useMemo(() => {
+    if (!run || run.points.length < 2) return 'var(--color-fgMuted)';
+    const net = run.points[run.points.length - 1]!.v - run.points[0]!.v;
+    return net === 0 ? 'var(--color-fgMuted)' : net > 0 ? 'var(--sr-up)' : 'var(--sr-down)';
+  }, [run]);
+
   return (
     <FloatingWindow
       windowKey="mrstrategy"
@@ -347,11 +355,12 @@ export function StrategyWindow({
                     animate={false}
                     height={CHART_H}
                     accessibilityLabel={`${label} 가격과 밴드`}
-                    inset={{ top: 12, right: 12, bottom: 8, left: 8 }}
-                    /* 색·축은 Main/Backtest 문법 [OWNER 2026-08-25]: 주선 잉크·
-                       보조선 뮤트·축 라벨은 fmtLevel. */
+                    inset={{ top: 16, right: 12, bottom: 8, left: 8 }}
+                    /* 주선 = 구간 방향색 + 점선 면(Main 미리보기·MR 상세 카드와
+                       같은 문법 — 같은 값+밴드 그림이 두 결이면 안 된다),
+                       보조선 뮤트, 축 라벨 fmtLevel. */
                     series={[
-                      { id: 'v', data: run.points.map((p) => p.v), color: 'var(--color-fg)', yAxisId: 'y' },
+                      { id: 'v', data: run.points.map((p) => p.v), color: priceHue, yAxisId: 'y' },
                       { id: 'ma', data: run.points.map((p) => p.ma), color: 'var(--color-fgMuted)', yAxisId: 'y' },
                       { id: 'up', data: run.points.map((p) => p.up), color: 'var(--color-fgMuted)', yAxisId: 'y' },
                       { id: 'lo', data: run.points.map((p) => p.lo), color: 'var(--color-fgMuted)', yAxisId: 'y' },
@@ -369,7 +378,7 @@ export function StrategyWindow({
                     <Line seriesId="up" strokeWidth={1} strokeOpacity={0.45} connectNulls={false} />
                     <Line seriesId="lo" strokeWidth={1} strokeOpacity={0.45} connectNulls={false} />
                     <Line seriesId="ma" strokeWidth={1.5} strokeOpacity={0.7} connectNulls={false} />
-                    <Line seriesId="v" curve="linear" connectNulls={false} />
+                    <Line seriesId="v" curve="linear" showArea areaType="dotted" connectNulls={false} />
                     <Scrubber accessibilityLabel="가격 짚기" seriesIds={['v']} />
                   </CartesianChart>
                   {idx?.chart === 'price' && run.points[idx.i] ? (
@@ -399,7 +408,7 @@ export function StrategyWindow({
                     animate={false}
                     height={CHART_H}
                     accessibilityLabel={`${label} z-스코어`}
-                    inset={{ top: 12, right: 12, bottom: 8, left: 8 }}
+                    inset={{ top: 16, right: 12, bottom: 8, left: 8 }}
                     series={[{ id: 'z', data: run.points.map((p) => p.z), color: 'var(--color-fg)', yAxisId: 'y' }]}
                     xAxis={{ data: dates }}
                     yAxis={[{ id: 'y' }]}
@@ -450,7 +459,7 @@ export function StrategyWindow({
                     animate={false}
                     height={CHART_H}
                     accessibilityLabel={`${label} 누적 손익`}
-                    inset={{ top: 12, right: 12, bottom: 8, left: 8 }}
+                    inset={{ top: 16, right: 12, bottom: 8, left: 8 }}
                     /* 손익 곡선은 부호가 색을 정한다 — LinkedCharts 누적 손익의
                        그 문법(`--sr-up`/`--sr-down`). */
                     series={[{
@@ -482,37 +491,73 @@ export function StrategyWindow({
               </Panel>
 
               <Panel title="거래" sub={run.trades.length === 0 ? '이 창에 거래가 없어요' : undefined}>
+                {/* 표는 Main/Backtest 방언 — CDS Table, 숫자는 label2 tabular
+                    우측, 손익만 방향색 글자 [OWNER 2026-08-25 «기준을 Backtest 에»]. */}
                 <Box style={{ position: 'relative', height: CHART_H, overflow: 'auto' }} width="100%">
-                  <table className="sr-rv-table sr-rv-divided">
-                    <thead>
-                      <tr>
-                        <th className="sr-rv-th sr-rv-left">진입</th>
-                        <th className="sr-rv-th sr-rv-left">청산</th>
-                        <th className="sr-rv-th sr-rv-left">방향</th>
-                        <th className="sr-rv-th">진입 z</th>
-                        <th className="sr-rv-th">청산 z</th>
-                        <th className="sr-rv-th">손익</th>
-                        <th className="sr-rv-th sr-rv-left">사유</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <Table bordered={false}>
+                    <TableHeader>
+                      <TableRow>
+                        <TableCell as="th" scope="col">
+                          <Text font="caption" as="span" color="fgMuted">진입</Text>
+                        </TableCell>
+                        <TableCell as="th" scope="col">
+                          <Text font="caption" as="span" color="fgMuted">청산</Text>
+                        </TableCell>
+                        <TableCell as="th" scope="col">
+                          <Text font="caption" as="span" color="fgMuted">방향</Text>
+                        </TableCell>
+                        <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
+                          <Text font="caption" as="span" color="fgMuted">진입 z</Text>
+                        </TableCell>
+                        <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
+                          <Text font="caption" as="span" color="fgMuted">청산 z</Text>
+                        </TableCell>
+                        <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
+                          <Text font="caption" as="span" color="fgMuted">손익</Text>
+                        </TableCell>
+                        <TableCell as="th" scope="col">
+                          <Text font="caption" as="span" color="fgMuted">사유</Text>
+                        </TableCell>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {run.trades.map((t) => (
-                        <tr key={`${t.entryT}-${t.exitT}`}>
-                          <td className="sr-rv-td sr-rv-left">{t.entryT}</td>
-                          <td className="sr-rv-td sr-rv-left">{t.exitT}</td>
-                          <td className="sr-rv-td sr-rv-left">{t.dir > 0 ? '롱' : '숏'}</td>
-                          <td className="sr-rv-td">{t.entryZ.toFixed(2)}σ</td>
-                          <td className="sr-rv-td">{t.exitZ.toFixed(2)}σ</td>
-                          <td className="sr-rv-td">
-                            <span className={t.pnl > 0 ? 'sr-up' : t.pnl < 0 ? 'sr-down' : undefined}>
+                        <TableRow key={`${t.entryT}-${t.exitT}`}>
+                          <TableCell>
+                            <Text font="label2" as="span" tabularNumbers noWrap>{t.entryT}</Text>
+                          </TableCell>
+                          <TableCell>
+                            <Text font="label2" as="span" tabularNumbers noWrap>{t.exitT}</Text>
+                          </TableCell>
+                          <TableCell>
+                            <Text font="label2" as="span" noWrap>{t.dir > 0 ? '롱' : '숏'}</Text>
+                          </TableCell>
+                          <TableCell className="sr-num" justifyContent="flex-end">
+                            <Text font="label2" as="span" tabularNumbers noWrap>{t.entryZ.toFixed(2)}σ</Text>
+                          </TableCell>
+                          <TableCell className="sr-num" justifyContent="flex-end">
+                            <Text font="label2" as="span" tabularNumbers noWrap>{t.exitZ.toFixed(2)}σ</Text>
+                          </TableCell>
+                          <TableCell className="sr-num" justifyContent="flex-end">
+                            <Text
+                              font="label2"
+                              as="span"
+                              tabularNumbers
+                              noWrap
+                              className={t.pnl > 0 ? 'sr-up' : t.pnl < 0 ? 'sr-down' : undefined}
+                            >
                               {fmtKrw(t.pnl)}
-                            </span>
-                          </td>
-                          <td className="sr-rv-td sr-rv-left">{t.why === 'stop' ? '손절' : '청산'}</td>
-                        </tr>
+                            </Text>
+                          </TableCell>
+                          <TableCell>
+                            <Text font="label2" as="span" color="fgMuted" noWrap>
+                              {t.why === 'stop' ? '손절' : '청산'}
+                            </Text>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </Box>
               </Panel>
             </HStack>
