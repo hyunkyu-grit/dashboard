@@ -33,6 +33,10 @@ import {
 } from '@coinbase/cds-web/visualizations/chart';
 
 import { fmtKrw, fmtKrwFromMan, manUnits } from '@/lib/krw';
+/* 방향 **글자**는 클래스(`sr-up`/`sr-down` — Backtest·Main 과 같은 기제),
+   방향 **배경**은 토큰 var(색을 섞어야 하므로 클래스로는 안 된다). 한 뜻에 두
+   기제를 쓰던 것을 이 선으로 가른다 [감사 2026-08-25]. */
+import { directionClass } from '@/table/tint';
 import { directionVar } from '@/theme/tint';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { ReconStack, type ReconStackDay } from '@/ui/window/ReconStack';
@@ -328,7 +332,7 @@ export function ResultsWindow({
                 accessibilityLabel={`${c.label} 케이스`}
                 start={<span className="sr-casedash" style={{ background: CASE_COLOR[c.id] }} />}
                 end={
-                  <TextLabel2 as="span" tabularNumbers noWrap style={{ color: directionVar(u) }}>
+                  <TextLabel2 as="span" tabularNumbers noWrap className={directionClass(u)}>
                     {fmtKrwFromMan(u)}
                   </TextLabel2>
                 }
@@ -375,8 +379,12 @@ export function ResultsWindow({
                     성분
                   </TextLegal>
                 </TableCell>
+                {/* `.sr-num` 이 없으면 **가로 정렬이 아예 안 된다** — CDS 가 값을
+                    세로 flex 로 감싸서 `justifyContent` 는 위아래를 다룬다
+                    (type.css:619-632 의 실측). 이 표의 숫자들이 그래서 왼쪽에
+                    붙어 있었다 [감사 2026-08-25]. */}
                 {grid.map((g) => (
-                  <TableCell as="th" scope="col" key={g.id} justifyContent="flex-end">
+                  <TableCell as="th" scope="col" key={g.id} className="sr-num" justifyContent="flex-end">
                     <HStack gap={0.5} alignItems="center">
                       <span className="sr-casedash" style={{ background: CASE_COLOR[g.id] }} />
                       <TextLegal as="span" color="fgMuted" noWrap>
@@ -400,12 +408,15 @@ export function ResultsWindow({
                        공란이다. 제외 사실은 표 밑 «제외됨» 줄이 말한다. */
                     const u = g.parts ? g.parts[part.key] : null;
                     return (
-                      <TableCell key={g.id} justifyContent="flex-end">
+                      <TableCell key={g.id} className="sr-num" justifyContent="flex-end">
+                        {/* 방향은 **클래스**로 — Backtest 가 같은 양(손익)에
+                            `sr-up`/`sr-down` 을 쓴다. 인라인 `directionVar` 는
+                            한 뜻에 두 기제였다 [감사 2026-08-25]. */}
                         <TextLabel2
                           as="span"
                           tabularNumbers
                           noWrap
-                          style={{ color: u === null ? undefined : directionVar(u) }}
+                          className={u === null ? undefined : directionClass(u)}
                         >
                           {u === null ? '—' : fmtKrwFromMan(u)}
                         </TextLabel2>
@@ -422,12 +433,12 @@ export function ResultsWindow({
                   </TextLabel1>
                 </TableCell>
                 {grid.map((g) => (
-                  <TableCell key={g.id} justifyContent="flex-end">
+                  <TableCell key={g.id} className="sr-num" justifyContent="flex-end">
                     <TextLabel1
                       as="span"
                       tabularNumbers
                       noWrap
-                      style={{ color: g.parts ? directionVar(g.parts.uPnl) : undefined }}
+                      className={g.parts ? directionClass(g.parts.uPnl) : undefined}
                     >
                       {g.parts ? fmtKrwFromMan(g.parts.uPnl) : '—'}
                     </TextLabel1>
@@ -537,7 +548,7 @@ export function ResultsWindow({
                     <TextLegal as="span" color="fgMuted" noWrap>
                       {label}
                     </TextLegal>
-                    <TextLabel2 as="span" tabularNumbers noWrap style={{ color: directionVar(u) }}>
+                    <TextLabel2 as="span" tabularNumbers noWrap className={directionClass(u)}>
                       {fmtKrwFromMan(u)}
                     </TextLabel2>
                   </HStack>
@@ -708,7 +719,8 @@ function Waterfall({ parts }: { parts: ReturnType<typeof partsOf> }) {
               as="span"
               tabularNumbers
               noWrap
-              style={{ marginInlineStart: 'auto', color: directionVar(s.u) }}
+              className={directionClass(s.u)}
+              style={{ marginInlineStart: 'auto' }}
             >
               {fmtKrwFromMan(s.u)}
             </TextLabel2>
@@ -722,7 +734,8 @@ function Waterfall({ parts }: { parts: ReturnType<typeof partsOf> }) {
             as="span"
             tabularNumbers
             noWrap
-            style={{ marginInlineStart: 'auto', color: directionVar(parts.uPnl) }}
+            className={directionClass(parts.uPnl)}
+            style={{ marginInlineStart: 'auto' }}
           >
             {fmtKrwFromMan(parts.uPnl)}
           </TextLabel1>
