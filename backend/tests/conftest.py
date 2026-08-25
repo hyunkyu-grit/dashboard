@@ -20,7 +20,21 @@ from __future__ import annotations
 import pytest
 
 from irs_pricer.core import ttl_cache
+from irs_pricer.loaders import irsdata as _irsdata_loader
 from irs_pricer.services.simulation import bond_roll
+
+
+@pytest.fixture(autouse=True)
+def sql_snapshot_off():
+    """시뮬 IRS 스냅샷의 주입 데이터셋을 매 테스트 앞에서 내린다 [2026-08-25].
+
+    `with TestClient(app)` 가 lifespan 을 돌리면 app 이 병합(SQL 우선)
+    데이터셋을 전역 주입한다 — 그 순간부터 스냅샷 골든이 «SQL 이 무엇을
+    담고 있나»라는 환경 사실에 붙는다. bond_roll_lane_off 와 같은 규율:
+    기본은 워크북(결정적), SQL 경로를 시험하는 테스트만 자기 페이크를 주입."""
+    _irsdata_loader.set_dataset(None)
+    yield
+    _irsdata_loader.set_dataset(None)
 
 
 @pytest.fixture(autouse=True)

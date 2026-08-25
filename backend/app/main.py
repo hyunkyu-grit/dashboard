@@ -62,6 +62,7 @@ from irs_pricer.config import DATA_DIR
 from irs_pricer.core import data_watch, ttl_cache
 from irs_pricer.core.errors import CurveBootstrapError
 from irs_pricer.engine import curve_cache
+from irs_pricer.loaders import irsdata as irsdata_loader
 from irs_pricer.services.simulation import bond_roll
 
 from . import instruments as instruments_mod
@@ -173,6 +174,12 @@ async def lifespan(app: FastAPI):
     # 서 등록해야 테스트·스크립트의 기본이 «미등록 = 롤 레인 꺼짐»으로 남는다
     # (curve_cache 들과 같은 원칙).
     bond_roll.set_sector_curve_provider(_bond_sector_curves)
+    # 시뮬 IRS 스냅샷 = 이 앱의 병합 데이터셋 **그 인스턴스** [OWNER,
+    # 2026-08-25 — 감사록 F2]. 시뮬의 DATA_DIR 워크북 복사가 멈춰(08-19)
+    # 스왑이 «당일 IRS 호가 없음»으로 제외되던 병의 근본 수정 — 백테스트와
+    # 시뮬이 같은 데이터 한 벌(SQL 우선)을 본다. 미주입(테스트·스크립트)은
+    # 종전 워크북 경로 그대로다.
+    irsdata_loader.set_dataset(_dataset)
     logging.getLogger("irs_pricer").info("simulation data dir: %s", DATA_DIR)
     # 개발용으로 띄웠다는 쪽지(app/dev_marker.py). `SAURON_DEV_LOCAL=1` 없이는
     # 아무것도 안 쓴다 — Funnel 로 공개된 라이브 인스턴스는 쪽지를 안 남기고,

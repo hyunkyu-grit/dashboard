@@ -88,6 +88,29 @@ _CD_NODE = "3M"  # CD 91d — dataset.py:121 "IRS 3M = CD91"
 _ON_NODE = "1D"  # 콜금리
 
 
+#: [OWNER, 2026-08-25 — 시뮬 스냅샷 SQL 이관 · 감사록 F2] app 계층이 기동 시
+#: 주입하는 병합 데이터셋 — app/main.py 의 `_dataset`(load_dataset_merged,
+#: SQL 우선 + 엑셀 보충) **그 인스턴스**다. 있으면 아래 세 함수가 워크북 대신
+#: 이것을 읽는다: 시뮬의 DATA_DIR 워크북 복사가 멈춰(실측 08-19에서 정지)
+#: 스왑이 «당일 IRS 호가 없음»으로 통째로 제외되던 병의 근본 수정이고,
+#: 백테스트와 시뮬이 **같은 데이터 한 벌**을 보게 된다. None(기본 — 테스트·
+#: 스크립트)은 종전 워크북 경로 그대로라 골든이 결정적으로 남는다(bond_roll
+#: 공급자와 같은 규율 — conftest 가 매 테스트 앞에서 내린다).
+_injected_dataset = None
+
+
+def set_dataset(ds) -> None:
+    """app 기동 훅. None 으로 되돌리면 워크북 경로다."""
+    global _injected_dataset
+    _injected_dataset = ds
+
+
+def _active(source: Path):
+    """주입본이 있으면 그것, 없으면 워크북. 주입본이 곧 신선도다 — app 이
+    기동 때 한 번 SQL 을 읽는 이 리포의 모델(07:00 재기동) 그대로."""
+    return _injected_dataset if _injected_dataset is not None else _load(source)
+
+
 def _workbook(source: Path) -> Path:
     return source / IRSDATA_FILE if source.is_dir() else source
 
@@ -134,7 +157,7 @@ def _row(ds, valuation_date: date) -> dict[str, float]:
 
 
 def load_market_snapshot_irsdata(source: Path, valuation_date: date) -> MarketSnapshot:
-    ds = _load(source)
+    ds = _active(source)
     row = _row(ds, valuation_date)
 
     if _CD_NODE not in row:
@@ -163,7 +186,7 @@ def load_market_snapshot_irsdata(source: Path, valuation_date: date) -> MarketSn
 def load_fixing_history_irsdata(source: Path) -> dict[date, float]:
     """CD 91d 픽싱 이력 {날짜: 소수}. 빈 칸은 담지 않는다 — 0으로 채우면
     select_fixing이 그날을 유효한 0% 리셋으로 읽는다."""
-    ds = _load(source)
+    ds = _active(source)
     series = ds.series.get(_CD_NODE)
     if series is None:
         raise FileNotFoundError(f"{_workbook(source)}에 CD 91d(3M) 열이 없습니다.")
@@ -176,7 +199,7 @@ def common_dates_irsdata(source: Path) -> list[date]:
     `ds.dates` 전체를 그대로 돌려주면 캘린더에는 있는데 실행하면 위의
     NonBusinessDayError로 떨어지는 날이 섞인다. 고를 수 있는 날짜와 돌아가는
     날짜는 같아야 한다."""
-    ds = _load(source)
+    ds = _active(source)
     nodes = [n for n, _, _ in _NODE_QUOTES]
     out: list[date] = []
     for i, d in enumerate(ds.dates):
