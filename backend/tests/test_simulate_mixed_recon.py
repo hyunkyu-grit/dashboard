@@ -239,6 +239,16 @@ class TestTheRollLane:
         finally:
             bond_roll.set_sector_curve_provider(lambda: {"국채": list(UPWARD)})
 
+    def test_sub_month_tenor_labels_in_days(self):
+        """1/365 노드는 «1D» 다 — 개월 반올림은 «0M» 을 만든다(실측 2026-08-25,
+        FE 전체 커브가 실리자 첫 열이 0M 으로 섰다)."""
+        from irs_pricer.services.simulation.bond_recon import _tenor_label
+
+        assert _tenor_label(1 / 365) == "1D"
+        assert _tenor_label(7 / 365) == "7D"
+        assert _tenor_label(0.25) == "3M"
+        assert _tenor_label(2.5) == "2.5Y"
+
     def test_matrix_with_empty_bond_curves_estimates_zero(self, client):
         """Δbp 는 엔진이 실제로 소비한 것만 말한다 [2026-08-25 실측 결함].
 

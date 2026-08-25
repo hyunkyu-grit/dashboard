@@ -46,9 +46,12 @@ def _sector_nodes(
 
 
 def _tenor_label(t: float) -> str:
+    # 한 달 미만은 일 단위 — 1/365(1D 노드)를 개월로 반올림하면 «0M» 이 된다
+    # (실측 2026-08-25: FE 전체 커브가 실리자 첫 열이 0M 으로 섰다).
+    if t < 1 / 12:
+        return f"{max(round(t * 365), 1)}D"
     if t < 1.0:
-        m = round(t * 12)
-        return f"{m}M"
+        return f"{round(t * 12)}M"
     return f"{t:g}Y"
 
 
