@@ -3,6 +3,8 @@
 import { Select } from '@coinbase/cds-web/alpha/select';
 import { Box } from '@coinbase/cds-web/layout';
 
+import { DROPDOWN_STYLES } from '@/ui/window/popup';
+
 /**
  * 현금채권·자산스왑 탭의 종목군 필터 — `StartFilter` 와 같은 성질·같은 자리.
  *
@@ -34,11 +36,18 @@ export function BondTypeFilter({
    * 같은 실측 계열). */
   return (
     <Box width={200}>
-      {/* font legal(13) — 컨트롤 값 13px 규칙(popup.ts 의 근거). */}
+      {/* font legal(13) — 컨트롤 값 13px 규칙(popup.ts 의 근거).
+          `styles`(목록 폭)가 **빠져 있었다** [OWNER 2026-08-25 — "산금채 AAA
+          이런거 다 잘려서 나오잖아"]: 이게 없으면 CDS 가 목록을 컨트롤 폭이
+          아니라 훨씬 좁게 잡아, 「산금채 AAA」가 「산금 / 채 / AA / A」로 글자마다
+          접혔다(실측). 창 안의 Select 들은 전부 이걸 지고 있었고 제목 줄의
+          `compact` 필터 둘만 안 지고 있었다 — `guards/dropdown-width.test.ts`
+          가 이제 그 누락을 잰다. */}
       <Select
         label="종목군"
         font="legal"
         compact
+        styles={DROPDOWN_STYLES}
         accessibilityLabel="종목군"
         value={value ?? ALL_TYPES}
         onChange={(v) => onChange(v === ALL_TYPES || v == null ? undefined : v)}

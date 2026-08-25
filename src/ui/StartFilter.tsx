@@ -3,6 +3,8 @@
 import { Select } from '@coinbase/cds-web/alpha/select';
 import { Box } from '@coinbase/cds-web/layout';
 
+import { DROPDOWN_STYLES } from '@/ui/window/popup';
+
 /**
  * 포워드 탭의 시작점 필터 (§3).
  *
@@ -43,11 +45,14 @@ export function StartFilter({
     <Box width={200}>
       {/* 라벨이 "시작" 이고 값이 "1Y 시작" 이면 화면에는 "시작 1Y 시작" 이 남는다
           (실측 2026-08-14). 라벨이 단위를 지고 값은 값만 진다. */}
-      {/* font legal(13) — 컨트롤 값 13px 규칙(popup.ts 의 근거). */}
+      {/* font legal(13) — 컨트롤 값 13px 규칙(popup.ts 의 근거).
+          `styles`(목록 폭)는 BondTypeFilter 와 함께 빠져 있었다 [2026-08-25] —
+          없으면 목록이 컨트롤보다 훨씬 좁게 잡혀 라벨이 글자마다 접힌다. */}
       <Select
         label="시작점"
         font="legal"
         compact
+        styles={DROPDOWN_STYLES}
         accessibilityLabel="포워드 시작점"
         value={value ?? ALL_STARTS}
         onChange={(v) => onChange(v === ALL_STARTS || v == null ? undefined : v)}
