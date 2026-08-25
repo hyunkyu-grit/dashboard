@@ -9,10 +9,13 @@ import type { Row } from '../src/table/rows';
 import {
   BOOKABLE_GROUPS,
   SWAP_GROUPS,
+  bookKindOf,
   decodeBook,
   directionLabel,
   encodeBook,
   forgetBacktestMemory,
+  FUTURES_OPTIONS,
+  FUTURESSWAP_OPTIONS,
   isBookable,
   loadBacktestMemory,
   MAX_POSITIONS,
@@ -91,6 +94,40 @@ describe('방향을 뭐라고 부르는가 [OWNER 2026-07-31]', () => {
     for (const d of [1, -1]) {
       expect(directionLabel('1Y-3Y-10Y', d)).not.toMatch(/플라이|나비|벨리 (페이|리시브)$/);
     }
+  });
+
+  it('선물은 매수 / 매도 — +1 = 가격 롱 [2026-08-25]', () => {
+    expect(directionLabel('FUT:3Y', 1)).toBe('매수');
+    expect(directionLabel('FUT:10Y', -1)).toBe('매도');
+  });
+
+  it('퓨처스왑도 용어를 지어내지 않는다 — 다리만 적는다', () => {
+    /* +1 = 호가값(내재−IRS) 롱 = 선물 매도 + IRS 리시브 (내재↑ = 가격↓ 에서
+     * 이득, IRS↓ = 리시브 이득). 백엔드 app/futures.py 의 방향 관례 그대로. */
+    expect(directionLabel('FSW:3Y', 1)).toBe('선물 매도 · IRS 리시브');
+    expect(directionLabel('FSW:10Y', -1)).toBe('선물 매수 · IRS 페이');
+  });
+});
+
+describe('선물 id 문법 [2026-08-25]', () => {
+  it('접두사가 종류를 정한다 — 백엔드 mixedbook·instruments 와 같은 규칙', () => {
+    expect(bookKindOf('FUT:3Y')).toBe('futures');
+    expect(bookKindOf('FSW:10Y')).toBe('futuresswap');
+    expect(bookKindOf('CB:KTB:3Y')).toBe('cashbond');
+    expect(bookKindOf('3Y-10Y')).toBe('swap');
+  });
+
+  it('목록은 닫힌 어휘 넷 — 라벨은 서버 FUT_LABELS/FSW_LABELS 와 같은 글자', () => {
+    expect(FUTURES_OPTIONS.map((o) => o.value)).toEqual(['FUT:3Y', 'FUT:10Y']);
+    expect(FUTURESSWAP_OPTIONS.map((o) => o.value)).toEqual(['FSW:3Y', 'FSW:10Y']);
+    expect(FUTURES_OPTIONS.map((o) => o.label)).toEqual(['KTB3 선물', 'KTB10 선물']);
+    expect(FUTURESSWAP_OPTIONS.map((o) => o.label)).toEqual(['퓨처스왑 3Y', '퓨처스왑 10Y']);
+  });
+
+  it('선물 줄은 매도도 실행할 수 있다 — 채권 규칙이 새지 않는다', () => {
+    const rows = decodeBook('FUT:3Y,-1,1e10,2026-01-05;FSW:10Y,1,1e10,2026-01-05');
+    expect(rows).toHaveLength(2);
+    expect(runnable(rows)).toHaveLength(2);
   });
 });
 

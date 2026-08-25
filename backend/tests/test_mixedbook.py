@@ -283,8 +283,10 @@ class TestRecon:
 
     def test_a_mixed_book_yields_two_tables(self):
         _ds, _m, r = self._recon()
-        assert set(r) == {"swap", "bond"}
+        # [2026-08-25] 선물 합류로 키는 셋 — 선물 없는 북은 그 자리가 None 이다.
+        assert set(r) == {"swap", "bond", "futures"}
         assert r["swap"] and r["bond"]
+        assert r["futures"] is None
         # 각 표는 자기 엔진의 모양 그대로 — 접두사도 그룹 머리도 없다.
         for block in (r["swap"], r["bond"]):
             assert "groups" not in block

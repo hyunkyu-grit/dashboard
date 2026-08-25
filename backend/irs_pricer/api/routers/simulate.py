@@ -100,6 +100,8 @@ class SimulationSummary(BaseModel):
     finalMTM: int
     finalCarry: int
     finalSwap: int
+    # [OWNER, 2026-08-25] 국채선물 최종 평가 — 구 캐시 응답 호환 기본 0.
+    finalFut: int = 0
     finalTotal: int
     breakEvenDay: int
 
@@ -115,6 +117,8 @@ class BookDailyPnLRow(BaseModel):
     dailyCarry: int
     fundingCost: int
     bondValuation: int
+    # [OWNER, 2026-08-25] 선물 자기 칸 — 구 캐시 응답 호환 기본 0.
+    futuresValuation: int = 0
     swapValuation: int
     swapThetaPnL: int
     totalDailyPnL: int
@@ -209,6 +213,15 @@ class BondDailyRecon(BaseModel):
     rollBasis: BondRollBasis
 
 
+class FuturesDailyRecon(BaseModel):
+    """국채선물 일별 대사 — 세 번째 자기 표 [OWNER, 2026-08-25]. 행 모양은
+    채권 행과 같은 계약이되 캐리·롤다운·조달이 **전 행 None** 이다(존재하지
+    않는 성분 — 공란 정책, futures_recon.py 모듈 doc). 잔차 = 컨벡시티."""
+    groups: list[BondReconGroup]
+    tenors: list[str]
+    rows: list[BondDailyReconRow]
+
+
 class FundingCurvePoint(BaseModel):
     """s11 T4 — 시뮬레이션 타임스텝별 조달금리/포지션 운용수익률/캐리 bp.
     positionRate/carryBp는 살아있는 채권이 없으면 null (0이 아니라 미정의)."""
@@ -277,6 +290,9 @@ class TotalReturnDecomposition(BaseModel):
     # 되면서 항등식과 total 에 합류했다. 구 캐시 응답 호환 기본 0.
     bondRolldown: float = 0.0
     fundingCost: float
+    # [OWNER, 2026-08-25] 국채선물 — 평가 한 성분뿐(KRX 폐형 재값매김;
+    # 캐리·조달·롤다운은 존재하지 않는 성분). 구 캐시 호환 기본 0.
+    futMtm: float = 0.0
     swapMtm: float | None
     swapCarry: float | None
     swapRolldown: float | None = None
@@ -296,6 +312,7 @@ class DecompositionDailyPoint(BaseModel):
     bondMtm: float
     bondCarry: float
     bondRolldown: float = 0.0
+    futMtm: float = 0.0
     swapMtm: float | None
     swapCarry: float | None
     swapRolldown: float | None = None
@@ -345,6 +362,9 @@ class SimulateResponse(BaseModel):
     # [OWNER, 2026-08-25 — 엔진 단위 분리] 채권 일별 대사 — 자기 표. 채권이
     # 없는 런(그리고 구 캐시 응답)은 None.
     bondDailyReconciliation: BondDailyRecon | None = None
+    # [OWNER, 2026-08-25] 국채선물 일별 대사 — 세 번째 자기 표. 선물이 없는
+    # 런(그리고 구 캐시 응답)은 None.
+    futuresDailyReconciliation: FuturesDailyRecon | None = None
     # s11 확장 필드 — 기존 골든 계약에 대한 추가 전용(extend, don't mutate).
     fundingCurve: list[FundingCurvePoint]
     distribution: SimulationDistribution | None

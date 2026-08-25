@@ -43,7 +43,9 @@ export type InstrumentKind =
   | "fly"
   | "forward"
   | "cashbond"
-  | "assetswap";
+  | "assetswap"
+  | "futures"
+  | "futuresswap";
 
 export const KIND_LABEL: Record<InstrumentKind, string> = {
   outright: "아웃라이트",
@@ -52,6 +54,9 @@ export const KIND_LABEL: Record<InstrumentKind, string> = {
   forward: "포워드",
   cashbond: "현금채권",
   assetswap: "자산스왑",
+  // [OWNER, 2026-08-25 — "선물이랑 선물스왑도"] 백테스트 창과 같은 라벨.
+  futures: "국채선물",
+  futuresswap: "퓨처스왑",
 };
 
 export const KIND_ORDER: InstrumentKind[] = [
@@ -61,6 +66,8 @@ export const KIND_ORDER: InstrumentKind[] = [
   "forward",
   "cashbond",
   "assetswap",
+  "futures",
+  "futuresswap",
 ];
 
 /** 채권은 **살 수만** 있다 [OWNER, 2026-08-14 — "국고채는 매도는 없는거고"].
@@ -71,9 +78,19 @@ export function isBondKind(kind: InstrumentKind): boolean {
   return kind === "cashbond" || kind === "assetswap";
 }
 
+/** 선물 종류 [2026-08-25] — 방향은 있고(매수/매도) 캐리·조달은 없는 무리. */
+export function isFuturesKind(kind: InstrumentKind): boolean {
+  return kind === "futures" || kind === "futuresswap";
+}
+
 /** 이 다리가 채권인가 — 다리 목록이 "수취/지급" 대신 "매수" 를 적을지 정한다. */
 export function isBondLeg(leg: EngineLeg): boolean {
   return leg.bondType === "bond";
+}
+
+/** 이 다리가 선물인가 [2026-08-25] — 매수/매도 문법 + 내재금리 읽기 전용. */
+export function isFuturesLeg(leg: EngineLeg): boolean {
+  return leg.bondType === "futures";
 }
 
 /** `GET /api/instruments` 의 한 항목. `key` 는 모니터의 표가 쓰는 주요/전체
@@ -94,6 +111,10 @@ export type InstrumentCatalog = Record<InstrumentKind, InstrumentOption[]>;
 export function kindOf(seriesId: string): InstrumentKind {
   if (seriesId.startsWith("CB:")) return "cashbond";
   if (seriesId.startsWith("ASW:")) return "assetswap";
+  // 선물 접두사도 접두사 우선 [2026-08-25] — `FUT:3Y` 에는 '-' 가 없어
+  // 아웃라이트로 읽힌다(백엔드 `instruments.kind_of` 와 같은 순서).
+  if (seriesId.startsWith("FUT:")) return "futures";
+  if (seriesId.startsWith("FSW:")) return "futuresswap";
   if (seriesId.includes("x")) return "forward";
   const dashes = (seriesId.match(/-/g) ?? []).length;
   return dashes === 0 ? "outright" : dashes === 1 ? "spread" : "fly";
@@ -788,6 +809,8 @@ export interface SimSummary {
   finalMTM: number;
   finalCarry: number;
   finalSwap: number;
+  /** 국채선물 최종 평가 [2026-08-25] — 구 캐시 응답에는 없다. */
+  finalFut?: number;
   finalTotal: number;
   /** −1 = 손익분기 없음(첫날부터 이익이거나 끝까지 손실). 0 이 아니다. */
   breakEvenDay: number;
@@ -812,6 +835,10 @@ export interface SimDecomposition {
    * 커브 위 잔존 단축이 합류하면서 total 자체가 이 항만큼 옳아졌다. 구 캐시
    * 응답에는 없다 — 옵셔널인 이유. */
   bondRolldown?: number | null;
+  /** 국채선물 평가 [OWNER, 2026-08-25 — 선물·퓨처스왑 합류]. 선물의 유일한
+   * 성분이다(KRX 폐형 재값매김 — 캐리·조달·롤다운은 존재하지 않는 성분).
+   * 구 캐시 응답에는 없다. */
+  futMtm?: number | null;
   fundingCost: number;
   total: number;
 }
@@ -892,6 +919,16 @@ export interface SimBondRecon {
   rollBasis: { applied: boolean; missing: string[] };
 }
 
+/** 국채선물 일별 대사 [OWNER, 2026-08-25] — 채권 표와 같은 행 계약이되
+ * 캐리·롤다운·조달이 **전 행 null** 이다(존재하지 않는 성분 — 공란 정책).
+ * 잔차 = 폐형 실측 − 선형 추정 = 컨벡시티. rollBasis 는 없다(롤 레인 자체가
+ * 없는 표다). */
+export interface SimFuturesRecon {
+  groups: { label: string; cols: { key: string; label: string }[] }[];
+  tenors: string[];
+  rows: SimBondReconRow[];
+}
+
 export interface SimResponse {
   status?: string;
   chartData: { day: number; totalPnL?: number }[];
@@ -901,6 +938,8 @@ export interface SimResponse {
   irsDailyReconciliation?: SimReconRow[];
   /** 채권 일별 대사 — 자기 표 [OWNER, 2026-08-25]. 채권 없는 런·구 캐시는 null. */
   bondDailyReconciliation?: SimBondRecon | null;
+  /** 국채선물 일별 대사 — 세 번째 자기 표 [2026-08-25]. 선물 없는 런·구 캐시는 null. */
+  futuresDailyReconciliation?: SimFuturesRecon | null;
   /** 성분의 **누적** 경로(하루 한 행). 서버가 누적을 주므로 화면은 차분하지
    * 않는다 — 차분하면 서버와 갈릴 수 있는 두 번째 정의가 생긴다. 스왑이 제외된
    * 실행에서는 스왑 성분이 null 이다(공란 정책). */
@@ -915,6 +954,8 @@ export interface SimResponse {
     bondCarry?: number | null;
     /** [OWNER, 2026-08-25] 동결 민평 커브 롤 — 구 캐시 응답에는 없다. */
     bondRolldown?: number | null;
+    /** [2026-08-25] 국채선물 평가 — 선물의 유일한 성분. 구 캐시에는 없다. */
+    futMtm?: number | null;
     fundingCost?: number | null;
     total: number;
   }[];

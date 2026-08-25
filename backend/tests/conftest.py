@@ -19,9 +19,22 @@ from __future__ import annotations
 
 import pytest
 
+from app import futures as _futures_mod
 from irs_pricer.core import ttl_cache
 from irs_pricer.loaders import irsdata as _irsdata_loader
 from irs_pricer.services.simulation import bond_roll
+
+
+@pytest.fixture(autouse=True)
+def futures_data_off():
+    """선물 종가 주입본을 매 테스트 앞뒤에서 내린다 [2026-08-25].
+
+    sql_snapshot_off 와 같은 규율: 주입이 없으면 `futures.load()` 는 SQL 로
+    가므로, 결정적이어야 하는 테스트는 자기 페이크를 `set_data` 로 주입한 뒤
+    이 픽스처가 되돌린다."""
+    _futures_mod.set_data(None)
+    yield
+    _futures_mod.set_data(None)
 
 
 @pytest.fixture(autouse=True)

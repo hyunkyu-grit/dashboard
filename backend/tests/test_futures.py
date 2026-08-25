@@ -1,0 +1,398 @@
+# -*- coding: utf-8 -*-
+"""국채선물·퓨처스왑 합류 [OWNER, 2026-08-25 — "선물이랑 선물스왑도 백테스트와
+시뮬레이션에 추가하기"].
+
+이 파일이 지는 명제:
+    ① 폐형 산술: P(5%) = 100 핀·역산 왕복·pvbp 부호 (futures_pricing).
+    ② 백테스트 FUT: 손익 = 방향 × 액면/100 × Δ종가, 롱+숏 = 0.
+    ③ 백테스트 FSW: 다리 = 같은 만기 IRS·진입일 DV01 중립 [OWNER 선택],
+       +1 = 선물 매도 + IRS 리시브 — 내재만 오르면 이익.
+    ④ 선물 대사표: actual = Δ종가 손익, est = 전일 KRD × Δ내재, 잔차 =
+       컨벡시티. 캐리·롤다운 열은 None(존재하지 않는 성분 — 공란 정책).
+    ⑤ 시뮬 엔진: 선물 분기 = KRX 폐형 재값매김(고정 지평·감쇠 없음),
+       캐리·조달 0. E2E 로 futMtm·항등식·자기 대사표가 선다.
+
+데이터는 전부 페이크 주입(futures.set_data / 자체 Dataset) — conftest 의
+futures_data_off 가 매 테스트 앞뒤로 되돌린다. SQL 없이 결정적이다.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app import futures as ft
+from app import instruments
+from app.dataset import Dataset
+from app.main import app
+from app import mixedbook
+from irs_pricer.services.simulation import daily_valuation as dv
+from irs_pricer.services.simulation.futures_pricing import (
+    FUT_YEARS,
+    implied_yield,
+    synth_price,
+    synth_pvbp,
+)
+
+# ── 페이크 시장 ─────────────────────────────────────────────────────────────
+
+NODES = ["1D", "3M", "6M", "9M", "1Y", "1.5Y", "2Y", "3Y", "5Y", "10Y"]
+FLAT = 3.00   # 평평한 IRS 커브 — 스왑 다리의 세타가 ~0 이 되게
+
+
+def _weekdays(start: dt.date, n: int) -> list[dt.date]:
+    out, d = [], start
+    while len(out) < n:
+        if d.weekday() < 5:
+            out.append(d)
+        d += dt.timedelta(days=1)
+    return out
+
+
+DATES = _weekdays(dt.date(2026, 9, 1), 12)
+
+
+def _dataset(rates: dict[str, list[float]] | None = None) -> Dataset:
+    series = rates or {n: [FLAT] * len(DATES) for n in NODES}
+    return Dataset(dates=DATES, series=series, tenor_order=list(NODES), source="test")
+
+
+def _futdata(path_3y: list[float], path_10y: list[float] | None = None) -> ft.FuturesData:
+    p10 = path_10y or [120.0] * len(DATES)
+    assert len(path_3y) == len(DATES) and len(p10) == len(DATES)
+    return ft.FuturesData(
+        series={
+            "3Y": ft.FuturesSeries(dates=list(DATES), close=list(path_3y)),
+            "10Y": ft.FuturesSeries(dates=list(DATES), close=list(p10)),
+        },
+        watermark=("test", len(DATES)),
+    )
+
+
+# ── ① 폐형 산술 ─────────────────────────────────────────────────────────────
+
+class TestPricing:
+    def test_par_pin(self):
+        """표면 5% 표준물은 5% 에서 정확히 100 — KRX 정의의 자명한 핀."""
+        assert synth_price(5.0, 3) == pytest.approx(100.0, abs=1e-9)
+        assert synth_price(5.0, 10) == pytest.approx(100.0, abs=1e-9)
+
+    def test_roundtrip(self):
+        for years in (3, 10):
+            for y in (1.5, 3.71, 5.0, 8.2):
+                assert implied_yield(synth_price(y, years), years) == pytest.approx(y, abs=1e-6)
+
+    def test_pvbp_sign_and_scale(self):
+        """롱이 양수·10Y 가 3Y 보다 크다(듀레이션)."""
+        p3, p10 = synth_pvbp(3.5, 3), synth_pvbp(3.5, 10)
+        assert 0 < p3 < p10
+        # 3Y 합성채 mod dur ≈ 2.8 → pvbp ≈ 0.028 (액면 100 기준)
+        assert p3 == pytest.approx(0.028, rel=0.2)
+
+    def test_mr_alias_is_this_function(self):
+        """mr.py 의 _implied_yield 는 이 모듈의 그 함수다 — 두 진실 금지."""
+        from app.mr import _implied_yield
+
+        assert _implied_yield is implied_yield
+
+
+# ── ② FUT 백테스트 ─────────────────────────────────────────────────────────
+
+class TestFutBacktest:
+    def test_pnl_is_price_change(self):
+        path = [104.0, 104.2, 104.5, 104.1, 103.8, 103.9, 104.0, 104.3, 104.6, 104.4, 104.2, 104.0]
+        fut = _futdata(path)
+        ds = _dataset()
+        pos = ft.as_position("FUT:3Y", 1, 1e10, DATES[0], None)
+        rec, own, _prev = ft.run_one(fut, ds, pos, DATES)
+        for i, d in enumerate(DATES):
+            assert own[d] == pytest.approx(1e10 / 100.0 * (path[i] - path[0]))
+        assert rec["pnl"] == pytest.approx(1e10 / 100.0 * (path[-1] - path[0]))
+        # 선물 손익은 전부 평가다 — 캐리·롤다운·개시는 None (공란 정책).
+        assert rec["valuation"] == rec["pnl"]
+        assert rec["carry"] is None and rec["rolldown"] is None and rec["startup"] is None
+
+    def test_long_plus_short_is_zero(self):
+        path = [104.0, 104.5, 103.7, 104.2, 104.9, 104.1, 103.5, 104.0, 104.8, 104.3, 104.6, 104.2]
+        fut = _futdata(path)
+        ds = _dataset()
+        long = ft.as_position("FUT:3Y", 1, 5e9, DATES[0], None)
+        short = ft.as_position("FUT:3Y", -1, 5e9, DATES[0], None)
+        _r1, own_l, _p1 = ft.run_one(fut, ds, long, DATES)
+        _r2, own_s, _p2 = ft.run_one(fut, ds, short, DATES)
+        for d in DATES:
+            assert own_l[d] + own_s[d] == pytest.approx(0.0, abs=1e-6)
+
+    def test_mixed_swap_plus_futures_book(self):
+        """스왑+선물 혼합 북 — 일반화 병합(_mixed_any) 경로.
+
+        평평한 IRS(세타 ~0) + 선물 가격만 이동 → 북 총액 ≈ 선물 다리 손익.
+        줄마다 자기 kind 가 붙고, 총액이 두 엔진 합으로 닫힌다."""
+        path = [104.0] * 3 + [104.5] * 9        # +0.5pt
+        ft.set_data(_futdata(path))
+        ds = _dataset()
+        out = mixedbook.run_backtest(
+            None, ds,
+            [
+                mixedbook.MixedPosition("3Y", 1, 1e10, DATES[0], None),
+                mixedbook.MixedPosition("FUT:3Y", 1, 1e10, DATES[0], None),
+            ],
+            _spec(), fut=ft.load(),
+        )
+        kinds = [p["kind"] for p in out["positions"]]
+        assert kinds == ["swap", "futures"]
+        fut_pnl = 1e10 / 100.0 * (path[-1] - path[0])
+        swap_pnl = out["positions"][0]["pnl"]
+        assert out["pnl"] == pytest.approx(swap_pnl + fut_pnl, abs=2.0)
+        assert out["calendar"]["basis"] == "IRS ∩ 선물"
+        # 점마다 d 가 서고(첫 점 제외), 마지막 점이 총액이다.
+        assert out["points"][0]["d"] is None
+        assert all(p["d"] is not None for p in out["points"][1:])
+        assert out["points"][-1]["pnl"] == out["pnl"]
+
+    def test_mixedbook_routes_futures_only_book(self):
+        path = [104.0] * 6 + [105.0] * 6
+        ft.set_data(_futdata(path))
+        ds = _dataset()
+        out = mixedbook.run_backtest(
+            None, ds,
+            [mixedbook.MixedPosition("FUT:10Y", 1, 1e10, DATES[0], None)],
+            _spec(), fut=ft.load(),
+        )
+        assert out["positions"][0]["kind"] == "futures"
+        assert out["positions"][0]["label"] == "KTB10 선물"
+        # 10Y 페이크는 상수 120 — 손익 0. 3Y 경로는 이 북과 무관하다.
+        assert out["pnl"] == 0.0
+
+
+def _spec():
+    from app import funding as fd
+
+    return fd.FundingSpec(basis="call", spread_bp=0.0)
+
+
+# ── ③ FSW ──────────────────────────────────────────────────────────────────
+
+class TestFsw:
+    def test_leg_is_dv01_neutral_same_tenor(self):
+        fut = _futdata([104.0] * len(DATES))
+        ds = _dataset()
+        pos = ft.as_position("FSW:3Y", 1, 1e10, DATES[0], None)
+        swap_pos, y0, fut_dv01 = ft.fsw_swap_leg(fut, ds, pos)
+        assert swap_pos.series_id == "3Y"          # 같은 만기 [OWNER]
+        assert swap_pos.direction == -1            # +1 = IRS 리시브
+        assert fut_dv01 == pytest.approx(1e10 / 100.0 * synth_pvbp(y0, 3))
+        # DV01 중립: 스왑 원/bp(= 명목 × 연금계수 × 1e-4 — 백테스트 창의
+        # 표시식이 이 규약의 핀) == 선물 원/bp. 처음 이 테스트가 1e-4 없는
+        # 잘못된 규약을 같이 믿어 10⁴배 결함을 통과시켰다(실측 2026-08-25:
+        # 100억 FSW 의 IRS 다리가 100만원) — 크기 상식 단언을 같이 박는다.
+        from app.backtest import _build_legs
+
+        j = ds.dates.index(swap_pos.entry)
+        unit = _build_legs(ds, "3Y", 1.0, j)[0].dv01
+        assert swap_pos.notional * unit * 1e-4 == pytest.approx(fut_dv01, rel=1e-9)
+        # 같은 만기·비슷한 듀레이션이면 두 다리 명목은 같은 자릿수여야 한다.
+        assert 0.5 * 1e10 < swap_pos.notional < 2.0 * 1e10
+
+    def test_implied_up_alone_profits_long_spread(self):
+        """IRS 평평 고정·선물 가격만 하락(내재 상승) → FSW +1 이익 ≈ DV01×Δbp."""
+        p0 = 104.0
+        y0 = implied_yield(p0, 3)
+        y1 = y0 + 0.10                              # +10bp
+        p1 = synth_price(y1, 3)
+        path = [p0] * 2 + [p1] * (len(DATES) - 2)
+        fut = _futdata(path)
+        ds = _dataset()
+        pos = ft.as_position("FSW:3Y", 1, 1e10, DATES[0], None)
+        _rec, own, _prev = ft.run_one(fut, ds, pos, DATES)
+        fut_dv01 = 1e10 / 100.0 * synth_pvbp(y0, 3)
+        expected = fut_dv01 * 10.0                  # 10bp
+        # 스왑 다리는 커브가 안 움직여 세타뿐 — 평평 커브 리시브 par 라 작다.
+        assert own[DATES[-1]] == pytest.approx(expected, rel=0.05)
+        assert own[DATES[-1]] > 0
+
+    def test_recon_triple_has_all_blocks(self):
+        p0 = 104.0
+        path = [p0] * len(DATES)
+        ft.set_data(_futdata(path))
+        ds = _dataset()
+        out = mixedbook.book_recon(
+            None, ds,
+            [mixedbook.MixedPosition("FSW:3Y", 1, 1e10, DATES[0], None)],
+            _spec(), fut=ft.load(),
+        )
+        assert set(out) == {"swap", "bond", "futures"}
+        assert out["bond"] is None
+        # FSW 의 IRS 다리가 스왑 표에 선다 — 엔진 단위 분리.
+        assert out["swap"] is not None and out["swap"]["rows"]
+        assert out["futures"] is not None
+        rows = out["futures"]["rows"]
+        assert rows[-1].get("carryover") is True
+        for r in rows:
+            assert r["carry"] is None and r["rolldown"] is None  # 공란 정책
+
+
+# ── ④ 선물 대사표 ──────────────────────────────────────────────────────────
+
+class TestFutRecon:
+    def test_actual_est_residual(self):
+        path = [104.0, 104.0, 103.5, 103.5, 103.8, 103.8, 103.8, 104.1, 104.1, 104.1, 104.0, 104.0]
+        fut = _futdata(path)
+        ds = _dataset()
+        out = ft.book_recon(
+            fut, ds, [ft.as_position("FUT:3Y", 1, 1e10, DATES[0], None)]
+        )
+        assert out["tenors"] == ["3Y"]
+        body = [r for r in out["rows"] if not r.get("carryover")]
+        # 진입일 행: 그날 종가로 struck — 평가 0, 전일 KRD 0 (아침엔 없었다).
+        assert body[0]["actual"] == 0 and body[0]["krd"]["3Y"] == 0
+        for i, r in enumerate(body):
+            if i == 0:
+                continue
+            d_price = path[i] - path[i - 1]
+            assert r["actual"] == pytest.approx(1e10 / 100.0 * d_price, abs=1.0)
+            assert r["residual"] == r["valuation"] - r["estTotal"]
+            # 잔차 = 컨벡시티 — 선형 추정 대비 작아야 한다 (50bp 미만 이동).
+            if r["estTotal"]:
+                assert abs(r["residual"]) < abs(r["estTotal"]) * 0.02 + 2
+        assert out["rows"][-1]["carryover"] is True
+        assert out["rows"][-1]["krd"]["3Y"] != 0     # 열린 북 — 이월 리스크
+
+
+# ── ⑤ 시뮬 엔진 ────────────────────────────────────────────────────────────
+
+def _fut_row(direction: int = 1, notional: float = 1e10, tenor: str = "3Y",
+             y0: float = 3.5) -> dict:
+    years = FUT_YEARS[tenor]
+    pvbp = direction * notional / 100.0 * synth_pvbp(y0, years)
+    return {
+        "id": f"FUT:{tenor}#0", "name": f"KTB{years} 선물", "book": "직접입력",
+        "bondType": "futures", "sector": "국채선물",
+        "maturityDate": (dt.date(2026, 9, 1) + dt.timedelta(days=int(years * 365))).isoformat(),
+        "couponRate": 5.0, "frequency": 2, "notional": notional,
+        "entryYield": y0, "entryYieldPurchase": y0, "mtmYield": y0,
+        "evaluationAmount": 0.0, "duration": 2.8, "pvbp": pvbp, "tenor": tenor,
+        "remainingDays": years * 365.0, "durationWeight": 0.0,
+        "krdMap": {tenor: pvbp}, "direction": direction,
+        "startDate": "2026-09-01",
+    }
+
+
+class TestSimEngine:
+    def test_exact_reval_no_aging(self):
+        """폐형 재값매김 — t 와 무관하게 같은 충격이면 같은 MTM(합성채는 늙지
+        않는다). 선형 pvbp 와의 차 = 컨벡시티가 실재한다."""
+        from irs_pricer.services.simulation.models import FrontendPosition
+
+        p = FrontendPosition(**_fut_row(direction=1, y0=3.5))
+        for t in (1, 90, 179):
+            got = dv.calculate_daily_mtm([p], "parallel", "step", 250.0, None, 1.0, t)
+            exact = 1e10 / 100.0 * (synth_price(3.5 + 2.5, 3) - synth_price(3.5, 3))
+            assert got == pytest.approx(exact)
+        linear = p.pvbp * -250.0
+        assert abs(got - linear) > 1e5     # 컨벡시티는 0 이 아니다 (+250bp)
+        assert got > linear                # 롱의 컨벡시티는 이득 쪽
+
+    def test_carry_and_funding_are_absent(self):
+        from irs_pricer.services.simulation.models import FrontendPosition
+
+        p = FrontendPosition(**_fut_row())
+        carry = dv.calculate_daily_carry([p], "parallel", "step", 100.0, None, 0.03, 1.0, 5)
+        cost = dv.calculate_daily_funding_cost([p], 0.03, 5)
+        assert carry == 0.0 and cost == 0.0
+
+    def test_matrix_mode_reads_ktb_curve_at_fixed_horizon(self):
+        from irs_pricer.services.simulation.models import (
+            FrontendPosition,
+            FrontendShockCurves,
+        )
+
+        p = FrontendPosition(**_fut_row(tenor="10Y", y0=3.8))
+        curves = FrontendShockCurves(
+            bondCurves={"국채": [{"t": 3.0, "val": 10.0}, {"t": 10.0, "val": 50.0}]},
+            swapCurve=[],
+        )
+        got = dv.calculate_daily_mtm([p], "matrix", "step", 0.0, curves, 1.0, 30)
+        exact = 1e10 / 100.0 * (synth_price(3.8 + 0.50, 10) - synth_price(3.8, 10))
+        assert got == pytest.approx(exact)
+
+
+class TestSimE2E:
+    def _req(self, rows: list[dict]) -> dict:
+        return {
+            "positions": rows,
+            "shockCurves": {"bondCurves": {}, "swapCurve": []},
+            "dailyShockCurves": {"bondCurves": {}, "swapCurve": []},
+            "fundingRate": 0.03, "fundingEvents": [],
+            "simDays": 30, "shockType": "ramp", "shockMode": "parallel",
+            "baseShockBp": 100, "baseDate": "2026-09-01",
+            "irsCurves": [],
+            "customPath": [{"day": 0, "bp": 0}, {"day": 30, "bp": 100}],
+            "includeDistribution": False,
+        }
+
+    def test_futures_only_run(self):
+        r = TestClient(app).post("/api/simulate", json=self._req([_fut_row()]))
+        assert r.status_code == 200, r.text
+        body = r.json()
+        d = body["totalReturnDecomposition"]
+        exact = 1e10 / 100.0 * (synth_price(3.5 + 1.0, 3) - synth_price(3.5, 3))
+        assert d["futMtm"] == pytest.approx(exact, rel=1e-6)
+        # 항등: 성분 합 == total (선물 외 성분은 전부 0).
+        assert d["total"] == pytest.approx(
+            d["bondMtm"] + d["bondCarry"] + d["bondRolldown"] + d["fundingCost"]
+            + d["futMtm"] + (d["swapMtm"] or 0) + (d["swapCarry"] or 0)
+            + (d["swapRolldown"] or 0)
+        )
+        assert d["bondCarry"] == 0.0 and d["fundingCost"] == 0.0
+        assert body["summary"]["finalFut"] == round(exact)
+        # 자기 대사표가 선다 — 채권·스왑 표는 없다.
+        tbl = body["futuresDailyReconciliation"]
+        assert tbl and tbl["groups"][0]["label"] == "국채선물"
+        assert body["bondDailyReconciliation"] is None
+        assert body["irsDailyReconciliation"] == []
+        # 세로 검산: Σ평가 == futMtm (±행 라운딩).
+        rows = [x for x in tbl["rows"] if not x.get("carryover")]
+        assert sum(x["valuation"] for x in rows) == pytest.approx(d["futMtm"], abs=len(rows))
+        # 잔차 = 컨벡시티: Σ잔차 == futMtm − 선형 추정.
+        est = sum(x["totalEstPnl"] for x in rows)
+        res = sum(x["residual"] for x in rows)
+        assert res == pytest.approx(d["futMtm"] - est, abs=len(rows))
+        for x in rows:
+            assert x["carry"] is None and x["rolldown"] is None and x["funding"] is None
+        # KRD 패널: 국채선물 섹터 행이 선다.
+        krd = {row["sector"]: row for row in body["pvbpSensitivity"]}
+        assert krd["국채선물"]["total"] == pytest.approx(_fut_row()["pvbp"], rel=1e-6)
+
+    def test_expand_fsw_makes_two_rows(self):
+        ft.set_data(_futdata([104.0] * len(DATES)))
+        ds = _dataset()
+        rows = instruments.expand(ds, "FSW:3Y", 1, 1e10, DATES[0])
+        assert len(rows) == 2
+        fut_leg, swap_leg = rows
+        assert fut_leg["bondType"] == "futures" and fut_leg["direction"] == -1
+        assert swap_leg["bondType"] == "swap" and swap_leg["direction"] == 1  # 리시브
+        y0 = implied_yield(104.0, 3)
+        assert fut_leg["mtmYield"] == pytest.approx(y0)
+        # DV01 중립 명목 — 원/bp = 명목 × 연금계수 × 1e-4 (위 백테스트 쪽
+        # 테스트와 같은 규약·같은 크기 상식 단언).
+        from app.backtest import _build_legs
+
+        unit = _build_legs(ds, "3Y", 1.0, 0)[0].dv01
+        assert swap_leg["notional"] * unit * 1e-4 == pytest.approx(
+            1e10 / 100.0 * synth_pvbp(y0, 3), rel=1e-9
+        )
+        assert 0.5 * 1e10 < swap_leg["notional"] < 2.0 * 1e10
+
+    def test_expand_fut_row_shape(self):
+        ft.set_data(_futdata([104.0] * len(DATES)))
+        ds = _dataset()
+        rows = instruments.expand(ds, "FUT:10Y", -1, 2e10, DATES[0])
+        assert len(rows) == 1
+        r = rows[0]
+        assert r["bondType"] == "futures" and r["direction"] == -1
+        assert r["pvbp"] < 0                      # 숏은 음수 (롱 양수 관행)
+        assert r["evaluationAmount"] == 0.0       # 현금 지출 없음
+        assert r["krdMap"] == {"10Y": r["pvbp"]}

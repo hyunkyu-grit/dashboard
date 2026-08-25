@@ -25,15 +25,23 @@ import type { ReconStackDay } from '@/ui/window/ReconStack';
 export function reconPair(
   recon: BacktestReconPair | BacktestRecon | undefined,
 ): BacktestReconPair {
-  if (!recon) return { swap: null, bond: null };
-  if ('swap' in recon || 'bond' in recon) {
+  if (!recon) return { swap: null, bond: null, futures: null };
+  if ('swap' in recon || 'bond' in recon || 'futures' in recon) {
     const pair = recon as BacktestReconPair;
-    return { swap: pair.swap ?? null, bond: pair.bond ?? null };
+    return {
+      swap: pair.swap ?? null,
+      bond: pair.bond ?? null,
+      // [2026-08-25] 선물 표 — 이 키가 없는 응답(선물 합류 전)은 null 로.
+      futures: pair.futures ?? null,
+    };
   }
   const legacy = recon as BacktestRecon;
-  if (legacy.tenors?.some((t) => t.includes(':'))) return { swap: null, bond: null };
+  if (legacy.tenors?.some((t) => t.includes(':')))
+    return { swap: null, bond: null, futures: null };
   const isBond = legacy.rows?.some((r) => typeof r.funding === 'number');
-  return isBond ? { swap: null, bond: legacy } : { swap: legacy, bond: null };
+  return isBond
+    ? { swap: null, bond: legacy, futures: null }
+    : { swap: legacy, bond: null, futures: null };
 }
 
 /**
@@ -88,6 +96,16 @@ export function bondReconNote(recon: BacktestRecon): string {
   const carry = '캐리는 조달 차감 전 금액이에요 — 조달은 자기 열에 음수로 서요.';
   const trunc = reconNote(recon);
   return trunc ? `${trunc} ${carry}` : carry;
+}
+
+/** 선물 표의 각주 [2026-08-25]. 캐리·롤다운·조달 열이 안 서는 이유(존재하지
+ * 않는 성분)와 잔차의 뜻(선형 추정 대 폐형 실측 = 컨벡시티)을 화면만 보는
+ * 사람에게 말한다 — 채권 각주와 같은 근거. */
+export function futuresReconNote(recon: BacktestRecon): string {
+  const base =
+    '선물은 손익이 전부 평가예요 — 합성채는 만기가 고정이라 캐리·롤다운이 없어요. 잔차는 선형 추정(KRD×Δbp) 대비 실제 가격 변화의 차, 곧 컨벡시티예요.';
+  const trunc = reconNote(recon);
+  return trunc ? `${trunc} ${base}` : base;
 }
 
 /** 혼합 차트 밑 달력 각주 — 차트·헤드라인은 여전히 민평 ∩ IRS 위에서 그린다.

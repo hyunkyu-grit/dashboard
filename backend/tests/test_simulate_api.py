@@ -128,6 +128,8 @@ def test_response_matches_frontend_contract_shape(representative_response: dict)
         "status", "chartData", "summary", "pvbpSensitivity",
         "bookDailyPnLs", "irsSettlementEvents", "irsDailyReconciliation",
         "bondDailyReconciliation",
+        # [OWNER, 2026-08-25] 국채선물 일별 대사 — 세 번째 자기 표.
+        "futuresDailyReconciliation",
         "fundingCurve", "distribution", "exclusions", "totalReturnDecomposition",
         "decompositionDaily", "fundingBasis",
         # 2026-08-06: 포지션별 기여. 목록에 이름을 올리는 것이 이 계약이 자라는
@@ -174,15 +176,18 @@ def test_response_matches_frontend_contract_shape(representative_response: dict)
     )
     assert [row["day"] for row in chart] == sorted(row["day"] for row in chart)
 
-    # SimulationSummary keys, exactly.
+    # SimulationSummary keys, exactly. [2026-08-25] finalFut — 선물 합류.
     assert set(body["summary"]) == {
-        "finalMTM", "finalCarry", "finalSwap", "finalTotal", "breakEvenDay",
+        "finalMTM", "finalCarry", "finalSwap", "finalFut", "finalTotal",
+        "breakEvenDay",
     }
 
-    # pvbpSensitivity: all 9 sectors plus the 합계 row, each with tenors + total.
+    # pvbpSensitivity: all 10 sectors plus the 합계 row, each with tenors +
+    # total. [2026-08-25] 국채선물 — 목록에 없으면 선물 krdMap 이 통째로
+    # 떨어진다(aggregates.py 의 30Y 실측과 같은 병).
     sectors = [row["sector"] for row in body["pvbpSensitivity"]]
     assert sectors == ["국고채", "통안채", "특은채", "시은채", "공사채",
-                       "여전채", "회사채", "IRS", "OIS", "합계"]
+                       "여전채", "회사채", "국채선물", "IRS", "OIS", "합계"]
     for row in body["pvbpSensitivity"]:
         assert "합계" in row["tenors"]
         assert math.isclose(row["total"], row["tenors"]["합계"], rel_tol=1e-12)
@@ -192,7 +197,7 @@ def test_response_matches_frontend_contract_shape(representative_response: dict)
     assert books == ["RP Fund", "Trading", "Total"]
     assert set(body["bookDailyPnLs"][0]) == {
         "bookName", "dailyCarry", "fundingCost", "bondValuation",
-        "swapValuation", "swapThetaPnL", "totalDailyPnL",
+        "futuresValuation", "swapValuation", "swapThetaPnL", "totalDailyPnL",
     }
 
 
@@ -292,10 +297,16 @@ def test_matches_source_backend_golden(representative_response: dict) -> None:
     # 쿠폰(마크) 고정으로 정정되며 finalCarry 36,920,495 → 20,106,895
     # (경로 충격 가산분 −16,813,600), finalTotal 도 같은 델타. MTM·swap 은
     # 바이트 동일 — 캐리 항만 닿는 수정임이 이 두 핀의 불변으로 증명된다.
+    # [RE-PINNED 2026-08-25 — 선물·퓨처스왑 합류] 골든을 다시 떴다: 가산 키만
+    # 늘었다(futPnL·futMtm·finalFut·futuresValuation·futuresDailyReconciliation·
+    # pvbpSensitivity 의 국채선물 행). 재생성 때 «가산 키를 걷어내면 종전
+    # 골든과 딥-동일» 을 기계로 증명하고 갈아 끼웠다 — 종전 수치는 전부
+    # 바이트 동일.
     assert representative_response["summary"] == {
         "finalMTM": -255_182_266,
         "finalCarry": 20_106_895,
         "finalSwap": 26_167_885,
+        "finalFut": 0,
         "finalTotal": -208_907_486,
         "breakEvenDay": -1,
     }
@@ -362,6 +373,7 @@ def test_bond_only_analytic(client: TestClient) -> None:
         "finalMTM": -9_726_027,
         "finalCarry": 0,
         "finalSwap": 0,
+        "finalFut": 0,              # [2026-08-25] 선물 합류 — 선물 없는 북은 0
         "finalTotal": -9_726_027,
         "breakEvenDay": -1,
     }
@@ -369,9 +381,11 @@ def test_bond_only_analytic(client: TestClient) -> None:
     # bookDailyPnLs with a zero daily shock: carry and funding cancel exactly.
     assert body["bookDailyPnLs"] == [
         {"bookName": "RP Fund", "dailyCarry": 821_918, "fundingCost": -821_918,
-         "bondValuation": 0, "swapValuation": 0, "swapThetaPnL": 0, "totalDailyPnL": 0},
+         "bondValuation": 0, "futuresValuation": 0, "swapValuation": 0,
+         "swapThetaPnL": 0, "totalDailyPnL": 0},
         {"bookName": "Total", "dailyCarry": 821_918, "fundingCost": -821_918,
-         "bondValuation": 0, "swapValuation": 0, "swapThetaPnL": 0, "totalDailyPnL": 0},
+         "bondValuation": 0, "futuresValuation": 0, "swapValuation": 0,
+         "swapThetaPnL": 0, "totalDailyPnL": 0},
     ]
 
     # pvbpSensitivity aggregates the bond's krdMap into its sector row.

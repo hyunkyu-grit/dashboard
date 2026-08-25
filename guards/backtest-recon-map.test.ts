@@ -96,27 +96,29 @@ describe('표 아래 각주 — 데이터 사실만, 없으면 각주도 없다'
   });
 });
 
-describe('서버 대사 정규화 — 표 둘 [OWNER, 2026-08-25 — 엔진 단위 분리]', () => {
-  it('라이브 서버의 {swap, bond} 는 그대로 통과한다', () => {
+describe('서버 대사 정규화 — 표 셋 [OWNER, 2026-08-25 — 엔진 단위 분리 · 선물 합류]', () => {
+  it('라이브 서버의 {swap, bond, futures} 는 그대로 통과한다', () => {
     const swap = recon([row()]);
     const bond = recon([row({ funding: -100 })]);
-    expect(reconPair({ swap, bond })).toEqual({ swap, bond });
-    expect(reconPair({ swap, bond: null })).toEqual({ swap, bond: null });
+    const futures = recon([row()]);
+    expect(reconPair({ swap, bond, futures })).toEqual({ swap, bond, futures });
+    // 선물 키가 없는 응답(선물 합류 전 구 서버·구 복원본)은 futures: null.
+    expect(reconPair({ swap, bond: null })).toEqual({ swap, bond: null, futures: null });
   });
 
-  it('없으면 둘 다 null — 표가 안 선다', () => {
-    expect(reconPair(undefined)).toEqual({ swap: null, bond: null });
+  it('없으면 셋 다 null — 표가 안 선다', () => {
+    expect(reconPair(undefined)).toEqual({ swap: null, bond: null, futures: null });
   });
 
   it('구 복원본(순수 북 한 표)은 조달 숫자로 자리를 찾는다', () => {
     const swapLegacy = recon([row()]);
-    expect(reconPair(swapLegacy)).toEqual({ swap: swapLegacy, bond: null });
+    expect(reconPair(swapLegacy)).toEqual({ swap: swapLegacy, bond: null, futures: null });
     const bondLegacy = recon([row({ funding: -100 })]);
-    expect(reconPair(bondLegacy)).toEqual({ swap: null, bond: bondLegacy });
+    expect(reconPair(bondLegacy)).toEqual({ swap: null, bond: bondLegacy, futures: null });
   });
 
   it('구 병합판(접두사 열쇠)은 버린다 — 두 표로 되돌릴 수 없다', () => {
     const merged = recon([row()], { tenors: ['S:3Y', 'B:3Y'] });
-    expect(reconPair(merged)).toEqual({ swap: null, bond: null });
+    expect(reconPair(merged)).toEqual({ swap: null, bond: null, futures: null });
   });
 });

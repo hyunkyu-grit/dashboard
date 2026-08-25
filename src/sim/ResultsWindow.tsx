@@ -76,16 +76,22 @@ const BOND_PARTS = [
   { key: 'bondRoll', label: '채권롤다운' },
   { key: 'fund', label: '조달비용' },
 ] as const;
+/* [OWNER, 2026-08-25 — 선물·퓨처스왑 합류] 선물은 성분이 **하나**다: KRX 폐형
+   재값매김의 평가. 캐리·조달·롤다운은 존재하지 않는 성분이라 항 자체가 없다
+   (합성채는 늙지 않는다 — backend futures_pricing). */
+const FUT_PARTS = [{ key: 'futMtm', label: '선물평가' }] as const;
 
 /** 커서 카드가 그리는 줄들 — 워터폴·표와 **같은 순서, 같은 이름**이다.
  * 세 곳이 각자 목록을 들면 하나만 고쳐지는 날이 온다. */
-const PATH_ROWS = [...SWAP_PARTS, ...BOND_PARTS] as readonly {
-  key: 'val' | 'carry' | 'roll' | 'bondMtm' | 'bondCarry' | 'bondRoll' | 'fund';
+const PATH_ROWS = [...SWAP_PARTS, ...BOND_PARTS, ...FUT_PARTS] as readonly {
+  key: 'val' | 'carry' | 'roll' | 'bondMtm' | 'bondCarry' | 'bondRoll' | 'fund' | 'futMtm';
   label: string;
 }[];
 const PATH_SERIES: string[] = PATH_ROWS.map((r) => r.key);
 /** 북에 채권이 없으면 서지 않는 셋. */
 const BOND_SERIES = new Set<string>(BOND_PARTS.map((r) => r.key));
+/** 북에 선물이 없으면 서지 않는 것. */
+const FUT_SERIES = new Set<string>(FUT_PARTS.map((r) => r.key));
 
 /** 케이스 선의 색.
  *
@@ -127,21 +133,28 @@ function partsOf(run: SimResponse) {
   const bondMtm = manUnits(d.bondMtm);
   const bondRoll = manUnits(d.bondRolldown ?? 0);
   const fund = manUnits(d.fundingCost);
+  /* 선물평가 [2026-08-25] — 선물의 유일한 성분. 구 캐시 응답에는 키가 없다.
+     존재 판정은 값이 아니라 **선물 대사표의 존재**다(= 북에 선물 포지션이
+     있었다는 서버의 사실): FUT 매수와 FSW 의 선물 매도가 정확히 상쇄되면
+     futMtm 이 0.0 이 되는데(같은 테너 100억 대 100억 — 실측 2026-08-25 첫
+     화면), 그때 행을 숨기면 실재하는 그로스 포지션이 화면에서 사라진다. */
+  const futMtm = manUnits(d.futMtm ?? 0);
+  const hasFut = run.futuresDailyReconciliation != null || futMtm !== 0;
   if (!hasSwap) {
-    const bondCarry = uPnl - bondMtm - bondRoll - fund;
+    const bondCarry = uPnl - bondMtm - bondRoll - fund - futMtm;
     return {
       uPnl, val: null, carry: null, roll: null,
-      bondMtm, bondCarry, bondRoll, fund,
+      bondMtm, bondCarry, bondRoll, fund, futMtm,
       hasBond: bondMtm !== 0 || bondCarry !== 0 || bondRoll !== 0 || fund !== 0,
-      hasSwap,
+      hasSwap, hasFut,
     };
   }
   const val = manUnits(d.swapMtm);
   const roll = manUnits(d.swapRolldown ?? 0);
   const bondCarry = manUnits(d.bondCarry);
-  const carry = uPnl - val - roll - bondMtm - bondCarry - bondRoll - fund;
+  const carry = uPnl - val - roll - bondMtm - bondCarry - bondRoll - fund - futMtm;
   const hasBond = bondMtm !== 0 || bondCarry !== 0 || bondRoll !== 0 || fund !== 0;
-  return { uPnl, val, carry, roll, bondMtm, bondCarry, bondRoll, fund, hasBond, hasSwap };
+  return { uPnl, val, carry, roll, bondMtm, bondCarry, bondRoll, fund, futMtm, hasBond, hasSwap, hasFut };
 }
 
 /** 엔진의 일별 대사 → 대사 스택. **시간순이 기본**(D+0 이 위) — 미래 경로에는
@@ -282,6 +295,10 @@ export function ResultsWindow({
       bondCarry: daily.map((d) => d.bondCarry ?? null),
       bondRoll: daily.map((d) => d.bondRolldown ?? null),
       fund: daily.map((d) => d.fundingCost ?? null),
+      /* 선물평가 [2026-08-25] — 선이 서는 조건은 partsOf 의 hasFut 과 같은
+         존재 판정(대사표 존재 = 북에 선물이 있다). 값으로 재면 FUT 매수와
+         FSW 선물 매도가 상쇄된 북에서 선이 사라진다(그쪽 주석의 실측). */
+      futMtm: daily.map((d) => d.futMtm ?? null),
       hasBond: daily.some(
         (d) =>
           (d.bondMtm ?? 0) !== 0 ||
@@ -289,23 +306,41 @@ export function ResultsWindow({
           (d.bondRolldown ?? 0) !== 0 ||
           (d.fundingCost ?? 0) !== 0,
       ),
+      hasFut:
+        run?.futuresDailyReconciliation != null ||
+        daily.some((d) => (d.futMtm ?? 0) !== 0),
     };
   }, [run]);
 
   /** 스크러버가 스크린리더에 읽어 줄 한 줄. 카드는 눈, 이건 귀 — 둘 다 있어야 한다. */
+  /** 이 경로 줄을 그릴 것인가 — 채권·선물 무리는 북에 있을 때만(범례 규칙). */
+  const drawPath = useCallback(
+    (key: string) => {
+      if (!paths) return false;
+      if (BOND_SERIES.has(key)) return paths.hasBond;
+      if (FUT_SERIES.has(key)) return paths.hasFut;
+      return true;
+    },
+    [paths],
+  );
+
   const pathScrubLabel = useCallback(
     (i: number) => {
       if (!paths || paths.days[i] == null) return '';
-      const rows = PATH_ROWS.filter((r) => paths.hasBond || !BOND_SERIES.has(r.key))
+      const rows = PATH_ROWS.filter((r) => drawPath(r.key))
         .map((r) => `${r.label} ${fmtKrw((paths[r.key] as (number | null)[])[i] ?? 0)}`);
       return [paths.days[i], ...rows].join(', ');
     },
-    [paths],
+    [paths, drawPath],
   );
 
   const p = run ? partsOf(run) : null;
   const recon = run?.irsDailyReconciliation ?? [];
   const bondRecon = run?.bondDailyReconciliation ?? null;
+  const futRecon = run?.futuresDailyReconciliation ?? null;
+  /* 표가 몇 개 서나 — 둘 이상이면 각 표를 낮게 눕혀 셋이 한 서랍에 들어간다. */
+  const reconStacks = (recon.length ? 1 : 0) + (bondRecon ? 1 : 0) + (futRecon ? 1 : 0);
+  const reconCap = reconStacks > 1 ? '20vh' : '34vh';
 
   return (
     <FloatingWindow
@@ -396,7 +431,11 @@ export function ResultsWindow({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {[...SWAP_PARTS, ...(grid.some((g) => g.parts?.hasBond) ? BOND_PARTS : [])].map((part) => (
+              {[
+                ...SWAP_PARTS,
+                ...(grid.some((g) => g.parts?.hasBond) ? BOND_PARTS : []),
+                ...(grid.some((g) => g.parts?.hasFut) ? FUT_PARTS : []),
+              ].map((part) => (
                 <TableRow key={part.key}>
                   <TableCell>
                     <TextLegal as="span" color="fgMuted" noWrap>
@@ -479,6 +518,9 @@ export function ResultsWindow({
                         { id: 'fund', data: paths.fund, color: 'var(--color-fg)', yAxisId: AXIS },
                       ]
                     : []),
+                  ...(paths.hasFut
+                    ? [{ id: 'futMtm', data: paths.futMtm, color: 'var(--sr-ref-fut)', yAxisId: AXIS }]
+                    : []),
                 ]}
                 xAxis={{ data: paths.days }}
                 yAxis={[{ id: AXIS }]}
@@ -501,16 +543,17 @@ export function ResultsWindow({
                     <Line seriesId="fund" curve="linear" connectNulls={false} />
                   </>
                 ) : null}
+                {paths.hasFut ? <Line seriesId="futMtm" curve="linear" connectNulls={false} /> : null}
                 <Scrubber
                   accessibilityLabel={pathScrubLabel}
-                  seriesIds={PATH_SERIES.filter((k) => paths.hasBond || !BOND_SERIES.has(k))}
+                  seriesIds={PATH_SERIES.filter((k) => drawPath(k))}
                 />
               </CartesianChart>
               {/* 커서가 짚은 날의 성분 — 레인 P1-2. 이 화면은 손익이 어떻게
                   쌓이는지를 보는 자리인데, 특정 날의 숫자를 읽을 길이 없었다. */}
               {pathIdx != null && pathIdx >= 0 && paths.days[pathIdx] != null ? (
                 <ReadoutCard title={`D+${paths.days[pathIdx]}`}>
-                  {PATH_ROWS.filter((r) => paths.hasBond || !BOND_SERIES.has(r.key)).map((r) => (
+                  {PATH_ROWS.filter((r) => drawPath(r.key)).map((r) => (
                     <ReadoutMoney
                       key={r.key}
                       k={r.label}
@@ -541,6 +584,7 @@ export function ResultsWindow({
                           ['조달비용', p.fund, 'var(--color-fg)'],
                         ] as const)
                       : []),
+                    ...(p.hasFut ? ([['선물평가', p.futMtm, 'var(--sr-ref-fut)']] as const) : []),
                   ] as readonly (readonly [string, number, string])[]
                 ).map(([label, u, colour]) => (
                   <HStack key={label} gap={0.5} alignItems="baseline">
@@ -573,6 +617,12 @@ export function ResultsWindow({
                 줄며 생기는 몫이에요.
               </TextLegal>
             ) : null}
+            {p.hasFut ? (
+              <TextLegal as="span" color="fgMuted">
+                선물평가는 국채선물 다리의 전부예요 — 합성채는 만기가 고정이라 캐리·롤다운
+                막대가 없고, 증거금 조달은 세지 않아요.
+              </TextLegal>
+            ) : null}
           </VStack>
         ) : null}
 
@@ -591,7 +641,7 @@ export function ResultsWindow({
           </TextLegal>
           {recon.length ? (
             <VStack gap={0.5} width="100%">
-              {bondRecon ? (
+              {reconStacks > 1 ? (
                 <TextLegal as="span" color="fgMuted">
                   스왑 대사 — 일별 KRD 재계산
                 </TextLegal>
@@ -600,7 +650,7 @@ export function ResultsWindow({
                 days={simDays(recon)}
                 tenors={Object.keys(recon[0].pvbp)}
                 defaultOrder="asc"
-                maxHeight={bondRecon ? '20vh' : '34vh'}
+                maxHeight={reconCap}
               />
             </VStack>
           ) : (
@@ -610,16 +660,39 @@ export function ResultsWindow({
           )}
           {bondRecon ? (
             <VStack gap={0.5} width="100%">
-              <TextLegal as="span" color="fgMuted">
-                채권 대사 — 시나리오 충격 테너에 배분한 감쇠 pvbp
-              </TextLegal>
+              {reconStacks > 1 ? (
+                <TextLegal as="span" color="fgMuted">
+                  채권 대사 — 시나리오 충격 테너에 배분한 감쇠 pvbp
+                </TextLegal>
+              ) : null}
               <ReconStack
                 days={bondDays(bondRecon.rows)}
                 tenors={bondRecon.tenors}
                 groups={bondRecon.groups}
                 defaultOrder="asc"
-                maxHeight={recon.length ? '20vh' : '34vh'}
+                maxHeight={reconCap}
                 note={bondReconNote(bondRecon)}
+              />
+            </VStack>
+          ) : null}
+          {futRecon ? (
+            /* 세 번째 표 [OWNER, 2026-08-25 — 선물·퓨처스왑 합류]. 행 계약은
+               채권 표와 같아 `bondDays` 를 그대로 쓴다 — 캐리·롤다운·조달이
+               전 행 null 이라 ReconStack 이 그 열들을 안 세운다(숫자-있을-
+               때만 규칙). 잔차가 싣는 것은 컨벡시티다(폐형 실측 − 선형 추정). */
+            <VStack gap={0.5} width="100%">
+              {reconStacks > 1 ? (
+                <TextLegal as="span" color="fgMuted">
+                  선물 대사 — 상장 만기 고정 지평의 KRD
+                </TextLegal>
+              ) : null}
+              <ReconStack
+                days={bondDays(futRecon.rows)}
+                tenors={futRecon.tenors}
+                groups={futRecon.groups}
+                defaultOrder="asc"
+                maxHeight={reconCap}
+                note="선물은 손익이 전부 평가예요 — 합성채는 만기가 고정이라 캐리·롤다운이 없어요. 잔차는 선형 추정 대비 폐형 재값매김의 차, 곧 컨벡시티예요."
               />
             </VStack>
           ) : null}
@@ -661,6 +734,8 @@ function Waterfall({ parts }: { parts: ReturnType<typeof partsOf> }) {
           { label: '조달비용', u: parts.fund },
         ]
       : []),
+    // 선물의 유일한 막대 [2026-08-25] — 캐리·조달 막대가 없는 것이 사실이다.
+    ...(parts.hasFut ? [{ label: '선물평가', u: parts.futMtm }] : []),
   ];
   // 누적 경계 — 각 막대의 아래/위 끝.
   let acc = 0;

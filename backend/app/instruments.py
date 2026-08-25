@@ -98,6 +98,30 @@ def catalog() -> dict[str, list[dict]]:
         sid = f"{start}x{span}"
         out["forward"].append({"id": sid, "label": sid, "key": sid in key_forwards})
     out.update(_bond_catalog())
+    out.update(_futures_catalog())
+    return out
+
+
+def _futures_catalog() -> dict[str, list[dict]]:
+    """고를 수 있는 선물·퓨처스왑 [OWNER, 2026-08-25]. 종가가 **SQL 에만**
+    있으므로 닿지 않으면 빈 목록 — 채권 목록과 같은 강등 규율."""
+    out: dict[str, list[dict]] = {"futures": [], "futuresswap": []}
+    try:
+        from . import futures as ft
+
+        fut = ft.load()
+    except Exception:
+        return out
+    for tenor in ft.FUT_TENORS:
+        fs = fut.series.get(tenor)
+        if fs is None or not fs.dates:
+            continue
+        out["futures"].append(
+            {"id": f"{ft.KIND_FUT}:{tenor}", "label": ft.FUT_LABELS[tenor], "key": True}
+        )
+        out["futuresswap"].append(
+            {"id": f"{ft.KIND_FSW}:{tenor}", "label": ft.FSW_LABELS[tenor], "key": True}
+        )
     return out
 
 
@@ -106,6 +130,12 @@ def kind_of(series_id: str) -> str:
         return "cashbond"
     if series_id.startswith(f"{_ASW}:"):
         return "assetswap"
+    # 선물 접두사도 접두사 우선이다 — `FUT:3Y` 에는 '-' 가 없어 아웃라이트로
+    # 읽히고, 그러면 TENOR_T 조회에서 죽는다(모듈 상단 CB 주석과 같은 이유).
+    if series_id.startswith("FUT:"):
+        return "futures"
+    if series_id.startswith("FSW:"):
+        return "futuresswap"
     if "x" in series_id:
         return "forward"
     n = series_id.count("-")
@@ -304,6 +334,98 @@ def _expand_bond(
     return rows
 
 
+def _expand_futures(
+    dataset: Dataset, series_id: str, direction: int, notional: float, base_date: dt.date
+) -> list[dict]:
+    """`FUT:3Y` · `FSW:3Y` → 시뮬레이션이 받는 줄들 [OWNER, 2026-08-25].
+
+    선물은 한 줄(bondType="futures" — 엔진의 자기 분기: KRX 폐형 재값매김·
+    고정 지평·캐리 0), 퓨처스왑은 **두 줄**이다 — 선물 다리 + 같은 만기 IRS
+    다리(진입일 DV01 중립 [OWNER: "3선이면 3년 IRS"], +1 = 스프레드 롱 =
+    선물 매도 + IRS 리시브 — app/futures.py 의 방향 관례 그대로).
+    """
+    from . import futures as ft
+    from irs_pricer.services.simulation.futures_pricing import (
+        FUT_YEARS,
+        implied_yield,
+        synth_price,
+        synth_pvbp,
+    )
+
+    try:
+        kind, tenor = ft.parse_id(series_id)
+    except ft.FuturesError as exc:
+        # expand 의 호출부(라우트·시뮬)는 BacktestError 를 422 로 옮긴다.
+        raise BacktestError(str(exc))
+    if direction not in (1, -1):
+        raise BacktestError("direction must be +1 or -1")
+    fut = ft.load()
+    fs = fut.series.get(tenor)
+    if fs is None or not fs.dates:
+        raise BacktestError(f"{tenor} 선물 종가가 없습니다.")
+    from .backtest import _index_on_or_before
+
+    i = _index_on_or_before(fs.dates, base_date)
+    as_of = fs.dates[i]
+    years = FUT_YEARS[tenor]
+    price0 = fs.close[i]
+    y0 = implied_yield(price0, years)
+
+    fut_dir = -direction if kind == ft.KIND_FSW else direction
+    # pvbp 는 롱이 양수 — 시뮬 채권 관행(MTM = pvbp × −Δbp)과 같은 부호.
+    pvbp = fut_dir * (notional / 100.0) * synth_pvbp(y0, years)
+    dirty = synth_price(y0, years)
+    mod_dur = (synth_pvbp(y0, years) * 1e4 / dirty) if dirty else 0.0
+    label = (ft.FUT_LABELS if kind == ft.KIND_FUT else ft.FSW_LABELS)[tenor]
+
+    rows = [{
+        "id": f"{series_id}#0",
+        "name": label if kind == ft.KIND_FUT else f"{label} · 선물",
+        "book": "직접입력",
+        "bondType": "futures",
+        "sector": "국채선물",          # get_sector_curve_key → 국채
+        "maturityDate": _add_years(as_of, years).isoformat(),
+        "couponRate": 5.0,             # KRX 표준물 표면 — 표시용
+        "frequency": 2,
+        "notional": notional,
+        "entryYield": y0,
+        "entryYieldPurchase": y0,
+        # 엔진의 폐형 재값매김이 읽는 기준 내재금리(%).
+        "mtmYield": y0,
+        # 평가액 0 — 선물은 현금 지출이 없다(증거금 미계상). 캐리·조달이
+        # 평가액을 읽는 어떤 경로도 여기서 0 이 된다(이중 안전).
+        "evaluationAmount": 0.0,
+        "duration": mod_dur,
+        "pvbp": pvbp,
+        "tenor": tenor,
+        "remainingDays": years * 365.0,
+        "durationWeight": 0.0,
+        "krdMap": {tenor: pvbp},
+        "direction": fut_dir,
+        "startDate": as_of.isoformat(),
+    }]
+
+    if kind == ft.KIND_FSW:
+        j = _index_on_or_after(dataset.dates, base_date)
+        swap_as_of = dataset.dates[j]
+        leg = _build_legs(dataset, tenor, 1.0, j)[0]
+        if leg.dv01 <= 0:
+            raise BacktestError(f"{series_id}: 스왑 DV01 을 셀 수 없습니다.")
+        fut_dv01_won = (notional / 100.0) * synth_pvbp(y0, years)
+        # `Leg.dv01` 은 연금계수(pv01) — 실제 원/bp = dv01 × 명목 × 1e-4
+        # (app/futures.py fsw_swap_leg 의 같은 주석·같은 실측 결함).
+        swap_notional = fut_dv01_won / (leg.dv01 * 1e-4)
+        rows.append(_leg_row(
+            series_id, 1, swap_as_of,
+            _add_years(swap_as_of, _years(tenor)),
+            leg.entry_rate * 100.0,
+            # `_leg_row` 의 부호는 +1 이 고정 수취 — FSW +1 = IRS 리시브.
+            direction,
+            swap_notional, tenor,
+        ))
+    return rows
+
+
 def _add_years(d: dt.date, years: float) -> dt.date:
     """기준일 + n년. 월 단위로 더한 뒤 그 달에 없는 날만 말일로 내린다 —
     프론트의 addYearsIso와 같은 규칙이고, 같은 이유(2/29가 3/1로 새는 것)다."""
@@ -327,6 +449,8 @@ def expand(
     kind = kind_of(series_id)
     if kind in ("cashbond", "assetswap"):
         return _expand_bond(dataset, series_id, direction, notional, base_date)
+    if kind in ("futures", "futuresswap"):
+        return _expand_futures(dataset, series_id, direction, notional, base_date)
 
     i = _index_on_or_after(dataset.dates, base_date)
     as_of = dataset.dates[i]

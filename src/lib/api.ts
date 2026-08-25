@@ -405,19 +405,34 @@ export class BacktestUnavailable extends Error {
 
 export interface BacktestLeg {
   tenor: string;
-  side: "pay" | "receive";
+  /** 스왑 다리는 pay/receive, 선물 다리는 long/short [2026-08-25]. */
+  side: "pay" | "receive" | "long" | "short";
   notional: number;
   entryRate: number; // percent
-  dv01: number;      // per unit notional, at the entry curve
+  /** per unit notional, at the entry curve — 선물 다리에는 없다. */
+  dv01?: number;
+  /** 어느 엔진의 다리인가 — 퓨처스왑 기록에만 붙는다 [2026-08-25]. */
+  kind?: "fut" | "irs";
+  /** 선물 다리의 진입 종가 (KRX 포인트). */
+  entryPrice?: number;
 }
 
 /** 북의 한 줄이 무엇인가 [2026-08-21]. 한 창이 스왑과 채권을 다 그리므로
- * **줄마다 자기 종류를 진다** — 서버 `mixedbook._tag_swap`/`_tag_bond` 가 붙인다.
- * id 로 다시 알아내지 않는 이유: 판정이 두 군데 있으면 갈린다. */
-export type BookKind = "swap" | "cashbond" | "assetswap";
+ * **줄마다 자기 종류를 진다** — 서버 `mixedbook._tag_swap`/`_tag_bond`/
+ * `_tag_futures` 가 붙인다. id 로 다시 알아내지 않는 이유: 판정이 두 군데
+ * 있으면 갈린다.
+ *
+ * [2026-08-25 — 선물·퓨처스왑 합류] 서버 기록의 kind 는 FUT/FSW 둘 다
+ * "futures" 다(같은 엔진). "futuresswap" 은 **입력 쪽**(book.ts 의
+ * `bookKindOf`)이 종류 셀렉터·방향 라벨을 가르기 위한 값이다. */
+export type BookKind = "swap" | "cashbond" | "assetswap" | "futures" | "futuresswap";
 
 export function isBondKind(kind: BookKind): boolean {
   return kind === "cashbond" || kind === "assetswap";
+}
+
+export function isFuturesKind(kind: BookKind): boolean {
+  return kind === "futures" || kind === "futuresswap";
 }
 
 /** One line of the book, as the server priced it. */
@@ -453,7 +468,9 @@ export interface BacktestPosition {
    * memory — the server always sends it now. */
   valuation: number;
   rolldown?: number;
-  carry: number;
+  /** 선물 줄은 null — 캐리라는 성분 자체가 없다(합성채는 늙지 않는다;
+   * backend/app/futures.py). 0 으로 채우면 "캐리가 0원이었다" 로 읽힌다. */
+  carry: number | null;
   /** 개시 — 거래일→발효일 한 밤 [OWNER, 2026-08-14]. 스팟 시작 스왑은 그 밤에
    * 경과이자가 없어 캐리가 구조적으로 0 이고, 그 밤의 세타 전부가 롤다운으로
    * 떨어지던 것을 네 번째 칸으로 뺐다(backend/app/backtest.py 의 개시 주석).
@@ -522,6 +539,10 @@ export interface BacktestRecon {
 export interface BacktestReconPair {
   swap: BacktestRecon | null;
   bond: BacktestRecon | null;
+  /** 국채선물 대사 — 선물 달력 [2026-08-25]. 세 번째 자기 표: 열은 평가·
+   * 잔차뿐(캐리·롤다운·개시 = 존재하지 않는 성분, 행마다 null). 퓨처스왑의
+   * IRS 다리는 실제 스왑이라 **스왑 표에** 선다. 구 응답에는 키가 없다. */
+  futures?: BacktestRecon | null;
 }
 
 export interface BacktestResult {

@@ -49,6 +49,7 @@ from dataclasses import dataclass
 
 from . import cashbond as cb
 from . import funding as fd
+from . import futures as ft
 from .backtest import (
     MAX_POINTS,
     MAX_POSITIONS,
@@ -82,12 +83,22 @@ def is_bond(series_id: str) -> bool:
     return series_id.startswith((f"{cb.KIND_CASH}:", f"{cb.KIND_ASW}:"))
 
 
+def is_futures(series_id: str) -> bool:
+    return ft.is_futures(series_id)
+
+
 def has_bond(positions: list[MixedPosition]) -> bool:
     return any(is_bond(p.series_id) for p in positions)
 
 
+def has_futures(positions: list[MixedPosition]) -> bool:
+    return any(is_futures(p.series_id) for p in positions)
+
+
 def has_swap(positions: list[MixedPosition]) -> bool:
-    return any(not is_bond(p.series_id) for p in positions)
+    return any(
+        not is_bond(p.series_id) and not is_futures(p.series_id) for p in positions
+    )
 
 
 def _as_swap(p: MixedPosition) -> Position:
@@ -128,8 +139,18 @@ def _check(positions: list[MixedPosition]) -> None:
 # 정책과 같다: 스왑에 조달이 0 이라고 적으면 "조달이 0 원이었다" 로 읽힌다.
 
 
+def _as_futures(p: MixedPosition) -> ft.FuturesPosition:
+    return ft.as_position(p.series_id, p.direction, p.notional, p.entry, p.exit)
+
+
 def _tag_swap(rec: dict) -> dict:
     return {"kind": "swap", "label": rec["id"], "funding": None, **rec}
+
+
+def _tag_futures(rec: dict) -> dict:
+    kind, tenor = ft.parse_id(rec["id"])
+    label = (ft.FUT_LABELS if kind == ft.KIND_FUT else ft.FSW_LABELS)[tenor]
+    return {"kind": "futures", "label": label, "funding": None, **rec}
 
 
 def _tag_bond(rec: dict) -> dict:
@@ -203,28 +224,43 @@ def run_backtest(
     dataset,
     positions: list[MixedPosition],
     spec: fd.FundingSpec,
+    fut: "ft.FuturesData | None" = None,
 ) -> dict:
     """섞인 북을 매일 재평가해 합친다.
 
     한 종류만 있는 북은 **그 엔진에 그대로 넘긴다** — 숫자가 종전과 한 원도
     달라지지 않아야 하고(정적 쌍둥이·가드가 그것을 핀으로 박고 있다), 스왑만
-    있는 북이 민평 SQL 에 닿아야 할 이유도 없다. 섞인 북만 아래 병합 경로로
-    간다.
+    있는 북이 민평 SQL 에 닿아야 할 이유도 없다. 섞인 북만 병합 경로로 간다:
+    채권+스왑 두 달력은 종전 `_mixed` 그대로(골든 보호), **선물이 낀 북만**
+    일반화 병합 `_mixed_any` 를 탄다 [OWNER, 2026-08-25 — 선물·퓨처스왑 합류].
     """
     _check(positions)
-    if not has_bond(positions):
-        out = swap_run_backtest(dataset, [_as_swap(p) for p in positions])
-        out["positions"] = [_tag_swap(r) for r in out["positions"]]
-        return out
-    if m is None:
+    if has_futures(positions) and fut is None:
+        raise MixedBookError(
+            "선물 줄에는 선물 종가가 필요합니다 — 백엔드가 SQL 에 닿는지 확인해 주세요."
+        )
+    if has_bond(positions) and m is None:
         raise MixedBookError(
             "채권 줄에는 민평이 필요합니다 — 백엔드가 SQL 에 닿는지 확인해 주세요."
         )
-    if not has_swap(positions):
+    if not has_bond(positions) and not has_futures(positions):
+        out = swap_run_backtest(dataset, [_as_swap(p) for p in positions])
+        out["positions"] = [_tag_swap(r) for r in out["positions"]]
+        return out
+    if not has_swap(positions) and not has_futures(positions):
         out = cb.run_backtest(m, dataset, [_as_bond(p) for p in positions], spec)
         out["positions"] = [_tag_bond(r) for r in out["positions"]]
         return out
-    return _mixed(m, dataset, positions, spec)
+    if not has_swap(positions) and not has_bond(positions):
+        try:
+            out = ft.run_backtest(fut, dataset, [_as_futures(p) for p in positions])
+        except ft.FuturesError as exc:
+            raise MixedBookError(str(exc))
+        out["positions"] = [_tag_futures(r) for r in out["positions"]]
+        return out
+    if not has_futures(positions):
+        return _mixed(m, dataset, positions, spec)
+    return _mixed_any(m, dataset, fut, positions, spec)
 
 
 def _mixed(
@@ -331,6 +367,171 @@ def _mixed(
     }
 
 
+def _mixed_any(
+    m: CreditMatrix | None,
+    dataset,
+    fut: "ft.FuturesData",
+    positions: list[MixedPosition],
+    spec: fd.FundingSpec,
+) -> dict:
+    """선물이 낀 혼합 북 — 날짜 키의 일반화 병합 [OWNER, 2026-08-25].
+
+    `_mixed`(채권+스왑 두 달력)의 같은 규칙을 달력 N개로 일반화한다: 한 달력
+    = 관련 달력 전부의 교집합, 그 위에서 각 엔진을 같은 날짜들로 부른다.
+    `d` 의 갭 규칙도 같다 — 공통 달력의 어제가 **모든** 관련 달력에서 자기
+    전 거래일과 같은 날일 때만 엔진들의 prev 를 그대로 더하고, 아니면 직전
+    공통 영업일 대비로 바꿔 잰다. `_mixed` 를 일반화로 대체하지 않는 이유는
+    골든 보호다(run_backtest doc) — 선물 없는 북은 종전 경로 바이트 그대로.
+    """
+    from bisect import bisect_left as _bl
+
+    spec = spec.validated()
+
+    swaps: dict[int, Position] = {}
+    bonds: dict[int, cb.BondPosition] = {}
+    blegs: dict[int, "cb._BondLeg"] = {}
+    futs: dict[int, ft.FuturesPosition] = {}
+    fut_cals: dict[int, list[dt.date]] = {}
+
+    cals: list[list[dt.date]] = []          # 교집합·갭 판정에 드는 달력들
+
+    def _add_cal(c: list[dt.date]) -> None:
+        if not any(c is existing or c == existing for existing in cals):
+            cals.append(c)
+
+    entered: list[dt.date] = []
+    exited: list[dt.date] = []
+    for n, p in enumerate(positions):
+        if is_bond(p.series_id):
+            bp = _as_bond(p)
+            if bp.direction != 1:
+                raise MixedBookError(
+                    "현금채권은 매수만 됩니다 — 공매도는 대차료가 필요한데 그 값이 없습니다."
+                )
+            leg = cb._bond_leg(m, bp)
+            bonds[n], blegs[n] = bp, leg
+            entered.append(m.dates[leg.entry_i])
+            exited.append(m.dates[leg.exit_i])
+            _add_cal(m.dates)
+            if bp.kind == cb.KIND_ASW:
+                # ASW 의 스왑 다리는 IRS 커브가 필요하다 — 그 달력도 교집합에.
+                _add_cal(dataset.dates)
+        elif is_futures(p.series_id):
+            try:
+                fp = _as_futures(p)
+                cal = ft.calendar_of(fut, dataset, fp)
+                a, b = ft._span_on(cal, fp)
+            except ft.FuturesError as exc:
+                raise MixedBookError(str(exc))
+            futs[n], fut_cals[n] = fp, cal
+            entered.append(cal[a])
+            exited.append(cal[b])
+            _add_cal(cal)
+        else:
+            sp = _as_swap(p)
+            entry_i, exit_i, _matured = _span_of(dataset, sp)
+            swaps[n] = sp
+            entered.append(dataset.dates[entry_i])
+            exited.append(dataset.dates[exit_i])
+            _add_cal(dataset.dates)
+
+    common = sorted(set.intersection(*[set(c) for c in cals]))
+    window = [d for d in common if min(entered) <= d <= max(exited)]
+    if not window:
+        raise MixedBookError("포지션들이 함께 사는 날짜가 없습니다.")
+
+    sample_k = _thin(list(range(len(window))), MAX_POINTS)
+
+    def _own_prev(cal: list[dt.date], d: dt.date) -> dt.date | None:
+        i = _bl(cal, d)
+        return cal[i - 1] if 0 < i < len(cal) and cal[i] == d else None
+
+    gaps = {
+        k for k in sample_k
+        if k > 0 and any(_own_prev(c, window[k]) != window[k - 1] for c in cals)
+    }
+    eval_k = sorted(set(sample_k) | {k - 1 for k in gaps})
+    eval_dates = [window[k] for k in eval_k]
+
+    records: dict[int, dict] = {}
+    own_by: dict[int, dict[dt.date, float]] = {}
+    prev_by: dict[int, dict[dt.date, float]] = {}
+
+    curve_cache: dict[int, object] = {}
+    ds_idx = {d: i for i, d in enumerate(dataset.dates)}
+    for n, sp in swaps.items():
+        sample_idx = [ds_idx[d] for d in eval_dates]
+        rec, own, prevd = _run_one(dataset, sp, sample_idx, curve_cache)
+        records[n] = _tag_swap(rec)
+        own_by[n] = {d: own[ds_idx[d]] for d in eval_dates}
+        prev_by[n] = {d: prevd[ds_idx[d]] for d in eval_dates if ds_idx[d] in prevd}
+
+    if bonds:
+        m_idx = {d: i for i, d in enumerate(m.dates)}
+        imap = {m_idx[d]: ds_idx[d] for d in common if d in ds_idx}
+        swap_cache: dict[int, object] = {}
+        bond_sample = [m_idx[d] for d in eval_dates]
+        for n, bp in bonds.items():
+            rec, own, prevd = cb.run_bond_position(
+                m, dataset, bp, blegs[n], bond_sample, spec, imap, swap_cache
+            )
+            records[n] = _tag_bond(rec)
+            own_by[n] = {d: own[m_idx[d]] for d in eval_dates}
+            prev_by[n] = {d: prevd[m_idx[d]] for d in eval_dates if m_idx[d] in prevd}
+
+    for n, fp in futs.items():
+        try:
+            rec, own, prevd = ft.run_one(fut, dataset, fp, eval_dates, curve_cache)
+        except ft.FuturesError as exc:
+            raise MixedBookError(str(exc))
+        records[n] = _tag_futures(rec)
+        own_by[n] = own
+        prev_by[n] = prevd
+
+    points = []
+    first_k = sample_k[0]
+    for k in sample_k:
+        d = window[k]
+        total = round(sum(own_by[n][d] for n in own_by), 0)
+        if k == first_k:
+            dd = None
+        elif k in gaps:
+            dd = round(total - sum(own_by[n][window[k - 1]] for n in own_by), 0)
+        else:
+            dd = round(total - sum(pv.get(d, 0.0) for pv in prev_by.values()), 0)
+        points.append({"t": d.isoformat(), "pnl": total, "d": dd})
+
+    pnls = [p["pnl"] for p in points]
+    a, b = window[sample_k[0]], window[sample_k[-1]]
+    kinds = []
+    if bonds:
+        kinds.append("민평")
+    if swaps or any(bp.kind == cb.KIND_ASW for bp in bonds.values()):
+        kinds.append("IRS")
+    if futs:
+        kinds.append("선물")
+    union_dates = sorted(set().union(*[set(c) for c in cals]))
+    dropped = len([d for d in union_dates if a <= d <= b]) - len(
+        [d for d in window if a <= d <= b]
+    )
+    return {
+        "positions": [records[n] for n in range(len(positions))],
+        "from": a.isoformat(),
+        "to": b.isoformat(),
+        "complete": len(sample_k) == len(window),
+        "points": points,
+        "pnl": pnls[-1] if pnls else 0.0,
+        "maxProfit": max(pnls) if pnls else 0.0,
+        "maxLoss": min(pnls) if pnls else 0.0,
+        "funding": fd.provenance(spec) if bonds else None,
+        "calendar": {
+            "basis": " ∩ ".join(kinds) if len(kinds) > 1 else (kinds[0] if kinds else ""),
+            "dropped": dropped,
+            "clippedFrom": min(entered).isoformat() if entered and min(entered) < a else None,
+        },
+    }
+
+
 # ── 대사 ────────────────────────────────────────────────────────────────────
 
 
@@ -339,6 +540,7 @@ def book_recon(
     dataset,
     positions: list[MixedPosition],
     spec: fd.FundingSpec,
+    fut: "ft.FuturesData | None" = None,
 ) -> dict:
     """일별 대사 — 스왑·채권 **각자 자기 표** [OWNER, 2026-08-25].
 
@@ -352,20 +554,48 @@ def book_recon(
     선다. 북 전체의 하루 총액 한 줄은 사라지는데, 그것은 숨긴 것이 아니라
     애초에 어느 하루도 아니었던 수를 그리지 않게 된 것이다(모듈 주석 `d` 절).
 
-    반환은 언제나 `{"swap": 블록|None, "bond": 블록|None}` — 한 종류뿐인
-    북은 그 엔진의 블록이 자기 자리에 그대로 서고 다른 쪽은 None 이다.
-    각 블록은 그 엔진 `book_recon` 의 모양 그대로다(두 번째 정의 없음).
+    반환은 언제나 `{"swap": 블록|None, "bond": 블록|None, "futures": 블록|None}`
+    — 한 종류뿐인 북은 그 엔진의 블록이 자기 자리에 그대로 서고 다른 쪽은
+    None 이다. 각 블록은 그 엔진 `book_recon` 의 모양 그대로다(두 번째 정의
+    없음). 선물 표 [OWNER, 2026-08-25]: FUT 와 FSW 의 선물 다리가 서고, FSW
+    의 IRS 다리는 실제 스왑이므로 스왑 표에 합류한다(아래 주석).
     """
     _check(positions)
-    swap_recon = bond_recon = None
-    if has_swap(positions):
-        swap_recon = swap_book_recon(
-            dataset, [_as_swap(p) for p in positions if not is_bond(p.series_id)]
-        )
+    swap_recon = bond_recon = futures_recon = None
+
+    # 퓨처스왑의 IRS 다리는 **스왑 표에** 선다 [OWNER, 2026-08-25 — 엔진 단위
+    # 분리]: 실제 스왑이 IRS 달력 위에서 스왑 엔진으로 값매겨지므로, 대사도
+    # 그 표가 진다. run 경로와 같은 함수(fsw_swap_leg)로 같은 다리를 얻는다.
+    fsw_swap_legs: list[Position] = []
+    if has_futures(positions):
+        if fut is None:
+            raise MixedBookError(
+                "선물 줄에는 선물 종가가 필요합니다 — 백엔드가 SQL 에 닿는지 확인해 주세요."
+            )
+        try:
+            for p in positions:
+                if is_futures(p.series_id):
+                    fp = _as_futures(p)
+                    if fp.kind == ft.KIND_FSW:
+                        leg, _y0, _dv = ft.fsw_swap_leg(fut, dataset, fp)
+                        fsw_swap_legs.append(leg)
+            futures_recon = ft.book_recon(
+                fut, dataset,
+                [_as_futures(p) for p in positions if is_futures(p.series_id)],
+            )
+        except ft.FuturesError as exc:
+            raise MixedBookError(str(exc))
+
+    swap_positions = [
+        _as_swap(p) for p in positions
+        if not is_bond(p.series_id) and not is_futures(p.series_id)
+    ] + fsw_swap_legs
+    if swap_positions:
+        swap_recon = swap_book_recon(dataset, swap_positions)
     if has_bond(positions):
         if m is None:
             raise MixedBookError("채권 줄에는 민평이 필요합니다.")
         bond_recon = cb.book_recon(
             m, dataset, [_as_bond(p) for p in positions if is_bond(p.series_id)], spec
         )
-    return {"swap": swap_recon, "bond": bond_recon}
+    return {"swap": swap_recon, "bond": bond_recon, "futures": futures_recon}

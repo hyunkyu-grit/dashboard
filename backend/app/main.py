@@ -77,6 +77,7 @@ from . import schedule_cache
 # 그대로 위임한다. 여기서 `run_backtest` 를 직접 들고 있으면 «스왑 전용 길» 이
 # 하나 더 열려 있는 셈이고, 그 길로 들어간 북에는 `kind` 가 안 붙는다.
 from .backtest import BacktestError
+from . import futures
 from . import mixedbook
 from .cache import cached
 from .cors import allowed_origin_regex, allowed_origins
@@ -600,6 +601,7 @@ def backtest(
 
     # 민평은 **채권 줄이 있을 때만** 읽는다 — 스왑만 있는 북이 SQL 에 닿아야 할
     # 이유가 없고, 닿게 만들면 그 테이블이 죽은 날 스왑 백테스트까지 같이 죽는다.
+    # 선물 종가도 같은 규율이다 [OWNER, 2026-08-25 — 선물·퓨처스왑 합류].
     spec = _funding_spec(basis, spreadBp)
     matrix = None
     if mixedbook.has_bond(parsed):
@@ -607,13 +609,21 @@ def backtest(
             matrix = creditmatrix.load()
         except creditmatrix.CreditMatrixError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
+    fut_data = None
+    if mixedbook.has_futures(parsed):
+        try:
+            fut_data = futures.load()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422, detail=f"선물 종가를 읽지 못했습니다: {exc}"
+            )
 
     try:
         # 일별 대사(`recon`)는 별도 패스다 — KRD 범프가 백테스트 본체보다
         # 비싸서 엔진 함수를 둘로 나눴다(backtest.book_recon doc). 응답은
         # 종전 그대로 한 덩어리에 `recon`만 얹는다.
-        result = mixedbook.run_backtest(matrix, _dataset, parsed, spec)
-        result["recon"] = mixedbook.book_recon(matrix, _dataset, parsed, spec)
+        result = mixedbook.run_backtest(matrix, _dataset, parsed, spec, fut=fut_data)
+        result["recon"] = mixedbook.book_recon(matrix, _dataset, parsed, spec, fut=fut_data)
         return result
     except (
         BacktestError,
@@ -621,6 +631,7 @@ def backtest(
         cashbond.CashBondError,
         creditmatrix.CreditMatrixError,
         funding.FundingError,
+        futures.FuturesError,
     ) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 

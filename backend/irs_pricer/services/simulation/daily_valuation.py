@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from .futures_pricing import synth_price
 from .models import FrontendPosition, FrontendShockCurves
 
 
@@ -108,6 +109,31 @@ def calculate_daily_mtm(
         initial_remaining = max(float(p.remainingDays or 1), 1.0)
         initial_pvbp = p.pvbp or 0.0
 
+        if p.bondType == "futures":
+            # 국채선물 [OWNER, 2026-08-25]: 합성채는 만기 고정(늙지 않는다 —
+            # futures_pricing 모듈 doc)이라 잔존 감쇠 없이 **상장 만기(3Y/10Y)
+            # 고정 지평**에서 국채 커브 충격을 읽고, 손익은 KRX 폐형 재값매김
+            # (컨벡시티 포함)이다 [OWNER 선택, 2026-08-25 — 대사표 잔차가
+            # 컨벡시티를 정직하게 싣는다]. 캐리·조달·롤다운은 0 이 사실이라
+            # 이 분기 바깥의 어떤 누적기에도 들어가지 않는다.
+            years = parse_tenor_to_years(p.tenor)
+            if shock_mode == "parallel":
+                shock_bp = (base_shock_bp or 0.0) * multiplier
+            else:
+                target = []
+                if shock_curves:
+                    target = (
+                        shock_curves.bondCurves.get(get_sector_curve_key(p.sector))
+                        or shock_curves.bondCurves.get("국채")
+                        or []
+                    )
+                shock_bp = interpolate_curve_shift(years, target) * multiplier
+            y0 = p.mtmYield or 0.0        # 기준일 내재금리(%) — expand 가 채운다
+            ny = int(round(years)) or 1
+            d_price = synth_price(y0 + shock_bp / 100.0, ny) - synth_price(y0, ny)
+            total += (p.direction or 1.0) * ((p.notional or 0.0) / 100.0) * d_price
+            continue
+
         if p.bondType != "swap":
             # 채권: 잔존일수·PVBP를 매일 재산정
             current_remaining = max(initial_remaining - t, 0.0)
@@ -182,6 +208,11 @@ def calculate_daily_carry(
     for p in positions:
         if p.bondType == "swap":
             continue  # IRS carry는 FM 엔진(irs_fm_carry)이 전담
+        if p.bondType == "futures":
+            # 선물 캐리 = 0 이 사실이다 [OWNER, 2026-08-25]: 액크루얼이 없고
+            # (합성채는 보유물이 아니라 결제 기준), 증거금 조달은 이 화면
+            # 바깥(미미·미계상)이다. 0 을 더하는 게 아니라 성분 자체가 없다.
+            continue
         initial_remaining = max(float(p.remainingDays or 0), 0.0)
         matured = (current_date and _is_matured(p, current_date)) or (initial_remaining > 0 and t >= initial_remaining)
         if matured:
@@ -220,8 +251,8 @@ def calculate_daily_funding_cost(
     같은 항의 인수분해이지 새 수식이 아니다."""
     total = 0.0
     for p in positions:
-        if p.bondType == "swap":
-            continue
+        if p.bondType in ("swap", "futures"):
+            continue  # 선물: 명목 조달 없음(증거금 미계상) — calculate_daily_carry 의 같은 규칙
         initial_remaining = max(float(p.remainingDays or 0), 0.0)
         matured = (current_date and _is_matured(p, current_date)) or (initial_remaining > 0 and t >= initial_remaining)
         if matured:

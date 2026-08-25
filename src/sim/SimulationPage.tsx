@@ -36,6 +36,7 @@ import { directionLabel } from '@/backtest/book';
 import { runErrorMessage, type WallSummary } from '@/lib/api';
 import { fmtLevel } from '@/lib/format';
 import { fmtKrw } from '@/lib/krw';
+import { Field } from '@/ui/ControlCard';
 import { useFillHeight } from '@/ui/useFillHeight';
 import { DROPDOWN_STYLES } from '@/ui/window/popup';
 
@@ -61,6 +62,8 @@ import {
   WAYPOINT_STEP_BP,
   isBondKind,
   isBondLeg,
+  isFuturesKind,
+  isFuturesLeg,
   KIND_LABEL,
   KIND_ORDER,
   kindOf,
@@ -263,16 +266,8 @@ function NumField({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <VStack gap={0.25} minWidth={0}>
-      <TextLegal as="span" color="fgMuted" noWrap>
-        {label}
-      </TextLegal>
-      {children}
-    </VStack>
-  );
-}
+/* `Field` 는 여기서 정의하지 않는다 — 앱에 하나뿐인 것을 임포트한다
+   (`ui/ControlCard`). 네 곳에 복제돼 있던 것의 정리 [OWNER 2026-08-25]. */
 
 /** 배타 선택은 **CDS `SegmentedTabs`** 다 [OWNER 2026-08-13 §5.4 — "CDS 컴포넌트가
  * 존재하면 항상 그것을 우선한다"].
@@ -577,7 +572,9 @@ export function SimulationPage({
               {KIND_LABEL[emptyKind]}에 고를 수 있는 상품이 없어요.
               {isBondKind(emptyKind)
                 ? ' 민평 수익률을 못 읽었어요 — 백엔드가 SQL에 닿는지 확인해 주세요.'
-                : ''}
+                : isFuturesKind(emptyKind)
+                  ? ' 선물 종가를 못 읽었어요 — 백엔드가 SQL에 닿는지 확인해 주세요.'
+                  : ''}
             </TextLegal>
           ) : null}
           {rows.map((r) => {
@@ -685,6 +682,30 @@ export function SimulationPage({
                       const rate = effectiveRate(l, r);
                       const off = rate !== l.couponRate;
                       const bond = isBondLeg(l);
+                      /* 선물 다리 [2026-08-25]: 매수/매도 문법, 값은 기준일 종가의
+                         내재수익률(읽기 전용 — 엔진의 폐형 재값매김이 이 값을
+                         기준으로 충격을 얹는다). 만기 줄은 안 적는다: 연결
+                         선물에는 만기가 없고 합성채 만기는 상수(3Y/10Y)다. */
+                      if (isFuturesLeg(l)) {
+                        const y0 = typeof l.mtmYield === 'number' ? l.mtmYield : null;
+                        return (
+                          <HStack key={l.id} gap={0.75} alignItems="center" flexWrap="wrap">
+                            <TextLegal as="span" color="fgMuted" tabularNumbers noWrap>
+                              {l.name} {l.direction > 0 ? '매수' : '매도'}{' '}
+                              {fmtKrw(l.notional).replace(/^\+/, '')}
+                            </TextLegal>
+                            <TextLegal
+                              as="span"
+                              color="fgMuted"
+                              tabularNumbers
+                              noWrap
+                              title="선물 종가의 내재수익률 (5% 합성)"
+                            >
+                              내재 {y0 === null ? '—' : `${y0.toFixed(4)}%`}
+                            </TextLegal>
+                          </HStack>
+                        );
+                      }
                       return (
                         <HStack key={l.id} gap={0.75} alignItems="center" flexWrap="wrap">
                           {/* 채권 다리는 수취/지급 문법이 아니다: 살 수만 있고,

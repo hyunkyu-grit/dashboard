@@ -26,8 +26,8 @@ describe('id 만 보고 종류를 안다 — 백엔드 kind_of 와 같은 규칙
     expect(kindOf('1Yx1Y')).toBe('forward');
   });
 
-  it('종류 목록의 끝에 둘이 붙는다', () => {
-    expect(KIND_ORDER.slice(-2)).toEqual(['cashbond', 'assetswap']);
+  it('종류 목록의 끝에 넷이 붙는다 — 채권 둘 뒤에 선물 둘 [2026-08-25]', () => {
+    expect(KIND_ORDER.slice(-4)).toEqual(['cashbond', 'assetswap', 'futures', 'futuresswap']);
   });
 });
 

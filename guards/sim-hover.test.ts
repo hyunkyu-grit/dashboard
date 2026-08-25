@@ -96,13 +96,18 @@ describe('이름이 한 곳에서 나온다', () => {
   });
 
   it('성분 이름은 워터폴·표와 같은 목록이다', () => {
-    /* 세 곳이 각자 목록을 들면 하나만 고쳐지는 날이 온다. */
+    /* 세 곳이 각자 목록을 들면 하나만 고쳐지는 날이 온다. [2026-08-25] 선물
+       성분이 같은 목록에 합류했다. */
     const src = read(RESULTS);
-    expect(src).toMatch(/const PATH_ROWS = \[\.\.\.SWAP_PARTS, \.\.\.BOND_PARTS\]/);
+    expect(src).toMatch(/const PATH_ROWS = \[\.\.\.SWAP_PARTS, \.\.\.BOND_PARTS, \.\.\.FUT_PARTS\]/);
   });
 
-  it('채권 성분은 북에 채권이 있을 때만 선다 — 카드에서도', () => {
+  it('채권·선물 성분은 북에 있을 때만 선다 — 카드에서도', () => {
+    /* 판정이 한 함수(drawPath)에 모여 있다 — 세 소비처(선·스크러버·카드)가
+       각자 조건을 들면 하나만 고쳐지는 날이 온다. */
     const src = read(RESULTS);
-    expect(src).toMatch(/paths\.hasBond \|\| !BOND_SERIES\.has/);
+    expect(src).toMatch(/const drawPath = useCallback/);
+    expect(src).toMatch(/BOND_SERIES\.has\(key\)\) return paths\.hasBond/);
+    expect(src).toMatch(/FUT_SERIES\.has\(key\)\) return paths\.hasFut/);
   });
 });

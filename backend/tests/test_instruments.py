@@ -30,8 +30,10 @@ def test_catalog_covers_every_tab():
     # 채권 둘이 뒤에 붙었다 [OWNER, 2026-08-14]. 그 둘은 민평이 SQL 에만 있어
     # 닿지 않으면 **빈 목록**이 되므로 (`_bond_catalog` 의 폴백), 여기서는
     # 존재만 못박고 내용은 아래 live 표시가 붙은 테스트에서 잰다.
+    # 선물 둘도 같은 규율로 뒤에 붙었다 [OWNER, 2026-08-25 — 선물·퓨처스왑].
     assert set(cat) == {
         "outright", "spread", "fly", "forward", "cashbond", "assetswap",
+        "futures", "futuresswap",
     }
     for k in ("outright", "spread", "fly", "forward"):
         assert cat[k], k

@@ -79,26 +79,13 @@ KIND_DEFN = {
 FSW_IRS_COL = {"FSW-3Y": ("3Y", "irs_3y"), "FSW-10Y": ("10Y", "irs_10y")}
 
 
-def _implied_yield(price: float, years: int) -> float:
-    """KRX 국채선물 이론가의 역함수 — 표면 5%·반기 이표 합성채 가격 → 연 수익률(%).
-
-    P(r) = Σ_{t=1..2y} 2.5/(1+r/2)^t + 100/(1+r/2)^{2y}. 단조 감소라 이분법이면
-    충분하다(60회 ≈ 1e-16 폭). P(5%) = 100 이 자명한 핀이다(테스트가 잰다).
-    """
-    n = 2 * years
-
-    def pv(r: float) -> float:
-        d = 1.0 + r / 2.0
-        return sum(2.5 / d ** t for t in range(1, n + 1)) + 100.0 / d ** n
-
-    lo_r, hi_r = -0.05, 0.30
-    for _ in range(60):
-        mid = (lo_r + hi_r) / 2.0
-        if pv(mid) > price:
-            lo_r = mid
-        else:
-            hi_r = mid
-    return (lo_r + hi_r) / 2.0 * 100.0
+# KRX 국채선물 이론가의 역함수 — 2026-08-25 선물·퓨처스왑이 백테스트/시뮬에
+# 합류하면서 `futures_pricing` 으로 승격했다(같은 수를 두 곳에서 정의하지
+# 않는다). 구간·횟수 등 산술은 바이트 단위로 그때 그대로다 — 이 별칭은 이
+# 화면(및 test_mr)이 부르던 이름을 지킨다.
+from irs_pricer.services.simulation.futures_pricing import (  # noqa: E402
+    implied_yield as _implied_yield,
+)
 
 
 def _fut_bundle() -> dict[str, dict[str, Any]]:

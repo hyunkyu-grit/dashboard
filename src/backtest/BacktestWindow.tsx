@@ -37,6 +37,7 @@ import { TextInput } from '@coinbase/cds-web/controls';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { SegmentedTabs } from '@coinbase/cds-web/tabs';
 import {
+  Text,
   TextBody,
   TextCaption,
   TextDisplay3,
@@ -51,6 +52,7 @@ import {
   fetchBacktest,
   fetchCashBondSeries,
   isBondKind,
+  isFuturesKind,
   runErrorMessage,
   type BacktestPosition,
   type BacktestResult,
@@ -64,18 +66,28 @@ import { seriesUrl } from '@/lib/staticPaths';
 import { fmtKrw, fmtKrwFromMan, splitCashBondKrw, splitKrw } from '@/lib/krw';
 import { useFunding } from '@/state/funding';
 import type { Row } from '@/table/rows';
+import { Field } from '@/ui/ControlCard';
+import { loadCd } from '@/ui/PreviewPane';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { DROPDOWN_STYLES } from '@/ui/window/popup';
 import { ReconStack } from '@/ui/window/ReconStack';
 
 import { LinkedCharts } from './LinkedCharts';
-import { backtestDays, bondReconNote, reconNote, reconPair } from './recon';
+import {
+  backtestDays,
+  bondReconNote,
+  futuresReconNote,
+  reconNote,
+  reconPair,
+} from './recon';
 import {
   bookKindOf,
   decodeBook,
   defaultEntry,
   directionLabel,
   encodeBook,
+  FUTURES_OPTIONS,
+  FUTURESSWAP_OPTIONS,
   isBondRow,
   isSwapBookable,
   loadBacktestMemory,
@@ -92,12 +104,16 @@ const EOK = 1e8;
 
 /** 줄의 종류. 스왑 셋(아웃라이트·스프레드·플라이)을 하나로 묶은 이유는 그
  * 목록이 이미 한 드롭다운이기 때문이다 — 여기서 다시 가르면 고르는 걸음만
- * 늘고 얻는 것이 없다. 채권 둘은 **종목군과 만기를 따로** 고르므로 갈린다. */
-const KIND_ORDER: BookKind[] = ['swap', 'cashbond', 'assetswap'];
+ * 늘고 얻는 것이 없다. 채권 둘은 **종목군과 만기를 따로** 고르므로 갈린다.
+ * 선물 둘 [OWNER, 2026-08-25]은 닫힌 어휘(3Y·10Y 각 두 개)라 종목 드롭다운
+ * 하나로 끝난다 — 만기 칸도 종목군 칸도 필요 없다. */
+const KIND_ORDER: BookKind[] = ['swap', 'cashbond', 'assetswap', 'futures', 'futuresswap'];
 const KIND_LABEL: Record<BookKind, string> = {
   swap: '스왑',
   cashbond: '현금채권',
   assetswap: '자산스왑',
+  futures: '국채선물',
+  futuresswap: '퓨처스왑',
 };
 
 /**
@@ -177,6 +193,13 @@ function decompose(result: BacktestResult) {
   let startup = 0;
   let funding = 0;
   let hasFunding = false;
+  /* 캐리·롤다운 항목이 서는 조건 [2026-08-25]: **숫자를 가진 줄이 하나라도
+     있나** — ReconStack 의 열 규칙과 같은 판정이다. FUT 아웃라이트는 둘 다
+     null(합성채는 늙지 않는다 — 성분 자체가 없다)이라 선물만의 북은 평가
+     한 항목이 되고, FSW 는 스왑 다리의 캐리·롤다운이 실재하므로 선다.
+     첫 판은 kind 로 재서(«전부 futures 면 숨김») FSW 의 스왑 다리 세타가
+     헤드라인에서 사라졌다 — 합계와 항목 합이 어긋나는 화면이었다. */
+  const hasTheta = result.positions.some((p) => p.carry != null || p.rolldown != null);
   for (const p of result.positions) {
     valuation += p.valuation;
     rolldown += p.rolldown ?? 0;
@@ -187,8 +210,9 @@ function decompose(result: BacktestResult) {
       hasFunding = true;
     }
   }
-  if (!hasFunding) return { ...splitKrw(result.pnl, valuation, rolldown, startup), uFund: null };
-  return splitCashBondKrw(result.pnl, valuation, rolldown, funding, startup);
+  if (!hasFunding)
+    return { ...splitKrw(result.pnl, valuation, rolldown, startup), uFund: null, hasTheta };
+  return { ...splitCashBondKrw(result.pnl, valuation, rolldown, funding, startup), hasTheta };
 }
 
 /** 크기(노셔널·DV01)는 **부호가 없다**. `fmtKrw` 는 부호 있는 돈을 위한 것이라
@@ -217,16 +241,9 @@ function Part({ label, u }: { label: string; u: number }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <VStack gap={0.25} minWidth={0}>
-      <TextCaption as="span" color="fgMuted" noWrap>
-        {label}
-      </TextCaption>
-      {children}
-    </VStack>
-  );
-}
+/* `Field` 는 여기서 정의하지 않는다 — 앱에 하나뿐인 것을 임포트한다
+   (`ui/ControlCard`). 이 파일에도 같은 것이 있었고 라벨만 `TextCaption` 으로
+   달라서, 시뮬·전략 창과 같은 칸이 조금씩 다르게 생겼다 [OWNER 2026-08-25]. */
 
 /** 배타 선택은 CDS `SegmentedTabs` 다 [OWNER 2026-08-13 §5.4] — 시뮬레이션의
  * 같은 래퍼와 같은 근거(그 파일의 주석: `SegmentedControl` 은 deprecated). */
@@ -295,6 +312,19 @@ export function BacktestWindow({
   const [unavailable, setUnavailable] = useState(false);
   /* 북에 있는 종목들의 히스토리 — 진입 레벨을 실행 **전에** 보여주기 위한 것. */
   const [points, setPoints] = useState<Record<string, { t: string; v: number }[]>>({});
+  /* CD 91일 — 진입 레벨 옆에 같이 적는다 [OWNER 2026-08-25]. `PreviewPane` 의
+   * 모듈 캐시라 형제 `LinkedCharts` 와 한 벌이고, 실패는 null 로 삼킨다: 기준이
+   * 없다고 북을 못 짤 이유는 없고 칸이 «CD —» 로 그 사실을 말한다. */
+  const [cdPoints, setCdPoints] = useState<{ t: string; v: number }[] | null>(null);
+  useEffect(() => {
+    let on = true;
+    void loadCd().then((p) => {
+      if (on) setCdPoints(p);
+    });
+    return () => {
+      on = false;
+    };
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -337,11 +367,17 @@ export function BacktestWindow({
   );
 
   /** 고를 수 있는 종류. 민평을 못 읽었으면 채권이 아예 안 뜬다 — 고를 수는
-   * 있는데 실행이 안 되는 칸을 두지 않는다(이 리포의 claim-vs-behaviour 규칙). */
+   * 있는데 실행이 안 되는 칸을 두지 않는다(이 리포의 claim-vs-behaviour 규칙).
+   * 선물 둘은 늘 뜬다: 목록이 데이터가 아니라 닫힌 어휘라(book.ts 의
+   * `FUTURES_OPTIONS` 주석) 화면이 미리 알 «없는 날» 이 없고, 백엔드가 종가
+   * SQL 에 못 닿은 드문 날은 실행이 명문 422 로 말한다. */
   const kinds = useMemo(
     () =>
       KIND_ORDER.filter(
-        (k) => k === 'swap' || cashbondRows.some((r) => r.kind === (k === 'assetswap' ? 'ASW' : 'CB')),
+        (k) =>
+          k === 'swap' ||
+          isFuturesKind(k) ||
+          cashbondRows.some((r) => r.kind === (k === 'assetswap' ? 'ASW' : 'CB')),
       ),
     [cashbondRows],
   );
@@ -390,6 +426,18 @@ export function BacktestWindow({
          `newRow` 의 폴백과 같은 값이다(그쪽도 '10Y'). */
       const id =
         swapOptions.find((o) => o.value === '10Y')?.value ?? swapOptions[0]?.value ?? '10Y';
+      patch(key, { id, direction: 1, entry: keep(id) });
+      return;
+    }
+    if (isFuturesKind(kind)) {
+      /* 선물로 옮길 때는 **만기를 되도록 지킨다** — 3Y 스왑을 들고 있다가
+         국채선물을 고르면 KTB3 가 서는 것이 자연스럽다. 못 지키면 3Y 다
+         (거래량이 큰 쪽). 방향은 스왑과 같은 배타 컨트롤이라 되돌릴 필요가
+         없지만, 라벨의 뜻이 바뀌므로(페이/리시브 → 매수/매도) +1 로 되돌려
+         읽는 사람이 새 낱말을 기본에서 시작하게 한다. */
+      const opts = kind === 'futures' ? FUTURES_OPTIONS : FUTURESSWAP_OPTIONS;
+      const want10 = cur.id.includes('10Y');
+      const id = (want10 ? opts[1] : opts[0]).value;
       patch(key, { id, direction: 1, entry: keep(id) });
       return;
     }
@@ -447,13 +495,15 @@ export function BacktestWindow({
              둘 다 설 때만 머리로 어느 달력의 표인지 말한다. */
           content: (() => {
             const pair = reconPair(result?.recon);
-            if (!pair.swap && !pair.bond) return null;
-            const both = Boolean(pair.swap && pair.bond);
+            const stacks = [pair.swap, pair.bond, pair.futures ?? null].filter(Boolean).length;
+            if (stacks === 0) return null;
+            const many = stacks > 1;
+            const cap = many ? '15vh' : undefined;
             return (
               <VStack gap={1} width="100%">
                 {pair.swap ? (
                   <VStack gap={0.5} width="100%">
-                    {both ? (
+                    {many ? (
                       <TextCaption as="span" color="fgMuted">
                         스왑 대사 — IRS 달력
                       </TextCaption>
@@ -463,13 +513,13 @@ export function BacktestWindow({
                       tenors={pair.swap.tenors}
                       defaultOrder="desc"
                       note={reconNote(pair.swap)}
-                      maxHeight={both ? '15vh' : undefined}
+                      maxHeight={cap}
                     />
                   </VStack>
                 ) : null}
                 {pair.bond ? (
                   <VStack gap={0.5} width="100%">
-                    {both ? (
+                    {many ? (
                       <TextCaption as="span" color="fgMuted">
                         채권 대사 — 민평 달력
                       </TextCaption>
@@ -479,7 +529,27 @@ export function BacktestWindow({
                       tenors={pair.bond.tenors}
                       defaultOrder="desc"
                       note={bondReconNote(pair.bond)}
-                      maxHeight={both ? '15vh' : undefined}
+                      maxHeight={cap}
+                    />
+                  </VStack>
+                ) : null}
+                {pair.futures ? (
+                  /* 세 번째 표 [OWNER, 2026-08-25 — 선물·퓨처스왑 합류].
+                     선물 달력 위에 서고, 열은 평가·잔차뿐이다(캐리·롤다운 =
+                     존재하지 않는 성분 — ReconStack 이 숫자 없는 열을 안
+                     세운다). 퓨처스왑의 IRS 다리는 위 스왑 표에 있다. */
+                  <VStack gap={0.5} width="100%">
+                    {many ? (
+                      <TextCaption as="span" color="fgMuted">
+                        선물 대사 — 선물 달력
+                      </TextCaption>
+                    ) : null}
+                    <ReconStack
+                      days={backtestDays(pair.futures)}
+                      tenors={pair.futures.tenors}
+                      defaultOrder="desc"
+                      note={futuresReconNote(pair.futures)}
+                      maxHeight={cap}
                     />
                   </VStack>
                 ) : null}
@@ -498,13 +568,18 @@ export function BacktestWindow({
           {book.map((r) => {
             const kind = bookKindOf(r.id);
             const bond = isBondKind(kind);
+            const fut = isFuturesKind(kind);
             const bondRow = bond ? bondById.get(r.id) : undefined;
             const tenors = bondRow
               ? cashbondRows.filter(
                   (x) => x.kind === bondRow.kind && x.bondType === bondRow.bondType,
                 )
               : [];
-            const unit: Unit = bondRow?.unit ?? (r.id.includes('-') ? 'bp' : '%');
+            const unit: Unit = fut
+              ? kind === 'futuresswap'
+                ? 'bp' // 내재 − IRS
+                : '%' // 내재금리
+              : (bondRow?.unit ?? (r.id.includes('-') ? 'bp' : '%'));
             const maxDate = bond ? cashbondAsOf : asOf;
             return (
               <VStack key={r.key} gap={0.5} width="100%">
@@ -553,7 +628,9 @@ export function BacktestWindow({
                         options={
                           bond
                             ? bondTypesFor(kind).map((t) => ({ value: t.id, label: t.label }))
-                            : swapOptions
+                            : fut
+                              ? [...(kind === 'futures' ? FUTURES_OPTIONS : FUTURESSWAP_OPTIONS)]
+                              : swapOptions
                         }
                       />
                     </Field>
@@ -634,16 +711,38 @@ export function BacktestWindow({
                           이 행은 `alignItems="flex-end"` 라 바닥이 정렬되는데, 그
                           규칙에서는 **블록 높이가 곧 라벨 높이**다: 값이 맨살
                           글자(20px)면 블록이 38 이 되어 라벨만 형제보다 12px 아래로
-                          내려앉았다(실측 2026-08-19). */}
-                      <HStack height={32} alignItems="center">
-                        <TextLabel2 as="span" tabularNumbers noWrap>
-                          {(() => {
-                            const p = pointOnOrAfter(points[r.id], r.entry);
-                            if (!p) return '—';
-                            return `${fmtLevel(p.v, unit)}${unitSuffix(unit)}`;
-                          })()}
-                        </TextLabel2>
-                      </HStack>
+                          내려앉았다(실측 2026-08-19).
+
+                          ── CD 를 같이 적는다 [OWNER 2026-08-25] ────────────────
+                          그 날짜의 진입 레벨만으로는 «비싼가» 를 못 읽는다 — 아래
+                          차트가 늘 CD 91일을 같이 그리는 이유와 같은 이유다. 계열은
+                          `PreviewPane.loadCd` 의 모듈 캐시를 그대로 쓴다(형제
+                          `LinkedCharts` 와 같은 경로라 한 페이지에서 두 번 안 받는다).
+                          날짜 스냅은 종목 레벨과 **같은 함수**(`pointOnOrAfter`) —
+                          두 규칙이 다르면 한 줄이 서로 다른 날을 말하게 된다.
+
+                          두 줄이 32px 안에 서고 상자는 안 커진다(legal 13/16 × 2).
+                          채권 줄은 만기 칸이 더 붙어 가로 여유가 9px 뿐이라(실측
+                          2026-08-25: 977/986) 폭을 늘리는 길은 없었다. */}
+                      <VStack height={32} justifyContent="center">
+                        {(() => {
+                          const p = pointOnOrAfter(points[r.id], r.entry);
+                          const c = pointOnOrAfter(cdPoints ?? undefined, r.entry);
+                          return (
+                            <>
+                              {/* 값 13px — 이 행의 나머지 다섯 컨트롤과 같은 크기다
+                                  (`window/popup.ts` 의 그 규칙이 「진입 레벨」을
+                                  이름으로 부르는데 여기만 14px 였다). */}
+                              <Text as="span" font="legal" tabularNumbers noWrap>
+                                {p ? `${fmtLevel(p.v, unit)}${unitSuffix(unit)}` : '—'}
+                              </Text>
+                              <Text as="span" font="legal" color="fgMuted" tabularNumbers noWrap>
+                                {c ? `CD ${fmtLevel(c.v, '%')}%` : 'CD —'}
+                              </Text>
+                            </>
+                          );
+                        })()}
+                      </VStack>
                     </Field>
                   </Box>
                   <button
@@ -751,8 +850,14 @@ export function BacktestWindow({
                   다시 읽어야 한다. */}
               <HStack gap={1} flexWrap="wrap">
                 <Part label="평가" u={parts.uVal} />
-                <Part label="롤다운" u={parts.uRoll} />
-                <Part label="캐리" u={parts.uCarry} />
+                {/* FUT 아웃라이트만의 북은 평가가 전부다 — 없는 성분에 0 을 안
+                    적는다(decompose 의 hasTheta 주석). */}
+                {parts.hasTheta ? (
+                  <>
+                    <Part label="롤다운" u={parts.uRoll} />
+                    <Part label="캐리" u={parts.uCarry} />
+                  </>
+                ) : null}
                 {parts.uFund != null ? <Part label="조달" u={parts.uFund} /> : null}
               </HStack>
               {/* 구간 안에서 어디까지 갔었나 — 같은 응답이 이미 담고 있다.
@@ -765,17 +870,19 @@ export function BacktestWindow({
                   사실은 데이터 사실이라 표 옆에 적는다(빠뜨리면 합계가 왜
                   안 맞는지 읽는 사람이 알 길이 없다). */}
               {result.calendar?.dropped ? (
+                /* 어느 달력들의 교집합인지는 서버가 말한다(basis) — 선물이
+                   합류하며 조합이 셋 이상이 됐다 [2026-08-25]. */
                 <TextLegal as="span" color="fgMuted">
-                  민평과 IRS 달력이 다 가진 날 위에서 셌어요 — 한쪽에만 있던{' '}
+                  {result.calendar.basis} 달력이 다 가진 날 위에서 셌어요 — 한쪽에만 있던{' '}
                   {result.calendar.dropped}일은 빼고요.
                 </TextLegal>
               ) : null}
-              {/* 선이 늦게 시작할 때. 민평이 2020년부터라 그 앞에 들어간 스왑은
-                  공통 달력이 못 담는다 — **총액은 옳고 그림만 중간부터**다.
-                  0 에서 출발하지 않는 선을 설명 없이 두면 오독이다. */}
+              {/* 선이 늦게 시작할 때. 짧은 달력(민평 2020~·선물 2016~)보다 앞에
+                  들어간 줄은 공통 달력이 못 담는다 — **총액은 옳고 그림만
+                  중간부터**다. 0 에서 출발하지 않는 선을 설명 없이 두면 오독이다. */}
               {result.calendar?.clippedFrom ? (
                 <TextLegal as="span" color="fgMuted">
-                  가장 이른 진입은 {result.calendar.clippedFrom} 인데 민평이{' '}
+                  가장 이른 진입은 {result.calendar.clippedFrom} 인데 공통 달력이{' '}
                   {result.from} 부터라 선은 거기서 시작해요 — 손익 합계는 진입일부터
                   전부 들어 있어요.
                 </TextLegal>
@@ -868,6 +975,16 @@ export function BacktestWindow({
                     <TextCaption as="span" color="fgMuted" noWrap>
                       {legsSentence(p)}
                     </TextCaption>
+                  ) : p.kind === 'futures' ? (
+                    /* 선물 줄 [2026-08-25] — 방향은 사람의 낱말로(매수/매도·
+                       다리 문장), 크기는 액면 억. 표면금리 줄이 없는 이유:
+                       합성채 5% 는 상수라 정보가 아니다. */
+                    <TextCaption as="span" color="fgMuted" tabularNumbers noWrap>
+                      {(p.notional / EOK).toLocaleString(undefined, {
+                        maximumFractionDigits: 0,
+                      })}
+                      억 {directionLabel(p.id, p.direction)}
+                    </TextCaption>
                   ) : (
                     <>
                       <TextCaption as="span" color="fgMuted" tabularNumbers noWrap>
@@ -889,6 +1006,14 @@ export function BacktestWindow({
                     <TextCaption as="span" color="fgMuted" tabularNumbers noWrap>
                       {fmtLevel(p.entryValue, p.legs.length === 1 ? '%' : 'bp')} →{' '}
                       {fmtLevel(p.exitValue, p.legs.length === 1 ? '%' : 'bp')}
+                    </TextCaption>
+                  ) : p.kind === 'futures' ? (
+                    /* 표시값 = 내재금리(FUT, %) 또는 진입 스프레드(FSW, bp) —
+                       서버 기록 그대로(entryValue). FSW 의 청산 스프레드는
+                       서버가 안 실어 — 가 선다(모르는 값). */
+                    <TextCaption as="span" color="fgMuted" tabularNumbers noWrap>
+                      {fmtLevel(p.entryValue, p.id.startsWith('FUT:') ? '%' : 'bp')} →{' '}
+                      {fmtLevel(p.exitValue, p.id.startsWith('FUT:') ? '%' : 'bp')}
                     </TextCaption>
                   ) : null}
                   {p.kind === 'assetswap' && p.aswSpread != null ? (
@@ -927,10 +1052,55 @@ export function BacktestWindow({
                             >
                               {l.tenor} {l.side === 'pay' ? '페이' : '리시브'} ·{' '}
                               {mag(l.notional ?? 0)} · DV01{' '}
-                              {mag(l.dv01 * (l.notional ?? 0) * 1e-4)}
+                              {mag((l.dv01 ?? 0) * (l.notional ?? 0) * 1e-4)}
                               /bp · 진입 {fmtLevel(l.entryRate, '%')}%
                             </TextCaption>
                           ))}
+                        </VStack>
+                      </details>
+                    ) : null
+                  ) : p.kind === 'futures' ? (
+                    /* 선물 줄의 기계 [2026-08-25]. FUT 아웃라이트는 접을 것이
+                       없다 — 손익이 전부 평가라 헤드라인이 곧 분해다. FSW 만
+                       두 다리(선물 + IRS)와 스왑 다리 성분을 편다. */
+                    p.legs.length > 1 ? (
+                      <details className="sr-bt-legs">
+                        <summary>
+                          <TextCaption as="span" color="fgMuted">
+                            자세히
+                          </TextCaption>
+                        </summary>
+                        <VStack gap={0.25} paddingY={0.5}>
+                          {p.legs.map((l, li) => (
+                            <TextCaption
+                              key={`${l.tenor}-${li}`}
+                              as="span"
+                              color="fgMuted"
+                              tabularNumbers
+                              noWrap
+                            >
+                              {l.kind === 'fut'
+                                ? `선물 ${l.tenor} ${l.side === 'short' ? '매도' : '매수'} · ${mag(l.notional ?? 0)} · 진입가 ${l.entryPrice ?? '—'} (내재 ${fmtLevel(l.entryRate, '%')}%)`
+                                : `IRS ${l.tenor} ${l.side === 'pay' ? '페이' : '리시브'} · ${mag(l.notional ?? 0)} · DV01 ${mag((l.dv01 ?? 0) * (l.notional ?? 0) * 1e-4)}/bp · 진입 ${fmtLevel(l.entryRate, '%')}%`}
+                            </TextCaption>
+                          ))}
+                          {/* 성분은 split 헬퍼를 거친다(가산성 가드) — 셋의 합이
+                              표시 정밀도에서 줄 손익과 닫히도록 캐리가 잔차를
+                              진다. FSW 만 여기 오므로 캐리·롤다운은 숫자다. */}
+                          {(() => {
+                            const u = splitKrw(
+                              p.pnl,
+                              p.valuation,
+                              p.rolldown ?? 0,
+                              p.startup ?? 0,
+                            );
+                            return (
+                              <TextCaption as="span" color="fgMuted" tabularNumbers noWrap>
+                                평가 {fmtKrwFromMan(u.uVal)} · 캐리 {fmtKrwFromMan(u.uCarry)} ·
+                                롤다운 {fmtKrwFromMan(u.uRoll)}
+                              </TextCaption>
+                            );
+                          })()}
                         </VStack>
                       </details>
                     ) : null

@@ -185,13 +185,21 @@ export function ReconStack({
      있을 때만 선다. 자리는 평가 바로 뒤 — 읽는 순서가 «합계(추정) → 평가 →
      그 차(잔차)» 라서다. 뜻은 표 밑 각주가 말한다. */
   const hasResidual = days.some((d) => typeof d.residual === 'number');
+  /* 캐리·롤다운도 같은 규칙이 됐다 [2026-08-25 — 선물 표]: 선물에는 두 성분이
+     존재하지 않아(합성채는 늙지 않는다 — backend/app/futures.py) 전 행이
+     null 로 온다. «숫자가 하나라도 있나» 로 재면 스왑·채권 표는 종전 그대로
+     서고, 선물 표만 그 질문 없는 열이 안 선다. */
+  const hasCarry = days.some((d) => typeof d.carry === 'number');
+  const hasRolldown = days.some((d) => typeof d.rolldown === 'number');
   const summaryCols: { label: string; get: (d: ReconStackDay) => number | null }[] = [
     { label: '평가', get: (d) => d.valuation },
     ...(hasResidual
       ? [{ label: '잔차', get: (d: ReconStackDay) => d.residual ?? null }]
       : []),
-    { label: '캐리', get: (d) => d.carry },
-    { label: '롤다운', get: (d) => d.rolldown },
+    ...(hasCarry ? [{ label: '캐리', get: (d: ReconStackDay) => d.carry }] : []),
+    ...(hasRolldown
+      ? [{ label: '롤다운', get: (d: ReconStackDay) => d.rolldown }]
+      : []),
     ...(hasFunding
       ? [{ label: '조달', get: (d: ReconStackDay) => d.funding ?? null }]
       : []),
@@ -454,7 +462,9 @@ export function ReconStack({
       {hasResidual ? (
         <p className="sr-recon-note">
           잔차 = 평가 − 추정(합계) — 전일 감도의 선형 추정이 못 담는 몫이에요(감도의 하루
-          감쇠 × 서 있는 충격, 볼록성, 리픽싱). 가로 합계(평가+캐리+롤다운
+          감쇠 × 서 있는 충격, 볼록성, 리픽싱). 가로 합계(평가
+          {hasCarry ? '+캐리' : ''}
+          {hasRolldown ? '+롤다운' : ''}
           {hasFunding ? '+조달' : ''})에는 안 들어가요.
         </p>
       ) : null}

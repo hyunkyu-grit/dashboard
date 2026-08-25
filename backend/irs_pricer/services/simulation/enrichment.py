@@ -166,6 +166,12 @@ def enrich_bond_dv01(
         if p.bondType == "swap":
             enriched.append(p)
             continue
+        if p.bondType == "futures":
+            # [OWNER, 2026-08-25] 선물 pvbp 는 expand 가 KRX 폐형(합성채
+            # 정의식 — futures_pricing)에서 이미 정확히 채웠다. 채권 재유도로
+            # 덮어쓰면 같은 리스크에 두 번째 수학이 생긴다 — 그대로 통과.
+            enriched.append(p)
+            continue
         maturity = None
         if p.maturityDate:
             try:

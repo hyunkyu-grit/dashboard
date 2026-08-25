@@ -46,8 +46,25 @@ export function isSwapBookable(row: Row): boolean {
 export function bookKindOf(id: string): BookKind {
   if (id.startsWith("CB:")) return "cashbond";
   if (id.startsWith("ASW:")) return "assetswap";
+  if (id.startsWith("FUT:")) return "futures";
+  if (id.startsWith("FSW:")) return "futuresswap";
   return "swap";
 }
+
+/** 고를 수 있는 선물·퓨처스왑 [OWNER, 2026-08-25 — "선물이랑 선물스왑도"].
+ *
+ * 채권과 달리 **정적 목록**이다: 상장 만기 두 개(3Y·10Y)의 닫힌 어휘라
+ * 데이터가 아니라 문법이고(2016년부터 상시), 백엔드가 선물 종가 SQL 에 못
+ * 닿은 날은 실행이 명문 422 로 그 사실을 말한다. 라벨은 서버
+ * `futures.FUT_LABELS/FSW_LABELS` 와 같은 글자다 — 용어 동결. */
+export const FUTURES_OPTIONS = [
+  { value: "FUT:3Y", label: "KTB3 선물" },
+  { value: "FUT:10Y", label: "KTB10 선물" },
+] as const;
+export const FUTURESSWAP_OPTIONS = [
+  { value: "FSW:3Y", label: "퓨처스왑 3Y" },
+  { value: "FSW:10Y", label: "퓨처스왑 10Y" },
+] as const;
 
 export function isBondRow(row: { id: string }): boolean {
   return isBondKind(bookKindOf(row.id));
@@ -118,6 +135,13 @@ export function directionLabel(id: string, direction: number): string {
   // 채권은 살 수만 있다 [OWNER, 2026-08-14] — 화면은 이 줄에 방향 칸을 안
   // 그리지만, 부르는 자리가 생겼을 때 "페이" 라고 답하면 그건 거짓말이다.
   if (isBondKind(bookKindOf(id))) return "매수";
+  // 선물 [2026-08-25]: +1 = 가격 롱 = **매수** (금리가 내리면 이득).
+  if (bookKindOf(id) === "futures") return direction > 0 ? "매수" : "매도";
+  // 퓨처스왑: +1 = 호가값(내재 − IRS) 롱. 단어를 만들지 않고 **다리를
+  // 적는다**(플라이의 그 규칙): 스프레드가 벌어질 때 버는 쪽 = 선물 매도 +
+  // IRS 리시브다(내재↑ = 선물 가격↓, IRS↓ = 리시브 이득).
+  if (bookKindOf(id) === "futuresswap")
+    return direction > 0 ? "선물 매도 · IRS 리시브" : "선물 매수 · IRS 페이";
   const legs = id.split("-");
   const pay = direction > 0 ? "페이" : "리시브";
   const rec = direction > 0 ? "리시브" : "페이";

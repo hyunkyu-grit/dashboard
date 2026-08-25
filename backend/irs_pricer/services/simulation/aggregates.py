@@ -18,7 +18,9 @@ from .models import FrontendPosition, FrontendShockCurves
 
 
 def build_frontend_pvbp_sensitivity(positions: list[FrontendPosition]) -> list[dict]:
-    sectors = ["국고채", "통안채", "특은채", "시은채", "공사채", "여전채", "회사채", "IRS", "OIS"]
+    # "국채선물" [OWNER, 2026-08-25 — 선물 합류]: 목록에 없으면 선물 krdMap 이
+    # 통째로 떨어진다 — 위 30Y 실측과 같은 병(리스크 0 으로 말하는 표).
+    sectors = ["국고채", "통안채", "특은채", "시은채", "공사채", "여전채", "회사채", "국채선물", "IRS", "OIS"]
     # qe.KRD_NAMES를 그대로 참조(하드코딩된 별도 목록이면 엔진에 새 테너를 추가해도
     # 여기서 누락되어 "합계"가 실제 평행이동 PVBP와 어긋난다 — 6Y/8Y/9Y 추가 시 실제로 발생했던 문제)
     #
@@ -78,7 +80,7 @@ def build_book_daily_pnl(
 
     for book_name in books:
         bp_list = [p for p in positions if p.book == book_name]
-        daily_carry = funding_cost = bond_val = swap_val = swap_theta = 0.0
+        daily_carry = funding_cost = bond_val = swap_val = swap_theta = fut_val = 0.0
 
         for p in bp_list:
             if p.bondType == "swap":
@@ -91,6 +93,17 @@ def build_book_daily_pnl(
                         delta += float(pvbp_val or 0) * (-sbp)
                 swap_val += delta
                 swap_theta += p.expectedThetaPnL or 0.0
+            elif p.bondType == "futures":
+                # [OWNER, 2026-08-25] 선물 — 자기 칸(futuresValuation). 채권
+                # 칸에 섞으면 라벨이 거짓이 된다. 이 표는 전 자산 선형 추정
+                # 관행이라 여기도 pvbp × −Δbp 다(엔진의 폐형과의 차는 대사표
+                # 잔차가 싣는다). 지평은 상장 만기 고정 — 합성채는 늙지 않는다.
+                curve_key = get_sector_curve_key(p.sector)
+                target = []
+                if shock_curves:
+                    target = shock_curves.bondCurves.get(curve_key) or shock_curves.bondCurves.get("국채") or []
+                sbp = interpolate_curve_shift(parse_tenor_to_years(p.tenor), target)
+                fut_val += (p.pvbp or 0.0) * (-sbp)
             else:
                 eval_amt = p.evaluationAmount or 0.0
                 daily_carry += (eval_amt * ((p.mtmYield or 0.0) / 100.0)) / 365.0
@@ -102,12 +115,13 @@ def build_book_daily_pnl(
                 sbp = interpolate_curve_shift((p.remainingDays or 0) / 365.0, target)
                 bond_val += (p.pvbp or 0.0) * (-sbp)
 
-        total = daily_carry + funding_cost + bond_val + swap_val + swap_theta
+        total = daily_carry + funding_cost + bond_val + swap_val + swap_theta + fut_val
         daily_pnls.append({
             "bookName": book_name,
             "dailyCarry": round(daily_carry),
             "fundingCost": round(funding_cost),
             "bondValuation": round(bond_val),
+            "futuresValuation": round(fut_val),
             "swapValuation": round(swap_val),
             "swapThetaPnL": round(swap_theta),
             "totalDailyPnL": round(total),
@@ -119,6 +133,7 @@ def build_book_daily_pnl(
             "dailyCarry": sum(d["dailyCarry"] for d in daily_pnls),
             "fundingCost": sum(d["fundingCost"] for d in daily_pnls),
             "bondValuation": sum(d["bondValuation"] for d in daily_pnls),
+            "futuresValuation": sum(d["futuresValuation"] for d in daily_pnls),
             "swapValuation": sum(d["swapValuation"] for d in daily_pnls),
             "swapThetaPnL": sum(d["swapThetaPnL"] for d in daily_pnls),
             "totalDailyPnL": sum(d["totalDailyPnL"] for d in daily_pnls),
