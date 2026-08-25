@@ -54,11 +54,14 @@ export function BandChart({ history }: { history: MrHistory }) {
         height={240}
         accessibilityLabel={`${history.label} 값과 밴드 이력`}
         inset={{ top: 12, right: 12, bottom: 8, left: 8 }}
+        /* 색은 Main/Backtest 차트 문법 그대로 [OWNER 2026-08-25 — "그래프
+           모양부터 너무 다르다"]: 주선은 잉크, 보조선(밴드·중심)은 뮤트.
+           CDS 기본 팔레트(파랑)를 그대로 두면 이 화면만 딴 제품처럼 보인다. */
         series={[
-          { id: 'v', data: v, yAxisId: 'y' },
-          { id: 'ma', data: ma, yAxisId: 'y' },
-          { id: 'up', data: up, yAxisId: 'y' },
-          { id: 'lo', data: lo, yAxisId: 'y' },
+          { id: 'v', data: v, color: 'var(--color-fg)', yAxisId: 'y' },
+          { id: 'ma', data: ma, color: 'var(--color-fgMuted)', yAxisId: 'y' },
+          { id: 'up', data: up, color: 'var(--color-fgMuted)', yAxisId: 'y' },
+          { id: 'lo', data: lo, color: 'var(--color-fgMuted)', yAxisId: 'y' },
         ]}
         xAxis={{ data: dates }}
         yAxis={[{ id: 'y' }]}

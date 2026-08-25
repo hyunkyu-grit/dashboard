@@ -32,7 +32,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Button } from '@coinbase/cds-web/buttons';
 import { TextInput } from '@coinbase/cds-web/controls';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Text } from '@coinbase/cds-web/typography';
@@ -60,17 +59,31 @@ import {
   type MrStrategyRun,
 } from './api';
 
+/* 얼라인 규칙 [OWNER 2026-08-25 — CLAUDE.md «얼라인» 절]. 첫 판은 라벨을
+ * 컨트롤 **옆**에 붙였고, 라벨 폭이 제각각이라 컨트롤 시작점이 계단이 졌다
+ * ("아주 얼라인이 개판이야"). 백테스트·시뮬 창의 Field 문법(라벨 위·바닥 정렬·
+ * 등고 32px)으로 다시 세운다. */
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <VStack gap={0.25} minWidth={0}>
+      <Text font="caption" as="span" color="fgMuted" noWrap>
+        {label}
+      </Text>
+      {children}
+    </VStack>
+  );
+}
+
 /** 숫자 칸 — blur/Enter 커밋(시뮬 NumField·rv BpField 의 규율: onChange 즉시
- * 파싱은 "-"·"1." 을 삼킨다). */
-function NumField({
+ * 파싱은 "-"·"1." 을 삼킨다). 라벨은 Field 가 진다 — 여기는 32px 상자뿐이다. */
+function NumInput({
   label,
   value,
-  width = 64,
   onCommit,
 }: {
+  /** 접근성 이름 — 같은 모양의 칸이 일곱 개 서므로 각자 이름이 있어야 한다. */
   label: string;
   value: number;
-  width?: number;
   onCommit: (v: number) => void;
 }) {
   const shown = String(value);
@@ -84,26 +97,19 @@ function NumField({
     else setText(shown);
   };
   return (
-    <HStack gap={0.5} alignItems="center">
-      <Text font="caption" as="span" color="fgMuted" noWrap>
-        {label}
-      </Text>
-      <Box width={width}>
-        <TextInput
-          size="s"
-          fontSize="legal"
-          height={32}
-          accessibilityLabel={label}
-          value={text}
-          onFocus={() => setEditing(true)}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setText(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e: React.KeyboardEvent) => {
-            if (e.key === 'Enter') commit();
-          }}
-        />
-      </Box>
-    </HStack>
+    <TextInput
+      size="s"
+      fontSize="legal"
+      height={32}
+      accessibilityLabel={label}
+      value={text}
+      onFocus={() => setEditing(true)}
+      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') commit();
+      }}
+    />
   );
 }
 
@@ -214,45 +220,79 @@ export function StrategyWindow({
       onClose={onClose}
     >
       <VStack gap={1.5} paddingX={2} paddingY={1.5} width="100%">
-        {/* ── 설정 줄 — 원본 노브 일곱 + 실행. 실행은 사람이 누른다. ───────── */}
-        <HStack gap={2} alignItems="center" flexWrap="wrap">
-          <HStack gap={0.5} alignItems="baseline">
-            <Text font="caption" as="span" color="fgMuted" noWrap>
-              종목
-            </Text>
-            <Text font="label2" as="span" noWrap>
-              {label}
-            </Text>
-          </HStack>
-          <HStack gap={0.5} alignItems="center">
-            <Text font="caption" as="span" color="fgMuted" noWrap>
-              룩백
-            </Text>
-            {MR_STRATEGY_LOOKBACKS.map((w) => (
-              <button
-                key={w}
-                type="button"
-                className="sr-rv-pillbtn"
-                data-on={knobs.lookback === w || undefined}
-                aria-pressed={knobs.lookback === w}
-                onClick={() => set({ lookback: w })}
-              >
-                {w}일
-              </button>
-            ))}
-            <NumField label="직접" width={56} value={knobs.lookback}
-              onCommit={(v) => set({ lookback: Math.max(2, Math.round(v)) })} />
-          </HStack>
-          <NumField label="진입 σ" value={knobs.entryZ} onCommit={(v) => set({ entryZ: v })} />
-          <NumField label="관찰 σ" value={knobs.warnZ} onCommit={(v) => set({ warnZ: v })} />
-          <NumField label="청산 σ" value={knobs.exitZ} onCommit={(v) => set({ exitZ: v })} />
-          <NumField label="손절 σ" value={knobs.stopZ} onCommit={(v) => set({ stopZ: v })} />
-          <NumField label="비용 bp" value={knobs.costBp} onCommit={(v) => set({ costBp: v })} />
-          <NumField label="명목 ₩/bp" width={96} value={knobs.notional}
-            onCommit={(v) => set({ notional: v })} />
-          <Button size="s" onClick={exec} disabled={running}>
+        {/* ── 설정 줄 — 원본 노브 일곱 + 실행. 실행은 사람이 누른다.
+            바닥 정렬 행: 블록 높이가 곧 라벨 높이(2026-08-19 얼라인 레인),
+            한 행의 컨트롤은 전부 32px 등고(control-parity 의 그 등고)라
+            실행도 알약이다(rv 「상세 분석」 자리의 그 컨트롤). */}
+        <HStack gap={1.5} alignItems="flex-end" flexWrap="wrap">
+          <Field label="종목">
+            {/* 컨트롤이 아닌 값도 같은 32px 상자에 담는다 — 백테스트 「진입
+                레벨」 칸의 판례(안 담으면 이 블록만 바닥에서 어긋난다). */}
+            <HStack height={32} alignItems="center">
+              <Text font="label2" as="span" noWrap>
+                {label}
+              </Text>
+            </HStack>
+          </Field>
+          <Field label="룩백 (일)">
+            <HStack gap={0.5} alignItems="center">
+              {MR_STRATEGY_LOOKBACKS.map((w) => (
+                <button
+                  key={w}
+                  type="button"
+                  className="sr-rv-pillbtn"
+                  data-on={knobs.lookback === w || undefined}
+                  aria-pressed={knobs.lookback === w}
+                  onClick={() => set({ lookback: w })}
+                >
+                  {w}
+                </button>
+              ))}
+              <Box width={56}>
+                <NumInput label="룩백(일)" value={knobs.lookback}
+                  onCommit={(v) => set({ lookback: Math.max(2, Math.round(v)) })} />
+              </Box>
+            </HStack>
+          </Field>
+          <Box width={64}>
+            <Field label="진입 σ">
+              <NumInput label="진입 σ" value={knobs.entryZ} onCommit={(v) => set({ entryZ: v })} />
+            </Field>
+          </Box>
+          <Box width={64}>
+            <Field label="관찰 σ">
+              <NumInput label="관찰 σ" value={knobs.warnZ} onCommit={(v) => set({ warnZ: v })} />
+            </Field>
+          </Box>
+          <Box width={64}>
+            <Field label="청산 σ">
+              <NumInput label="청산 σ" value={knobs.exitZ} onCommit={(v) => set({ exitZ: v })} />
+            </Field>
+          </Box>
+          <Box width={64}>
+            <Field label="손절 σ">
+              <NumInput label="손절 σ" value={knobs.stopZ} onCommit={(v) => set({ stopZ: v })} />
+            </Field>
+          </Box>
+          <Box width={64}>
+            <Field label="비용 (bp)">
+              <NumInput label="비용(bp)" value={knobs.costBp} onCommit={(v) => set({ costBp: v })} />
+            </Field>
+          </Box>
+          <Box width={96}>
+            <Field label="명목 (₩/bp)">
+              <NumInput label="명목(₩/bp)" value={knobs.notional}
+                onCommit={(v) => set({ notional: v })} />
+            </Field>
+          </Box>
+          <button
+            type="button"
+            className="sr-rv-pillbtn"
+            disabled={running}
+            onClick={exec}
+          >
             {running ? '계산 중…' : '실행'}
-          </Button>
+          </button>
         </HStack>
         {stale ? (
           /* 조용한 재계산 금지 — 원본의 stale 배너 + 마커 숨김 규율 그대로. */
@@ -308,17 +348,24 @@ export function StrategyWindow({
                     height={CHART_H}
                     accessibilityLabel={`${label} 가격과 밴드`}
                     inset={{ top: 12, right: 12, bottom: 8, left: 8 }}
+                    /* 색·축은 Main/Backtest 문법 [OWNER 2026-08-25]: 주선 잉크·
+                       보조선 뮤트·축 라벨은 fmtLevel. */
                     series={[
-                      { id: 'v', data: run.points.map((p) => p.v), yAxisId: 'y' },
-                      { id: 'ma', data: run.points.map((p) => p.ma), yAxisId: 'y' },
-                      { id: 'up', data: run.points.map((p) => p.up), yAxisId: 'y' },
-                      { id: 'lo', data: run.points.map((p) => p.lo), yAxisId: 'y' },
+                      { id: 'v', data: run.points.map((p) => p.v), color: 'var(--color-fg)', yAxisId: 'y' },
+                      { id: 'ma', data: run.points.map((p) => p.ma), color: 'var(--color-fgMuted)', yAxisId: 'y' },
+                      { id: 'up', data: run.points.map((p) => p.up), color: 'var(--color-fgMuted)', yAxisId: 'y' },
+                      { id: 'lo', data: run.points.map((p) => p.lo), color: 'var(--color-fgMuted)', yAxisId: 'y' },
                     ]}
                     xAxis={{ data: dates }}
                     yAxis={[{ id: 'y' }]}
                   >
                     <XAxis showGrid={false} />
-                    <YAxis axisId="y" position="right" showGrid={false} />
+                    <YAxis
+                      axisId="y"
+                      position="right"
+                      showGrid={false}
+                      tickLabelFormatter={(v: number) => fmtLevel(v, unit)}
+                    />
                     <Line seriesId="up" strokeWidth={1} strokeOpacity={0.45} connectNulls={false} />
                     <Line seriesId="lo" strokeWidth={1} strokeOpacity={0.45} connectNulls={false} />
                     <Line seriesId="ma" strokeWidth={1.5} strokeOpacity={0.7} connectNulls={false} />
@@ -353,7 +400,7 @@ export function StrategyWindow({
                     height={CHART_H}
                     accessibilityLabel={`${label} z-스코어`}
                     inset={{ top: 12, right: 12, bottom: 8, left: 8 }}
-                    series={[{ id: 'z', data: run.points.map((p) => p.z), yAxisId: 'y' }]}
+                    series={[{ id: 'z', data: run.points.map((p) => p.z), color: 'var(--color-fg)', yAxisId: 'y' }]}
                     xAxis={{ data: dates }}
                     yAxis={[{ id: 'y' }]}
                   >
@@ -404,7 +451,14 @@ export function StrategyWindow({
                     height={CHART_H}
                     accessibilityLabel={`${label} 누적 손익`}
                     inset={{ top: 12, right: 12, bottom: 8, left: 8 }}
-                    series={[{ id: 'cum', data: run.points.map((p) => p.cum), yAxisId: 'y' }]}
+                    /* 손익 곡선은 부호가 색을 정한다 — LinkedCharts 누적 손익의
+                       그 문법(`--sr-up`/`--sr-down`). */
+                    series={[{
+                      id: 'cum',
+                      data: run.points.map((p) => p.cum),
+                      color: run.summary.totalPnl >= 0 ? 'var(--sr-up)' : 'var(--sr-down)',
+                      yAxisId: 'y',
+                    }]}
                     xAxis={{ data: dates }}
                     yAxis={[{ id: 'y' }]}
                   >
