@@ -1,22 +1,24 @@
 # -*- coding: utf-8 -*-
-"""시뮬레이션 일별 대사표가 **한 북 전체**를 센다 [2026-08-21].
+"""시뮬레이션 일별 대사 — 스왑·채권 **각자 자기 표** [OWNER, 2026-08-25].
 
-시뮬레이션은 2026-08-14 부터 스왑과 현금채권을 한 포트폴리오에 담을 수 있었는데,
-대사표는 `irsDailyReconciliation` — 이름 그대로 **스왑만** 세고 있었다. 결과는 두
-가지였다:
+2026-08-21 판은 채권 성분을 스왑 표(`irsDailyReconciliation`)에 합산해 표합을
+헤드라인과 맞췄다. 그 판이 드러낸 근본 문제 — 채권 다리에 롤다운 항이 아예
+없었다(스왑 = unchanged term structure, 채권 = unchanged yields) — 를 chart.py
+의 bondRolldown 누적기(bond_roll.py)가 채우면서, 채권 대사는
+`bondDailyReconciliation` 이라는 자기 표로 독립했다.
 
-    혼합 북    표의 합이 헤드라인과 조용히 어긋난다. 화면의 서랍 이름은 그냥
-               「일별 대사」라 그 사실이 어디에도 안 적혀 있었다.
-    채권만     par 커브가 없어 표가 **통째로 비었다**. 백테스트에서 같은 증상을
-               같은 날 고쳤다(`app/mixedbook.py`).
+이 파일이 지는 명제:
+    ① 두 표가 각자 서고(스왑만/채권만/혼합), 스왑 표에는 조달이라는 질문이 없다.
+    ② 각 표의 세로합 = 자기 소계, 두 소계의 합 = 헤드라인.
+    ③ 가로 항등식 — 스왑: 평가+캐리+롤다운 = 그날 손익.
+                    채권: 평가+캐리+롤다운+조달 = 그날 손익.
+    ④ 채권 표는 chart.py 가 **이미 낸** 누적 계열(`decompositionDaily`)의
+       차분이다 — 두 번째 정의 금지.
+    ⑤ 롤다운 레인: 우상향 동결 커브 위 매수 채권의 롤은 양수, 평탄 커브는 0,
+       공급자 부재는 «롤 0 + rollBasis.applied=False» 로 정직하게 강등.
 
-이 파일이 지는 명제는 하나다: **표의 합 = 헤드라인.** 세 가지 북(스왑만·채권만·
-혼합)에서 그것이 성립하는지만 본다. 성분의 옳고 그름은 저쪽 파일들(골든·carry_split
-·harden1)이 이미 핀으로 박고 있다.
-
-산술을 새로 쓰지 않았다는 것도 여기서 같이 지킨다: 대사표의 채권 몫은 chart.py 의
-`decompositionDaily`(누적)의 차분이어야 하고, 두 계열이 갈리면 그건 두 번째 정의가
-생겼다는 뜻이다.
+커브 공급자는 모듈 픽스처가 **명시적으로 주입**한다 — 기동 여부(SQL 연결)에
+따라 수치가 흔들리면 이 파일의 명제가 데이터 명제가 되어 버린다.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from irs_pricer.services.simulation import bond_roll
 
 BOND = {
     "id": "b1", "name": "국고채 3Y", "book": "직접입력", "bondType": "bond",
@@ -43,6 +46,17 @@ SWAP = {
     "entryYield": 0, "entryYieldPurchase": 0, "durationWeight": 0,
     "startDate": "2026-07-15",
 }
+
+#: 우상향 동결 민평 커브 (decimal) — 잔존이 줄면 수익률이 내려 매수 롤이 양수다.
+UPWARD = [(0.25, 0.030), (1.0, 0.032), (3.0, 0.034), (5.0, 0.036)]
+
+
+@pytest.fixture(autouse=True)
+def _frozen_curve(bond_roll_lane_off):
+    """결정적 커브 주입 — conftest 의 lane-off 뒤에 얹혀(요청 관계 = 순서
+    보증) SQL·기동 여부와 무관하게 같은 수를 낸다."""
+    bond_roll.set_sector_curve_provider(lambda: {"국채": list(UPWARD)})
+    yield
 
 
 def _request(positions: list[dict]) -> dict:
@@ -77,133 +91,165 @@ def _run(client: TestClient, positions: list[dict]) -> dict:
     return r.json()
 
 
-def _body_rows(body: dict) -> list[dict]:
+def _swap_rows(body: dict) -> list[dict]:
     return [r for r in (body.get("irsDailyReconciliation") or []) if not r.get("carryover")]
 
 
-class TestTheTableTotalsTheBook:
-    """표의 합 = 헤드라인. 이 표가 있는 이유가 그것이다."""
+def _bond_rows(body: dict) -> list[dict]:
+    tbl = body.get("bondDailyReconciliation") or {}
+    return [r for r in (tbl.get("rows") or []) if not r.get("carryover")]
 
-    @pytest.mark.parametrize(
-        "label, positions",
-        [
-            ("스왑만", [dict(SWAP)]),
-            ("채권만", [dict(BOND)]),
-            ("혼합", [dict(SWAP), dict(BOND)]),
-        ],
-    )
-    def test_rows_sum_to_the_headline(self, client, label, positions):
-        body = _run(client, positions)
-        rows = _body_rows(body)
-        assert rows, f"{label}: 대사표가 비었다"
-        total = sum(r["totalActual"] for r in rows)
-        # 허용 오차는 행마다 1원(라운딩) — 그 이상은 성분이 빠진 것이다.
+
+class TestTwoTablesStandApart:
+    """① 각자 자기 표 — 스왑만/채권만/혼합에서 서는 표가 그 북을 말한다."""
+
+    def test_swap_only_has_no_bond_table(self, client):
+        body = _run(client, [dict(SWAP)])
+        assert _swap_rows(body)
+        assert body.get("bondDailyReconciliation") is None
+
+    def test_bond_only_has_no_swap_table(self, client):
+        body = _run(client, [dict(BOND)])
+        assert body.get("irsDailyReconciliation") == []
+        assert _bond_rows(body)
+
+    def test_mixed_has_both(self, client):
+        body = _run(client, [dict(SWAP), dict(BOND)])
+        assert _swap_rows(body) and _bond_rows(body)
+
+    def test_the_swap_table_has_no_funding_question(self, client):
+        """스왑에는 조달이라는 질문 자체가 없다 — null 조차 싣지 않는다."""
+        for row in _swap_rows(_run(client, [dict(SWAP), dict(BOND)])):
+            assert "funding" not in row
+
+
+class TestEachTableTotalsItsOwnBook:
+    """② 세로합 = 자기 소계, 두 소계의 합 = 헤드라인."""
+
+    def test_swap_rows_sum_to_the_swap_headline(self, client):
+        body = _run(client, [dict(SWAP), dict(BOND)])
+        rows = _swap_rows(body)
+        assert sum(r["totalActual"] for r in rows) == pytest.approx(
+            body["summary"]["finalSwap"], abs=len(rows)
+        )
+
+    def test_bond_rows_sum_to_the_bond_share(self, client):
+        body = _run(client, [dict(SWAP), dict(BOND)])
+        rows = _bond_rows(body)
+        d = body["totalReturnDecomposition"]
+        bond_share = d["bondMtm"] + d["bondCarry"] + d["bondRolldown"] + d["fundingCost"]
+        assert sum(r["actual"] for r in rows) == pytest.approx(
+            bond_share, abs=len(rows)
+        )
+
+    def test_the_two_subtotals_total_the_book(self, client):
+        body = _run(client, [dict(SWAP), dict(BOND)])
+        total = sum(r["totalActual"] for r in _swap_rows(body)) + sum(
+            r["actual"] for r in _bond_rows(body)
+        )
         assert total == pytest.approx(
-            body["summary"]["finalTotal"], abs=len(rows)
-        ), f"{label}: 표 {total:,} 대 헤드라인 {body['summary']['finalTotal']:,}"
-
-    def test_the_mixed_gap_was_exactly_the_bond(self, client):
-        """혼합 북의 표가 스왑만 셌다는 것은 «표 − 스왑만 북» 으로 잡힌다."""
-        mixed = _run(client, [dict(SWAP), dict(BOND)])
-        bond_only = _run(client, [dict(BOND)])
-        rows = _body_rows(mixed)
-        bond_rows = _body_rows(bond_only)
-        # 채권 몫은 채권만 돌린 북의 헤드라인이다 — 혼합 표에 그만큼이 들어 있다.
-        assert sum(r["totalActual"] for r in rows) - sum(
-            r["totalActual"] for r in bond_rows
-        ) == pytest.approx(mixed["summary"]["finalSwap"], abs=len(rows) * 2)
+            body["summary"]["finalTotal"],
+            abs=len(_swap_rows(body)) + len(_bond_rows(body)),
+        )
 
 
 class TestRowsCloseAcross:
-    """가로로도 닫힌다 — 평가 + 캐리 + 롤다운 + 조달 = 그날 손익."""
+    """③ 가로 항등식 — 각 표가 자기 성분으로 닫힌다."""
 
     @pytest.mark.parametrize(
         "label, positions",
-        [("스왑만", [dict(SWAP)]), ("채권만", [dict(BOND)]), ("혼합", [dict(SWAP), dict(BOND)])],
+        [("스왑만", [dict(SWAP)]), ("혼합", [dict(SWAP), dict(BOND)])],
     )
-    def test_every_row(self, client, label, positions):
-        for row in _body_rows(_run(client, positions)):
-            total = (
-                row["valuationPnl"] + row["carryPnl"] + row["rolldownPnl"]
-                + (row.get("funding") or 0)
-            )
+    def test_every_swap_row(self, client, label, positions):
+        for row in _swap_rows(_run(client, positions)):
+            total = row["valuationPnl"] + row["carryPnl"] + row["rolldownPnl"]
             assert total == pytest.approx(row["totalActual"], abs=2), f"{label} {row['date']}"
+
+    @pytest.mark.parametrize(
+        "label, positions",
+        [("채권만", [dict(BOND)]), ("혼합", [dict(SWAP), dict(BOND)])],
+    )
+    def test_every_bond_row(self, client, label, positions):
+        for row in _bond_rows(_run(client, positions)):
+            total = row["valuation"] + row["carry"] + row["rolldown"] + row["funding"]
+            assert total == pytest.approx(row["actual"], abs=3), f"{label} {row['date']}"
+        # 조달은 서버가 이미 음수로 준다 — 화면이 부호를 다시 주지 않는다.
+        assert all(
+            (r["funding"] or 0) <= 0
+            for r in _bond_rows(_run(client, positions))
+        )
 
 
 class TestNoSecondDefinition:
-    """채권 몫은 chart.py 가 **이미 낸** 누적 계열의 차분이어야 한다."""
+    """④ 채권 표 = `decompositionDaily` 누적의 차분 — 산술은 한 군데에만."""
 
-    def test_bond_components_match_decomposition_daily(self, client):
-        """혼합 − 스왑만 = 채권 몫, 그리고 그 채권 몫은 `decompositionDaily` 의
-        누적 끝점 차이와 같아야 한다. 두 계열이 갈리면 대사표가 채권 산술을 자기
-        나름대로 다시 쓴 것이고, 그게 이 리포가 «두 번째 정의» 라 부르는 결함이다.
-        """
-        mixed = _run(client, [dict(SWAP), dict(BOND)])
-        swap = _run(client, [dict(SWAP)])
-        m_rows, s_rows = _body_rows(mixed), _body_rows(swap)
-        assert len(m_rows) == len(s_rows)
-        daily = mixed["decompositionDaily"]
-        tol = len(m_rows) * 2
+    def test_bond_columns_match_decomposition_daily(self, client):
+        body = _run(client, [dict(SWAP), dict(BOND)])
+        rows = _bond_rows(body)
+        daily = body["decompositionDaily"]
+        tol = len(rows) * 2
 
-        # 평가 — 백워드 차분이라 기간 합은 누적 bondMtm 의 끝 − 시작이다.
-        bond_val = sum(r["valuationPnl"] for r in m_rows) - sum(
-            r["valuationPnl"] for r in s_rows
-        )
-        assert bond_val == pytest.approx(
+        # 평가 — 백워드 차분: 기간 합 = 누적 bondMtm 끝 − 시작.
+        assert sum(r["valuation"] for r in rows) == pytest.approx(
             daily[-1]["bondMtm"] - daily[0]["bondMtm"], abs=tol
         )
-
-        # 캐리 — 포워드 차분. 기간 합은 같은 끝점 차이다(조달은 자기 칸에 따로).
-        bond_carry = sum(r["carryPnl"] for r in m_rows) - sum(
-            r["carryPnl"] for r in s_rows
-        )
-        assert bond_carry == pytest.approx(
+        # 캐리·롤다운·조달 — 포워드 차분: 기간 합 = 같은 끝점 차이.
+        assert sum(r["carry"] for r in rows) == pytest.approx(
             daily[-1]["bondCarry"] - daily[0]["bondCarry"], abs=tol
         )
-
-        # 조달 — 누적 조달의 끝 − 시작.
-        assert sum(r.get("funding") or 0 for r in m_rows) == pytest.approx(
+        assert sum(r["rolldown"] for r in rows) == pytest.approx(
+            daily[-1]["bondRolldown"] - daily[0]["bondRolldown"], abs=tol
+        )
+        assert sum(r["funding"] for r in rows) == pytest.approx(
             daily[-1]["fundingCost"] - daily[0]["fundingCost"], abs=tol
         )
 
-    def test_funding_is_absent_without_bonds(self, client):
-        """스왑에는 조달이라는 질문이 없다 — 값이 0 이 아니라 없어야 한다.
-
-        응답이 고정 모델을 지나므로 전선에는 `null` 로 실린다. 화면은 «숫자가
-        하나라도 있나» 로 열을 세운다(`ReconStack` 의 `hasFunding`).
-        """
-        rows = _body_rows(_run(client, [dict(SWAP)]))
-        assert rows
-        assert all(r.get("funding") is None for r in rows)
-
-    def test_funding_is_a_number_with_bonds(self, client):
-        rows = _body_rows(_run(client, [dict(SWAP), dict(BOND)]))
-        assert any(isinstance(r.get("funding"), int) for r in rows)
-        # 서버가 이미 음수로 준다 — 화면이 부호를 다시 주지 않는다.
-        assert all((r.get("funding") or 0) <= 0 for r in rows)
+    def test_the_swap_table_is_untouched_by_the_bond(self, client):
+        """스왑 표는 채권이 있든 없든 한 글자도 다르지 않다 — v1 계약 복원."""
+        mixed = _swap_rows(_run(client, [dict(SWAP), dict(BOND)]))
+        swap = _swap_rows(_run(client, [dict(SWAP)]))
+        assert mixed == swap
 
 
-class TestTheGridStaysSwapOnly:
-    """KRD 격자는 스왑의 것이다 — 채권을 근사로 채워 넣지 않는다.
+class TestTheRollLane:
+    """⑤ 롤다운 레인 — 있어야 할 항이 실제로 서고, 없을 때는 말한다."""
 
-    시뮬의 채권은 테너별 KRD 를 매일 재계산하지 않는다(하나의 pvbp 를 잔존으로
-    감쇠시키고 섹터 커브에서 한 숫자를 보간한다). 진입 KRD 를 스케일해 채우면
-    진짜 재계산인 스왑 열과 정적 배분인 채권 열이 한 표에서 같아 보인다.
-    """
+    def test_upward_curve_long_bond_rolls_positive(self, client):
+        body = _run(client, [dict(BOND)])
+        d = body["totalReturnDecomposition"]
+        assert d["bondRolldown"] > 0, "우상향 커브 위 매수 채권의 롤은 양수여야 한다"
+        assert body["bondDailyReconciliation"]["rollBasis"] == {
+            "applied": True, "missing": [],
+        }
 
-    def test_a_bond_only_book_has_a_zero_grid(self, client):
-        rows = _body_rows(_run(client, [dict(BOND)]))
-        assert rows
-        assert all(v == 0 for v in rows[0]["pvbp"].values())
-        assert all(v == 0 for v in rows[0]["pnl"].values())
+    def test_identity_includes_the_roll(self, client):
+        """항등식: bondMtm + bondCarry + bondRolldown + fundingCost (+스왑) == total."""
+        d = _run(client, [dict(SWAP), dict(BOND)])["totalReturnDecomposition"]
+        parts = (
+            d["bondMtm"] + d["bondCarry"] + d["bondRolldown"] + d["fundingCost"]
+            + d["swapMtm"] + d["swapCarry"] + d["swapRolldown"]
+        )
+        assert parts == pytest.approx(d["total"], abs=1)
 
-    def test_the_estimate_explains_the_swap_only(self, client):
-        """추정(격자 × Δbp)이 설명하는 대상은 스왑의 평가다. 채권 평가가 거기
-        섞이면 잔차가 채권만큼 부풀어 대사표가 자기 잔차를 못 읽는다."""
-        mixed = _body_rows(_run(client, [dict(SWAP), dict(BOND)]))
-        swap = _body_rows(_run(client, [dict(SWAP)]))
-        assert [r["totalEstPnl"] for r in mixed] == [r["totalEstPnl"] for r in swap]
-        assert [r["residual"] for r in mixed] == [r["residual"] for r in swap]
+    def test_a_flat_curve_rolls_zero(self, client):
+        bond_roll.set_sector_curve_provider(lambda: {"국채": [(0.25, 0.03), (5.0, 0.03)]})
+        try:
+            d = _run(client, [dict(BOND)])["totalReturnDecomposition"]
+            assert d["bondRolldown"] == pytest.approx(0.0, abs=1)
+        finally:
+            bond_roll.set_sector_curve_provider(lambda: {"국채": list(UPWARD)})
+
+    def test_no_provider_degrades_honestly(self, client):
+        """공급자 부재 = 종전(unchanged-yields) 동작 + applied=False. 조용한 0 금지."""
+        bond_roll.set_sector_curve_provider(None)
+        try:
+            body = _run(client, [dict(BOND)])
+            assert body["totalReturnDecomposition"]["bondRolldown"] == 0.0
+            basis = body["bondDailyReconciliation"]["rollBasis"]
+            assert basis["applied"] is False
+            assert basis["missing"] == ["국채"]
+        finally:
+            bond_roll.set_sector_curve_provider(lambda: {"국채": list(UPWARD)})
 
 
 class TestTheKrdTableKeepsBondTenors:
@@ -245,8 +291,7 @@ class TestTheKrdTableKeepsBondTenors:
         assert cols.index("2.5Y") == cols.index("2Y") + 1
 
     def test_an_on_grid_book_is_byte_identical(self, client):
-        """아무도 격자 밖 테너를 안 들면 열 목록은 종전과 한 글자도 다르지 않다 —
-        이 수리가 **가산적**이라는 것이 골든이 그대로 통과하는 이유다."""
+        """아무도 격자 밖 테너를 안 들면 열 목록은 종전과 한 글자도 다르지 않다."""
         from irs_pricer.engine.quant_engine import KRD_NAMES
 
         body = _run(client, [dict(SWAP), dict(BOND)])

@@ -187,6 +187,7 @@ def _run_simulation_profiled(
     # 필드가 되면서 그 우회가 사라졌다. 응답 필드 배치는 그대로다.
     decomposition_daily   = run.decomposition_daily
     swap_contributions    = run.swap_contributions
+    bond_daily_recon      = run.bond_daily_recon
 
     # 스왑이 제외된 경우(당일 호가 없음): 스왑 성분은 0이 아니라 "미정의"다 —
     # FE는 이 null을 —(공란)으로 렌더링한다(blank-MtM 정책). 스왑이 아예 없는
@@ -197,13 +198,17 @@ def _run_simulation_profiled(
         decomposition["swapCarry"] = None
         decomposition["swapRolldown"] = None
         decomposition["total"] = (
-            decomposition["bondMtm"] + decomposition["bondCarry"] + decomposition["fundingCost"]
+            decomposition["bondMtm"] + decomposition["bondCarry"]
+            + decomposition["bondRolldown"] + decomposition["fundingCost"]
         )
         for row in decomposition_daily:
             row["swapMtm"] = None
             row["swapCarry"] = None
             row["swapRolldown"] = None
-            row["total"] = row["fundingCost"] + row["bondMtm"] + row["bondCarry"]
+            row["total"] = (
+                row["fundingCost"] + row["bondMtm"] + row["bondCarry"]
+                + row["bondRolldown"]
+            )
     with _phase(_prof, "assembly (pvbp+bookPnL)"):
         pvbp_sensitivity = build_frontend_pvbp_sensitivity(positions)
         # bookDailyPnL: 당일 실제 금리변동만 반영. dailyShockCurves 없으면 shockCurves로 fallback
@@ -259,6 +264,9 @@ def _run_simulation_profiled(
         "bookDailyPnLs": book_daily_pnls,
         "irsSettlementEvents":    irs_settlement_events,
         "irsDailyReconciliation": irs_daily_recon,
+        # [OWNER, 2026-08-25 — 엔진 단위 분리] 채권 일별 대사 — 자기 표.
+        # 스왑 표(irsDailyReconciliation)는 v1 계약(스왑만)으로 돌아갔다.
+        "bondDailyReconciliation": bond_daily_recon,
         # s11 추가 필드 (기존 계약 불변·확장 전용): T4 조달금리 스트립 + T3 분포 팬.
         "fundingCurve": funding_curve,
         "distribution": distribution,

@@ -190,18 +190,16 @@ def test_funding_stepping_moves_only_funding_side_fields(client) -> None:
     assert a["bookDailyPnLs"] == b["bookDailyPnLs"]
     assert a["exclusions"] == b["exclusions"]
     assert a["irsSettlementEvents"] == b["irsSettlementEvents"]
-    # [2026-08-21] 대사표는 더 이상 평가 쪽 전용이 아니다 — 채권의 **캐리·조달**
-    # 까지 실으므로 조달 스테핑이 그 칸들을 움직이는 것이 옳다. 안 움직여야 하는
-    # 것은 격자와 평가·세타 쪽이다.
-    _INVARIANT = (
-        "pvbp", "cumulativeBp", "dailyDbp", "pnl", "totalEstPnl",
-        "settleCf", "npvChange", "residual", "thetaPnl", "rolldownPnl",
-        "valuationPnl",
-    )
-    _ra, _rb = a["irsDailyReconciliation"], b["irsDailyReconciliation"]
+    # [OWNER, 2026-08-25 — 엔진 단위 분리] 스왑 표는 다시 평가·세타 전용이라
+    # 조달 스테핑에 **바이트 동일**해야 하고, 조달이 움직이는 자리는 채권
+    # 표(bondDailyReconciliation)다.
+    assert a["irsDailyReconciliation"] == b["irsDailyReconciliation"]
+    _ra = a["bondDailyReconciliation"]["rows"]
+    _rb = b["bondDailyReconciliation"]["rows"]
     assert len(_ra) == len(_rb)
+    # 채권 표에서도 평가·격자 쪽은 안 움직인다 — 조달 스테핑은 조달·actual 만.
     for _x, _y in zip(_ra, _rb):
-        for _k in _INVARIANT:
+        for _k in ("pvbp", "dailyDbp", "pnl", "totalEstPnl", "valuation", "rolldown", "residual"):
             assert _x[_k] == _y[_k], f"조달 스테핑이 {_k} 를 움직였다"
     # 그리고 조달 쪽은 **실제로** 움직였다 — 안 움직이면 이 표가 조달을 안 싣는 것이다.
     assert any(_x.get("funding") != _y.get("funding") for _x, _y in zip(_ra, _rb))

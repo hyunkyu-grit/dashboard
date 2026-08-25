@@ -507,26 +507,21 @@ export interface BacktestReconRow {
   carryover?: boolean;
 }
 
-/** KRD 격자 한 덩어리. 혼합 북에서만 온다 [OWNER, 2026-08-21] — 스왑 KRD 는
- * IRS 제로커브 노드, 채권 KRD 는 민평 노드라 **같은 칸에 더할 수 없다**. 열쇠는
- * 접두사가 붙어 있고(`S:3Y`·`B:3Y`) 화면에 적히는 것은 `label`(테너)뿐이다 —
- * 어느 커브인지는 그룹 머리가 말한다. */
-export interface BacktestReconGroup {
-  label: string;
-  cols: { key: string; label: string }[];
-}
-
 export interface BacktestRecon {
   /** every tenor label, ascending — columns; the table hides all-zero ones */
   tenors: string[];
-  /** 있으면 격자를 그 순서로 가른다. 없으면 격자가 하나다(한 종류뿐인 북). */
-  groups?: BacktestReconGroup[];
   rows: BacktestReconRow[];
   /** true when the window was cut to the last ~250 business days */
   truncated: boolean;
-  /** 두 달력이 어긋나 대사에서 뺀 날의 수 — 혼합 북에서만. 지어낸 행보다
-   * 빠진 행이 낫고, 빠졌다는 사실은 표 아래 한 줄이 말한다. */
-  dropped?: number;
+}
+
+/** 일별 대사는 **표 둘**이다 [OWNER, 2026-08-25 — 엔진 단위 분리]. 스왑 표는
+ * IRS 달력, 채권 표는 민평 달력 위에 각자 서고 서버는 병합하지 않는다 —
+ * 2026-08-21 병합판(민평 ∩ IRS)이 지불하던 드롭(세로합 ≠ 기간 3분해)이
+ * 그래서 사라졌다. 한 종류뿐인 북은 그 엔진의 블록만 서고 다른 쪽은 null. */
+export interface BacktestReconPair {
+  swap: BacktestRecon | null;
+  bond: BacktestRecon | null;
 }
 
 export interface BacktestResult {
@@ -554,11 +549,15 @@ export interface BacktestResult {
   /** 어느 달력 위에서 셌나 [2026-08-21]. 혼합 북은 민평 ∩ IRS 다 —
    * `dropped` 는 그 구간에서 한쪽에만 있던 날의 수이고, `clippedFrom` 은 **선이
    * 늦게 시작할 때** 가장 이른 진입일이다(민평이 2020년부터라 그 앞에 들어간
-   * 스왑은 공통 달력이 못 담는다). 총액은 그때도 옳다 — 그림만 중간부터다. */
+   * 스왑은 공통 달력이 못 담는다). 총액은 그때도 옳다 — 그림만 중간부터다.
+   * (차트·헤드라인의 달력이다 — 일별 대사는 표 둘로 갈라져 각자 자기 달력을
+   * 쓴다, `BacktestReconPair`.) */
   calendar?: { basis: string; dropped: number; clippedFrom: string | null };
   /** 일별 대사 — optional only for results restored from an older session's
-   * memory; the live endpoint always sends it. */
-  recon?: BacktestRecon;
+   * memory; the live endpoint always sends it. 구 세션 복원본은 병합 한 표
+   * (`BacktestRecon`)일 수 있다 — `backtest/recon.ts` 의 `reconPair` 가
+   * 두 모양을 다 받는다. */
+  recon?: BacktestReconPair | BacktestRecon;
 }
 
 /** What the user typed, before the server prices it. */

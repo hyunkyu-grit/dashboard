@@ -273,7 +273,9 @@ describe('분해는 화면에서 합계와 맞는다', () => {
      * 들어오면서, v1 642c5c46). 각자 fmtKrw 로 반올림하면 1만원이 어긋난다 —
      * 백테스트에서 실측으로 걸린 그 결함. */
     const s = body('src/sim/ResultsWindow.tsx');
-    expect(s).toMatch(/const carry = uPnl - val - roll - bondMtm - bondCarry - fund/);
+    // [OWNER, 2026-08-25 — 엔진 단위 분리] bondRoll 이 성분에 합류 — 잔차 앞
+    // 반올림이 하나 늘었다(스왑캐리는 여전히 잔차 하나).
+    expect(s).toMatch(/const carry = uPnl - val - roll - bondMtm - bondCarry - bondRoll - fund/);
   });
 
   it('채권·조달 성분은 잔차로 접지 않고 **자기 행**으로 선다 — 채권이 있을 때만', () => {

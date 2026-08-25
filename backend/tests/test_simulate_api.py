@@ -124,6 +124,7 @@ def test_response_matches_frontend_contract_shape(representative_response: dict)
     assert set(body.keys()) == {
         "status", "chartData", "summary", "pvbpSensitivity",
         "bookDailyPnLs", "irsSettlementEvents", "irsDailyReconciliation",
+        "bondDailyReconciliation",
         "fundingCurve", "distribution", "exclusions", "totalReturnDecomposition",
         "decompositionDaily", "fundingBasis",
         # 2026-08-06: 포지션별 기여. 목록에 이름을 올리는 것이 이 계약이 자라는
@@ -556,18 +557,17 @@ def test_bond_only_empty_irs_curves(client: TestClient) -> None:
     assert body["chartData"][-1]["mtmPnL"] != 0
     assert body["summary"]["finalSwap"] == 0
 
-    # [2026-08-21] 표가 **더 이상 비지 않는다.** 종전에는 여기가
-    # `irsDailyReconciliation == []` 를 못박고 있었다 — par 커브가 없으면 표가
-    # 통째로 빈다는 계약이었고, 그건 **격자**의 조건이지 표의 조건이 아니었다.
-    # 채권만 있는 북에도 대사할 손익은 있다(평가·캐리·조달). 격자는 스왑의
-    # 것이라 여기서는 전부 0 이고, 그 사실은 화면이 각주로 말한다.
-    rec = body["irsDailyReconciliation"]
-    rows = [r_ for r_ in rec if not r_.get("carryover")]
-    assert rows, "채권만 있는 북의 대사표가 비었다"
-    assert all(v == 0 for v in rows[0]["pvbp"].values()), "스왑이 없는데 격자가 섰다"
-    # 그리고 표는 헤드라인으로 닫힌다 — 이 표가 있는 이유가 그것이다.
-    assert sum(r_["totalActual"] for r_ in rows) == pytest.approx(
+    # [OWNER, 2026-08-25 — 엔진 단위 분리] 채권만 북의 대사는 **자기 표**에
+    # 선다. 스왑 표는 v1 계약(스왑 + par 커브 있을 때만)으로 돌아가 여기서는
+    # 비고, 채권 표가 손익 대사(평가·캐리·롤다운·조달)를 진다.
+    assert body["irsDailyReconciliation"] == []
+    tbl = body["bondDailyReconciliation"]
+    assert tbl is not None, "채권만 있는 북의 채권 대사표가 비었다"
+    rows = [r_ for r_ in tbl["rows"] if not r_.get("carryover")]
+    assert rows
+    # 표는 채권 몫(= 이 북의 헤드라인)으로 닫힌다 — 이 표가 있는 이유다.
+    assert sum(r_["actual"] for r_ in rows) == pytest.approx(
         body["summary"]["finalTotal"], abs=len(rows)
     )
-    # 조달 열은 채권 줄이 있으므로 선다 (서버가 이미 음수로 준다).
+    # 조달 열이 선다 (서버가 이미 음수로 준다).
     assert any(isinstance(r_.get("funding"), int) for r_ in rows)

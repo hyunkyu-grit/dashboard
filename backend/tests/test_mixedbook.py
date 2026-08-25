@@ -266,110 +266,107 @@ class TestRefusals:
 
 
 class TestRecon:
+    """`book_recon` 은 표를 **둘**로 낸다 [OWNER, 2026-08-25 — 엔진 단위 분리].
+
+    2026-08-21 병합판(민평 ∩ IRS 한 표)이 지불하던 대가 — 드롭(세로합 ≠ 기간
+    3분해)·0 채움·병합 이월 앵커 — 는 전부 사라진다. 각 표는 그 엔진
+    `book_recon` 의 모양 그대로이고, 이 파일은 분리 계약과 «각자 자기 달력
+    위에 온전히 선다»만 지킨다. 각 표 내부의 산술은 엔진 자기 테스트
+    (test_backtest_recon·test_cashbond)가 이미 핀으로 박고 있다.
+    """
+
     def _recon(self):
         ds = _dataset(120)
         m = _matrix(ds.dates)
         book = [_pos("3Y", 1, ds.dates[5]), _pos("CB:KTB:3Y", 1, ds.dates[5])]
         return ds, m, mb.book_recon(m, ds, book, SPEC)
 
-    def test_the_two_grids_do_not_mix(self):
+    def test_a_mixed_book_yields_two_tables(self):
         _ds, _m, r = self._recon()
-        assert [g["label"] for g in r["groups"]] == ["스왑 KRD", "채권 KRD"]
-        keys = r["tenors"]
-        assert len(keys) == len(set(keys))          # 열쇠가 겹치지 않는다
-        assert all(k.startswith(("S:", "B:")) for k in keys)
-        flat = [c["key"] for g in r["groups"] for c in g["cols"]]
-        assert flat == keys
-        # 화면에 적히는 것은 테너뿐 — 어느 커브인지는 그룹 머리가 말한다
-        assert all(":" not in c["label"] for g in r["groups"] for c in g["cols"])
+        assert set(r) == {"swap", "bond"}
+        assert r["swap"] and r["bond"]
+        # 각 표는 자기 엔진의 모양 그대로 — 접두사도 그룹 머리도 없다.
+        for block in (r["swap"], r["bond"]):
+            assert "groups" not in block
+            assert all(":" not in t for t in block["tenors"])
 
-    def test_every_row_closes_across(self):
-        """평가 + 롤다운 + 캐리 + 개시 + 조달 = 그날 손익. 이 성질이 이 표의
-        존재 이유다 — 읽는 사람이 암산으로 거짓말을 잡을 수 있어야 한다."""
+    def test_each_table_closes_with_its_own_identity(self):
+        """스왑: 평가+롤다운+캐리+개시 = 그날 손익. 채권: +조달까지.
+        조달 열은 채권 표에만 있다 — 스왑에는 그 질문이 없다."""
         _ds, _m, r = self._recon()
-        body = [x for x in r["rows"] if not x.get("carryover")]
-        assert body
-        for row in body:
+        s_body = [x for x in r["swap"]["rows"] if not x.get("carryover")]
+        b_body = [x for x in r["bond"]["rows"] if not x.get("carryover")]
+        assert s_body and b_body
+        for row in s_body:
+            assert "funding" not in row
+            total = row["valuation"] + row["rolldown"] + row["carry"] + (row.get("startup") or 0)
+            assert total == pytest.approx(row["actual"], abs=2.0)
+        for row in b_body:
             total = (
                 row["valuation"] + row["rolldown"] + row["carry"]
-                + (row["startup"] or 0) + (row["funding"] or 0)
+                + (row.get("startup") or 0) + (row["funding"] or 0)
             )
             assert total == pytest.approx(row["actual"], abs=2.0)
 
-    def test_the_carryover_anchor_has_no_pnl(self):
+    def test_each_table_keeps_its_own_carryover_anchor(self):
         _ds, _m, r = self._recon()
-        anchor = r["rows"][-1]
-        assert anchor["carryover"] is True
-        assert anchor["actual"] is None and anchor["estTotal"] is None
-        assert any(v for v in anchor["krd"].values())
+        for block in (r["swap"], r["bond"]):
+            anchor = block["rows"][-1]
+            assert anchor["carryover"] is True
+            assert anchor["actual"] is None and anchor["estTotal"] is None
+            assert any(v for v in anchor["krd"].values())
 
-    def test_every_row_carries_both_grids(self):
-        _ds, _m, r = self._recon()
-        for row in r["rows"]:
-            assert set(row["krd"]) == set(r["tenors"])
-
-    def test_the_window_is_the_overlap_of_the_two_windows(self):
-        """두 대사는 각자 **자기 달력의** 최근 250영업일을 싣고 온다 — 시작일이
-        다르다(실측 2026-08-21: 스왑 2025-08-25 · 채권 2025-08-08). 그 밖의 행을
-        «달력이 어긋나서» 뺐다고 세면 화면이 없는 병을 보고한다."""
-        ds = _dataset(400)
-        m = _matrix(ds.dates)
-        # 진입을 아주 이르게 둬 양쪽 창이 다 잘리게 한다
-        book = [_pos("3Y", 1, ds.dates[1]), _pos("CB:KTB:3Y", 1, ds.dates[1])]
-        r = mb.book_recon(m, ds, book, SPEC)
-        body = [x for x in r["rows"] if not x.get("carryover")]
-        assert body
-        # 달력이 완전히 겹치는 판이므로 뺄 날이 없다 — 창 밖은 뺀 게 아니다
-        assert r["dropped"] == 0
-
-    def test_calendar_gaps_cost_the_day_and_the_day_after(self):
-        """한쪽만 쉰 날은 짝이 없고, **그 다음 날**은 두 계열이 다른 밤을 잰다."""
+    def test_a_calendar_gap_costs_nothing(self):
+        """분리의 요점: 한쪽만 쉰 날이 있어도 **어느 표에서도 날이 빠지지
+        않는다**. 병합판은 그 날과 다음 날을 떨궈야 했다(다른 밤 문제) — 각
+        표가 자기 달력 위에 서면 그 문제 자체가 없다."""
         ds = _dataset(200)
         hole = ds.dates[150]
         m = _matrix([d for d in ds.dates if d != hole])
         book = [_pos("3Y", 1, ds.dates[5]), _pos("CB:KTB:3Y", 1, ds.dates[5])]
         r = mb.book_recon(m, ds, book, SPEC)
-        got = {x["t"] for x in r["rows"]}
-        assert hole.isoformat() not in got
-        assert ds.dates[151].isoformat() not in got
-        assert r["dropped"] == 2
+        s_dates = {x["t"] for x in r["swap"]["rows"] if not x.get("carryover")}
+        b_dates = {x["t"] for x in r["bond"]["rows"] if not x.get("carryover")}
+        # 스왑 표는 IRS 달력의 그 날을 그대로 싣고, 그 다음 날도 산다.
+        assert hole.isoformat() in s_dates
+        assert ds.dates[151].isoformat() in s_dates
+        # 채권 표는 민평 달력대로 — 구멍 다음 날이 정상적으로 선다.
+        assert hole.isoformat() not in b_dates
+        assert ds.dates[151].isoformat() in b_dates
 
-    def test_a_finished_side_is_zero_filled_not_dropped(self):
-        """한쪽이 먼저 끝나도 대사표는 안 비워진다.
+    def test_each_column_totals_its_engines_decomposition(self):
+        """세로합 = 기간 3분해 — 병합판이 드롭 때문에 못 지키던 성질.
 
-        끝난 줄의 일별 손익은 0 이고 KRD 도 0 이다(누적은 얼어붙어 있다) —
-        지어내는 숫자가 아니라 참인 0 이라 채워 넣는다. 종전 판은 창의 끝을
-        `min` 으로 잡아, 「2020년에 산 국고채(2023 만기) + 지금도 들고 있는 스왑」
-        에서 표를 **통째로 비웠다**(실측 2026-08-21).
-        """
-        ds = _dataset(400)
+        각 표의 캐리·롤다운 열을 세로로 더하면 그 엔진 백테스트 레코드의
+        기간 스칼라와 만나야 한다(포워드 귀속이라, 열린 북은 마지막 행의
+        «오늘 밤» 하루만큼 스칼라보다 앞서간다 — app/backtest.py 모듈 주석).
+        여기서는 그 이월 한 밤을 마지막 행에서 빼고 비교한다."""
+        ds = _dataset(120)
         m = _matrix(ds.dates)
-        book = [
-            _pos("3Y", 1, ds.dates[1]),
-            _pos("CB:KTB:3Y", 1, ds.dates[1], ds.dates[100]),   # 일찍 청산
-        ]
+        book = [_pos("3Y", 1, ds.dates[5]), _pos("CB:KTB:3Y", 1, ds.dates[5])]
         r = mb.book_recon(m, ds, book, SPEC)
-        body = [x for x in r["rows"] if not x.get("carryover")]
-        assert body, "끝난 줄 하나가 표를 비웠다"
-        # 창은 살아 있는 쪽의 끝까지 간다
-        assert body[-1]["t"] == ds.dates[-1].isoformat()
-        # 채권이 끝난 뒤의 행에서 채권 칸은 전부 0 — 그리고 행은 여전히 닫힌다
-        after = [x for x in body if x["t"] > ds.dates[100].isoformat()]
-        assert after
-        for row in after:
-            assert all(v == 0 for k, v in row["krd"].items() if k.startswith("B:"))
-            total = (
-                row["valuation"] + row["rolldown"] + row["carry"]
-                + (row["startup"] or 0) + (row["funding"] or 0)
+        bt = mb.run_backtest(m, ds, book, SPEC)
+        swap_rec = next(p for p in bt["positions"] if p["kind"] == "swap")
+        bond_rec = next(p for p in bt["positions"] if p["kind"] != "swap")
+        for block, rec in ((r["swap"], swap_rec), (r["bond"], bond_rec)):
+            body = [x for x in block["rows"] if not x.get("carryover")]
+            tol = len(body) * 2.0
+            last = body[-1]
+            carry_open = last["carry"] or 0
+            roll_open = last["rolldown"] or 0
+            assert sum(x["carry"] for x in body) - carry_open == pytest.approx(
+                rec["carry"], abs=tol
             )
-            assert total == pytest.approx(row["actual"], abs=2.0)
+            assert sum(x["rolldown"] for x in body) - roll_open == pytest.approx(
+                rec["rolldown"], abs=tol
+            )
 
-    def test_a_pure_book_keeps_the_old_shape(self):
-        """한 종류뿐이면 그룹도 접두사도 없다 — 기존 화면이 그대로 읽는다."""
+    def test_a_pure_book_fills_one_slot(self):
+        """한 종류뿐이면 그 엔진의 블록이 자기 자리에 서고 다른 쪽은 None."""
         ds = _dataset(120)
         r = mb.book_recon(None, ds, [_pos("3Y", 1, ds.dates[5])], SPEC)
-        assert "groups" not in r
-        assert all(":" not in k for k in r["tenors"])
+        assert r["bond"] is None
+        assert r["swap"] and all(":" not in k for k in r["swap"]["tenors"])
 
 
 # ── 6. 라우트 ───────────────────────────────────────────────────────────────
@@ -410,11 +407,10 @@ class TestRoutes:
         assert [p["kind"] for p in body["positions"]] == ["swap", "cashbond"]
         assert body["calendar"]["basis"] == "민평 ∩ IRS"
         assert body["funding"]["label"]
-        # 대사는 두 격자다 — 같은 칸에 두 커브를 더하지 않는다.
-        groups = body["recon"]["groups"]
-        assert [g["label"] for g in groups] == ["스왑 KRD", "채권 KRD"]
-        keys = body["recon"]["tenors"]
-        assert len(keys) == len(set(keys))
+        # 대사는 표 둘이다 [OWNER, 2026-08-25] — 각자 자기 달력 위의 자기 표.
+        assert body["recon"]["swap"] and body["recon"]["bond"]
+        assert all(":" not in t for t in body["recon"]["swap"]["tenors"])
+        assert all(":" not in t for t in body["recon"]["bond"]["tenors"])
 
     def test_selling_a_bond_is_refused_with_a_sentence(self, client):
         r = client.get(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { backtestDays, reconNote } from '../src/backtest/recon';
+import { backtestDays, bondReconNote, reconNote, reconPair } from '../src/backtest/recon';
 import type { BacktestRecon, BacktestReconRow } from '../src/lib/api';
 
 /**
@@ -84,19 +84,39 @@ describe('표 아래 각주 — 데이터 사실만, 없으면 각주도 없다'
     expect(reconNote(recon([row()], { truncated: true }))).toContain('최근 영업일만');
   });
 
-  it('뺀 날은 **몇 일인지와 왜인지**를 같이 말한다', () => {
-    const note = reconNote(recon([row()], { dropped: 19 }));
-    expect(note).toContain('19일');
-    expect(note).toContain('그 다음 날');
+  it('채권 표는 캐리 라벨의 뜻을 **언제나** 말한다 [OWNER, 2026-08-25 — 표기 보강]', () => {
+    const note = bondReconNote(recon([row({ funding: -100 })]));
+    expect(note).toContain('조달 차감 전');
   });
 
-  it('둘 다면 둘 다 — 한 줄에 이어 붙인다', () => {
-    const note = reconNote(recon([row()], { truncated: true, dropped: 3 }));
+  it('채권 표가 잘렸으면 둘 다 — 한 줄에 이어 붙인다', () => {
+    const note = bondReconNote(recon([row({ funding: -100 })], { truncated: true }));
     expect(note).toContain('최근 영업일만');
-    expect(note).toContain('3일');
+    expect(note).toContain('조달 차감 전');
+  });
+});
+
+describe('서버 대사 정규화 — 표 둘 [OWNER, 2026-08-25 — 엔진 단위 분리]', () => {
+  it('라이브 서버의 {swap, bond} 는 그대로 통과한다', () => {
+    const swap = recon([row()]);
+    const bond = recon([row({ funding: -100 })]);
+    expect(reconPair({ swap, bond })).toEqual({ swap, bond });
+    expect(reconPair({ swap, bond: null })).toEqual({ swap, bond: null });
   });
 
-  it('0 일은 각주가 아니다 — 뺀 게 없다는 말을 굳이 안 한다', () => {
-    expect(reconNote(recon([row()], { dropped: 0 }))).toBeUndefined();
+  it('없으면 둘 다 null — 표가 안 선다', () => {
+    expect(reconPair(undefined)).toEqual({ swap: null, bond: null });
+  });
+
+  it('구 복원본(순수 북 한 표)은 조달 숫자로 자리를 찾는다', () => {
+    const swapLegacy = recon([row()]);
+    expect(reconPair(swapLegacy)).toEqual({ swap: swapLegacy, bond: null });
+    const bondLegacy = recon([row({ funding: -100 })]);
+    expect(reconPair(bondLegacy)).toEqual({ swap: null, bond: bondLegacy });
+  });
+
+  it('구 병합판(접두사 열쇠)은 버린다 — 두 표로 되돌릴 수 없다', () => {
+    const merged = recon([row()], { tenors: ['S:3Y', 'B:3Y'] });
+    expect(reconPair(merged)).toEqual({ swap: null, bond: null });
   });
 });

@@ -155,12 +155,58 @@ class IrsDailyReconRow(BaseModel):
     # 라운딩 잔차로 롤다운을 잡는다). 구 캐시/구 응답 호환을 위해 기본 0.
     carryPnl: int | None = 0
     rolldownPnl: int | None = 0
-    # 조달 — **채권 줄이 있을 때만** 실린다 [2026-08-21]. 스왑에는 그 개념이
-    # 없으므로 «0원» 도 «모른다» 도 아니고 그 질문이 없다: 필드 부재가 그 뜻이고
-    # (화면의 `hasFunding` 이 그것을 본다), 이월 앵커 행에서만 null 이다.
-    # 서버가 이미 음수로 준다 — 화면에서 부호를 다시 주지 않는다.
-    funding: int | None = None
+    # 조달 필드는 2026-08-21 병합판의 흔적이었다 — [OWNER, 2026-08-25 — 엔진
+    # 단위 분리]로 채권 대사가 자기 표(bondDailyReconciliation)로 독립하면서
+    # 이 행에서 사라졌다. 스왑에는 조달이라는 질문 자체가 없다.
     carryover: bool = False
+
+
+class BondDailyReconRow(BaseModel):
+    """채권 일별 대사 행 [OWNER, 2026-08-25 — 엔진 단위 분리].
+
+    스왑 행과 같은 데스크 관행: 평가는 백워드(전일 대비), 캐리·롤다운·조달은
+    포워드(오늘 → 다음 영업일) — `평가+캐리+롤다운+조달 = actual` 이 행마다
+    닫힌다. pvbp 격자는 시나리오 충격 커브의 테너에 감쇠 pvbp 를 선형 배분한
+    것(bond_recon.py 모듈 doc), 이월 앵커 행은 종가 KRD 만 싣는다(공란 정책).
+    조달은 서버가 이미 음수로 준다 — 화면에서 부호를 다시 주지 않는다."""
+    date: str
+    day: int
+    pvbp: dict[str, int]
+    dailyDbp: dict[str, float]
+    pnl: dict[str, int]
+    totalEstPnl: int | None
+    valuation: int | None
+    carry: int | None
+    rolldown: int | None
+    funding: int | None
+    actual: int | None
+    residual: int | None
+    carryover: bool = False
+
+
+class BondReconGroupCol(BaseModel):
+    key: str
+    label: str
+
+
+class BondReconGroup(BaseModel):
+    label: str
+    cols: list[BondReconGroupCol]
+
+
+class BondRollBasis(BaseModel):
+    """롤다운 레인의 프로버넌스 — 무엇을 실제로 셌는가. applied=False 면 롤이
+    0 인 채 종전(unchanged-yields) 동작이고, missing 은 커브가 없어 롤 0 으로
+    남은 섹터들이다. 조용한 0 금지 — 화면 각주가 이것을 읽는다."""
+    applied: bool
+    missing: list[str] = []
+
+
+class BondDailyRecon(BaseModel):
+    groups: list[BondReconGroup]
+    tenors: list[str]
+    rows: list[BondDailyReconRow]
+    rollBasis: BondRollBasis
 
 
 class FundingCurvePoint(BaseModel):
@@ -226,6 +272,10 @@ class TotalReturnDecomposition(BaseModel):
     채권 성분·funding은 동일하다. 스왑 제외 요청에서는 셋 다 null."""
     bondMtm: float
     bondCarry: float
+    # [OWNER, 2026-08-25] 채권 다리의 빠져 있던 항 — 동결 민평 커브 위 잔존
+    # 단축(bond_roll.py). 스왑 다리와 같은 unchanged-term-structure 가정이
+    # 되면서 항등식과 total 에 합류했다. 구 캐시 응답 호환 기본 0.
+    bondRolldown: float = 0.0
     fundingCost: float
     swapMtm: float | None
     swapCarry: float | None
@@ -245,6 +295,7 @@ class DecompositionDailyPoint(BaseModel):
     fundingCost: float
     bondMtm: float
     bondCarry: float
+    bondRolldown: float = 0.0
     swapMtm: float | None
     swapCarry: float | None
     swapRolldown: float | None = None
@@ -291,6 +342,9 @@ class SimulateResponse(BaseModel):
     bookDailyPnLs: list[BookDailyPnLRow]
     irsSettlementEvents: list[IrsSettlementEvent]
     irsDailyReconciliation: list[IrsDailyReconRow]
+    # [OWNER, 2026-08-25 — 엔진 단위 분리] 채권 일별 대사 — 자기 표. 채권이
+    # 없는 런(그리고 구 캐시 응답)은 None.
+    bondDailyReconciliation: BondDailyRecon | None = None
     # s11 확장 필드 — 기존 골든 계약에 대한 추가 전용(extend, don't mutate).
     fundingCurve: list[FundingCurvePoint]
     distribution: SimulationDistribution | None

@@ -28,36 +28,48 @@ function draw(runs: { base: SimResponse }) {
 }
 
 function response(bond: boolean): SimResponse {
+  /* [OWNER, 2026-08-25 — 엔진 단위 분리] bondRolldown 이 성분에 합류했다 —
+     시뮬 채권에 아예 없던 항이라(unchanged-yields), 총액도 이 항만큼 옳아졌다. */
   const d = bond
-    ? { total: 100_017_003, swapMtm: 50_000_000, swapCarry: 0, swapRolldown: 10_000_000,
-        bondMtm: 30_004_999, bondCarry: 20_012_004, fundingCost: -10_000_000 }
+    ? { total: 105_017_003, swapMtm: 50_000_000, swapCarry: 0, swapRolldown: 10_000_000,
+        bondMtm: 30_004_999, bondCarry: 20_012_004, bondRolldown: 5_000_000, fundingCost: -10_000_000 }
     : { total: 60_000_000, swapMtm: 50_000_000, swapCarry: 0, swapRolldown: 10_000_000,
-        bondMtm: 0, bondCarry: 0, fundingCost: 0 };
+        bondMtm: 0, bondCarry: 0, bondRolldown: 0, fundingCost: 0 };
   return {
     totalReturnDecomposition: d,
     decompositionDaily: [
-      { day: 0, swapMtm: 0, swapCarry: 0, swapRolldown: 0, bondMtm: 0, bondCarry: 0, fundingCost: 0, total: 0 },
+      { day: 0, swapMtm: 0, swapCarry: 0, swapRolldown: 0, bondMtm: 0, bondCarry: 0, bondRolldown: 0, fundingCost: 0, total: 0 },
       { day: 1, swapMtm: d.swapMtm, swapCarry: 0, swapRolldown: d.swapRolldown,
-        bondMtm: d.bondMtm, bondCarry: d.bondCarry, fundingCost: d.fundingCost, total: d.total },
+        bondMtm: d.bondMtm, bondCarry: d.bondCarry, bondRolldown: d.bondRolldown,
+        fundingCost: d.fundingCost, total: d.total },
     ],
   } as unknown as SimResponse;
 }
 
 describe('채권 성분 행', () => {
-  it('채권이 든 북 — 채권평가·채권캐리·조달비용이 행으로 선다', () => {
+  it('채권이 든 북 — 채권평가·채권캐리·채권롤다운·조달비용이 행으로 선다', () => {
     const { container } = draw({ base: response(true) });
     const text = container.textContent ?? '';
     expect(text).toContain('채권평가');
     expect(text).toContain('채권캐리');
+    expect(text).toContain('채권롤다운');
     expect(text).toContain('조달비용');
-    // 토탈 = manUnits(100,017,003) = 10,002만 — 성분들이 이 값으로 더해진다
-    expect(text).toContain('+1억 2만원');
+    // 토탈 = manUnits(105,017,003) = 10,502만 — 성분들이 이 값으로 더해진다
+    expect(text).toContain('+1억 502만원');
   });
 
   it('스왑만인 북 — 채권 행이 아예 없다', () => {
     const { container } = draw({ base: response(false) });
     const text = container.textContent ?? '';
     expect(text).not.toContain('채권평가');
+    expect(text).not.toContain('채권롤다운');
     expect(text).not.toContain('조달비용');
+  });
+
+  it('구 캐시 응답(bondRolldown 없음) — 0 으로 읽혀 행이 안 선다 · 총액 불변', () => {
+    const legacy = response(false);
+    delete (legacy.totalReturnDecomposition as unknown as Record<string, unknown>).bondRolldown;
+    const { container } = draw({ base: legacy });
+    expect(container.textContent ?? '').not.toContain('채권롤다운');
   });
 });

@@ -7,10 +7,34 @@
  * 함수가 창 안에 있어서 가드가 닿지 못했다.
  *
  * 여기서 계산하는 것은 없다. 이름만 바꿔 넘긴다 — 두 번째 정의를 만들지 않는다.
+ *
+ * [OWNER, 2026-08-25 — 엔진 단위 분리] 서버 대사가 표 둘(`{swap, bond}`)이
+ * 됐다. 스왑 표는 IRS 달력, 채권 표는 민평 달력 위에 각자 서고, 병합판이
+ * 지불하던 드롭(한쪽만 쉰 날 + 다음 날 제거 → 세로합 ≠ 기간 3분해)은 서버에서
+ * 사라졌다. 이 파일은 그 두 표를 각자 스택 모양으로 넘길 뿐이다.
  */
 
-import type { BacktestRecon } from '@/lib/api';
+import type { BacktestRecon, BacktestReconPair, BacktestResult } from '@/lib/api';
 import type { ReconStackDay } from '@/ui/window/ReconStack';
+
+/** 서버 응답·구 세션 복원본을 한 모양으로. 라이브 서버는 언제나 `{swap, bond}`
+ * 를 주고, 2026-08-25 이전 세션의 복원본은 병합 한 표다 — 그 판의 격자는
+ * 접두사 열쇠(`S:`/`B:`)와 병합 달력이라 두 표로 되돌릴 수 없어 **버린다**
+ * (다시 실행하면 새 모양이 온다). 순수 북의 구 복원본(한 표)은 조달 숫자의
+ * 유무로 어느 엔진 것인지 판별해 자기 자리에 세운다. */
+export function reconPair(
+  recon: BacktestReconPair | BacktestRecon | undefined,
+): BacktestReconPair {
+  if (!recon) return { swap: null, bond: null };
+  if ('swap' in recon || 'bond' in recon) {
+    const pair = recon as BacktestReconPair;
+    return { swap: pair.swap ?? null, bond: pair.bond ?? null };
+  }
+  const legacy = recon as BacktestRecon;
+  if (legacy.tenors?.some((t) => t.includes(':'))) return { swap: null, bond: null };
+  const isBond = legacy.rows?.some((r) => typeof r.funding === 'number');
+  return isBond ? { swap: null, bond: legacy } : { swap: legacy, bond: null };
+}
 
 /**
  * 행은 서버 순서(오름차순) 그대로 넘긴다. 보이는 방향은 스택의 날짜 헤더 토글이
@@ -41,15 +65,38 @@ export function backtestDays(recon: BacktestRecon): ReconStackDay[] {
   }));
 }
 
-/** 표 아래 한 줄 — 잘린 창과 뺀 날은 **데이터 사실**이라 화면이 말해야 한다.
- * 둘 다 없으면 `undefined` 를 돌려 각주 자체를 안 세운다. */
+/** 표 아래 한 줄 — 잘린 창은 **데이터 사실**이라 화면이 말해야 한다.
+ * 없으면 `undefined` 를 돌려 각주 자체를 안 세운다. (한쪽 달력에만 있던 날을
+ * 뺐다는 옛 문장은 은퇴했다 — 각 표가 자기 달력 위에 서면서 빠지는 날 자체가
+ * 없어졌다 [OWNER, 2026-08-25].) */
 export function reconNote(recon: BacktestRecon): string | undefined {
+  return recon.truncated
+    ? '긴 백테스트라 최근 영업일만 실었어요 — 기간 전체 분해는 위에 있어요.'
+    : undefined;
+}
+
+/** 채권 표의 각주 — 잘린 창 + 캐리 라벨의 뜻 [OWNER, 2026-08-25 — 표기 보강].
+ * 캐리 열은 **조달 차감 전**(그로스)이다: 문헌 표준 정의(carry = y − r_f,
+ * Ilmanen)와 달리 이 리포는 IRS 세타와 정의를 맞추려 조달을 자기 열로 뺐다
+ * [OWNER, 2026-08-14]. 화면만 보는 사람이 그 결정을 알 수 없으면 안 되므로
+ * 여기서 말한다. */
+export function bondReconNote(recon: BacktestRecon): string {
+  const carry = '캐리는 조달 차감 전 금액이에요 — 조달은 자기 열에 음수로 서요.';
+  const trunc = reconNote(recon);
+  return trunc ? `${trunc} ${carry}` : carry;
+}
+
+/** 혼합 차트 밑 달력 각주 — 차트·헤드라인은 여전히 민평 ∩ IRS 위에서 그린다.
+ * 일별 대사가 표 둘로 갈라진 지금, 이 문장은 **차트**의 사실만 말한다. */
+export function calendarNote(result: BacktestResult): string | undefined {
+  const cal = result.calendar;
+  if (!cal) return undefined;
   const parts = [
-    recon.truncated
-      ? '긴 백테스트라 최근 영업일만 실었어요 — 기간 전체 분해는 위에 있어요.'
+    cal.dropped
+      ? `차트는 ${cal.basis} 달력 위에서 그려요 — 한쪽 달력에만 있던 ${cal.dropped}일은 점이 없어요.`
       : '',
-    recon.dropped
-      ? `민평과 IRS 달력이 어긋난 ${recon.dropped}일은 뺐어요 — 한쪽만 쉰 날과 그 다음 날이에요. 두 계열이 서로 다른 밤을 재고 있어서 더하면 어느 하루도 아니에요.`
+    cal.clippedFrom
+      ? `가장 이른 진입(${cal.clippedFrom})은 공통 달력보다 앞이라 선이 중간부터 시작해요 — 총액은 그대로예요.`
       : '',
   ].filter(Boolean);
   return parts.length ? parts.join(' ') : undefined;

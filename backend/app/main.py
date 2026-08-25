@@ -62,6 +62,7 @@ from irs_pricer.config import DATA_DIR
 from irs_pricer.core import data_watch, ttl_cache
 from irs_pricer.core.errors import CurveBootstrapError
 from irs_pricer.engine import curve_cache
+from irs_pricer.services.simulation import bond_roll
 
 from . import instruments as instruments_mod
 from . import calendar_cache
@@ -107,6 +108,31 @@ from .volatility import volatility_payload
 # 결정이다.
 POLICY_PATH = Path(__file__).resolve().parents[2] / "data" / "bokbaserate.xlsx"
 
+
+#: 시뮬 채권 롤다운 레인의 커브 공급자 [OWNER, 2026-08-25 — 엔진 단위 분리].
+#: 시뮬(irs_pricer)은 SQL 을 모른다는 계층 규칙 때문에 app 이 여기서 민평
+#: 최신 커브를 먹인다. `creditmatrix.load()` 는 워터마크 캐시라 호출마다
+#: 싸고, 실패는 bond_roll 쪽이 삼켜 «롤 0 + provenance» 로 강등한다.
+_ROLL_SECTOR_TYPES: dict[str, str] = {
+    "국채": "KTB",
+    "은행채": "BD",
+    "특은채": "KDB",
+    "카드채": "CARD",
+    "회사채": "CB1",
+}
+
+
+def _bond_sector_curves() -> dict[str, list[tuple[float, float]]]:
+    m = creditmatrix.load()
+    i = len(m.dates) - 1
+    out: dict[str, list[tuple[float, float]]] = {}
+    for sector, bond_type in _ROLL_SECTOR_TYPES.items():
+        pts = creditmatrix.curve_points(m, bond_type, i)
+        if pts:
+            out[sector] = pts
+    return out
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Memoises the pure curve bootstrap that every simulation pricing/risk path
@@ -142,6 +168,10 @@ async def lifespan(app: FastAPI):
     # Installs on BOTH copies of the port (backtest + simulation) — they are
     # different function objects. `BW_DF_CACHE=0` disables it.
     df_cache.install()
+    # 채권 롤다운 커브 공급자 — 위 `_bond_sector_curves` 주석 참조. 여기(기동)
+    # 서 등록해야 테스트·스크립트의 기본이 «미등록 = 롤 레인 꺼짐»으로 남는다
+    # (curve_cache 들과 같은 원칙).
+    bond_roll.set_sector_curve_provider(_bond_sector_curves)
     logging.getLogger("irs_pricer").info("simulation data dir: %s", DATA_DIR)
     # 개발용으로 띄웠다는 쪽지(app/dev_marker.py). `SAURON_DEV_LOCAL=1` 없이는
     # 아무것도 안 쓴다 — Funnel 로 공개된 라이브 인스턴스는 쪽지를 안 남기고,

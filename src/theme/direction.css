@@ -71,6 +71,9 @@
 :root {
   --sr-ref-cd: #b45309;
   --sr-ref-policy: #7c3aed;
+  /* 채권 롤다운 선 [OWNER, 2026-08-25 — 엔진 단위 분리]. 같은 제약을 따른다:
+   * 방향색(빨강·파랑)과 갈라지는 청록, 흰 카드 위 대비 ≈5:1 (#0f766e ≈ 5.8). */
+  --sr-ref-roll: #0f766e;
 }
 
 /* CDS's ThemeProvider emits its palette as INLINE CSS variables on a wrapper it
@@ -95,6 +98,7 @@
   --sr-down: #5794f0; /* #2272eb 을 밝기만 올림 — 다크 표면 worst 5.35 */
   --sr-ref-cd: #f59e0b; /* 호박색을 밝힘 — 검은 카드 위에서도 둘의 간격 유지 */
   --sr-ref-policy: #a78bfa; /* 보라를 밝힘 — 위와 같은 이유 */
+  --sr-ref-roll: #2dd4bf; /* 청록을 밝힘 — 위와 같은 이유 */
 }
 
 /* ── 덮개 (메가 패널 뒤) ────────────────────────────────────────────────────

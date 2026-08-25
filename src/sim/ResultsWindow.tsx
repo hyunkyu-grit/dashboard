@@ -44,6 +44,8 @@ import {
   SIM_CASES,
   type CaseId,
   type Scenario,
+  type SimBondRecon,
+  type SimBondReconRow,
   type SimReconRow,
   type SimResponse,
 } from './scenario';
@@ -64,13 +66,17 @@ const SWAP_PARTS = [
 const BOND_PARTS = [
   { key: 'bondMtm', label: '채권평가' },
   { key: 'bondCarry', label: '채권캐리' },
+  /* [OWNER, 2026-08-25 — 엔진 단위 분리] 종전 시뮬 채권에는 이 항이 아예
+     없었다(unchanged-yields). 동결 민평 커브 롤이 합류하며 총액도 이 항만큼
+     옳아졌다 — bond_roll.py. */
+  { key: 'bondRoll', label: '채권롤다운' },
   { key: 'fund', label: '조달비용' },
 ] as const;
 
 /** 커서 카드가 그리는 줄들 — 워터폴·표와 **같은 순서, 같은 이름**이다.
  * 세 곳이 각자 목록을 들면 하나만 고쳐지는 날이 온다. */
 const PATH_ROWS = [...SWAP_PARTS, ...BOND_PARTS] as readonly {
-  key: 'val' | 'carry' | 'roll' | 'bondMtm' | 'bondCarry' | 'fund';
+  key: 'val' | 'carry' | 'roll' | 'bondMtm' | 'bondCarry' | 'bondRoll' | 'fund';
   label: string;
 }[];
 const PATH_SERIES: string[] = PATH_ROWS.map((r) => r.key);
@@ -103,34 +109,31 @@ const CASE_COLOR: Record<CaseId, string> = {
  * 1만원이 어긋난다(백테스트에서 실측으로 걸린 그 결함). */
 function partsOf(run: SimResponse) {
   const d = run.totalReturnDecomposition;
-  /* splitKrw 의 수법 그대로, 성분이 여섯으로 늘었을 뿐이다: 합계와 다섯 성분이
+  /* splitKrw 의 수법 그대로, 성분이 일곱으로 늘었을 뿐이다: 합계와 여섯 성분이
      각각 한 번씩 반올림하고 **스왑캐리가 잔차**를 진다. 북에 채권이 없으면
-     채권 셋은 정확히 0 이라 예전의 3분해와 같은 숫자다. */
+     채권 넷은 정확히 0 이라 예전의 3분해와 같은 숫자다. */
   const uPnl = manUnits(d.total);
   const val = manUnits(d.swapMtm);
   const roll = manUnits(d.swapRolldown ?? 0);
   const bondMtm = manUnits(d.bondMtm);
   const bondCarry = manUnits(d.bondCarry);
+  const bondRoll = manUnits(d.bondRolldown ?? 0);
   const fund = manUnits(d.fundingCost);
-  const carry = uPnl - val - roll - bondMtm - bondCarry - fund;
-  const hasBond = bondMtm !== 0 || bondCarry !== 0 || fund !== 0;
-  return { uPnl, val, carry, roll, bondMtm, bondCarry, fund, hasBond };
+  const carry = uPnl - val - roll - bondMtm - bondCarry - bondRoll - fund;
+  const hasBond = bondMtm !== 0 || bondCarry !== 0 || bondRoll !== 0 || fund !== 0;
+  return { uPnl, val, carry, roll, bondMtm, bondCarry, bondRoll, fund, hasBond };
 }
 
 /** 엔진의 일별 대사 → 대사 스택. **시간순이 기본**(D+0 이 위) — 미래 경로에는
  * "최신" 이랄 게 없다. 여기서 계산하는 것은 없다.
  *
- * 내보내는 이유는 백테스트 쪽 `backtest/recon.ts` 와 같다 [2026-08-21]: 조달 칸의
- * 판단이 창 안에만 있으면 가드가 닿지 못하고, 저쪽에서 정확히 그 자리가 한 번
- * 조용히 틀렸다. */
-/** 이 실행에 채권 줄이 있나 — 조달 칸에 **숫자가** 있는지가 그 판정이다
- * (`ReconStack` 의 `hasFunding` 과 같은 규칙, 한 벌이어야 한다). 스왑만 있는
- * 북에서는 응답이 고정 모델을 지나며 `funding: null` 이 전 행에 실려 오므로
- * «필드가 있나» 로 재면 250줄짜리 «—» 조달 칸이 선다. */
-export function hasBondRows(rows: SimReconRow[]): boolean {
-  return rows.some((r) => typeof r.funding === 'number');
-}
-
+ * 내보내는 이유는 백테스트 쪽 `backtest/recon.ts` 와 같다 [2026-08-21]: 이
+ * 사상이 창 안에만 있으면 가드가 닿지 못하고, 저쪽에서 정확히 그 자리가 한 번
+ * 조용히 틀렸다.
+ *
+ * [OWNER, 2026-08-25 — 엔진 단위 분리] 스왑 표는 v1 계약으로 돌아갔다 — 조달
+ * 필드를 넘기지 않는다(스왑에는 그 질문이 없다). 채권의 대사는 `bondDays` 가
+ * 자기 표로 넘긴다. */
 export function simDays(rows: SimReconRow[]): ReconStackDay[] {
   return rows.map((r) => ({
     date: r.date,
@@ -144,12 +147,44 @@ export function simDays(rows: SimReconRow[]): ReconStackDay[] {
     valuation: r.valuationPnl,
     carry: r.carryPnl ?? null,
     rolldown: r.rolldownPnl ?? null,
-    /* 조달은 채권 줄이 있을 때만 숫자로 온다 — 열을 세울지는 스택이 정한다
-       (`hasFunding`: 숫자가 하나라도 있나). 여기서 `?? 0` 으로 채우면 스왑만
-       있는 북에 «조달 0원» 이라는 없는 사실이 생긴다. */
-    funding: r.funding ?? null,
     actual: r.totalActual,
   }));
+}
+
+/** 채권 일별 대사 → 대사 스택. 조달은 이 표의 것이다 — 서버가 이미 음수로
+ * 주므로 여기서 부호를 다시 주지 않는다. */
+export function bondDays(rows: SimBondReconRow[]): ReconStackDay[] {
+  return rows.map((r) => ({
+    date: r.date,
+    title: r.carryover
+      ? `${r.date} · D+${r.day} · 다음 영업일로 들고 가는 이월 리스크`
+      : `${r.date} · D+${r.day}`,
+    krd: r.pvbp,
+    dbp: r.dailyDbp,
+    est: r.pnl,
+    estTotal: r.totalEstPnl,
+    valuation: r.valuation,
+    carry: r.carry,
+    rolldown: r.rolldown,
+    funding: r.funding,
+    actual: r.actual,
+  }));
+}
+
+/** 채권 표 각주 — 캐리 라벨의 뜻 + 롤 레인의 프로버넌스 [OWNER, 2026-08-25].
+ * 캐리는 **조달 차감 전**(그로스)이다: 문헌 표준(carry = y − r_f)과 달리 이
+ * 리포는 IRS 세타와 정의를 맞추려 조달을 자기 열로 뺐다 [OWNER, 2026-08-14] —
+ * 화면만 보는 사람이 그 결정을 알 수 있어야 한다. 롤 레인이 꺼진 채 나온
+ * 응답(커브 공급자 부재)은 그 사실도 말한다 — 조용한 0 금지. */
+export function bondReconNote(recon: SimBondRecon): string {
+  const carry = '캐리는 조달 차감 전 금액이에요 — 조달은 자기 열에 음수로 서요.';
+  if (!recon.rollBasis.applied) {
+    return `${carry} 이 실행은 민평 커브에 닿지 못해 롤다운이 0으로 나왔어요 — 백엔드 데이터 연결을 확인해 주세요.`;
+  }
+  if (recon.rollBasis.missing.length) {
+    return `${carry} ${recon.rollBasis.missing.join('·')} 섹터는 민평 커브가 없어 롤다운이 0이에요.`;
+  }
+  return carry;
 }
 
 /** 조건 칩 — 이 창이 답한 질문.
@@ -219,13 +254,18 @@ export function ResultsWindow({
       val: daily.map((d) => d.swapMtm ?? null),
       carry: daily.map((d) => d.swapCarry ?? null),
       roll: daily.map((d) => d.swapRolldown ?? null),
-      /* 채권 셋 — 북에 채권이 있을 때만 선이 선다. 없는 북에서는 전부 0 이라
-         상수 0 선 셋이 범례만 늘리므로 그린 것에만 이름을 준다(범례 규칙). */
+      /* 채권 넷 — 북에 채권이 있을 때만 선이 선다. 없는 북에서는 전부 0 이라
+         상수 0 선 넷이 범례만 늘리므로 그린 것에만 이름을 준다(범례 규칙). */
       bondMtm: daily.map((d) => d.bondMtm ?? null),
       bondCarry: daily.map((d) => d.bondCarry ?? null),
+      bondRoll: daily.map((d) => d.bondRolldown ?? null),
       fund: daily.map((d) => d.fundingCost ?? null),
       hasBond: daily.some(
-        (d) => (d.bondMtm ?? 0) !== 0 || (d.bondCarry ?? 0) !== 0 || (d.fundingCost ?? 0) !== 0,
+        (d) =>
+          (d.bondMtm ?? 0) !== 0 ||
+          (d.bondCarry ?? 0) !== 0 ||
+          (d.bondRolldown ?? 0) !== 0 ||
+          (d.fundingCost ?? 0) !== 0,
       ),
     };
   }, [run]);
@@ -243,7 +283,7 @@ export function ResultsWindow({
 
   const p = run ? partsOf(run) : null;
   const recon = run?.irsDailyReconciliation ?? [];
-  const hasBondRow = hasBondRows(recon);
+  const bondRecon = run?.bondDailyReconciliation ?? null;
 
   return (
     <FloatingWindow
@@ -401,6 +441,7 @@ export function ResultsWindow({
                     ? [
                         { id: 'bondMtm', data: paths.bondMtm, color: 'var(--sr-ref-cd)', yAxisId: AXIS },
                         { id: 'bondCarry', data: paths.bondCarry, color: 'var(--sr-ref-policy)', yAxisId: AXIS },
+                        { id: 'bondRoll', data: paths.bondRoll, color: 'var(--sr-ref-roll)', yAxisId: AXIS },
                         { id: 'fund', data: paths.fund, color: 'var(--color-fg)', yAxisId: AXIS },
                       ]
                     : []),
@@ -422,6 +463,7 @@ export function ResultsWindow({
                   <>
                     <Line seriesId="bondMtm" curve="linear" connectNulls={false} />
                     <Line seriesId="bondCarry" curve="linear" connectNulls={false} />
+                    <Line seriesId="bondRoll" curve="linear" connectNulls={false} />
                     <Line seriesId="fund" curve="linear" connectNulls={false} />
                   </>
                 ) : null}
@@ -455,6 +497,7 @@ export function ResultsWindow({
                       ? ([
                           ['채권평가', p.bondMtm, 'var(--sr-ref-cd)'],
                           ['채권캐리', p.bondCarry, 'var(--sr-ref-policy)'],
+                          ['채권롤다운', p.bondRoll, 'var(--sr-ref-roll)'],
                           ['조달비용', p.fund, 'var(--color-fg)'],
                         ] as const)
                       : []),
@@ -485,44 +528,61 @@ export function ResultsWindow({
             <Waterfall parts={p} />
             {p.hasBond ? (
               <TextLegal as="span" color="fgMuted">
-                채권평가·채권캐리·조달비용은 북의 채권 다리 몫이에요 — 조달은 평가금액을
-                조달한 비용이라 채권이 있을 때만 서요.
+                채권평가·채권캐리·채권롤다운·조달비용은 북의 채권 다리 몫이에요 — 채권캐리는
+                조달 차감 전 금액이고(조달은 자기 막대), 채권롤다운은 커브가 멈춰도 잔존만기가
+                줄며 생기는 몫이에요.
               </TextLegal>
             ) : null}
           </VStack>
         ) : null}
 
-        {/* ── 6. 일별 대사 ─────────────────────────────────────────────────── */}
+        {/* ── 6. 일별 대사 — 표 둘 [OWNER, 2026-08-25 — 엔진 단위 분리] ──────
+            스왑 표는 진짜 일별 KRD 재계산, 채권 표는 감쇠 pvbp 의 배분 격자다.
+            다른 자로 잰 것을 한 표에 세우지 않는다 — 2026-08-21 병합판이 채권
+            성분을 스왑 열에 합산하며 흐려졌던 그 구분이다. 각 표는 자기
+            항등식으로 닫힌다(스왑: 평가+캐리+롤다운 · 채권: +조달). */}
         <VStack gap={0.5} width="100%">
           <TextLabel1 as="span">일별 대사</TextLabel1>
           <TextLegal as="span" color="fgMuted">
             하루가 세 줄이에요 — KRD(전일 종가 감도), Δbp(그날 변화), 손익(KRD × Δbp 추정).
             같은 블록의 KRD와 Δbp를 곱하면 손익 줄이 나와요. 추정 합계와 평가의 차가 선형화
-            잔차이고, 평가·캐리·롤다운(+조달)을 더하면 그날 손익이에요. 마지막 블록은 다음
-            영업일로 들고 가는 이월 리스크예요.
+            잔차이고, 평가·캐리·롤다운(채권은 +조달)을 더하면 그날 손익이에요. 마지막 블록은
+            다음 영업일로 들고 가는 이월 리스크예요.
           </TextLegal>
           {recon.length ? (
-            <ReconStack
-              days={simDays(recon)}
-              tenors={Object.keys(recon[0].pvbp)}
-              defaultOrder="asc"
-              maxHeight="34vh"
-              /* 격자가 무엇의 것인지 표가 말한다 [2026-08-21]. 손익 줄은 북
-                 전체(채권 포함)를 세지만 KRD·Δbp 격자는 **스왑의 것**이다 —
-                 시뮬의 채권은 테너별 KRD 를 매일 재계산하지 않고 하나의 pvbp 를
-                 잔존으로 감쇠시키므로, 진입 KRD 를 스케일해 채워 넣으면 진짜
-                 재계산인 스왑 열과 같아 보인다. 지어내지 않고 그 사실을 적는다. */
-              note={
-                hasBondRow
-                  ? '격자(KRD·Δbp)는 스왑 줄의 것이에요 — 채권은 테너별 감도를 매일 다시 재지 않아서 여기 안 세워요. 손익 줄은 채권까지 다 센 북 전체예요.'
-                  : undefined
-              }
-            />
+            <VStack gap={0.5} width="100%">
+              {bondRecon ? (
+                <TextLegal as="span" color="fgMuted">
+                  스왑 대사 — 일별 KRD 재계산
+                </TextLegal>
+              ) : null}
+              <ReconStack
+                days={simDays(recon)}
+                tenors={Object.keys(recon[0].pvbp)}
+                defaultOrder="asc"
+                maxHeight={bondRecon ? '20vh' : '34vh'}
+              />
+            </VStack>
           ) : (
             <TextLegal as="span" color="fgMuted">
-              이 실행에는 일별 KRD가 없어요 — 스왑이 제외됐거나 par 커브가 없는 실행이에요.
+              스왑 일별 KRD가 없어요 — 스왑이 없거나 제외됐거나 par 커브가 없는 실행이에요.
             </TextLegal>
           )}
+          {bondRecon ? (
+            <VStack gap={0.5} width="100%">
+              <TextLegal as="span" color="fgMuted">
+                채권 대사 — 시나리오 충격 테너에 배분한 감쇠 pvbp
+              </TextLegal>
+              <ReconStack
+                days={bondDays(bondRecon.rows)}
+                tenors={bondRecon.tenors}
+                groups={bondRecon.groups}
+                defaultOrder="asc"
+                maxHeight={recon.length ? '20vh' : '34vh'}
+                note={bondReconNote(bondRecon)}
+              />
+            </VStack>
+          ) : null}
         </VStack>
 
         {run?.exclusions?.length ? (
@@ -551,6 +611,7 @@ function Waterfall({ parts }: { parts: ReturnType<typeof partsOf> }) {
       ? [
           { label: '채권평가', u: parts.bondMtm },
           { label: '채권캐리', u: parts.bondCarry },
+          { label: '채권롤다운', u: parts.bondRoll },
           { label: '조달비용', u: parts.fund },
         ]
       : []),

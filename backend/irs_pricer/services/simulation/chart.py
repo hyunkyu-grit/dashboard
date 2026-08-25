@@ -4,8 +4,8 @@ simulation_service.py; 2026-08-10 에 세 조각을 모듈로 꺼냈다 — 아�
 One call = one full scenario: IRS FM precompute (simulate_irs_path_fm per
 swap — the ~82s full-book hotspot, measurement-only, do not optimize here),
 the per-business-day valuation loop, and the decomposition accumulators whose
-float identity (bondMtm + bondCarry + fundingCost + swapMtm + swapCarry ==
-totalPnL) the FE waterfall consumes.
+float identity (bondMtm + bondCarry + bondRolldown + fundingCost + swapMtm +
+swapCarry + swapRolldown == totalPnL) the FE waterfall consumes.
 
 2026-08-10 분해 (동작 바이트 동일 — 골든 픽스처가 못박는다):
   - 일별 대사표          → recon.build_irs_daily_recon
@@ -45,6 +45,8 @@ from .daily_valuation import (
     get_position_shock_bp,
     interpolate_curve_shift,
 )
+from . import bond_roll
+from .bond_recon import build_bond_daily_recon
 from .carry_split import base_cash_carry_paths
 from .kr_calendar import build_bizday_schedule
 from .models import FrontendPosition, FrontendShockCurves
@@ -72,6 +74,8 @@ class ChartRun(NamedTuple):
     rate_path: list[dict]
     decomposition_daily: list[dict]
     swap_contributions: list[dict]
+    #: 채권 일별 대사 — 자기 표 [OWNER, 2026-08-25]. 채권 없는 런은 None.
+    bond_daily_recon: dict | None = None
 
 
 def _build_irs_shock_curve(
@@ -133,9 +137,11 @@ def build_chart_data(
     금리 경로는 그대로.
 
     decomposition (s15 T2): 만기 시점 Total Return의 성분 분해(라운딩 전 float).
-    bondMtm + bondCarry + fundingCost + swapMtm + swapCarry == totalPnL(비라운딩)
-    이 부동소수점 항등으로 성립한다 — 모두 같은 루프의 같은 누적기에서 나온
-    같은 float들이다(bondCarry는 총 이자수익+재투자수익, fundingCost는 음수).
+    bondMtm + bondCarry + bondRolldown + fundingCost + swapMtm + swapCarry +
+    swapRolldown == totalPnL(비라운딩)이 부동소수점 항등으로 성립한다 — 모두
+    같은 루프의 같은 누적기에서 나온 같은 float들이다(bondCarry는 총
+    이자수익+재투자수익, fundingCost는 음수, bondRolldown 은 2026-08-25 에
+    합류한 동결 민평 커브 롤 — bond_roll.py).
     """
     try:
         base_date = date.fromisoformat(base_date_str)
@@ -409,10 +415,11 @@ def build_chart_data(
     # Day 0 초기 항목 (모든 P&L = 0)
     chart_data.append({"day": 0, "mtmPnL": 0, "cumulativeCarry": 0, "swapPnL": 0, "totalPnL": 0,
                         "swapThetaPnL": 0, "swapValuationPnL": 0,
-                        "swapCashCarryPnL": 0, "swapRolldownPnL": 0})
+                        "swapCashCarryPnL": 0, "swapRolldownPnL": 0, "bondRolldownPnL": 0})
     # HARDEN-1: 일별 분해 경로도 chartData와 같은 day 축 — day 0 = 전 성분 0.
     decomposition_daily.append({
         "day": 0, "fundingCost": 0.0, "bondMtm": 0.0, "bondCarry": 0.0,
+        "bondRolldown": 0.0,
         "swapMtm": 0.0, "swapCarry": 0.0, "swapRolldown": 0.0, "total": 0.0,
     })
     funding_curve.append(_funding_row(0, base_date, _factor(0)))
@@ -422,6 +429,13 @@ def build_chart_data(
     prev_short_mult = _short_factor(0)
     bond_mtm  = 0.0   # 루프가 비어도(영업일 0일) 분해가 정의되도록 초기화
     irs_mtm_t = 0.0
+    # ── 채권 롤다운 레인 [OWNER, 2026-08-25] — bond_roll 모듈 doc 참조 ──────
+    # 동결 민평 커브는 app 계층이 등록한 공급자에서 온다. 없으면(SQL 다운·
+    # 미등록) 롤 0 + provenance 가 그 사실을 싣는다 — 종전(unchanged-yields)
+    # 동작으로 정직하게 강등.
+    _bond_curves = bond_roll.sector_curves() if bond_positions else None
+    _bond_roll_basis = bond_roll.provenance(bond_positions, _bond_curves)
+    cumulative_bond_roll = 0.0
     for current_date, cal_day, dt_cal in _bizday_schedule:
         t = cal_day
         multiplier = _factor(t)
@@ -476,11 +490,15 @@ def build_chart_data(
 
         cumulative_bond_carry += (bond_carry or 0.0) + daily_cash_return
         cumulative_irs_carry  += (irs_carry_t or 0.0)
+        # 채권 롤다운 — 동결 민평 커브 위 잔존 단축, 스왑 세타와 같은 걸음.
+        cumulative_bond_roll += bond_roll.step_roll(
+            bond_positions, _bond_curves, prev_cal, t, current_date
+        )
 
         # 스왑손익 = IRS MTM + 누적 IRS 캐리
         swap_pnl  = irs_mtm_t + cumulative_irs_carry
-        total_pnl = bond_mtm + cumulative_bond_carry + swap_pnl
-        total_mtm = bond_mtm + irs_mtm_t   # BEP 체크용
+        total_pnl = bond_mtm + cumulative_bond_carry + cumulative_bond_roll + swap_pnl
+        total_mtm = bond_mtm + irs_mtm_t   # BEP 체크용 — 마크무브만, 롤은 세타 쪽
 
         # 스왑손익 분해: 세타손익(커브 고정, 시간경과만) + 평가손익(그날 실제 커브변동)
         # irs_fm_mtm_theta는 irs_fm_mtm과 동일한 방식(누적 정산CF+클린NPV변화)으로 조립된
@@ -507,6 +525,7 @@ def build_chart_data(
             "swapValuationPnL": round(swap_valuation_pnl)  if swap_valuation_pnl   else 0,
             "swapCashCarryPnL": round(swap_carry_cash_pnl) if swap_carry_cash_pnl  else 0,
             "swapRolldownPnL":  round(swap_rolldown_pnl)   if swap_rolldown_pnl    else 0,
+            "bondRolldownPnL":  round(cumulative_bond_roll) if cumulative_bond_roll else 0,
         }
         # HARDEN-1: 일별 누적 성분 분해(비라운딩 float) — 최종 decomposition과
         # 같은 누적기에서 나온 같은 float들이라 매일
@@ -519,6 +538,7 @@ def build_chart_data(
             "fundingCost": -cumulative_funding,
             "bondMtm":     bond_mtm,
             "bondCarry":   cumulative_bond_carry + cumulative_funding,
+            "bondRolldown": cumulative_bond_roll,
             "swapMtm":     swap_valuation_pnl,
             "swapCarry":   swap_carry_cash_pnl,
             "swapRolldown": swap_rolldown_pnl,
@@ -542,24 +562,16 @@ def build_chart_data(
         "breakEvenDay": break_even_day,
     }
 
-    # ── 일별 손익 대사표 (recon.py) ─────────────────────────────────────────
+    # ── 일별 손익 대사표 — 스왑·채권 **각자 자기 표** [OWNER, 2026-08-25] ──
     #
-    # **루프 뒤로 옮겼다** [2026-08-21]. 종전에는 루프 앞이었고 그래서 스왑만
-    # 셀 수 있었다 — 채권의 일별 성분은 이 루프가 만들기 때문이다. `decomposition_daily`
-    # 를 그대로 넘긴다: 대사표가 채권 산술을 다시 쓰지 않고 **이 루프가 이미 낸
-    # 누적 계열의 차분**만 읽는다(두 번째 정의를 만들지 않는다).
-    #
-    # 게이트도 넓어졌다. 종전 조건은 `par_rates` 하나였는데, 그건 **스왑의 KRD
-    # 격자**에 필요한 것이지 표 전체의 조건이 아니다. 채권만 있는 북은 par 커브가
-    # 없어서 표가 통째로 비어 있었다 — 격자만 없는 것이지 대사할 손익이 없는 게
-    # 아니다(recon.py 의 `_has_krd`).
+    # 2026-08-21 판은 채권 성분을 스왑 표에 합산했다. 엔진 단위 분리 룰링으로
+    # 스왑 표는 v1 계약(스왑만·par 커브 필요)으로 돌아가고, 채권은 아래
+    # `bond_recon` 이 자기 표를 세운다 — 같은 루프의 `decomposition_daily`
+    # 차분이라 두 번째 정의는 여전히 없다.
     #
     # 배포 계약 보정(종전 주석 승계): 실제 프론트 브리지는 irsCurves 를 비워
     # 보내고 스왑이 있을 때만 스냅샷에서 채워진다. 스왑이 있는데 커브가 없으면
     # 원본과 동일하게 FM 경로에서 먼저 실패한다.
-    _recon_wanted = (not skip_recon) and (
-        bool(par_rates) or any(p.bondType != "swap" for p in positions)
-    )
     irs_daily_recon: list[dict] = (
         build_irs_daily_recon(
             irs_positions=irs_positions,
@@ -577,10 +589,24 @@ def build_chart_data(
             irs_fm_mtm_theta=irs_fm_mtm_theta,
             irs_daily_scf=irs_daily_scf,
             irs_fm_carry_cash=irs_fm_carry_cash,
-            bond_daily=decomposition_daily,
         )
-        if _recon_wanted
+        if (par_rates and irs_positions and not skip_recon)
         else []
+    )
+    bond_daily_recon: dict | None = (
+        build_bond_daily_recon(
+            bond_positions=bond_positions,
+            decomposition_daily=decomposition_daily,
+            bizday_schedule=_bizday_schedule,
+            base_date=base_date,
+            shock_mode=shock_mode,
+            base_shock_bp=base_shock_bp,
+            shock_curves=shock_curves,
+            factor_at=_factor,
+            roll_basis=_bond_roll_basis,
+        )
+        if (bond_positions and not skip_recon)
+        else None
     )
 
     # s15 T2 — 만기 시점 Total Return 분해 (비라운딩 float; 문서화된 항등:
@@ -604,11 +630,16 @@ def build_chart_data(
     decomposition = {
         "bondMtm":     bond_mtm,
         "bondCarry":   cumulative_bond_carry + cumulative_funding,
+        # [OWNER, 2026-08-25] 채권 다리의 빠져 있던 항 — 동결 민평 커브 위
+        # 잔존 단축(bond_roll.py). 스왑 다리와 같은 unchanged-term-structure
+        # 가정이 되면서 총액 자체가 이 항만큼 옳아진다.
+        "bondRolldown": cumulative_bond_roll,
         "fundingCost": -cumulative_funding,
         "swapMtm":     swap_valuation_pnl,
         "swapCarry":   swap_carry_cash_pnl,
         "swapRolldown": swap_rolldown_pnl,
-        "total":       bond_mtm + cumulative_bond_carry + irs_mtm_t + cumulative_irs_carry,
+        "total":       bond_mtm + cumulative_bond_carry + cumulative_bond_roll
+                       + irs_mtm_t + cumulative_irs_carry,
     }
 
     return ChartRun(
@@ -621,4 +652,5 @@ def build_chart_data(
         rate_path=rate_path,
         decomposition_daily=decomposition_daily,
         swap_contributions=swap_contributions,
+        bond_daily_recon=bond_daily_recon,
     )

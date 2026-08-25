@@ -69,7 +69,7 @@ import { DROPDOWN_STYLES } from '@/ui/window/popup';
 import { ReconStack } from '@/ui/window/ReconStack';
 
 import { LinkedCharts } from './LinkedCharts';
-import { backtestDays, reconNote } from './recon';
+import { backtestDays, bondReconNote, reconNote, reconPair } from './recon';
 import {
   bookKindOf,
   decodeBook,
@@ -441,15 +441,51 @@ export function BacktestWindow({
         {
           id: 'recon',
           label: '일별 대사',
-          content: result?.recon ? (
-            <ReconStack
-              days={backtestDays(result.recon)}
-              tenors={result.recon.tenors}
-              groups={result.recon.groups}
-              defaultOrder="desc"
-              note={reconNote(result.recon)}
-            />
-          ) : null,
+          /* 표 둘 [OWNER, 2026-08-25 — 엔진 단위 분리]: 스왑 표는 IRS 달력,
+             채권 표는 민평 달력 위에 각자 선다. 병합판이 떨구던 날(한쪽만 쉰
+             날 + 다음 날)이 없어져 각 표의 세로합이 자기 기간 3분해와 닫힌다.
+             둘 다 설 때만 머리로 어느 달력의 표인지 말한다. */
+          content: (() => {
+            const pair = reconPair(result?.recon);
+            if (!pair.swap && !pair.bond) return null;
+            const both = Boolean(pair.swap && pair.bond);
+            return (
+              <VStack gap={1} width="100%">
+                {pair.swap ? (
+                  <VStack gap={0.5} width="100%">
+                    {both ? (
+                      <TextCaption as="span" color="fgMuted">
+                        스왑 대사 — IRS 달력
+                      </TextCaption>
+                    ) : null}
+                    <ReconStack
+                      days={backtestDays(pair.swap)}
+                      tenors={pair.swap.tenors}
+                      defaultOrder="desc"
+                      note={reconNote(pair.swap)}
+                      maxHeight={both ? '15vh' : undefined}
+                    />
+                  </VStack>
+                ) : null}
+                {pair.bond ? (
+                  <VStack gap={0.5} width="100%">
+                    {both ? (
+                      <TextCaption as="span" color="fgMuted">
+                        채권 대사 — 민평 달력
+                      </TextCaption>
+                    ) : null}
+                    <ReconStack
+                      days={backtestDays(pair.bond)}
+                      tenors={pair.bond.tenors}
+                      defaultOrder="desc"
+                      note={bondReconNote(pair.bond)}
+                      maxHeight={both ? '15vh' : undefined}
+                    />
+                  </VStack>
+                ) : null}
+              </VStack>
+            );
+          })(),
           unavailable: result
             ? '이 실행에는 대사가 없어요 — 예전 세션에서 복원한 결과예요.'
             : '실행하면 하루씩 대사가 서요 — 시작 KRD, 그날 Δbp, 그 곱(추정), 그리고 실제 손익의 평가/롤다운/캐리 분해예요.',

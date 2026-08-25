@@ -33,10 +33,12 @@
 
 ── 대사 ────────────────────────────────────────────────────────────────────
 
-`book_recon` 은 KRD 격자를 **두 블록**으로 낸다 [OWNER, 2026-08-21]. 스왑 KRD 는
-IRS 제로커브 노드에, 채권 KRD 는 민평 노드에 실린 감도다 — 같은 "3Y" 라는 이름을
-쓰지만 다른 위험이고, 한 칸에 더하면 그 둘을 하나로 부르는 셈이 된다. 손익
-3분해(평가·롤다운·캐리·조달)는 원이라 그냥 더해지므로 한 벌만 선다.
+`book_recon` 은 **표 자체를 둘**로 낸다 [OWNER, 2026-08-25 — 엔진 단위 분리].
+스왑 표는 IRS 달력, 채권 표는 민평 달력 위에 각자 서고, 이 함수는 두 엔진의
+블록을 `{"swap": …, "bond": …}` 로 나란히 돌려줄 뿐 병합하지 않는다.
+2026-08-21 판(민평 ∩ IRS 병합 한 표)은 한쪽만 쉰 날과 그 다음 날을 떨궈야
+했고 — 두 계열이 다른 밤을 재므로 — 그 드롭이 세로합을 기간 3분해와
+어긋나게 했다. 위의 달력 문단은 **차트·헤드라인**(run_backtest)에만 남는다.
 """
 
 from __future__ import annotations
@@ -58,12 +60,6 @@ from .backtest import (
 from .backtest import book_recon as swap_book_recon
 from .backtest import run_backtest as swap_run_backtest
 from .creditmatrix import CreditMatrix
-
-#: 대사표에서 두 KRD 격자를 가르는 열쇠 접두사. 화면은 접두사를 떼고 테너만
-#: 보여주고(그룹 머리가 어느 쪽인지 말한다), 열쇠는 겹치지 않아야 한다.
-SWAP_COL = "S"
-BOND_COL = "B"
-
 
 class MixedBookError(Exception):
     """혼합 북을 실행할 수 없다 — 라우트가 422 로 옮긴다."""
@@ -344,181 +340,32 @@ def book_recon(
     positions: list[MixedPosition],
     spec: fd.FundingSpec,
 ) -> dict:
-    """일별 대사. 한 종류뿐인 북은 그 엔진의 블록을 **그대로** 돌려준다."""
+    """일별 대사 — 스왑·채권 **각자 자기 표** [OWNER, 2026-08-25].
+
+    2026-08-21 판은 두 엔진의 표를 민평 ∩ IRS 병합 달력 위에서 한 표로
+    합쳤다. 그 병합이 요구한 것들 — 한쪽만 쉰 날과 그 다음 날을 떨구는
+    드롭(세로합 ≠ 기간 3분해), 끝난 쪽의 0 채움, 늦은 쪽 이월 앵커 — 은
+    전부 «두 계열이 서로 다른 밤을 잰다»는 사실을 한 표에 욱여넣은 대가였다.
+
+    분리하면 그 대가가 통째로 사라진다: 각 표가 자기 달력 위에 서므로 빠지는
+    날이 없고, 세로합이 자기 엔진의 기간 3분해와 닫히고, 조달 열은 채권 표에만
+    선다. 북 전체의 하루 총액 한 줄은 사라지는데, 그것은 숨긴 것이 아니라
+    애초에 어느 하루도 아니었던 수를 그리지 않게 된 것이다(모듈 주석 `d` 절).
+
+    반환은 언제나 `{"swap": 블록|None, "bond": 블록|None}` — 한 종류뿐인
+    북은 그 엔진의 블록이 자기 자리에 그대로 서고 다른 쪽은 None 이다.
+    각 블록은 그 엔진 `book_recon` 의 모양 그대로다(두 번째 정의 없음).
+    """
     _check(positions)
-    if not has_bond(positions):
-        return swap_book_recon(dataset, [_as_swap(p) for p in positions])
-    if m is None:
-        raise MixedBookError("채권 줄에는 민평이 필요합니다.")
-    if not has_swap(positions):
-        return cb.book_recon(m, dataset, [_as_bond(p) for p in positions], spec)
-
-    sr = swap_book_recon(
-        dataset, [_as_swap(p) for p in positions if not is_bond(p.series_id)]
-    )
-    br = cb.book_recon(
-        m, dataset, [_as_bond(p) for p in positions if is_bond(p.series_id)], spec
-    )
-
-    s_rows = {r["t"]: r for r in sr["rows"] if not r.get("carryover")}
-    b_rows = {r["t"]: r for r in br["rows"] if not r.get("carryover")}
-    s_at = {d.isoformat(): i for i, d in enumerate(dataset.dates)}
-    b_at = {d.isoformat(): i for i, d in enumerate(m.dates)}
-
-    # 창을 맞춘다. 두 대사가 각자 **자기 달력의 · 자기 북의** 최근 250영업일을
-    # 싣고 오므로 양 끝이 다 다르다.
-    #
-    #   시작 — 잘린 창의 바닥이다. 그 앞은 «달력이 어긋나서» 빠진 것이 아니라
-    #          그냥 안 계산된 것이고, 그 사실은 `truncated` 가 이미 말한다.
-    #          그래서 **늦은 쪽**을 바닥으로 쓴다.
-    #   끝  — 그 북이 **끝난 날**이다. 한쪽이 먼저 끝났으면 그 뒤로 그 줄의
-    #          일별 손익은 0 이고 KRD 도 0 이다(누적은 얼어붙어 있다). 지어내는
-    #          숫자가 아니라 참인 0 이므로 채워 넣고 **늦은 쪽**까지 간다.
-    #
-    # 종전에는 끝도 min 이었다. 그 판에서 「2020년에 산 국고채 3Y(2023 만기) +
-    # 지금도 들고 있는 10Y 스왑」 이 대사표를 **통째로 비웠다**(실측 2026-08-21:
-    # 스왑 창 2025-08-25~2026-08-19 · 채권 창 2021-12-28~2023-01-02 → lo > hi).
-    # 화면에는 "이 실행에는 일별 대사가 없어요" 만 떴고, 그건 병이 아니라 답이
-    # 있는데 못 찾은 것이었다.
-    if not s_rows or not b_rows:
-        lo = hi = None
-        s_end = b_end = ""
-    else:
-        lo = max(min(s_rows), min(b_rows))
-        s_end, b_end = max(s_rows), max(b_rows)
-        hi = max(s_end, b_end)
-
-    def _zero(tenors: list[str]) -> dict:
-        """끝난 쪽의 하루 — 손익도 리스크도 0 이다(누적은 얼어붙어 있다).
-
-        `dbp` 만 0 이 아니라 **빈칸**이다. 그날 시장은 움직였겠지만 그 줄의
-        엔진은 이제 아무것도 안 재고 있고, 여기서 노드 변화를 다시 구하면 이
-        모듈이 피하려던 것 — Δbp 의 두 번째 정의 — 이 생긴다. KRD 가 0 이라
-        추정(krd × dbp)은 어차피 0 이므로 표의 산술은 그대로 닫힌다.
-        """
-        return {
-            "krd": {lb: 0 for lb in tenors},
-            "dbp": {},
-            "est": {},
-            "estTotal": 0,
-            "actual": 0,
-            "valuation": 0,
-            "rolldown": 0,
-            "carry": 0,
-            "startup": 0,
-            "funding": 0,
-        }
-
-    # 그 창 안에서: **살아 있는 쪽**이 다 선 날만, 그리고 그 쪽들의 **어제가 같은
-    # 날인** 날만 [모듈 주석]. 뒤 조건이 하루를 더 먹는다 — 한쪽만 쉰 날의
-    # **다음 날**은 두 계열이 서로 다른 밤을 재고 있어서, 더한 값이 어느 하루에도
-    # 속하지 않는다. 이미 끝난 쪽은 달력에 아무 요구도 하지 않는다(0 이라서).
-    keep: list[str] = []
-    dropped = 0
-    for t in sorted(set(s_rows) | set(b_rows)):
-        if lo is None or t < lo or t > hi:
-            continue
-        s_live, b_live = t <= s_end, t <= b_end
-        if (s_live and t not in s_rows) or (b_live and t not in b_rows):
-            dropped += 1
-            continue
-        si, bi = s_at.get(t), b_at.get(t)
-        if s_live and b_live:
-            if si is None or bi is None or si == 0 or bi == 0:
-                dropped += 1
-                continue
-            if dataset.dates[si - 1] != m.dates[bi - 1]:
-                dropped += 1
-                continue
-        keep.append(t)
-
-    s_cols = [f"{SWAP_COL}:{lb}" for lb in sr["tenors"]]
-    b_cols = [f"{BOND_COL}:{lb}" for lb in br["tenors"]]
-
-    def _grid(row: dict, field: str, tenors: list[str], prefix: str) -> dict:
-        src = row.get(field) or {}
-        return {f"{prefix}:{lb}": src.get(lb) for lb in tenors}
-
-    zero_s, zero_b = _zero(sr["tenors"]), _zero(br["tenors"])
-    rows: list[dict] = []
-    for t in keep:
-        s, b = s_rows.get(t, zero_s), b_rows.get(t, zero_b)
-        total_est = (s["estTotal"] or 0) + (b["estTotal"] or 0)
-        valuation = s["valuation"] + b["valuation"]
-        rows.append(
-            {
-                "t": t,
-                "krd": {
-                    **_grid(s, "krd", sr["tenors"], SWAP_COL),
-                    **_grid(b, "krd", br["tenors"], BOND_COL),
-                },
-                "dbp": {
-                    **_grid(s, "dbp", sr["tenors"], SWAP_COL),
-                    **_grid(b, "dbp", br["tenors"], BOND_COL),
-                },
-                "est": {
-                    **_grid(s, "est", sr["tenors"], SWAP_COL),
-                    **_grid(b, "est", br["tenors"], BOND_COL),
-                },
-                "estTotal": total_est,
-                "actual": s["actual"] + b["actual"],
-                "valuation": valuation,
-                "rolldown": s["rolldown"] + b["rolldown"],
-                "carry": s["carry"] + b["carry"],
-                # 개시는 스왑 줄만 낸다(채권은 진입일에 발행돼 결제 시차의 밤이 없다).
-                "startup": s.get("startup", 0),
-                # 조달은 채권 줄만 낸다 — 서버가 이미 음수로 준다.
-                "funding": b.get("funding"),
-                "residual": valuation - total_est,
-            }
+    swap_recon = bond_recon = None
+    if has_swap(positions):
+        swap_recon = swap_book_recon(
+            dataset, [_as_swap(p) for p in positions if not is_bond(p.series_id)]
         )
-
-    # 이월 앵커 둘을 한 줄로. 날짜가 갈리면 **늦은 쪽**이다 — 둘 다 "다음
-    # 영업일" 인데 한쪽 달력에만 있는 날이면 그날 아침에 둘 다 들고 있다.
-    s_anchor = next((r for r in sr["rows"] if r.get("carryover")), None)
-    b_anchor = next((r for r in br["rows"] if r.get("carryover")), None)
-    if rows and (s_anchor or b_anchor):
-        at = max(r["t"] for r in (s_anchor, b_anchor) if r)
-        rows.append(
-            {
-                "t": at,
-                "krd": {
-                    **_grid(s_anchor or {}, "krd", sr["tenors"], SWAP_COL),
-                    **_grid(b_anchor or {}, "krd", br["tenors"], BOND_COL),
-                },
-                "dbp": {},
-                "est": {},
-                "estTotal": None,
-                "actual": None,
-                "valuation": None,
-                "rolldown": None,
-                "carry": None,
-                "startup": None,
-                "funding": None,
-                "residual": None,
-                "carryover": True,
-            }
+    if has_bond(positions):
+        if m is None:
+            raise MixedBookError("채권 줄에는 민평이 필요합니다.")
+        bond_recon = cb.book_recon(
+            m, dataset, [_as_bond(p) for p in positions if is_bond(p.series_id)], spec
         )
-
-    return {
-        "tenors": s_cols + b_cols,
-        # 두 격자를 가르는 머리 [OWNER, 2026-08-21]. 열쇠는 접두사가 붙어 있고
-        # 화면에 적히는 것은 테너뿐이다 — 어느 커브인지는 그룹 머리가 말한다.
-        "groups": [
-            {
-                "label": "스왑 KRD",
-                "cols": [
-                    {"key": k, "label": lb} for k, lb in zip(s_cols, sr["tenors"])
-                ],
-            },
-            {
-                "label": "채권 KRD",
-                "cols": [
-                    {"key": k, "label": lb} for k, lb in zip(b_cols, br["tenors"])
-                ],
-            },
-        ],
-        "rows": rows,
-        "truncated": sr["truncated"] or br["truncated"],
-        "dropped": dropped,
-    }
+    return {"swap": swap_recon, "bond": bond_recon}

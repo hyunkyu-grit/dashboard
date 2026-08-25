@@ -38,7 +38,13 @@ DATA = Path(__file__).parent / "data"
 # [OWNER, 2026-08-11 — 교과서 3분해] 세타(구 swapCarry)가 swapCarry(순캐리) +
 # swapRolldown(만기 압축)으로 갈렸다. 두 값의 합은 종전 세타와 float 그대로
 # 일치한다(아래 핀들이 그 등식을 그대로 들고 있다).
-DECOMP_KEYS = ("fundingCost", "bondMtm", "bondCarry", "swapMtm", "swapCarry", "swapRolldown")
+# [OWNER, 2026-08-25 — 엔진 단위 분리] bondRolldown 합류 — 이 스위트에서는
+# conftest 의 `bond_roll_lane_off` 가 공급자를 내려 두므로 값이 정확히 0 이고,
+# 항등식에는 자리가 있어야 한다(자리가 빠지면 롤 레인이 켜진 배포에서 합이 샌다).
+DECOMP_KEYS = (
+    "fundingCost", "bondMtm", "bondCarry", "bondRolldown",
+    "swapMtm", "swapCarry", "swapRolldown",
+)
 
 
 @pytest.fixture(scope="module")

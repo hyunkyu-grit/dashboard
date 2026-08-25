@@ -791,6 +791,11 @@ export interface SimDecomposition {
   swapRolldown?: number | null;
   bondMtm: number;
   bondCarry: number;
+  /** 채권 롤다운 [OWNER, 2026-08-25 — 엔진 단위 분리]. 종전 시뮬 채권은 이
+   * 항이 아예 없었다(unchanged-yields — 스왑 다리와 다른 가정). 동결 민평
+   * 커브 위 잔존 단축이 합류하면서 total 자체가 이 항만큼 옳아졌다. 구 캐시
+   * 응답에는 없다 — 옵셔널인 이유. */
+  bondRolldown?: number | null;
   fundingCost: number;
   total: number;
 }
@@ -832,11 +837,41 @@ export interface SimReconRow {
   /** 구 캐시 응답에는 3분해가 없다 — 0 이 아니라 미정의(공란 정책). */
   carryPnl?: number | null;
   rolldownPnl?: number | null;
-  /** 조달 — 채권 줄이 있을 때만 숫자다 [2026-08-21]. 응답이 고정 모델을 지나
-   * 스왑만 있는 북에서도 `null` 이 실려 오므로, 열을 세울지는 **숫자가 하나라도
-   * 있나**로 정한다(`ReconStack` 의 `hasFunding`). 서버가 이미 음수로 준다. */
+  /** 2026-08-21 병합판의 흔적 — 라이브 서버는 더 이상 안 싣는다 [OWNER,
+   * 2026-08-25 — 엔진 단위 분리: 조달은 채권 표의 것]. 구 캐시 응답 호환으로만
+   * 남는다. */
   funding?: number | null;
   carryover?: boolean;
+}
+
+/** 채권 일별 대사 한 행 [OWNER, 2026-08-25 — 엔진 단위 분리]. 스왑 행과 같은
+ * 데스크 관행: 평가 백워드 · 캐리/롤다운/조달 포워드, `평가+캐리+롤다운+조달 =
+ * actual` 이 행마다 닫힌다. 격자는 시나리오 충격 커브의 테너에 감쇠 pvbp 를
+ * 선형 배분한 것 — 진짜 재계산인 스왑 격자와 다른 자라서 표도 다르다. */
+export interface SimBondReconRow {
+  date: string;
+  day: number;
+  pvbp: Record<string, number>;
+  dailyDbp: Record<string, number>;
+  pnl: Record<string, number>;
+  totalEstPnl: number | null;
+  valuation: number | null;
+  carry: number | null;
+  rolldown: number | null;
+  /** 서버가 이미 음수로 준다 — 화면에서 부호를 다시 주지 않는다. */
+  funding: number | null;
+  actual: number | null;
+  residual: number | null;
+  carryover?: boolean;
+}
+
+export interface SimBondRecon {
+  groups: { label: string; cols: { key: string; label: string }[] }[];
+  tenors: string[];
+  rows: SimBondReconRow[];
+  /** 롤다운 레인의 프로버넌스 — applied=false 면 커브 공급자가 없어 롤이 0 인
+   * 채(종전 unchanged-yields 동작) 나온 것이고, 화면 각주가 그것을 말한다. */
+  rollBasis: { applied: boolean; missing: string[] };
 }
 
 export interface SimResponse {
@@ -846,6 +881,8 @@ export interface SimResponse {
   totalReturnDecomposition: SimDecomposition;
   swapContributions?: SimContribution[];
   irsDailyReconciliation?: SimReconRow[];
+  /** 채권 일별 대사 — 자기 표 [OWNER, 2026-08-25]. 채권 없는 런·구 캐시는 null. */
+  bondDailyReconciliation?: SimBondRecon | null;
   /** 성분의 **누적** 경로(하루 한 행). 서버가 누적을 주므로 화면은 차분하지
    * 않는다 — 차분하면 서버와 갈릴 수 있는 두 번째 정의가 생긴다. 스왑이 제외된
    * 실행에서는 스왑 성분이 null 이다(공란 정책). */
@@ -858,6 +895,8 @@ export interface SimResponse {
      * 때만 선을 세운다 [OWNER, 2026-08-14 — 시뮬 포지션에 현금채권·자산스왑]. */
     bondMtm?: number | null;
     bondCarry?: number | null;
+    /** [OWNER, 2026-08-25] 동결 민평 커브 롤 — 구 캐시 응답에는 없다. */
+    bondRolldown?: number | null;
     fundingCost?: number | null;
     total: number;
   }[];
