@@ -165,6 +165,8 @@ export const rvHistoryUrl = (query: string) => liveUrl("/api/rv/history", query)
 export const mrBoardUrl = (query: string) => liveUrl("/api/mr/board", query);
 export const mrHistoryUrl = (id: string, query: string) =>
   liveUrl(`/api/mr/history/${encodeURIComponent(id)}`, query);
+/** 전략 실험 창 — 첫 PMS entry-signals 의 z-스코어 백테스트 재현. */
+export const mrStrategyUrl = (query: string) => liveUrl("/api/mr/strategy", query);
 
 export const simInstrumentsUrl = () => liveUrl("/api/instruments");
 export const simExpandUrl = () => liveUrl("/api/instruments/expand");

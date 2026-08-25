@@ -46,6 +46,7 @@ import {
   type MrState,
 } from './api';
 import { BandChart } from './BandChart';
+import { StrategyWindow } from './StrategyWindow';
 
 /** 조건 바 한 칸 — rv 의 Cond 와 같은 문법(새 코드라 shorthand 대신 Text). */
 function Cond({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
@@ -125,6 +126,8 @@ export function MrPage() {
   const [selId, setSelId] = useState<string>();
   const [histories, setHistories] = useState<Record<string, MrHistory>>({});
   const [histErr, setHistErr] = useState<string>();
+  /* 전략 실험 창 [OWNER 2026-08-25] — 세부는 클릭 뒤 창이 진다(백테스트 문법). */
+  const [stratOpen, setStratOpen] = useState(false);
 
   /* 룩백·밴드 폭 — URL 상태(rv 의 이력 창과 같은 문법: 기본값은 주소에 안
      적는다). 모르는 값은 기본으로 떨어진다(딥링크 게이트). 선택지 근거는
@@ -396,9 +399,21 @@ export function MrPage() {
                 국고 − IRS
               </Text>
             </HStack>
-            <Text font="caption" as="span" color="fgMuted" noWrap>
-              {sel.asof}
-            </Text>
+            <HStack gap={1} alignItems="center">
+              <Text font="caption" as="span" color="fgMuted" noWrap>
+                {sel.asof}
+              </Text>
+              {/* rv 「상세 분석」 자리의 문법 — 세부(전략 재현)는 버튼 뒤 창. */}
+              <button
+                type="button"
+                className="sr-rv-pillbtn"
+                data-on={stratOpen || undefined}
+                aria-pressed={stratOpen}
+                onClick={() => setStratOpen((v) => !v)}
+              >
+                전략 실험
+              </button>
+            </HStack>
           </HStack>
           <VStack gap={1.5} paddingX={2} paddingBottom={2} width="100%" flexGrow={1} minHeight={0}>
             {/* 큰 건 제목이 아니라 숫자다(공간문법). */}
@@ -438,6 +453,10 @@ export function MrPage() {
           </VStack>
         </VStack>
       </HStack>
+
+      {stratOpen ? (
+        <StrategyWindow id={sel.id} label={sel.label} onClose={() => setStratOpen(false)} />
+      ) : null}
     </VStack>
   );
 }

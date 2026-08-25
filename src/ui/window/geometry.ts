@@ -64,7 +64,8 @@ export type WindowKey =
   | "simulation"
   | "matrix"
   | "rv"
-  | "rvlanes";
+  | "rvlanes"
+  | "mrstrategy";
 
 const remembered = new Map<WindowKey, WinPos>();
 

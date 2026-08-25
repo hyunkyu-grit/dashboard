@@ -6,7 +6,7 @@
  */
 
 import { BacktestUnavailable } from '@/lib/api';
-import { mrBoardUrl, mrHistoryUrl } from '@/lib/staticPaths';
+import { mrBoardUrl, mrHistoryUrl, mrStrategyUrl } from '@/lib/staticPaths';
 
 /** 밴드 상태 — 판정이지 행동이 아니다. 검증 레인(bollinger-mr)과 같은 어휘. */
 export type MrStateKind = 'below' | 'above' | 'reentry-low' | 'reentry-high' | 'inside';
@@ -63,6 +63,88 @@ export interface MrHistory {
   label: string;
   unit: string;
   points: MrHistoryPoint[];
+}
+
+/* ── 전략 실험 창 [OWNER 2026-08-25 — "첫 PMS 의 그 창 참고해서 구현"] ────────
+ * 산술은 서버(backend/app/mrbacktest.py — PMS 원본 이식·적합성 벡터로 잠금).
+ * 기본값도 PMS s16 기본 그대로다. */
+
+export interface MrStrategyParams {
+  lookback: number;
+  entryZ: number;
+  warnZ: number;
+  exitZ: number;
+  stopZ: number;
+  costBp: number;
+  notional: number;
+}
+
+export const MR_STRATEGY_DEFAULTS: MrStrategyParams = {
+  lookback: 60,
+  entryZ: 2.0,
+  warnZ: 1.5,
+  exitZ: 0.5,
+  stopZ: 3.5,
+  costBp: 0.05,
+  notional: 1_000_000,
+};
+
+/** PMS 룩백 프리셋 그대로 — 20/60/120 + 자유 입력. */
+export const MR_STRATEGY_LOOKBACKS = [20, 60, 120] as const;
+
+export interface MrStrategyPoint {
+  t: string;
+  v: number;
+  z: number | null;
+  ma: number | null;
+  /** 밴드 배수는 entryZ — PMS 의 «노브 하나, 뜻 둘» 그대로. */
+  up: number | null;
+  lo: number | null;
+  /** 누적 손익(₩) — 표본 끝 미청산 MTM 포함. */
+  cum: number;
+}
+
+export interface MrStrategyTrade {
+  entryT: string;
+  exitT: string;
+  dir: number;
+  entryZ: number;
+  exitZ: number;
+  entryV: number;
+  exitV: number;
+  pnl: number;
+  why: 'exit' | 'stop';
+}
+
+export interface MrStrategyRun {
+  id: string;
+  label: string;
+  unit: string;
+  asof: string | null;
+  params: MrStrategyParams;
+  points: MrStrategyPoint[];
+  trades: MrStrategyTrade[];
+  summary: {
+    totalPnl: number;
+    maxDrawdown: number;
+    winRate: number | null;
+    sharpe: number | null;
+    numTrades: number;
+  };
+}
+
+export function fetchMrStrategy(id: string, p: MrStrategyParams): Promise<MrStrategyRun> {
+  const q = new URLSearchParams({
+    id,
+    lookback: String(p.lookback),
+    entryZ: String(p.entryZ),
+    warnZ: String(p.warnZ),
+    exitZ: String(p.exitZ),
+    stopZ: String(p.stopZ),
+    costBp: String(p.costBp),
+    notional: String(p.notional),
+  });
+  return get<MrStrategyRun>(mrStrategyUrl(q.toString()), 'mr strategy');
 }
 
 async function get<T>(url: string, what: string): Promise<T> {

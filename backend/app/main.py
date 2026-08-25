@@ -68,6 +68,7 @@ from . import instruments as instruments_mod
 from . import calendar_cache
 from . import df_cache
 from . import mr as mr_mod
+from . import mrbacktest as mrbt
 from . import payloads
 from . import rv as rv_mod
 from . import schedule_cache
@@ -879,6 +880,83 @@ def mr_history(series_id: str, window: int = mr_mod.WINDOW, k: float = mr_mod.K)
     if body is None:
         raise HTTPException(status_code=404, detail=f"unknown mr series {series_id}")
     return body
+
+
+@router.get("/api/mr/strategy")
+def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
+                warnZ: float = 1.5, exitZ: float = 0.5, stopZ: float = 3.5,
+                costBp: float = 0.05, notional: float = 1_000_000.0) -> dict:
+    """전략 실험 창 — 첫 PMS entry-signals 의 z-스코어 백테스트 재현(§16).
+
+    산술은 `mrbacktest.py`(PMS 원본 이식·적합성 벡터로 잠금), 기본값도 그쪽
+    기본(s16) 그대로다. warnZ 는 엔진엔 안 들어가고 오실레이터 가이드가 쓴다.
+    캐시 없음 — 파라미터가 자유값이고 계산이 밀리초라 태울 이유가 없다.
+    """
+    labels = dict(mr_mod.SERIES)
+    if id not in labels:
+        raise HTTPException(status_code=404, detail=f"unknown mr series {id}")
+    if not 2 <= lookback <= 600:
+        raise HTTPException(status_code=422, detail=f"룩백이 범위를 벗어나요: {lookback}일 (2~600)")
+    for name, v in (("entry", entryZ), ("watch", warnZ), ("exit", exitZ), ("stop", stopZ)):
+        if not 0.0 <= v <= 20.0:
+            raise HTTPException(status_code=422, detail=f"{name} σ가 범위를 벗어나요: {v} (0~20)")
+    if not 0.0 <= costBp <= 10.0:
+        raise HTTPException(status_code=422, detail=f"비용이 범위를 벗어나요: {costBp}bp (0~10)")
+    if not 0.0 <= notional <= 1e12:
+        raise HTTPException(status_code=422, detail=f"명목이 범위를 벗어나요: {notional} (0~1e12)")
+
+    body = universe_series(id)
+    pts = [p for p in body["points"] if p.get("v") is not None]
+    dates = [p["t"] for p in pts]
+    vals = [float(p["v"]) for p in pts]
+    if len(vals) < lookback + 1:
+        raise HTTPException(status_code=422, detail=f"이력이 룩백보다 짧아요: {len(vals)} < {lookback + 1}")
+
+    r = mrbt.simulate(dates, vals, lookback=lookback, entry_z=entryZ,
+                      exit_z=exitZ, stop_z=stopZ, cost_bp=costBp,
+                      notional=notional)
+    roll = r["roll"]
+    points = [
+        {
+            "t": dates[i], "v": round(vals[i], 4),
+            "z": round(r["points"][i]["z"], 4) if r["points"][i]["z"] is not None else None,
+            "ma": round(roll["mean"][i], 4) if roll["mean"][i] is not None else None,
+            # 밴드 배수는 entryZ 다 — PMS 의 «노브 하나, 뜻 둘» 그대로.
+            "up": round(roll["mean"][i] + entryZ * roll["std"][i], 4)
+                  if roll["mean"][i] is not None else None,
+            "lo": round(roll["mean"][i] - entryZ * roll["std"][i], 4)
+                  if roll["mean"][i] is not None else None,
+            "cum": round(r["points"][i]["cumulativePnl"], 2),
+        }
+        for i in range(len(vals))
+    ]
+    trades = [
+        {
+            "entryT": t["entryDate"], "exitT": t["exitDate"],
+            "dir": t["direction"],
+            "entryZ": round(t["entryZ"], 2), "exitZ": round(t["exitZ"], 2),
+            "entryV": round(t["entryValue"], 4), "exitV": round(t["exitValue"], 4),
+            "pnl": round(t["pnl"], 2), "why": t["exitReason"],
+        }
+        for t in r["trades"]
+    ]
+    s = r["summary"]
+    return {
+        "id": id, "label": labels[id], "unit": body["unit"],
+        "asof": dates[-1] if dates else None,
+        "params": {"lookback": lookback, "entryZ": entryZ, "warnZ": warnZ,
+                   "exitZ": exitZ, "stopZ": stopZ, "costBp": costBp,
+                   "notional": notional},
+        "points": points,
+        "trades": trades,
+        "summary": {
+            "totalPnl": round(s["totalPnl"], 2),
+            "maxDrawdown": round(s["maxDrawdown"], 2),
+            "winRate": round(s["winRate"], 4) if s["winRate"] is not None else None,
+            "sharpe": round(s["sharpe"], 3) if s["sharpe"] is not None else None,
+            "numTrades": s["numTrades"],
+        },
+    }
 
 
 @router.get("/api/volatility")
