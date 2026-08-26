@@ -68,6 +68,7 @@ import { fmtKrw, fmtKrwFromMan, splitCashBondKrw, splitKrw } from '@/lib/krw';
 import { useFunding } from '@/state/funding';
 import type { Row } from '@/table/rows';
 import { Field } from '@/ui/ControlCard';
+import { IsoDateField } from '@/ui/IsoDateField';
 import { loadCd } from '@/ui/PreviewPane';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { DROPDOWN_STYLES } from '@/ui/window/popup';
@@ -716,35 +717,32 @@ export function BacktestWindow({
                       />
                     </Field>
                   </Box>
-                  <Box width={128}>
-                    <Field label="진입일">
-                      {/* 네이티브 date — CDS `DateInput` 은 마스크 텍스트라 ISO 를
-                          직접 다루지 않고, 이 제품의 날짜는 화면 전체가 ISO 다
-                          (표 헤더·신선도 칩·대사). 여기서만 다른 문법을 쓰면 같은
-                          날짜가 두 모양으로 존재한다. */}
-                      <input
-                        className="sr-date"
-                        type="date"
-                        value={r.entry}
-                        min={bond ? cashbondFrom : undefined}
-                        max={maxDate}
-                        onChange={(e) => patch(r.key, { entry: e.target.value })}
-                        aria-label="진입일"
-                      />
-                    </Field>
+                  {/* CDS `DateInput`(`ui/IsoDateField` 어댑터). 네이티브
+                      `<input type="date">` 에서 옮겼다 [OWNER 2026-08-26]:
+                      종전 근거였던 «네이티브가 ISO 로 보인다» 는 **로케일
+                      의존**이라 en-US 에서는 08/24/2026 이 된다. 라벨은
+                      컨트롤이 지므로 `Field` 를 벗었다. */}
+                  <Box width={150}>
+                    <IsoDateField
+                      label="진입일"
+                      value={r.entry}
+                      min={bond ? cashbondFrom : undefined}
+                      max={maxDate}
+                      onChange={(iso) => patch(r.key, { entry: iso })}
+                      outOfRangeMessage={
+                        bond ? '민평이 있는 구간 밖이에요.' : '데이터가 있는 구간 밖이에요.'
+                      }
+                    />
                   </Box>
-                  <Box width={128}>
-                    <Field label="청산일">
-                      <input
-                        className="sr-date"
-                        type="date"
-                        value={r.exit}
-                        min={r.entry}
-                        max={maxDate}
-                        onChange={(e) => patch(r.key, { exit: e.target.value })}
-                        aria-label="청산일 (비우면 데이터 끝까지)"
-                      />
-                    </Field>
+                  <Box width={150}>
+                    <IsoDateField
+                      label="청산일"
+                      value={r.exit}
+                      min={r.entry}
+                      max={maxDate}
+                      onChange={(iso) => patch(r.key, { exit: iso })}
+                      helperText="비우면 데이터 끝까지"
+                    />
                   </Box>
                   {/* 진입 레벨 — 실행 전에도. 타이핑한 날짜가 **실제로 어느 레벨에
                       꽂히는지**가 실행을 누르기 전에 읽혀야 한다. 그 날짜에 관측이

@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
  *
  * CDS 는 size="s" 여도 Select/TextInput 의 값 텍스트를 body(16px)로 찍는다.
  * 이 제품의 컨트롤 주변은 전부 13px 이다 — 칸 라벨(caption), 날짜 입력
- * (`.sr-date`), 조건 바. 값만 16px 이면 그 칸이 화면에서 혼자 크고, 실제로
+ * (`ui/IsoDateField`), 조건 바. 값만 16px 이면 그 칸이 화면에서 혼자 크고, 실제로
  * 백테스트 창의 종목·방향·규모가 그랬다.
  *
  * 줄이는 자리는 prop 하나다: Select 는 `font="legal"`, TextInput 은
@@ -72,9 +72,15 @@ describe('컨트롤 값 13px 규칙 — 새 Select/TextInput 이 규칙을 빠�
     }
   });
 
-  it('짝이 되는 날짜 입력(.sr-date)도 13px 에 서 있다', () => {
-    const css = fs.readFileSync(path.resolve(SRC_ROOT, 'theme/type.css'), 'utf8');
-    const block = css.match(/\.sr-date \{[^}]*\}/)?.[0] ?? '';
-    expect(block).toMatch(/font-size: 13px/);
+  it('날짜 입력도 13px 에 서 있다 — 이제 CSS 가 아니라 **prop** 이 진다', () => {
+    /* `.sr-date`(네이티브 `<input type="date">` 의 CSS 훅)가 지던 규칙이다.
+       2026-08-26 에 CDS `DateInput` 으로 옮기면서 그 클래스가 사라졌고, 같은
+       명제는 `ui/IsoDateField` 의 `fontSize: 'legal'` 이 진다 — legal 이 곧
+       13px 다(`sauronTheme.ts`). 재는 자리가 옮겨졌을 뿐 명제는 그대로다. */
+    const src = fs.readFileSync(
+      path.resolve(import.meta.dirname, '../src/ui/IsoDateField.tsx'),
+      'utf8',
+    );
+    expect(src).toMatch(/fontSize: 'legal' as const/);
   });
 });

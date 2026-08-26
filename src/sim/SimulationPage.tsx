@@ -38,6 +38,7 @@ import { fmtLevel } from '@/lib/format';
 import { fmtKrw } from '@/lib/krw';
 import { Field } from '@/ui/ControlCard';
 import { useFillHeight } from '@/ui/useFillHeight';
+import { IsoDateField } from '@/ui/IsoDateField';
 import { DROPDOWN_STYLES } from '@/ui/window/popup';
 
 import { CurvePreview } from './CurvePreview';
@@ -975,18 +976,20 @@ export function SimulationPage({
           ) : null}
           {cur.events.map((ev) => (
             <HStack key={ev.key} gap={1} alignItems="flex-end" flexWrap="wrap">
-              <Box width={140}>
-                <Field label="날짜">
-                  <input
-                    className="sr-date"
-                    type="date"
-                    value={ev.date}
-                    min={asOf}
-                    list="sr-mpc-dates"
-                    onChange={(e) => patchEvent(ev.key, { date: e.target.value })}
-                    aria-label="이벤트 날짜"
-                  />
-                </Field>
+              {/* 금통위 날짜는 **강조**로 온다(`highlight`) — 종전의
+                  `<datalist>` 자리다. 그 자리의 규칙은 그대로다: «고르는 것을
+                  돕되 막지 않는다». 강조는 `disabledDates` 가 아니고, 달력
+                  안에서 보이며 스크린리더가 그 사실을 읽는다. */}
+              <Box width={160}>
+                <IsoDateField
+                  label="날짜"
+                  value={ev.date}
+                  min={asOf}
+                  onChange={(iso) => patchEvent(ev.key, { date: iso })}
+                  highlight={summary.policy.upcoming ?? []}
+                  highlightHint="금통위 예정일"
+                  outOfRangeMessage="기준일보다 앞선 날짜는 못 써요."
+                />
               </Box>
               <Field label="기준금리">
                 <NumField
@@ -1030,13 +1033,6 @@ export function SimulationPage({
               이벤트 추가
             </Button>
           </Box>
-          {/* 날짜 후보. `<datalist>` 라 **고르는 것을 돕되 막지 않는다** — 금통위가
-              아닌 날의 인하를 그려 보는 것도 정당한 질문이다. */}
-          <datalist id="sr-mpc-dates">
-            {(summary.policy.upcoming ?? []).map((d) => (
-              <option key={d} value={d} />
-            ))}
-          </datalist>
         </Collapsible>
 
         <Button

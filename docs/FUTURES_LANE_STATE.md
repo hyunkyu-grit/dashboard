@@ -610,3 +610,67 @@ caption 아래 소문자 라틴·그리스가 든 자리는 셋뿐이다:
 component instead` 다. **안정판이라 부른 쪽이 deprecated 이고 CDS 가 alpha 를
 쓰라고 지시한다.** 리포의 6곳은 옳은 경로였다. 「alpha = 불안정」이라는 통념으로
 판단하고 타이핑을 안 읽은 내 오류다.
+
+### 날짜 입력 → CDS `DateInput` [OWNER 선택: 「DateInput 으로 이관」]
+
+세 곳(백테스트 진입일·청산일, 시뮬 금통위 이벤트일)을 옮겼다. 어댑터 하나를
+새로 만들었다 — `src/ui/IsoDateField.tsx`.
+
+**계약은 ISO in / ISO out 하나다.** CDS `DateInput` 은 `Date | null` 과
+`DateInputValidationError | null` 을 각각 상태로 받으므로(넷 다 필수 prop) 호출부
+셋에 변환 두 벌과 상태 하나를 흩으면 곧 세 벌이 갈린다 — CLAUDE.md 「얼라인」 8.
+
+#### 옮기고 나서 드러난 것 셋 (전부 실측)
+
+**① ISO 표시는 공짜가 아니었다.** 옮기자마자 ko-KR 브라우저에서
+`02/02/2026` · placeholder `mm/dd/yyyy` 가 나왔다. 뿌리는 CDS `LocaleContext`
+기본값이 **`en-US`** 인 것 — `DateInput` 은 브라우저 로케일이 아니라 그 컨텍스트를
+읽어 `new IntlDateFormat({locale, separator})` 를 만든다(그 소스 49~53줄).
+
+Intl 실측으로 로케일을 골랐다:
+
+    en-US   "2/2/2026"      -> MM-DD-YYYY
+    ko-KR   "2026. 2. 2."   -> YYYY-MM-DD-   (후행 리터럴이 구분자로 남는다)
+    en-CA   "2026-02-02"    -> YYYY-MM-DD    <- 이것
+
+`<LocaleProvider locale="en-CA">` + `separator="-"`. **자릿수 순서 때문에 고른
+것**이지 이 앱이 캐나다 것이어서가 아니다. 범위는 이 컨트롤 하나다 — 앱 전역에
+올리면 다른 CDS 소비처까지 끌려간다.
+
+결과적으로 표시가 **로케일과 무관하게** `2026-08-25` 다. 네이티브가 못 주던
+것이고, 이 이관이 실제로 얻은 것이다(네이티브는 ko 에서만 ISO 였다).
+
+**② 힌트 줄이 행을 깨뜨렸다.** `DateInput` 은
+`helperText ?? error?.message ?? 형식문자열` 로 그 줄을 채운다 — 아무것도 안 주면
+«yyyy-mm-dd» 가 상시로 붙어 블록이 **74px** 이 되고, 같은 행 형제(48~50px)보다
+컨트롤이 **24px 위로** 뜬다(실측). CLAUDE.md 「얼라인」 1(등고 32px)이 깨진다.
+
+그래서 그 슬롯을 **에러 전용**으로 돌렸다: 평소 `''`(그 `??` 는 빈 문자열에서 안
+떨어진다), 에러일 때만 `undefined` 로 넘겨 문장이 나오게 한다. **줄은 할 말이
+있을 때만 선다.** 부가 설명은 `Field` 의 `help` 로 간다.
+수리 후 실측: 규모·진입일·청산일 셋 다 blockH 50 · ctrlTop 152 · ctrlH 30 — 동일.
+
+**③ 라벨은 `Field` 가 져야 했다.** CDS `label` prop 은 label2(14px/400)로
+그려져 형제(`Field` = legal 13px/500)와 어긋난다(라벨 top 133 vs 171). 그래서
+어댑터가 `Field` 로 감싸고 CDS 라벨은 안 쓴다.
+
+#### 얻은 것 — 실측으로 확인
+
+범위 밖 날짜(2030-01-01)를 넣으니 **빨간 테두리 + ⚠ + 「데이터가 있는 구간
+밖이에요.」** 가 뜨고 실행 버튼이 비활성됐다. 네이티브 `<input type="date">` 는
+이 상황에서 **아무 말도 안 했다.**
+
+시뮬 쪽은 `<datalist>` 가 하던 금통위 날짜 제안을 `DatePicker` 의
+`highlightedDates` 로 옮겼다 — 그 자리의 규칙(«고르는 것을 돕되 막지 않는다»)은
+그대로이고, 달력 안에서 **보이며** 스크린리더가 읽는다
+(`highlightedDateAccessibilityHint`). 강조는 `disabledDates` 가 아니다.
+
+#### 함께 지운 것
+
+`.sr-date` CSS(32줄)와 고아가 된 `<datalist id="sr-mpc-dates">`. 마지막 소비처가
+사라진 자리다.
+
+가드 둘을 새 집으로 옮겼다 — `control-parity`(CSS 컨트롤 높이 셀렉터 5 -> 4)와
+`control-value-font`(13px 규칙). **재는 명제는 그대로**이고 재는 자리만 CSS 에서
+prop 으로 옮겼다. 신설 `guards/iso-date-field.test.ts` 12 — UTC 왕복(연말·월초·
+윤년)·로케일 순서를 `Intl` 로 **직접 실행해** 확인·힌트 슬롯·네이티브 잔재 0.

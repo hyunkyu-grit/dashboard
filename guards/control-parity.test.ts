@@ -37,7 +37,7 @@ import { stripComments } from './_source';
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SRC = path.join(ROOT, 'src');
 
-/** 이 앱의 기본 행 컨트롤 높이. `.sr-date`·`.sr-pillbtn`·`.sr-naviconbtn`·
+/** 이 앱의 기본 행 컨트롤 높이. `.sr-pillbtn`·`.sr-naviconbtn`·
  * `.sr-clog-trigger`·`.sr-window-close` 가 CSS 로 적는 값과 같은 수다. */
 export const CONTROL_H = 32;
 
@@ -132,8 +132,11 @@ describe('한 행 = 한 컨트롤 높이', () => {
 
   it(`CSS 가 적는 컨트롤 높이는 전부 ${CONTROL_H} 이다`, () => {
     const rows = cssControlHeights();
-    // 다섯 셀렉터가 모두 잡혀야 한다 — 하나라도 빠지면 파서가 눈이 먼 것이다.
-    expect(rows.length).toBeGreaterThanOrEqual(5);
+    /* 네 셀렉터가 모두 잡혀야 한다 — 하나라도 빠지면 파서가 눈이 먼 것이다.
+       다섯이었다가 넷이 됐다: `.sr-date` 가 2026-08-26 에 CDS `DateInput`
+       (`ui/IsoDateField`)으로 옮겨가며 사라졌고, 그 32px 는 이제 CSS 가 아니라
+       `height: 32` prop 이 진다(`guards/iso-date-field.test.ts` 가 잰다). */
+    expect(rows.length).toBeGreaterThanOrEqual(4);
     const wrong = rows.filter((r) => r.h !== CONTROL_H);
     expect(
       wrong.map((w) => `${w.sel}=${w.h}`),
