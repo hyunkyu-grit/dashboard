@@ -78,7 +78,8 @@ def rolling_series(values: list[float], lookback: int) -> dict[str, list]:
 def simulate(dates: list[str], values: list[float], *, lookback: int,
              entry_z: float, exit_z: float, stop_z: float,
              cost_bp: float, notional: float,
-             allow_dirs: tuple[int, ...] = (-1, 1)) -> dict[str, Any]:
+             allow_dirs: tuple[int, ...] = (-1, 1),
+             gate: list[Any] | None = None) -> dict[str, Any]:
     """원본 simulateMeanReversion 의 바-루프 그대로. 반환 키도 그 어휘를 쓴다.
 
     `allow_dirs` 만 원본에 없던 자리다 — 실행할 수 있는 방향(+1 = 값이 오르면
@@ -86,6 +87,27 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
     낸다(적합성 벡터가 그 사실을 잰다). 막힌 방향의 진입 신호는 세어서
     `blocked` 로 돌려준다 — 화면이 «몇 번을 못 들어갔는지» 를 말할 수 있어야
     하고, 말 없는 누락은 «신호가 없었다» 로 읽힌다.
+
+    ## `gate` — 「z 문턱이 났는데도 안 들어가는」 자리
+
+    봉마다의 참/거짓 목록이고, **진입에만** 듣는다. `None` 이면 게이트가 없는
+    것이고 그때의 수는 예전과 완전히 같다.
+
+    청산과 손절은 **게이트를 안 본다**. 이건 취향이 아니라 안전 규칙이다 —
+    나가는 문까지 조건을 달면 조건이 꺼진 동안 포지션이 갇히고, 보유기간이
+    규칙이 아니라 지표의 부산물이 된다. 들어갈 때만 고르고, 일단 들어갔으면
+    원래 규칙대로 나온다.
+
+    게이트가 지운 신호는 `gated` 로 **세어서 돌려준다**(`blocked` 와 같은 규율:
+    구간 수와 일수 둘 다). 필터를 달면 거래 수가 줄고 승률은 거의 반드시
+    올라가므로, 몇 건이 사라졌는지를 화면이 말하지 못하면 그 승률은 읽는 사람을
+    속인다. `blocked`(방향 때문에 못 하는 거래)와 따로 세는 이유도 그것이다 —
+    방향은 이 데스크의 제약이고 게이트는 **우리가 고른 것**이라, 둘을 한
+    숫자로 합치면 선택의 대가가 제약 뒤에 숨는다.
+
+    warm-up 으로 아직 값이 없는 봉(`None`)은 거짓으로 친다 — 지표가 못 서는
+    구간에 «조건이 맞았다» 고 할 수는 없다. 다만 그것도 `gated` 에 세므로
+    창 앞머리에서 몇 건이 그렇게 빠졌는지가 숫자로 남는다.
     """
     n = len(values)
     roll = rolling_series(values, lookback)
@@ -108,11 +130,16 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
     blocked_days = 0
     blocked_spells = 0
     blocked_prev = False
+    # 게이트가 지운 신호 — 방향 때문에 못 한 것(blocked)과 **따로** 센다.
+    gated_days = 0
+    gated_spells = 0
+    gated_prev = False
 
     for i in range(n):
         daily_pnl = 0.0
         zi = z[i]
         blocked_now = False
+        gated_now = False
 
         if position != 0:
             daily_pnl += position * notional * (values[i] - values[i - 1])
@@ -143,7 +170,21 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
         elif zi is not None and abs(zi) >= entry_z:
             # 평소 대비 너무 높으면 떨어진다에 건다(숏) — 너무 낮으면 롱.
             want = -1 if zi > 0 else 1
-            if want in allow_dirs:
+            if want not in allow_dirs:
+                # 못 하는 거래는 안 한 것으로 둔다 — 비용도 손익도 없다.
+                # 방향을 **먼저** 본다: 애초에 실행 불가능한 신호를 두고
+                # 「게이트가 걸렀다」고 세면 필터의 공이 부풀려진다.
+                blocked_now = True
+                blocked_days += 1
+                if not blocked_prev:
+                    blocked_spells += 1
+            elif gate is not None and not gate[i]:
+                # 할 수 있었는데 **우리가 안 한** 거래. 여기 세는 것이 필터의 대가다.
+                gated_now = True
+                gated_days += 1
+                if not gated_prev:
+                    gated_spells += 1
+            else:
                 position = want
                 entry_idx = i
                 entry_z_val = zi
@@ -151,14 +192,9 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
                 entry_cost = notional * cost_bp
                 daily_pnl -= entry_cost
                 trade_pnl = daily_pnl
-            else:
-                # 못 하는 거래는 안 한 것으로 둔다 — 비용도 손익도 없다.
-                blocked_now = True
-                blocked_days += 1
-                if not blocked_prev:
-                    blocked_spells += 1
 
         blocked_prev = blocked_now
+        gated_prev = gated_now
         cumulative += daily_pnl
         points.append({
             "date": dates[i], "value": values[i], "z": zi,
@@ -182,7 +218,8 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
 
     return {"points": points, "trades": trades,
             "summary": summary, "roll": roll, "open": open_leg,
-            "blocked": {"spells": blocked_spells, "days": blocked_days}}
+            "blocked": {"spells": blocked_spells, "days": blocked_days},
+            "gated": {"spells": gated_spells, "days": gated_days}}
 
 
 def breakeven_cost_bp(total_pnl: float, cost_bp: float, notional: float,

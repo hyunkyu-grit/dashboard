@@ -177,3 +177,91 @@ def test_open_leg_is_none_when_flat_at_end():
     if r["points"][-1]["position"] == 0:
         assert r["open"] is None
         assert r["summary"]["openPnl"] is None
+
+
+# ── gate — 「조건이 맞을 때만 진입」의 배관 ────────────────────────────────
+#
+# 조건이 **무엇인가** 는 여기 없다(그건 오너가 정한다). 여기 있는 것은 조건이
+# 무엇이든 지켜져야 하는 성질뿐이다.
+
+def test_gate_none_and_gate_all_true_are_the_same_run():
+    """게이트를 안 걸면 예전 수 그대로 — 배관이 산술을 안 건드렸다는 핀."""
+    dates, vals = _fixture()
+    base = bt.simulate(dates, vals, **PIN)
+    allon = bt.simulate(dates, vals, **PIN, gate=[True] * len(vals))
+    assert base["summary"] == allon["summary"]
+    assert [t["entryDate"] for t in base["trades"]] == [t["entryDate"] for t in allon["trades"]]
+    assert base["gated"] == {"spells": 0, "days": 0}
+
+
+def test_gate_all_false_trades_nothing_and_counts_every_lost_signal():
+    dates, vals = _fixture()
+    base = bt.simulate(dates, vals, **PIN)
+    off = bt.simulate(dates, vals, **PIN, gate=[False] * len(vals))
+    assert off["trades"] == []
+    assert off["summary"]["totalPnl"] == 0.0
+    # 지워진 신호가 조용히 사라지지 않는다 — 최소한 원래 거래 수만큼은 세어야 한다
+    assert off["gated"]["spells"] >= len(base["trades"])
+    assert off["gated"]["days"] >= off["gated"]["spells"]
+
+
+def test_gate_does_not_hold_a_position_hostage():
+    """**안전 규칙**: 게이트는 진입에만 듣는다.
+
+    나가는 문까지 조건을 달면 조건이 꺼진 동안 포지션이 갇히고 보유기간이
+    규칙이 아니라 지표의 부산물이 된다. 진입 봉에서만 참인 게이트를 걸어도
+    거래는 원래 규칙대로 **끝나야** 한다.
+    """
+    dates, vals = _fixture()
+    base = bt.simulate(dates, vals, **PIN)
+    first = base["trades"][0]
+    at = {d: i for i, d in enumerate(dates)}
+    g = [False] * len(vals)
+    g[at[first["entryDate"]]] = True          # 그 한 봉에서만 진입 허용
+
+    r = bt.simulate(dates, vals, **PIN, gate=g)
+    assert len(r["trades"]) == 1
+    got = r["trades"][0]
+    assert got["entryDate"] == first["entryDate"]
+    # 청산일·사유·손익이 게이트 없는 판과 같아야 한다 — 나가는 규칙은 안 바뀌었다
+    assert got["exitDate"] == first["exitDate"]
+    assert got["exitReason"] == first["exitReason"]
+    assert math.isclose(got["pnl"], first["pnl"])
+
+
+def test_gate_warmup_none_counts_as_blocked_not_as_permission():
+    """지표가 아직 못 서는 봉(None)은 «조건이 맞았다» 가 아니다."""
+    dates, vals = _fixture()
+    g = [None] * len(vals)
+    r = bt.simulate(dates, vals, **PIN, gate=g)
+    assert r["trades"] == []
+    assert r["gated"]["spells"] >= 1
+
+
+def test_direction_is_counted_before_the_gate():
+    """실행 불가능한 신호를 게이트의 공으로 돌리지 않는다.
+
+    한 방향만 허용하고 게이트를 전부 끄면, 막힌 방향의 신호는 `blocked` 로만
+    가고 `gated` 로 이중 계상되지 않아야 한다.
+    """
+    dates, vals = _fixture()
+    both = bt.simulate(dates, vals, **PIN)
+    short_only_open = bt.simulate(dates, vals, **PIN, allow_dirs=(-1,))
+    r = bt.simulate(dates, vals, **PIN, allow_dirs=(-1,), gate=[False] * len(vals))
+
+    # 방향 카운트는 게이트 유무와 무관하다
+    assert r["blocked"] == short_only_open["blocked"]
+    # 게이트는 «할 수 있었는데 안 한» 것만 센다
+    assert r["gated"]["days"] + r["blocked"]["days"] >= len(both["trades"])
+    assert r["trades"] == []
+
+
+def test_gated_spell_counts_runs_not_bars():
+    """열흘 내리 막힌 것은 열 번이 아니라 한 번 못 들어간 것이다(blocked 와 같은 규율)."""
+    dates, vals = _fixture()
+    # 문턱을 낮춰 신호가 여러 봉 **연달아** 나게 한다 — 그 연속이 한 구간이다.
+    r = bt.simulate(dates, vals, lookback=60, entry_z=0.5, exit_z=0.1, stop_z=99.0,
+                    cost_bp=0.0, notional=1_000_000, gate=[False] * len(vals))
+    assert r["trades"] == []
+    assert r["gated"]["spells"] >= 1
+    assert r["gated"]["days"] > r["gated"]["spells"], "연속 봉이 한 구간으로 묶여야 한다"
