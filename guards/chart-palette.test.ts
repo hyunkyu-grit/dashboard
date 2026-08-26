@@ -168,11 +168,15 @@ describe('⑤ 스킴이 바뀌어도 차트를 다시 만들지 않는다', () =
   const hook = read('useLwChart.ts');
 
   it('생성 효과의 의존성에 팔레트가 없다', () => {
-    /* 있으면 토글마다 시리즈·프리미티브가 날아가고 화면이 깜빡인다. */
-    const create = /createYieldCurveChart[\s\S]*?\}, \[([^\]]*)\]\)/.exec(hook);
+    /* 있으면 토글마다 시리즈·프리미티브가 날아가고 화면이 깜빡인다.
+       **주석을 걷고 잰다** — 안 걷으면 이 파일의 이력 주석(«처음에는
+       createYieldCurveChart 를 썼다»)에 걸려 가드가 **우연히** 통과한다.
+       2026-08-26 에 실제로 그랬다. */
+    const code = codeOf(hook);
+    const create = /createChartEx[\s\S]*?\}, \[([^\]]*)\]\)/.exec(code);
     expect(create).not.toBeNull();
     expect(create![1]).not.toMatch(/palette/);
-    expect(create![1]).toMatch(/el, kind/);
+    expect(create![1]).toMatch(/el, kind, scale, ready/);
   });
 
   it('팔레트가 바뀌면 **옵션만** 덧입힌다', () => {

@@ -12,15 +12,17 @@
  * CDS `CartesianChart` 는 x축이 «문자열 배열» 하나였다. `lightweight-charts` 는
  * 축의 **뜻**을 셋으로 나눠 갖는다:
  *
- *   `time`    `createChart`            x = 날짜.        시계열 9개
- *   `curve`   `createYieldCurveChart`  x = **만기 월수**, 선형 배치. 커브 3개
- *   `numeric` `createOptionsChart`     x = 숫자.        시뮬 일수·분기 3개
+ *   `time`    `createChart`      x = 날짜.                     시계열 9개
+ *   `curve`   `createChartEx`    x = **√만기**(`tenorScale.ts`)  커브 3개
+ *   `numeric` `createOptionsChart` x = 숫자.                    시뮬 일수·분기 3개
  *
  * 커브를 시계열로 위장하지 않는 것이 요점이다. 만기 3M·6M·1Y·…·10Y 는 날짜가
  * 아니고, 가짜 날짜를 넣으면 크로스헤어·스케일·`fitContent` 가 전부 없는 시간을
- * 기준으로 돈다. `createYieldCurveChart` 는 그 축을 **월수**로 갖고
- * (`baseResolution` 1 = 1개월), `formatTime` 으로 눈금 글자를 「120」이 아니라
- * 「10Y」로 찍게 해 준다.
+ * 기준으로 돈다.
+ *
+ * 처음에는 `createYieldCurveChart`(선형 월수)를 썼다. 그 축은 만기 축의 정석이나
+ * 짧은 쪽이 뭉쳐서 오너가 **√만기**를 골랐다 — 그 결정과 «왜 값만 바꿔서는 안
+ * 되는가» 는 `chart/tenorScale.ts` 머리에 적혀 있다.
  *
  * ── 이 앱이 스크롤·줌을 라이브러리에서 뺏는 이유 ────────────────────────────
  * 보이는 구간은 **이 제품이 정한다** — SPANS 프리셋(1M·3M·6M·1Y·전체)과 휠 확대가
@@ -36,22 +38,20 @@ import {
   CrosshairMode,
   LineStyle,
   createChart,
+  createChartEx,
   createOptionsChart,
-  createYieldCurveChart,
 } from 'lightweight-charts';
 import type { DeepPartial, IChartApiBase, ChartOptions } from 'lightweight-charts';
 
 import { pixelColorParser, useLwPalette, type LwPalette } from './palette';
+import { TenorHorzScale } from './tenorScale';
 
 export type ChartKind = 'time' | 'curve' | 'numeric';
 
 /** 커브 차트에만 있는 설정. */
 export type CurveSetup = {
-  /** 월수를 눈금 글자로. 예: 120 -> `10Y`. */
-  formatTime?: (months: number) => string;
-  /** 데이터가 짧아도 이만큼은 보여 준다(월). 기본 120 = 10년. */
-  minimumTimeRange?: number;
-  startTimeRange?: number;
+  /** 이 커브의 가로축. **참조가 안정해야 한다** — 바뀌면 차트가 새로 만들어진다. */
+  scale: TenorHorzScale;
 };
 
 export type LwHandle<H> = { chart: IChartApiBase<H>; palette: LwPalette };
@@ -169,12 +169,9 @@ export function useLwChart<H>(
   paletteRef.current = palette;
   const ready = palette != null;
 
-  /* 커브 설정은 **만들 때 한 번** 들어간다(`applyOptions` 로는 못 바꾼다).
-     그래서 의존성에 원시값으로 편다 — 객체를 그대로 넣으면 매 렌더 새 참조라
-     차트가 계속 재생성된다. */
-  const fmt = curve?.formatTime;
-  const minRange = curve?.minimumTimeRange;
-  const startRange = curve?.startTimeRange;
+  /* 축은 **만들 때 한 번** 들어간다. 호출부가 `useRef` 로 붙잡아 두므로
+     참조가 안 바뀌고, 그래서 차트도 안 다시 만들어진다. */
+  const scale = curve?.scale;
 
   useEffect(() => {
     const p = paletteRef.current;
@@ -182,25 +179,20 @@ export function useLwChart<H>(
     const canon = creationOptions(p);
     const made =
       kind === 'curve'
-        ? createYieldCurveChart(el as HTMLElement, {
-            ...canon,
-            yieldCurve: {
-              baseResolution: 1,
-              minimumTimeRange: minRange ?? 120,
-              startTimeRange: startRange ?? 0,
-              ...(fmt ? { formatTime: fmt } : {}),
-            },
-          })
+        ? scale
+          ? createChartEx<number, TenorHorzScale>(el as HTMLElement, scale, canon)
+          : null
         : kind === 'numeric'
           ? createOptionsChart(el as HTMLElement, canon)
           : createChart(el as HTMLElement, canon);
+    if (!made) return;
 
     setChart(made as unknown as IChartApiBase<H>);
     return () => {
       setChart(null);
       made.remove();
     };
-  }, [el, kind, fmt, minRange, startRange, ready]);
+  }, [el, kind, scale, ready]);
 
   useEffect(() => {
     if (!chart || !palette) return;

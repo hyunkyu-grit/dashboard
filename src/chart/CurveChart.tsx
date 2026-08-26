@@ -22,14 +22,18 @@
  * 손잡이가 없다 — 스플라인을 켜지 않는 것으로 지킨다.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { LineSeries } from 'lightweight-charts';
 import type { ISeriesApi, LineData, WhitespaceData } from 'lightweight-charts';
 
 import type { LwPalette } from './palette';
-import { monthsLabel, tenorMonths } from './tenor';
+import { tenorMonths } from './tenor';
+import { TenorHorzScale, monthsToX } from './tenorScale';
 import { useLwChart } from './useLwChart';
+
+/** 양 끝 여백(√만기 축 단위). 3M~10Y 축이 대략 35~219 이라 4 면 두 칸 남짓이다. */
+const EDGE_PAD = 4;
 
 export type CurveLine = {
   id: string;
@@ -70,27 +74,56 @@ export function CurveChart({
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   const [hover, setHover] = useState<number | null>(null);
 
+  /* 축은 이 차트가 살아 있는 동안 **하나**다 — 매 렌더 새로 만들면 참조가
+     바뀌어 차트가 통째로 다시 만들어진다. */
+  const scaleRef = useRef<TenorHorzScale | null>(null);
+  if (scaleRef.current === null) scaleRef.current = new TenorHorzScale();
+  const scale = scaleRef.current;
+
   /* 만기를 월수로 바꾸고 **오름차순으로 세운다** — 라이브러리는 정렬된 데이터를
      요구하고, 안 그러면 조용히 틀린 자리에 그린다. 원래 인덱스를 같이 들고
      다녀야 리드아웃이 제 노드를 읽는다. */
   const order = useMemo(() => {
     const rows = nodes
-      .map((id, i) => ({ i, m: tenorMonths(id) }))
-      .filter((r): r is { i: number; m: number } => r.m != null);
+      .map((id, i) => ({ i, m: tenorMonths(id), x: 0 }))
+      .filter((r): r is { i: number; m: number; x: number } => r.m != null);
     rows.sort((a, b) => a.m - b.m);
-    return rows;
+    /* 두 만기가 같은 자리로 떨어지면 뒤엣것을 버린다 — 라이브러리는 같은 x 를
+       두 번 받으면 조용히 하나만 그린다. 실제 어휘에서는 안 생기지만
+       (3M->35 · 6M->49 · …), 규칙을 여기 적어 둔다. */
+    const seen = new Set<number>();
+    const out: { i: number; m: number; x: number }[] = [];
+    for (const r of rows) {
+      const x = monthsToX(r.m);
+      if (seen.has(x)) continue;
+      seen.add(x);
+      out.push({ ...r, x });
+    }
+    return out;
   }, [nodes]);
 
-  /** 월수 -> 원래 인덱스. 크로스헤어가 주는 것은 월수뿐이다. */
-  const byMonth = useMemo(() => new Map(order.map((r) => [r.m, r.i])), [order]);
+  /**
+   * 커서가 있는 자리에서 **가장 가까운 노드**의 원래 인덱스.
+   *
+   * 정확히 일치를 찾으면 안 된다: 노드 사이는 빈 점으로 촘촘히 메워져 있어서
+   * (√만기 자리를 만드는 것이 그 빈 점들이다) 커서는 거의 항상 노드가 **아닌**
+   * 자리에 선다. 실측 2026-08-26: 그렇게 뒀더니 크로스헤어는 뜨는데 리드아웃
+   * 카드가 안 떴다. CDS `Scrubber` 는 늘 가장 가까운 노드로 붙었고, 이 화면의
+   * 리드아웃은 그 성질 위에 서 있다.
+   */
+  const nearest = useMemo(() => {
+    const xs = order.map((r) => r.x);
+    return (x: number): number | null => {
+      if (xs.length === 0) return null;
+      let best = 0;
+      for (let k = 1; k < xs.length; k++) {
+        if (Math.abs(xs[k] - x) < Math.abs(xs[best] - x)) best = k;
+      }
+      return order[best].i;
+    };
+  }, [order]);
 
-  const lastMonth = order.length ? order[order.length - 1].m : 120;
-  const handle = useLwChart<number>('curve', el, {
-    formatTime: monthsLabel,
-    /* 데이터가 짧으면 그만큼만 본다 — 기본 120(10년)으로 두면 5Y 커브가 화면
-       왼쪽 절반에 몰린다. */
-    minimumTimeRange: lastMonth,
-  });
+  const handle = useLwChart<number>('curve', el, { scale });
 
   const notify = useCallback(
     (i: number | null) => {
@@ -101,8 +134,12 @@ export function CurveChart({
   );
 
   useEffect(() => {
-    if (!handle) return;
+    if (!handle || order.length === 0) return;
     const { chart, palette } = handle;
+
+    /* 축에 «어느 자리가 진짜 만기인지» 를 알려 준다 — 눈금 글자와 가중치가
+       거기서 나온다. `setData` **전에** 해야 첫 그리기부터 맞다. */
+    scale.setNodes(order.map((r) => r.m));
 
     const made: ISeriesApi<'Line', number>[] = lines.map((ln) => {
       const s = chart.addSeries(LineSeries, {
@@ -113,13 +150,25 @@ export function CurveChart({
         crosshairMarkerVisible: true,
         priceFormat: { type: 'price', precision, minMove: 10 ** -precision },
       });
-      /* 값이 없는 만기는 **whitespace** 로 넣는다 — 빼 버리면 선이 이어져
-         버려서 «그 만기에 값이 있다» 고 거짓말한다(CDS 판의 `connectNulls={false}`
-         가 하던 일). */
-      const data: (LineData<number> | WhitespaceData<number>)[] = order.map((r) => {
-        const v = ln.values[r.i];
-        return v == null ? { time: r.m } : { time: r.m, value: v };
-      });
+      /* 노드 **사이를 빈 점으로 메운다.** 라이브러리의 가로축은 인덱스 간격이라,
+         이 빈 점들이 곧 «자리» 다 — 이것이 없으면 노드가 등간격으로 서고 √만기
+         축이 아무 일도 안 한 것이 된다(`tenorScale.ts` 머리 주석).
+         값이 없는 만기도 같은 빈 점이 된다 — 빼 버리면 선이 이어져서 «그 만기에
+         값이 있다» 고 거짓말한다(CDS 판의 `connectNulls={false}` 가 하던 일). */
+      const valueAt = new Map<number, number | null>();
+      for (const r of order) valueAt.set(r.x, ln.values[r.i] ?? null);
+
+      const data: (LineData<number> | WhitespaceData<number>)[] = [];
+      /* 양 끝에 빈 점을 조금 더 둔다 — `fixLeftEdge`/`fixRightEdge` 때문에 첫·끝
+         노드가 축 모서리에 딱 붙어 점 표시가 반쯤 잘린다. CDS 판의
+         `CHART_INSET{left:8,right:12}` 가 하던 일의 자리다. */
+      const pad = EDGE_PAD;
+      const lo = (order[0]?.x ?? 0) - pad;
+      const hi = (order[order.length - 1]?.x ?? 0) + pad;
+      for (let x = lo; x <= hi; x++) {
+        const v = valueAt.get(x);
+        data.push(v == null ? { time: x } : { time: x, value: v });
+      }
       s.setData(data);
       return s;
     });
@@ -129,7 +178,7 @@ export function CurveChart({
     return () => {
       for (const s of made) chart.removeSeries(s);
     };
-  }, [handle, lines, order, precision]);
+  }, [handle, lines, order, precision, scale]);
 
   /* 세로축 눈금 글자. 옵션이라 차트가 선 뒤에 따로 건다. */
   useEffect(() => {
@@ -142,11 +191,11 @@ export function CurveChart({
     const { chart } = handle;
     const onMove = (param: { time?: number }) => {
       const t = param.time;
-      notify(t == null ? null : (byMonth.get(t) ?? null));
+      notify(t == null ? null : nearest(t));
     };
     chart.subscribeCrosshairMove(onMove);
     return () => chart.unsubscribeCrosshairMove(onMove);
-  }, [handle, byMonth, notify]);
+  }, [handle, nearest, notify]);
 
   return (
     <>
