@@ -2,128 +2,108 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
+import { Button } from '@coinbase/cds-web/buttons';
 import { HStack, VStack } from '@coinbase/cds-web/layout';
 import { TextCaption, TextTitle3 } from '@coinbase/cds-web/typography';
-import { CartesianChart } from '@coinbase/cds-web/visualizations/chart';
 
-import { CandidateB } from '@/chart/CandidateB';
-import { CandleLayerA, type Bar } from '@/chart/CandleLayerA';
-import { seriesUrl } from '@/lib/staticPaths';
+import { useScheme } from '@/app/providers';
+
+import { LineSeries } from 'lightweight-charts';
+
+import { DottedArea } from '@/chart/dottedArea';
+import { monthsLabel, tenorMonths } from '@/chart/tenor';
+import { useLwChart } from '@/chart/useLwChart';
 
 /**
- * PASS B harness. `?c=a|b` picks the candidate, `?n=` caps the bar count,
- * `?i=w|d` picks weekly (real OHLC from the backend) or daily.
+ * 이관 벤치 [2026-08-26].
  *
- * Daily OHLC is NOT served — the backend gives daily closes and only w/m
- * candles. B2b needs 2,500 daily BARS, and the node count depends on the bar
- * count, not on the values, so daily bars are derived from the daily closes
- * (o = previous close, h/l = the max/min of o and c). Stated plainly because it
- * is synthetic: it is a rendering benchmark, not a price series.
+ * 종전의 PASS B(A/B 후보 비교) 하니스를 대체한다 — 그 판정은 끝났고, 후보
+ * 파일 둘(`CandidateB`·`CandleLayerA`)은 v4 API 라 타입체크도 깨고 있었다.
+ *
+ * 여기서 재는 것은 셋이고, 셋 다 **프로덕션 15개를 고치기 전에** 확인해야
+ * 하는 것들이다:
+ *
+ *   ① 커브 축이 정말 만기 축인가 — 3M·1Y·10Y·30Y 가 **선형 월수** 자리에
+ *      서고 눈금 글자가 「120」이 아니라 「10Y」인가.
+ *   ② 점무늬 면 프리미티브가 주선 아래에 그려지는가(캐논의 `areaType="dotted"`).
+ *   ③ 스킴을 토글하면 **캔버스 색이 따라오는가** — 종전 후보 B 가 마운트 때
+ *      한 번 읽고 얼어붙었던 그 자리다.
+ *
+ * 커브 값은 **합성**이다. 이 화면은 렌더 확인용이지 시세가 아니다.
  */
-async function loadBars(interval: 'w' | 'd'): Promise<Bar[]> {
-  if (interval === 'w') {
-    const r = await fetch(seriesUrl('3Y', 'w'));
-    const j = (await r.json()) as { bars: Bar[] };
-    return j.bars;
-  }
-  const r = await fetch(seriesUrl('3Y', 'full'));
-  const j = (await r.json()) as { points: { t: string; v: number }[] };
-  const out: Bar[] = [];
-  let prev = j.points[0]?.v ?? 0;
-  for (const p of j.points) {
-    if (p.v == null) continue;
-    const o = prev;
-    const c = p.v;
-    out.push({ t: p.t, o, c, h: Math.max(o, c), l: Math.min(o, c) });
-    prev = c;
-  }
-  return out;
-}
 
-export default function ChartHarness() {
-  const [bars, setBars] = useState<Bar[]>([]);
-  const [candidate, setCandidate] = useState<'a' | 'b'>('a');
-  const [limit, setLimit] = useState(520);
-  const [interval, setInterval] = useState<'w' | 'd'>('w');
+const TENORS = ['3M', '6M', '9M', '1Y', '18M', '2Y', '3Y', '5Y', '7Y', '10Y', '20Y', '30Y'];
+/** 합성 파 커브(%) — 우상향에 10Y 뒤로 평평해지는 흔한 모양. */
+const PAR = [2.61, 2.58, 2.55, 2.54, 2.56, 2.6, 2.68, 2.79, 2.87, 2.95, 3.02, 3.0];
 
-  useEffect(() => {
-    const q = new URLSearchParams(window.location.search);
-    const c = q.get('c');
-    if (c === 'a' || c === 'b') setCandidate(c);
-    const i = q.get('i');
-    if (i === 'w' || i === 'd') setInterval(i);
-    const n = Number(q.get('n'));
-    if (Number.isFinite(n) && n > 0) setLimit(n);
-  }, []);
+function CurveBench() {
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  const handle = useLwChart<number>('curve', el, {
+    formatTime: monthsLabel,
+    minimumTimeRange: 360,
+  });
 
-  useEffect(() => {
-    let live = true;
-    loadBars(interval).then((b) => {
-      if (live) setBars(b);
-    });
-    return () => {
-      live = false;
-    };
-  }, [interval]);
-
-  const shown = useMemo(() => bars.slice(-limit), [bars, limit]);
-
-  const series = useMemo(
-    () => [
-      {
-        id: 'close',
-        // The series must name the axis, or CDS looks up DEFAULT_AXIS_ID, finds
-        // nothing, and renders an empty <svg> with no error at all.
-        xAxisId: 'x',
-        data: shown.map((b) => [Date.parse(b.t), b.c] as [number, number]),
-      },
-    ],
-    [shown],
+  const data = useMemo(
+    () =>
+      TENORS.map((t, i) => ({ time: tenorMonths(t)!, value: PAR[i] })).sort(
+        (a, b) => a.time - b.time,
+      ),
+    [],
   );
 
-  /* THE B1 ATTEMPT, made explicitly rather than left to inference.
-   * CDS has no time scale, but `scaleType: 'linear'` over an epoch-millisecond
-   * domain is the same thing for a chart that draws no date ticks. Without the
-   * explicit domain the x scale falls back to the data INDEX, which is exactly
-   * the compressed-index spacing B1 rejects — measured: bar gaps came back as
-   * ~2.7e9 px, i.e. the scale was never mapping the epoch values at all. */
-  const xAxis = useMemo(() => {
-    if (shown.length === 0) return undefined;
-    return {
-      id: 'x',
-      scaleType: 'linear' as const,
-      domainLimit: 'strict' as const,
-      domain: {
-        min: Date.parse(shown[0].t),
-        max: Date.parse(shown[shown.length - 1].t),
-      },
-    };
-  }, [shown]);
+  useEffect(() => {
+    if (!handle) return;
+    const { chart, palette } = handle;
+    const series = chart.addSeries(LineSeries, {
+      color: palette.up,
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+    });
+    series.setData(data);
 
+    const area = new DottedArea<number>();
+    series.attachPrimitive(area);
+    area.update(data, palette.up);
+
+    chart.timeScale().fitContent();
+    return () => {
+      series.detachPrimitive(area);
+      chart.removeSeries(series);
+    };
+  }, [handle, data]);
+
+  return <div ref={setEl} style={{ height: 260 }} />;
+}
+
+function SchemeToggle() {
+  const { scheme, toggleScheme } = useScheme();
   return (
-    <VStack background="bg" minHeight="100vh" gap={1} padding={2}>
-      <HStack alignItems="baseline" gap={2}>
-        <TextTitle3 as="h1">chart harness</TextTitle3>
-        <TextCaption as="span" color="fgMuted" data-sr-probe="meta">
-          {`candidate=${candidate} interval=${interval} bars=${shown.length}`}
+    <Button compact variant="secondary" onClick={toggleScheme}>
+      {scheme === 'light' ? '다크로' : '라이트로'}
+    </Button>
+  );
+}
+
+export default function ChartBenchPage() {
+  return (
+    <VStack gap={3} padding={3}>
+      <VStack gap={0.5}>
+        <TextTitle3 as="h1">이관 벤치 — 커브 축</TextTitle3>
+        <TextCaption as="p" color="fgMuted">
+          가로축은 날짜가 아니라 만기 월수예요. 눈금이 3M·1Y·10Y·30Y 로 서고, 자리는 월수에
+          비례해요. 값은 합성이에요.
+        </TextCaption>
+      </VStack>
+      <CurveBench />
+      <HStack gap={2} alignItems="center">
+        <SchemeToggle />
+        <TextCaption as="p" color="fgMuted">
+          누르면 선·면·눈금 색이 **그 자리에서** 바뀌어야 해요. 안 바뀌면 색 다리가 마운트
+          때 한 번 읽고 얼어붙은 거예요 — 종전 후보 B 의 그 고장이에요.
         </TextCaption>
       </HStack>
-
-      {shown.length === 0 ? (
-        <TextCaption as="span" color="fgMuted">
-          loading
-        </TextCaption>
-      ) : candidate === 'a' ? (
-        <div data-sr-chart="a" style={{ width: '100%', height: 420 }}>
-          <CartesianChart series={series} xAxis={xAxis} height={420} enableScrubbing>
-            <CandleLayerA bars={shown} />
-          </CartesianChart>
-        </div>
-      ) : (
-        <div data-sr-chart="b" style={{ width: '100%' }}>
-          <CandidateB bars={shown} />
-        </div>
-      )}
     </VStack>
   );
 }

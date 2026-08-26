@@ -20,7 +20,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.14.9",
     "framer-motion": "^10.18.0",
-    "lightweight-charts": "^4.2.3",
+    "lightweight-charts": "^5.2.1",
     "next": "15.4.8",
     "react": "19.1.2",
     "react-dom": "19.1.2"
