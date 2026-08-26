@@ -103,7 +103,7 @@ body,
 .sr-flat {
   font-variant-numeric: tabular-nums;
 }
-
+/* ── The three surfaces, applied ────────────────────────────────────────────
  * Definitions and the measurement behind them live in `direction.css`; this is
  * only where they land. The page is the ground, cards sit on it, and controls
  * are FILLED rather than outlined — a bordered control on a card reads as a
