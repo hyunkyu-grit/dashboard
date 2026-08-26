@@ -372,7 +372,7 @@ export function ResultsWindow({
                   </TextLabel2>
                 }
                 onClick={() => setShown(c.id)}
-                invertColorScheme={c.id === shown}
+                active={c.id === shown}
               >
                 {c.label}
               </Chip>

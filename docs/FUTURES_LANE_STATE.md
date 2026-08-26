@@ -542,3 +542,71 @@ ThemeProvider 루트에서 getComputedStyle):
 네이티브 `<input type="date">` ×3(로케일 의존 불변식) · `alpha/select` ×6(안정판
 존재) · cds-web **9.15.0 -> 9.22.0**(첫 항목 = `invertColorScheme` -> `active`
 rename, 이번 작업으로 2곳 -> 4곳).
+
+### cds-web 9.15.0 → 9.22.0 승급 [OWNER 선택: «Advanced 착수 전에»]
+
+승급을 **DateInput 이관보다 먼저** 했다: 9.20 이 입력 컴포넌트의 기본 라벨
+스타일을 바꾸므로, 9.15 에서 DateInput 을 붙였다가 올리면 같은 자리를 두 번
+확인해야 한다.
+
+`💥 Breaking` 절 **0건**(9.16~9.22 전수). 올린 것 셋 — cds-web 9.22.0 ·
+cds-common 9.22.0 · cds-icons 5.22.0(9.22 가 `^5.22.0` 을 요구). illustrations
+4.48.0 은 그대로.
+
+    9.16    invertColorScheme deprecate -> active (제거 예정 v11)
+    9.17.0  차트 막대 그라디언트
+    9.17.1  Select field press target 복구 (tshirt size 작업 여파)
+    9.17.2  textTransform 을 Text 로 forwarding
+    9.18    PeriodSelector 테마링
+    9.19    커스텀 아이콘 세트
+    9.20    입력 라벨 기본 restyle — label1->label2 · fg->fgMuted
+    9.21.x  인위적 범프(변경 없음)
+    9.22    체크박스 라벨 fix
+
+조치: `invertColorScheme` -> `active` **7곳/4파일**(CurvePreview·ResultsWindow·
+PreviewPane·SettingView). 가드 `chart-overlays` 도 새 이름으로 옮기고 옛 이름이
+되돌아오지 않는지 함께 잰다.
+
+#### 승급 후 실측
+
+- **9.20 라벨 restyle 이 실제로 적용됐다**: `StartFilter` 의 «시작점» 이
+  14px/400/`rgb(91,97,110)`(=fgMuted). 리포의 `Field` 가 이미
+  `font="legal" color="fgMuted"` 라 **CDS 기본이 이 리포 관례에 가까워졌다**.
+  CDS `label` prop 을 쓰는 곳은 둘뿐이다(BondTypeFilter·StartFilter).
+- **CDS `Select` 트리거 = 높이 34px · 라운드 8px · 테두리 1px.** 32px 등고
+  캐논은 안 깨졌다(`control-parity` 그린) — 그 캐논이 걸리는 행은 리포가
+  `height={32}` 를 명시하는 자리이고, 이 Select 는 그 행이 아니다.
+- 프런트 1,403 그린 · tsc 0 · eslint 0.
+
+#### 승급과 무관한 발견 — `font="caption"` 은 대문자 변환이다
+
+동시 세션(MR 레인)이 «2σ» 가 화면에 **«2Σ»** 로 나온다고 넘겼고, 재검증했다:
+CDS 기본 테마의 `textTransform.caption = 'uppercase'` 이고 리포는 안 덮는다.
+**9.15.0 에도 같은 값이라 승급이 만든 것이 아니다**(unpkg 로 옛 판 대조).
+
+시그마는 대소문자가 서로 다른 글자라 오타가 아니라 **틀린 기호**다. 소스에서
+caption 아래 소문자 라틴·그리스가 든 자리는 셋뿐이다:
+
+    src/mr/StrategyWindow.tsx:770  «진입 z»   -> 화면 «진입 Z»   (MR 레인 관할)
+    src/mr/StrategyWindow.tsx:773  «청산 z»   -> «청산 Z»        (같음)
+    src/rv/SectorLane.tsx:148      «창(±50bp)» -> «50BP»
+
+내삽된 단위(`{n}bp` 등)는 이 셈에 안 잡힌다 — caption 을 단위·기호에 쓰는 것은
+피하는 편이 맞고, 그 판단은 별도 레인 몫으로 남긴다.
+
+#### 인계
+
+- Advanced 레인(`infomax-f7`)에 착수 전 통보하고 진행했다. 그쪽 Advanced 실측은
+  등고 **32px 단일**(34개 중 14)·라운드 **0px(18) > 6px(13) > pill(3)** 이라
+  CDS Select 의 34/8px 와 어긋난다 — `sauronTheme` 으로 맞출지 컴포넌트에서
+  잡을지가 그쪽 판단이고, 수치를 넘겼다.
+- **MCP 서버 핀이 `@coinbase/cds-mcp-server@9.15.0` 이다**(user 스코프). 승급
+  후에는 9.22.0 으로 다시 핀 해야 문서·타이핑이 설치본과 맞는다 — 리포 밖
+  설정이라 안 건드렸다. **오너 조치 필요.**
+
+#### 감사 ②번 정정 — `alpha/select` 는 결함이 아니었다
+
+`dts/controls/Select.d.ts` 가 `@deprecated Please use the new Select alpha
+component instead` 다. **안정판이라 부른 쪽이 deprecated 이고 CDS 가 alpha 를
+쓰라고 지시한다.** 리포의 6곳은 옳은 경로였다. 「alpha = 불안정」이라는 통념으로
+판단하고 타이핑을 안 읽은 내 오류다.

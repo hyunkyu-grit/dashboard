@@ -279,7 +279,7 @@ function OverlayCard() {
                 style={{ background: 'var(--sr-ref-cd)', opacity: prefs.refs.cd ? 0.9 : 0.3 }}
               />
             }
-            invertColorScheme={prefs.refs.cd}
+            active={prefs.refs.cd}
             onClick={() => ov.toggleRef('cd')}
           >
             CD 91일
@@ -296,7 +296,7 @@ function OverlayCard() {
                 }}
               />
             }
-            invertColorScheme={prefs.refs.policy}
+            active={prefs.refs.policy}
             onClick={() => ov.toggleRef('policy')}
           >
             기준금리
@@ -350,7 +350,7 @@ function OverlayCard() {
                       style={{ background: maColorVar(color), opacity: on ? 1 : 0.3 }}
                     />
                   }
-                  invertColorScheme={on}
+                  active={on}
                   onClick={() => ov.toggle(w)}
                 >
                   {`MA${w}`}

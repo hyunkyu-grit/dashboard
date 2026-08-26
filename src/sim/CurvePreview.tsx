@@ -226,7 +226,7 @@ export function CurvePreview({
               accessibilityLabel={`${c.label} 케이스 겹쳐 보기`}
               start={<span className="sr-casedash" style={{ background: CASE_COLOR[c.id] }} />}
               disabled={c.id === scenario.activeCase}
-              invertColorScheme={on}
+              active={on}
               onClick={() => onToggleOverlay(c.id)}
             >
               {c.label}

@@ -4,3 +4,6 @@ allowBuilds:
   unrs-resolver: true
 minimumReleaseAgeExclude:
   - '@coinbase/cds-illustrations@4.48.0'
+  - '@coinbase/cds-common@9.22.0'
+  - '@coinbase/cds-mcp-server@9.22.0'
+  - '@coinbase/cds-web@9.22.0'

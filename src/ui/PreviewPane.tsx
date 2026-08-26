@@ -245,7 +245,7 @@ export function RefChip({
       start={
         <span className="sr-casedash" style={{ background: color, opacity: on ? 0.9 : 0.3 }} />
       }
-      invertColorScheme={on}
+      active={on}
       onClick={onToggle}
     >
       {label}
@@ -1228,7 +1228,7 @@ export function PreviewPane({
                     }}
                   />
                 }
-                invertColorScheme={on}
+                active={on}
                 onClick={() => ov.toggle(w)}
               >
                 {`MA${w}`}

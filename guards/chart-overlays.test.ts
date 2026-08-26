@@ -124,7 +124,10 @@ describe('④ 껏다 켰다 [OWNER 2026-08-26]', () => {
 
   it('범례가 손잡이다 — 켠 상태가 칩에 실린다', () => {
     expect(pane).toMatch(/onClick=\{\(\) => ov\.toggle\(w\)\}/);
-    expect(pane).toMatch(/invertColorScheme=\{on\}/);
+    /* 9.16 에서 `invertColorScheme` 이 deprecate 되고 `active` 가 캐논이 됐다
+       (제거 예정 v11). 9.22 승급과 함께 개명했다. */
+    expect(pane).toMatch(/active=\{on\}/);
+    expect(pane).not.toMatch(/invertColorScheme/);
   });
 
   it('취향은 `state/overlays.ts` 한 곳이다 — Setting 과 차트가 같은 저장소를 읽는다', () => {
