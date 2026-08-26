@@ -26,6 +26,7 @@ import { CD_SERIES_ID, type PolicyStep } from '@/lib/api';
 import { fmtDelta, fmtLevel, unitSuffix } from '@/lib/format';
 import { rangePosition } from '@/lib/range';
 import { cashbondSeriesUrl, seriesUrl, universeSeriesUrl } from '@/lib/staticPaths';
+import { CurveChart, type CurveLine } from '@/chart/CurveChart';
 import { type IdleCurve } from '@/chart/curve';
 import { alignByDate, policyByDate, referenceMode } from '@/chart/references';
 import { panRange, sliceRange, zoomRange, type ViewRange } from '@/chart/zoom';
@@ -729,6 +730,26 @@ export function PreviewPane({
     [curve],
   );
 
+  /** 커브의 선 둘. **전일이 먼저 = 아래에 깔린다.**
+   *
+   * 전일선 색은 `fgMutedSoft` 다 — CDS 판이 `color=fgMuted` 에
+   * `strokeOpacity={0.5}` 를 겹쳐 쓰던 그 색이고, 캔버스에는 불투명도 손잡이가
+   * 따로 없어 색 자체가 반투명이어야 한다(`chart/palette.ts::soften`). */
+  /* 이 화면의 «안 고름» 은 `undefined` 인데 차트는 `null` 로 말한다. 여기서
+     한 번 맞춘다 — **인라인 화살표로 넘기면 매 렌더 새 함수라** 크로스헤어
+     구독이 렌더마다 붙었다 떨어진다. */
+  const setCurveHover = useCallback((i: number | null) => setHoverIdx(i ?? undefined), []);
+
+  const curveLines = useMemo<CurveLine[]>(() => {
+    if (!curve) return [];
+    const out: CurveLine[] = [];
+    if (curve.prev.some((v) => v != null)) {
+      out.push({ id: 'PREV', values: curve.prev, color: (p) => p.fgMutedSoft, width: 1 });
+    }
+    out.push({ id: 'NOW', values: curve.now, color: (p) => p.fg });
+    return out;
+  }, [curve]);
+
   /* ── 아무것도 안 고른 상태 = **IRS 파 커브** ────────────────────────────────
      빈 pane 에 "행을 고르세요" 라고 적어두는 대신 커브를 그린다. 커브 보기가 이
      제품의 1순위이고, 그건 탭과 무관하게 같은 커브다 [v1 OWNER, pass M].
@@ -774,44 +795,15 @@ export function PreviewPane({
           onMouseMove={onPlotMove}
           onMouseLeave={onPlotLeave}
         >
-          <CartesianChart
-            enableScrubbing
-            onScrubberPositionChange={setHoverIdx}
-            animate={false}
+          <CurveChart
             height={chartH}
             accessibilityLabel={`IRS 파 커브, ${curve.tenors.length}개 노드`}
-            inset={CHART_INSET}
-            series={[
-              /* 전일이 먼저 = 아래에 깔린다. 오늘 커브가 위에 와야 한다. */
-              /* `yAxisId` 를 빼먹으면 축 이름과 조회가 어긋나 선이 조용히
-                 사라진다 — 이 파일 위쪽 x 축 주석과 같은 함정이고, 이 커브를
-                 처음 붙일 때 실제로 한 번 더 밟았다. */
-              ...(curve.prev.some((v) => v != null)
-                ? [{ id: 'PREV', data: curve.prev, color: 'var(--color-fgMuted)', yAxisId: MAIN_AXIS }]
-                : []),
-              { id: 'NOW', data: curve.now, color: 'var(--color-fg)', yAxisId: MAIN_AXIS },
-            ]}
-            xAxis={{ data: curve.tenors }}
-            yAxis={[{ id: MAIN_AXIS }]}
-          >
-            <XAxis showGrid={false} />
-            <YAxis axisId={MAIN_AXIS} position="right" showGrid={false} tickLabelFormatter={fmtPct} />
-            {/* `curve="linear"` — CDS 기본은 `bump` 스플라인이고, 그건 노드
-                사이를 **지어낸다**. 우리가 아는 것은 노드의 값뿐이라 마디를
-                직선으로 잇는다(v1 도 직선 세그먼트다). 곡선이 예뻐 보이는 대신
-                존재하지 않는 만기의 금리를 그리는 거래는 하지 않는다. */}
-            {curve.prev.some((v) => v != null) ? (
-              <Line
-                seriesId="PREV"
-                curve="linear"
-                strokeWidth={1}
-                strokeOpacity={0.5}
-                connectNulls={false}
-              />
-            ) : null}
-            <Line seriesId="NOW" curve="linear" connectNulls={false} />
-            <Scrubber accessibilityLabel={curveScrubLabel} />
-          </CartesianChart>
+            nodes={curve.tenors}
+            lines={curveLines}
+            tickFormat={fmtPct}
+            onHoverIndex={setCurveHover}
+            hoverLabel={curveScrubLabel}
+          />
           {/* 노드의 리드아웃 — 히스토리 차트와 **같은 카드**다. 만기가 날짜
               자리에 오고 나머지 다섯 줄은 같다(v1 `ui/CurveView.tsx` 와 동일). */}
           {curveIdx != null ? (

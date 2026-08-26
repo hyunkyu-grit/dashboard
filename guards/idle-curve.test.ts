@@ -118,11 +118,39 @@ describe('그릴 게 없으면 그리지 않는다', () => {
 });
 
 describe('마디는 직선으로 잇는다', () => {
-  it('`curve="linear"` — 기본 `bump` 는 노드 사이를 지어낸다', () => {
-    const src = fs.readFileSync(
+  /* 규칙은 안 바뀌었고 **재는 자리가 옮겨졌다** [2026-08-26 라이트웨이트 이관].
+   *
+   * CDS 판에서는 기본이 `bump` 스플라인이라 `curve="linear"` 를 **켜야** 했다.
+   * `lightweight-charts` 의 `LineSeries` 는 기본이 직선 세그먼트라 이제는
+   * **끄지 않는 것**이 지키는 방법이다 — 그래서 「그 옵션이 있는가」가 아니라
+   * 「그 옵션을 건드리지 않았는가」를 잰다.
+   *
+   * 우리가 아는 것은 노드의 값뿐이다. 곡선이 예뻐 보이는 대신 존재하지 않는
+   * 만기의 금리를 그리는 거래는 하지 않는다. */
+  const src = fs.readFileSync(
+    path.resolve(import.meta.dirname, '../src/chart/CurveChart.tsx'),
+    'utf8',
+  );
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  it('`lineType` 을 아예 안 건드린다 — 기본이 직선이다', () => {
+    expect(code).not.toMatch(/lineType/);
+  });
+
+  it('스플라인·계단으로 바꾸지 않는다', () => {
+    expect(code).not.toMatch(/LineType\.(Curved|WithSteps)/);
+  });
+
+  it('커브를 그리는 곳이 여기 하나다 — 화면마다 다른 보간이 생기지 않는다', () => {
+    const pane = fs.readFileSync(
       path.resolve(import.meta.dirname, '../src/ui/PreviewPane.tsx'),
       'utf8',
     );
-    expect(src).toMatch(/seriesId="NOW"[\s\S]{0,60}curve="linear"/);
+    expect(pane).toMatch(/<CurveChart/);
+    /* 옛 커브 경로가 남아 있으면 둘이 갈린다. **히스토리 차트의**
+       `curve="linear"` 는 아직 CDS 라 그대로 있다(이관 진행 중) — 그래서
+       커브 차트의 계열 이름으로 좁혀 잰다. */
+    expect(pane).not.toMatch(/seriesId="NOW"/);
+    expect(pane).not.toMatch(/seriesId="PREV"/);
   });
 });

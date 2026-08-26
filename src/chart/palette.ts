@@ -57,6 +57,10 @@ export type LwPalette = {
   /** 축 글자체. 캔버스는 `font-family` 도 상속을 못 받는다 — 안 주면
    *  라이브러리 기본(Trebuchet MS)이 나와 화면에서 그 축만 다른 글자가 된다. */
   fontFamily: string;
+  /** `fgMuted` 를 반쯤 지운 것. 커브의 **전일 선**이 쓴다 — CDS 판이
+   *  `color=fgMuted` 에 `strokeOpacity={0.5}` 를 겹쳐 쓰던 그 색이다.
+   *  캔버스에는 불투명도 손잡이가 따로 없어 색 자체가 반투명이어야 한다. */
+  fgMutedSoft: string;
 };
 
 /** 읽을 변수 이름 ↔ 결과 키. 이름을 틀리면 빈 문자열이 나오고 캔버스는
@@ -75,9 +79,28 @@ const VARS: Record<keyof LwPalette, string> = {
   refPolicy: '--sr-ref-policy',
   refFut: '--sr-ref-fut',
   refRoll: '--sr-ref-roll',
-  /* `fontFamily` 는 변수가 아니라 계산값으로 읽는다 — 아래 `readPalette` 참조. */
+  /* 아래 둘은 변수 하나로 안 떨어진다 — `readPalette` 가 따로 만든다. */
   fontFamily: '',
+  fgMutedSoft: '',
 };
+
+/**
+ * 색을 반투명하게 — **계산은 브라우저가 한다.**
+ *
+ * 직접 섞으려면 `rgb(...)`/`#hex` 를 파싱해 알파를 붙여야 하고, 그 순간 이
+ * 파일이 색을 «만드는» 것이 되어 «색 리터럴은 direction.css 한 곳» 규칙을
+ * 캔버스로 우회하게 된다. 대신 문서 안에 잠깐 프로브를 세워 `color-mix` 를
+ * 시키고 계산값(`rgba(...)`)을 받아 온다. 우리 코드에는 색 산술이 없다.
+ */
+function soften(host: Element, color: string, percent: number): string {
+  const probe = document.createElement('span');
+  probe.style.color = `color-mix(in srgb, ${color} ${percent}%, transparent)`;
+  probe.style.display = 'none';
+  host.appendChild(probe);
+  const out = getComputedStyle(probe).color;
+  host.removeChild(probe);
+  return out || color;
+}
 
 /** 그 엘리먼트가 상속받은 계산값으로 팔레트를 읽는다.
  *
@@ -105,6 +128,7 @@ export function readPalette(el: Element): LwPalette {
      사슬의 원문이 오지만, `font-family` 를 읽으면 이 엘리먼트가 실제로 쓰는
      사슬이 온다. 캔버스에 넘길 것은 후자다. */
   out.fontFamily = cs.fontFamily || 'sans-serif';
+  out.fgMutedSoft = soften(el, out.fgMuted, 50);
   return out;
 }
 

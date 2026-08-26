@@ -96,11 +96,17 @@ describe('리드아웃 카드', () => {
 describe('카드를 여는 배선', () => {
   const pane = SRC('src/ui/PreviewPane.tsx');
 
-  it('두 차트가 모두 스크러버 위치를 알려준다', () => {
+  it('두 차트가 모두 커서 위치를 알려준다', () => {
     /* 커브와 히스토리 둘 다. 하나만 배선하면 pane 이 어느 상태냐에 따라
-       "패널이 나왔다 안 나왔다" 하고, 그건 버그로 안 읽히고 착각으로 읽힌다. */
-    const wired = pane.match(/onScrubberPositionChange=\{setHoverIdx\}/g) ?? [];
-    expect(wired.length).toBe(2);
+       "패널이 나왔다 안 나왔다" 하고, 그건 버그로 안 읽히고 착각으로 읽힌다.
+       **손잡이 이름이 둘로 갈렸다** [2026-08-26 라이트웨이트 이관]: 히스토리는
+       아직 CDS `Scrubber`(`onScrubberPositionChange`), 커브는 캔버스라
+       크로스헤어(`onHoverIndex`)다. 재는 것은 이름이 아니라 **둘 다 배선돼
+       있는가** 이므로 각각 한 번씩을 확인한다. */
+    const scrub = pane.match(/onScrubberPositionChange=\{setHoverIdx\}/g) ?? [];
+    const cross = pane.match(/onHoverIndex=\{setCurveHover\}/g) ?? [];
+    expect(scrub.length + cross.length).toBe(2);
+    expect(cross.length).toBe(1);
   });
 
   it('카드가 놓일 상자가 위치 기준을 진다', () => {

@@ -29,7 +29,7 @@
  * `handleScale` 을 끈다.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   ColorType,
@@ -96,15 +96,41 @@ export function canonOptions(p: LwPalette): DeepPartial<ChartOptions> {
     /* 구간은 이 제품이 정한다 — 위 머리 주석. */
     handleScroll: false,
     handleScale: false,
+    /* 크기는 컨테이너를 따라간다.
+     *
+     * ── 배경 탭에서는 캔버스가 안 선다(라이브러리 성질) ─────────────────────
+     * 실측 2026-08-26: 자동화 탭에서 캔버스가 전부 300×150(브라우저 기본)에
+     * 머물렀다. 한동안 `autoSize` 고장으로 보고 직접 리사이즈를 짰는데,
+     * **틀린 진단이었다.** 뿌리는 `document.visibilityState === 'hidden'` 이다:
+     *
+     *   `fancy-canvas` 는 캔버스 **비트맵** 크기를 `ResizeObserver` 의
+     *   `device-pixel-content-box` 로 정하는데, 그 지원 여부를 재는 프로브가
+     *   `document.body` 관찰 콜백으로 resolve 된다. 배경 탭은 프레임을 안
+     *   그리므로 그 콜백이 **영영 안 온다** — true 도 false 도 아니라 아무
+     *   일도 안 일어난다.
+     *
+     * 즉 «배경 탭에서는 차트가 비어 있다가, 탭을 보는 순간 그려진다». CDS 의
+     * SVG 차트는 그렇지 않았으므로 **이관이 바꾸는 성질**이다. 직접 리사이즈로도
+     * 못 고친다(비트맵은 라이브러리 것이다). 이 리포에 같은 계열 판례가 있다 —
+     * "«프리즈»는 hidden 탭 인공산물(rAF 0)" [2026-08-18 Lab 감사]. */
     autoSize: true,
   };
 }
 
 /**
- * `el` 이 서면 차트를 만들고, 스킴이 바뀌면 캐논을 다시 입힌다.
+ * 팔레트가 읽히면 차트를 만들고, 스킴이 바뀌면 캐논을 다시 입힌다.
  *
- * 차트는 **다시 안 만든다** — 스킴 토글마다 재생성하면 시리즈·프리미티브가
- * 전부 날아가고 화면이 깜빡인다. 옵션만 덧입힌다.
+ * ── 캐논은 **만들 때** 들어간다 ────────────────────────────────────────────
+ * 처음에는 빈 옵션으로 만들고 `applyOptions` 로 캐논을 덧입혔는데, 그러면
+ * **`autoSize` 와 `attributionLogo` 가 안 먹는다**(실측 2026-08-26: 캔버스가
+ * 전부 300×150 — 브라우저 기본 — 이고 라이브러리 로고가 남아 있었다. 차트도
+ * 시리즈도 다 붙은 상태였는데 화면은 비어 있었다). 그 둘은 생성자에서 읽는
+ * 옵션이다.
+ *
+ * 그래서 **팔레트가 읽힐 때까지 차트를 안 만든다.** `ready` 는 한 번만
+ * false -> true 로 뒤집히고 그 뒤로는 스킴을 토글해도 그대로라, 차트가
+ * 다시 만들어지지 않는다 — 재생성하면 시리즈·프리미티브가 전부 날아가고
+ * 화면이 깜빡인다. 스킴 변화는 `applyOptions` 가 받는다(색은 그렇게 먹는다).
  */
 export function useLwChart<H>(
   kind: ChartKind,
@@ -114,6 +140,12 @@ export function useLwChart<H>(
   const palette = useLwPalette(el);
   const [chart, setChart] = useState<IChartApiBase<H> | null>(null);
 
+  /* 생성 효과가 팔레트를 **읽되 의존하지는 않게** 하는 자리. 의존시키면
+     토글마다 차트가 새로 만들어진다. */
+  const paletteRef = useRef(palette);
+  paletteRef.current = palette;
+  const ready = palette != null;
+
   /* 커브 설정은 **만들 때 한 번** 들어간다(`applyOptions` 로는 못 바꾼다).
      그래서 의존성에 원시값으로 편다 — 객체를 그대로 넣으면 매 렌더 새 참조라
      차트가 계속 재생성된다. */
@@ -122,10 +154,13 @@ export function useLwChart<H>(
   const startRange = curve?.startTimeRange;
 
   useEffect(() => {
-    if (!el) return;
+    const p = paletteRef.current;
+    if (!el || !p) return;
+    const canon = canonOptions(p);
     const made =
       kind === 'curve'
         ? createYieldCurveChart(el as HTMLElement, {
+            ...canon,
             yieldCurve: {
               baseResolution: 1,
               minimumTimeRange: minRange ?? 120,
@@ -134,20 +169,26 @@ export function useLwChart<H>(
             },
           })
         : kind === 'numeric'
-          ? createOptionsChart(el as HTMLElement, {})
-          : createChart(el as HTMLElement, {});
+          ? createOptionsChart(el as HTMLElement, canon)
+          : createChart(el as HTMLElement, canon);
 
     setChart(made as unknown as IChartApiBase<H>);
     return () => {
       setChart(null);
       made.remove();
     };
-  }, [el, kind, fmt, minRange, startRange]);
+  }, [el, kind, fmt, minRange, startRange, ready]);
 
   useEffect(() => {
     if (!chart || !palette) return;
     chart.applyOptions(canonOptions(palette));
   }, [chart, palette]);
 
-  return chart && palette ? { chart, palette } : null;
+
+  /* **참조가 매 렌더 바뀌면 안 된다** — 이 값은 호출부 효과의 의존성으로
+     쓰이므로, 새 객체를 매번 주면 시리즈를 렌더마다 지웠다 다시 만든다. */
+  return useMemo(
+    () => (chart && palette ? { chart, palette } : null),
+    [chart, palette],
+  );
 }
