@@ -305,3 +305,75 @@ def test_series_history_empty_is_null_safe():
     h = series_history([], "%", "preview")
     assert h["stats"] is None
     assert h["points"] == [] and h["calendar"] == []
+
+
+# ── 이동평균 [OWNER 2026-08-26 — "차트 회사들에서 제공하는 표준 MA로"] ────────
+
+def test_ma_windows_are_the_vendor_standard():
+    """창을 이 리포가 발명하지 않는다. 키움 HTS 공장 기본값이 «종가 단순
+    5·10·20·60·120» 이고, 주 5거래일이라 5=1주·20=1개월·60=1분기·120=반기다.
+    MR 보드(20·60·120·252)와 셋이 겹치는 것도 그래서다 — 두 화면이 「MA120」
+    이라는 같은 낱말로 같은 수를 말해야 한다."""
+    from app.derive import MA_WINDOWS
+
+    assert MA_WINDOWS == (5, 10, 20, 60, 120)
+
+
+def test_ma_lookback_is_none_not_zero():
+    """창이 차기 전은 값이 **없다**. TA-Lib 이 lookback 을 NaN 으로 두는 규약이고,
+    0 으로 채우면 화면이 «그 날 평균이 0 이었다» 고 말한다."""
+    from app.derive import moving_averages
+
+    ma = moving_averages([float(i) for i in range(10)], (5,))[5]
+    assert ma[:4] == [None] * 4
+    assert ma[4] == pytest.approx(2.0)      # (0+1+2+3+4)/5
+    assert ma[9] == pytest.approx(7.0)      # (5+6+7+8+9)/5
+
+
+def test_ma_shorter_than_the_window_is_all_none():
+    from app.derive import moving_averages
+
+    assert moving_averages([1.0, 2.0], (5,))[5] == [None, None]
+    assert moving_averages([], (5,))[5] == []
+
+
+def test_ma_rides_along_with_its_own_point_through_downsampling():
+    """**정렬이 원리적으로 깨질 수 없어야 한다.**
+
+    프리뷰는 150점으로 솎인다. MA 를 따로 계산해 zip 하면 i 번째가 같은 날이
+    아니게 되고, 그건 그럴듯해 보이고 그냥 틀린 차트다(`chart/references.ts` 가
+    기준선에 대해 적어 둔 그 함정). 그래서 MA 는 **솎기 전에** 각 점에 얹혔다가
+    솎인 뒤 배열로 되꺼내진다 — 이 시험이 그 성질을 잰다.
+    """
+    import datetime as dt
+    import math
+
+    from app.derive import moving_averages, series_history
+
+    # 날짜는 **유일하고 증가**해야 한다 — 아래 `truth` 가 날짜로 키를 잡으므로,
+    # 중복 날짜를 만들면 사전이 뭉개져 시험이 코드가 아니라 자기 픽스처를 잰다
+    # (2026-08-26 에 실제로 그렇게 한 번 빨개졌다).
+    day0 = dt.date(2016, 1, 4)
+    pairs = [((day0 + dt.timedelta(days=i)).isoformat(), 3.0 + math.sin(i / 40))
+             for i in range(2000)]
+    assert len({t for t, _ in pairs}) == len(pairs)
+    truth = dict(zip([p[0] for p in pairs],
+                     moving_averages([p[1] for p in pairs], (20,))[20]))
+
+    body = series_history(pairs, "%", "preview")
+    assert len(body["points"]) == 150               # 실제로 솎였다
+    assert len(body["ma"]["20"]) == len(body["points"])
+    for pt, m in zip(body["points"], body["ma"]["20"]):
+        want = truth[pt["t"]]
+        assert (want is None) == (m is None)
+        if want is not None:
+            assert m == pytest.approx(want)
+
+
+def test_ma_keys_do_not_leak_into_points():
+    """점은 `t·v·d` 뿐이다 — 창마다 키를 다는 것보다 배열이 훨씬 작다."""
+    from app.derive import series_history
+
+    body = series_history([(f"2020-01-{i + 1:02d}", float(i)) for i in range(28)], "%")
+    assert set(body["points"][0]) == {"t", "v", "d"}
+    assert body["maWindows"] == [5, 10, 20, 60, 120]

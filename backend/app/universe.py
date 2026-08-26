@@ -30,6 +30,7 @@ import datetime as dt
 import logging
 from typing import Any, Iterable
 
+from .derive import MA_WINDOWS, moving_averages
 from .mysqldb import engine
 from sqlalchemy import text
 
@@ -375,7 +376,7 @@ def build_universe() -> dict[str, Any]:
     }
 
 
-def universe_series(rid: str) -> dict[str, Any]:
+def _universe_series(rid: str) -> dict[str, Any]:
     """History for ONE universe row.
 
     Targeted rather than served out of the summary payload: 120 series x ~1,600 points
@@ -440,3 +441,21 @@ def universe_series(rid: str) -> dict[str, Any]:
                     "points": [{"t": x.isoformat(), "v": round(v * 100, 4)} for x, v in zip(d, spread)]}
 
     raise KeyError(rid)
+
+
+def universe_series(rid: str) -> dict[str, Any]:
+    """`_universe_series` + 이동평균.
+
+    갈래가 여섯이라 반환 자리마다 적지 않고 한 번 감싼다. 이 계열은 솎지 않으므로
+    (전 구간 그대로 나간다) MA 는 나가는 점들 위에서 그대로 계산된다 — 스왑 쪽
+    (`derive.series_history`)이 솎기 전에 얹어야 했던 이유가 여기엔 없다.
+
+    창은 `derive.MA_WINDOWS` 하나다. 화면이 「MA120」이라고 부르는 수가 국고에서와
+    퓨처스왑에서 다르면 안 된다.
+    """
+    body = _universe_series(rid)
+    values = [p["v"] for p in body.get("points", [])]
+    mas = moving_averages(values)
+    body["ma"] = {str(w): mas[w] for w in MA_WINDOWS}
+    body["maWindows"] = list(MA_WINDOWS)
+    return body

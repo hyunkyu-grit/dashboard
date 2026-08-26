@@ -38,6 +38,45 @@ CALENDAR_DAYS = 130  # ~26 trading weeks of daily changes for the heatmap (§2)
 # does not distort them and the longer window estimates better.
 ANNUAL_OBS = 252
 
+#: 이동평균 창 — **벤더 표준을 그대로 쓴다** [OWNER, 2026-08-26 — "차트 회사들에서
+#: 제공하는 표준 MA로"]. 키움 HTS 의 공장 기본값이 «종가 단순 5·10·20·60·120» 이고,
+#: 주 5거래일이라 5=1주 · 20=1개월 · 60=1분기 · 120=반기라는 뜻이 붙어 있다
+#: (10 은 2주). TradingView 계열 리본(5·10·20·50·100·200)도 같은 계열이다.
+#:
+#: 새 어휘를 만들지 않는 것이 요점이다 — 이 리포의 MR 보드가 이미 20·60·120·252
+#: 를 쓰고 있어(`app/mr.py` WINDOWS) 세 창이 겹친다. 두 화면이 「MA120」이라는
+#: 같은 낱말로 같은 수를 말한다.
+MA_WINDOWS: tuple[int, ...] = (5, 10, 20, 60, 120)
+
+
+def moving_averages(
+    values: list[float], windows: tuple[int, ...] = MA_WINDOWS
+) -> dict[int, list[float | None]]:
+    """단순이동평균(종가 기준) — 창마다 값 배열 하나.
+
+    **창이 차기 전은 `None` 이고 0 이 아니다.** TA-Lib 이 lookback 구간을 NaN 으로
+    두는 그 규약이고, 이 리포가 볼린저 밴드(`app/mr.py::_bands`)에서 이미 지키는
+    규약이기도 하다 — 0 으로 채우면 화면이 «그 날 평균이 0 이었다» 고 말한다.
+    프런트는 `connectNulls={false}` 로 그 구간을 잇지 않는다.
+
+    브라우저는 시계열을 평균 내지 않는다(§16). 여기가 그 한 자리다.
+    """
+    n = len(values)
+    out: dict[int, list[float | None]] = {}
+    for w in windows:
+        col: list[float | None] = [None] * n
+        if w <= 0 or n < w:
+            out[w] = col
+            continue
+        run = sum(values[:w])
+        col[w - 1] = run / w
+        for i in range(w, n):
+            run += values[i] - values[i - w]
+            col[i] = run / w
+        out[w] = [None if v is None else round(v, 6) for v in col]
+    return out
+
+
 
 def annual_stats(values: list[float | None]) -> dict:
     """52-week level stats: min/max/avg of the trailing ANNUAL_OBS non-null
@@ -277,15 +316,30 @@ def series_history(pairs: list[tuple[str, float]], unit: str,
             "avg": round(sum(year) / len(year), 4),
         }
 
+    # ── 이동평균 ────────────────────────────────────────────────────────────
+    # **솎기 전에** 전 계열에서 내고 각 포인트에 얹는다. 그래야 프리뷰 해상도로
+    # 솎여도 i 번째 MA 가 i 번째 관측의 것이다 — 따로 계산해 zip 하면 다른 날의
+    # 평균을 이 날 옆에 그리게 된다(`chart/references.ts` 가 기준선에 대해 적어
+    # 둔 그 함정과 같은 것이고, 그럴듯해 보이고 그냥 틀린다).
+    mas = moving_averages(values)
+    for i, x in enumerate(triples):
+        for w in MA_WINDOWS:
+            x[f"_ma{w}"] = mas[w][i]
+
     points = (
         downsample_triples(triples) if resolution == "preview" else triples
     )
+
+    # 솎고 나서 창별 배열로 되꺼낸다 — 응답에서는 **`points` 와 같은 첨자**의
+    # 배열 다섯이고, 포인트마다 키 다섯을 다는 것보다 훨씬 작다.
+    ma = {str(w): [x.pop(f"_ma{w}") for x in points] for w in MA_WINDOWS}
     # Calendar wants DAILY resolution regardless of the line's resolution.
     calendar = [
         {"t": x["t"], "d": x["d"]} for x in triples if x["d"] is not None
     ][-CALENDAR_DAYS:]
 
-    return {"unit": unit, "points": points, "stats": stats, "calendar": calendar}
+    return {"unit": unit, "points": points, "stats": stats, "calendar": calendar,
+            "ma": ma, "maWindows": list(MA_WINDOWS)}
 
 
 def ohlc_buckets(pairs: list[tuple[str, float]], interval: str) -> list[dict]:

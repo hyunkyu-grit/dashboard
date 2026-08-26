@@ -43,7 +43,33 @@ import {
 
 /** `d` = 그날의 전일 대비 변화. **백엔드가 낸다**(`derive.py::series_history`) —
  * 브라우저는 시계열을 차분하지 않는다(§16). 카드의 「당일 변화」가 이 값이다. */
-type Point = { t: string; v: number; d?: number | null };
+type Point = { t: string; v: number; d?: number | null; ma?: (number | null)[] };
+
+/**
+ * 이동평균 — **벤더 표준 그대로** [OWNER, 2026-08-26 — "차트 회사들에서 제공하는
+ * 표준 MA로"]. 창은 서버가 정한다(`derive.MA_WINDOWS` = 5·10·20·60·120, 키움 HTS
+ * 공장 기본값). 여기 배열은 **그리는 법**만 말한다.
+ *
+ * ── 왜 색이 아니라 무게인가 ────────────────────────────────────────────────
+ * HTS 는 MA 선마다 다른 색을 준다. 이 제품에서 색은 이미 두 사전을 갖고 있다 —
+ * 방향(`--sr-up`/`--sr-down`)과 기준선(CD·기준금리의 호박/보라). 거기에 다섯 색을
+ * 더하면 「빨간 선」이 상승인지 MA5 인지 화면이 못 정한다. 그래서 MA 는 **한 색
+ * (fgMuted)의 무게 사다리**다: 창이 길수록 굵고 진하다 — 느리고 구조적인 선이
+ * 무거워야 눈이 층을 읽는다. 캐논의 «주선 잉크 · 보조선 뮤트» 안이다.
+ *
+ * MA 는 스크러버가 짚지 않는다(아래 `seriesIds`) — 다섯 개 구슬이 더 뜨면 커서가
+ * 무엇을 읽는지 모르게 된다.
+ */
+const MA_INK: { width: number; opacity: number }[] = [
+  { width: 1, opacity: 0.3 },
+  { width: 1, opacity: 0.4 },
+  { width: 1.25, opacity: 0.55 },
+  { width: 1.5, opacity: 0.7 },
+  { width: 1.75, opacity: 0.85 },
+];
+
+/** 시리즈 id — 문자열을 두 군데 적으면 한 군데만 고쳐지는 날이 온다(§MAIN_AXIS). */
+const maSeriesId = (w: number) => `MA${w}`;
 
 /** 52주 통계. 이것도 서버 것이다 — 최근 252관측 창이고, 차트가 보여주는 구간과
  * **무관하게** 고정이다. v1 이 여기에 남긴 근거: 10년 창은 2020~21 레짐 단절을
@@ -128,9 +154,12 @@ type SpanKey = (typeof SPANS)[number]['key'];
  * typed twice, so a span cannot exist in one list and not the other. */
 const SPAN_TABS = SPANS.map((s) => ({ id: s.key as string, label: s.label }));
 
-async function loadSeries(
-  row: Row,
-): Promise<{ unit: string; points: Point[]; stats: SeriesStats | null }> {
+async function loadSeries(row: Row): Promise<{
+  unit: string;
+  points: Point[];
+  stats: SeriesStats | null;
+  maWindows: number[];
+}> {
   // Swap rows have a stage-2 history route; universe rows have their own; cash-bond
   // rows a third (민평은 SQL 전용이라 라이브만 있다). Three routes, one shape — the
   // pane does not care which produced it (`derive.series_history` 가 셋 다 만든다).
@@ -142,10 +171,32 @@ async function loadSeries(
         : universeSeriesUrl(row.id);
   const r = await fetch(url);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const j = (await r.json()) as { unit?: string; points?: Point[]; stats?: SeriesStats | null };
+  const j = (await r.json()) as {
+    unit?: string;
+    points?: Point[];
+    stats?: SeriesStats | null;
+    ma?: Record<string, (number | null)[]>;
+    maWindows?: number[];
+  };
   /* `stats` 는 예전부터 이 응답 안에 있었다 — 프런트가 버리고 있었을 뿐이다.
      카드가 52주 세 줄을 이걸로 찍는다(v1 과 같은 출처). */
-  return { unit: j.unit ?? row.unit, points: j.points ?? [], stats: j.stats ?? null };
+  const points = j.points ?? [];
+  const windows = j.maWindows ?? [];
+  /* **이동평균을 점에 얹는다.** 서버가 솎기 전에 얹은 것과 같은 이유다: 이 파일은
+     점 배열을 두 번 자른다(구간 알약 → 확대). MA 를 따로 들고 있으면 그 두
+     자르기를 두 번째 자리에서 똑같이 흉내내야 하고, 언젠가 한쪽만 고쳐진다.
+     점에 붙여 두면 `view.win` 이 잘릴 때 MA 도 같이 잘린다 — 어긋날 길이 없다. */
+  if (windows.length && j.ma) {
+    for (let i = 0; i < points.length; i++) {
+      points[i].ma = windows.map((w) => j.ma?.[String(w)]?.[i] ?? null);
+    }
+  }
+  return {
+    unit: j.unit ?? row.unit,
+    points,
+    stats: j.stats ?? null,
+    maWindows: windows,
+  };
 }
 
 /** One label-over-value pair, the reference's stat unit. The label is the quiet
@@ -353,7 +404,12 @@ export function PreviewPane({
   fill?: boolean;
   height?: number;
 }) {
-  const [data, setData] = useState<{ unit: string; points: Point[]; stats: SeriesStats | null }>();
+  const [data, setData] = useState<{
+    unit: string;
+    points: Point[];
+    stats: SeriesStats | null;
+    maWindows: number[];
+  }>();
   const [cd, setCd] = useState<Point[] | null>(null);
   const [error, setError] = useState<string>();
   const [span, setSpan] = useState<SpanKey>('1Y');
@@ -411,6 +467,10 @@ export function PreviewPane({
   }, [row]);
 
   const days = SPANS.find((s) => s.key === span)?.days ?? null;
+
+  /** 서버가 정한 이동평균 창. 화면은 목록을 따로 갖지 않는다 — 두 곳에 적으면
+   *  「MA120」이 서로 다른 수를 가리키는 날이 온다. */
+  const maWindows = useMemo(() => data?.maWindows ?? [], [data]);
 
   /* The window the chart actually draws, and everything read off it. Kept in one
    * memo so the line's sign, the hero's change and the range readout can never
@@ -551,8 +611,16 @@ export function PreviewPane({
       ...(refs?.policy
         ? [{ id: BASE_LINE, data: refs.policy, color: 'var(--sr-ref-policy)', yAxisId: refAxis }]
         : []),
+      /* 이동평균 — **종목과 같은 축**이다(같은 단위의 같은 계열의 평균이므로).
+         기준선과 달리 `refAxis` 를 안 탄다: bp 차트에서도 MA 는 bp 다. */
+      ...maWindows.map((w, k) => ({
+        id: maSeriesId(w),
+        data: view.win.map((pt) => pt.ma?.[k] ?? null),
+        color: 'var(--color-fgMuted)',
+        yAxisId: MAIN_AXIS,
+      })),
     ];
-  }, [view, refs, pctAxis, hue, row?.id]);
+  }, [view, refs, pctAxis, hue, row?.id, maWindows]);
 
   /* 축 설정. 두 번째 축은 **있을 때만** 선언한다 — 빈 축은 눈금을 그리고 폭을
    * 먹으면서 아무것도 말하지 않는다. */
@@ -903,6 +971,20 @@ export function PreviewPane({
                 tickLabelFormatter={fmtPct}
               />
             ) : null}
+            {/* 이동평균이 종목 선 **앞**에 온다 — SVG 는 나중에 그린 것이 위다.
+                주선이 MA 밑에 깔리면 잉크의 위계가 뒤집힌다. 창이 안 찬 앞 구간은
+                서버가 null 로 두므로(`derive.moving_averages` — TA-Lib 의 lookback
+                규약) `connectNulls` 를 끈다: 이으면 없던 평균을 직선으로 메운다. */}
+            {maWindows.map((w, k) => (
+              <Line
+                key={maSeriesId(w)}
+                seriesId={maSeriesId(w)}
+                curve="linear"
+                strokeWidth={MA_INK[k]?.width ?? 1}
+                strokeOpacity={MA_INK[k]?.opacity ?? 0.5}
+                connectNulls={false}
+              />
+            ))}
             <Line
               seriesId={row.id}
               showArea
@@ -1001,13 +1083,19 @@ export function PreviewPane({
           한 줄, 그리고 **실제로 그려진 것만** 이름을 얻는다. 늘 두 이름을 찍으면
           CD 를 못 받아온 날 화면이 없는 선을 가리킨다. 범례가 없다 = 기준선이
           없다, 이고 그건 bp·ratio 차트에서 정상이다(`referenceMode`). */}
-      {refs ? (
+      {refs || maWindows.length ? (
         <HStack gap={2} paddingX={2} paddingBottom={1} flexWrap="wrap">
           {/* 같은 위계 = 색만 다르고 나머지 취급은 전부 같다. */}
-          {refs.cd ? <RefKey label="CD 91일" opacity={0.9} color="var(--sr-ref-cd)" /> : null}
-          {refs.policy ? (
+          {refs?.cd ? <RefKey label="CD 91일" opacity={0.9} color="var(--sr-ref-cd)" /> : null}
+          {refs?.policy ? (
             <RefKey label="기준금리" opacity={0.9} color="var(--sr-ref-policy)" />
           ) : null}
+          {/* MA 는 색을 안 받으므로 `RefKey` 의 색 없는 갈래로 선다 — 견본이 곧
+              그려진 선이라는 그 부품의 규칙 그대로이고, 무게 사다리가 견본에도
+              그대로 실린다(같은 opacity). */}
+          {maWindows.map((w, k) => (
+            <RefKey key={maSeriesId(w)} label={`MA${w}`} opacity={MA_INK[k]?.opacity ?? 0.5} />
+          ))}
         </HStack>
       ) : null}
 
