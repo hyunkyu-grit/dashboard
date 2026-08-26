@@ -103,8 +103,18 @@ NumericChart x=숫자   3  ResultsWindow · CurvePreview · BasisIrf
 ```
 
 **3D 표면(`src/ui/Surface3D.tsx`)은 오너 지시로 CDS/캔버스 그대로 둔다.**
-CDS `visualizations/chart` 에서 아직 임포트하는 것은 `PeriodSelector` 뿐이고
-(`PreviewPane`·`Surface3D`) 그건 차트가 아니라 구간 선택 컨트롤이다.
+
+CDS `visualizations/chart` 에서 아직 임포트하는 것은 `PeriodSelector` 뿐이다
+(`PreviewPane` 1 · `Surface3D` 4). **이건 이관 대상이 아니다 — 손대지 말 것.**
+그림이 아니라 탭 컨트롤이고, `DESIGN.md §5.4 «컴포넌트는 CDS 것만»`
+[OWNER 2026-08-13] 이 *"CDS 컴포넌트가 존재하면 항상 그것을 우선한다"* 라고
+못 박아 두었다. `PreviewPane.tsx:865` 주석이 그 자리의 내력을 적어 놓았다 —
+손으로 만든 알약 행을 **일부러 걷어내고** CDS 것으로 바꾼 자리다(키보드 이동·
+활성 인디케이터·포커스 링을 다시 만들지 않으려고). 우리가 얹은 것은 색뿐이고
+그건 `type.css` 의 `.sr-spans`(부호 있는 선택)·`.sr-tabs-neutral`(부호 없는
+필터·카메라)에 있다.
+
+**이 레인이 옮긴 것은 «그림을 그리는 층» 이지 CDS 컴포넌트 전부가 아니다.**
 
 ```
 ae624baf  차트 레인 인계 문서
@@ -179,9 +189,11 @@ src/chart/
 
 ## 9. 남은 것 / 미결
 
+**이 레인에 남은 코드 작업은 없다.** 차트 15개 이관이 끝이었다. 아래는 전부
+다른 사람 몫이거나 오너 판단이다.
+
 | 무엇 | 상태 |
 |---|---|
-| CDS `PeriodSelector` 이관 | 이 레인의 **유일한 잔여 코드 작업**. 차트가 아니라 구간 컨트롤이라 급하지 않다 |
 | MCP 핀 `@coinbase/cds-mcp-server` 9.15 → 9.22 | 리포 밖 · **오너 조치** |
 | 시뮬 선물 진입가 편집 | 서버 절반만 됨 — `main.py` 두 줄이 남의 것이라 못 박음 |
 | 표 머리 `caption` 대문자화(σ → Σ) | 일곱 중 둘만 고칠지 전부 `legal` 로 갈지 **오너 판단** |
