@@ -104,35 +104,6 @@ body,
   font-variant-numeric: tabular-nums;
 }
 
-/* D4.4 — period / basis selectors as pills.
- *
- * ── MEASURED BUG, 2026-08-13: 흰 글자가 흰 배경 위에 있었다 ──────────────────
- * This rule used to set only the BACKGROUND of the active pill, to a 12% tint of
- * the up hue. The markup paired it with CDS's `<Chip inverted>`, and `inverted`
- * sets the FOREGROUND to `fgInverse` — white — because it assumes the active
- * state is a solid dark fill. Overriding the fill to a near-white tint while
- * leaving the text white gave **white on white**, measured at ~1.1:1: the active
- * asset-class chip was effectively invisible.
- *
- * This is the same failure the kit hit before ("채움 주황 위 흰 글자 2.31:1"):
- * a background changed without its foreground travelling with it. So the rule now
- * sets BOTH, and `inverted` is gone from the call site.
- */
-.sr-pill {
-  border-radius: 999px;
-}
-
-.sr-pill[data-active='true'] {
-  background: color-mix(in srgb, var(--sr-up) 12%, transparent);
-}
-
-/* The pair. `color` must be stated here or the inherited/inverse one wins. */
-.sr-pill[data-active='true'],
-.sr-pill[data-active='true'] * {
-  color: var(--sr-up);
-}
-
-/* ── The three surfaces, applied ────────────────────────────────────────────
  * Definitions and the measurement behind them live in `direction.css`; this is
  * only where they land. The page is the ground, cards sit on it, and controls
  * are FILLED rather than outlined — a bordered control on a card reads as a
@@ -1109,17 +1080,6 @@ thead th {
 
 .sr-s3d-layer:not(.sr-s3d-canvas) {
   pointer-events: none;
-}
-
-/* 단면 패널 — 표면 위에 얹히는 2D. 표면이 이 밑을 지나가므로 **불투명**이어야
-   한다(반투명이면 능선이 숫자 사이로 비친다). */
-.sr-surface-cut {
-  position: absolute;
-  top: 0;
-  right: 0;
-  border: 1px solid var(--color-bgLine);
-  border-radius: 8px;
-  background: var(--sr-card);
 }
 
 

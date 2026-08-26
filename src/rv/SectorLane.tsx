@@ -21,7 +21,7 @@
  */
 
 import { HStack, VStack } from '@coinbase/cds-web/layout';
-import { Text, TextCaption, TextLabel2, TextLegal } from '@coinbase/cds-web/typography';
+import { Text, TextLabel2, TextLegal } from '@coinbase/cds-web/typography';
 
 import { tintFor } from '@/theme/tint';
 
@@ -145,9 +145,13 @@ export function SectorLane({
         <HStack gap={1.5} alignItems="baseline" flexWrap="wrap">
           <TextLabel2 as="span">교체점</TextLabel2>
           {sector.swapPoints.length === 0 ? (
-            <TextCaption as="span" color="fgMuted">
+            /* `caption` 이 아니라 `legal` 이다 — CDS 기본 테마의
+               `textTransform.caption = 'uppercase'` 라 «50bp» 가 «50BP» 로
+               렌더된다(실측 2026-08-26). 둘은 **크기가 같고**(0.8125rem) 중량과
+               대문자화만 다르므로, 단위·기호가 든 문장은 `legal` 이 맞다. */
+            <Text font="legal" as="span" color="fgMuted">
               창(±50bp) 안에 없어요
-            </TextCaption>
+            </Text>
           ) : (
             sector.swapPoints.map((p) => (
               <TextLegal key={`${p.from}-${p.to}`} as="span" tabularNumbers noWrap>

@@ -674,3 +674,19 @@ Intl 실측으로 로케일을 골랐다:
 `control-value-font`(13px 규칙). **재는 명제는 그대로**이고 재는 자리만 CSS 에서
 prop 으로 옮겼다. 신설 `guards/iso-date-field.test.ts` 12 — UTC 왕복(연말·월초·
 윤년)·로케일 순서를 `Intl` 로 **직접 실행해** 확인·힌트 슬롯·네이티브 잔재 0.
+
+### 배포 전 마무리 [OWNER — "남은 거 더 고칠 거 있으면 바로 고치고"]
+
+- **`caption` 대문자 함정 수리 1건.** `rv/SectorLane.tsx` 의 «창(±50bp) 안에
+  없어요» 가 화면에서 «50BP» 로 렌더되고 있었다 — CDS 기본 테마의
+  `textTransform.caption = 'uppercase'` 다. `legal` 로 옮겼다: 둘은 **크기가
+  같고**(0.8125rem) 중량과 대문자화만 다르므로, 단위·기호가 든 문장은 `legal`
+  이 맞다. `src/mr/StrategyWindow.tsx` 의 «진입 z»·«청산 z» 둘은 MR 레인 관할이라
+  그쪽에 넘겼다.
+- **죽은 CSS 2 클래스 더.** `.sr-pill`(3블록 + 그 14줄 주석 — 참조 23건은 전부
+  `sr-pillbtn` 이라 접두사로 세면 살아 있는 것처럼 보인다)과
+  `.sr-surface-cut`(컨테이너 — 쓰이는 것은 `.sr-surface-cut-date` 뿐).
+  `type.css` 2,761 -> 2,688.
+
+앞선 청소에서 이 둘을 놓친 이유가 같다 — **접두사로 세면 안 된다.** 이번엔
+`(?![a-z0-9-])` 로 클래스명 경계를 잡아 다시 셌다.
