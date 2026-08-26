@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 
 import type { ColorScheme } from '@coinbase/cds-common';
 import { ThemeProvider } from '@coinbase/cds-web';
+import { PortalProvider } from '@coinbase/cds-web/overlays';
 import { MediaQueryProvider } from '@coinbase/cds-web/system';
 
 import { sauronTheme } from '@/theme/sauronTheme';
@@ -77,7 +78,30 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <SchemeContext.Provider value={value}>
       <MediaQueryProvider>
         <ThemeProvider theme={sauronTheme} activeColorScheme={scheme}>
-          <div data-sr-scheme={scheme}>{children}</div>
+          {/* CDS 오버레이(Tooltip·Modal·Toast·Alert·Tray)가 포털할 컨테이너를
+              만든다. 문서가 «required root-level provider» 라고 적어 둔 것이고,
+              **없으면 조용히 틀린다** — `overlays/Portal.js` 가
+
+                  if (disablePortal || isSSR() || !document.getElementById(containerId))
+                    return <Fragment>{children}</Fragment>;
+
+              로 떨어져 오버레이가 트리거 **안에** 렌더된다. 에러도 경고도 없다.
+              이 리포가 그 대가를 이미 치렀다: rv 랭킹 표의 툴팁이 `<th>` 안에
+              그려져 그 칸의 `nowrap` 을 상속했고, 패널이 한 줄 높이로 서서 긴
+              문장이 밖으로 흘렀다 [OWNER 2026-08-19 — "패널 밖으로 글씨가
+              빠져나가"]. 그때 CSS(.sr-rv-tiptext)로 증상을 덮었는데, 뿌리는
+              이 프로바이더가 없던 것이었다.
+
+              **ThemeProvider 안쪽**이다 — `Portal` 이 포털 트리에 테마를 다시
+              세울 때 `useTheme()` 로 현재 테마를 읽으므로, 밖에 두면 다크에서
+              오버레이만 라이트로 뜬다.
+
+              층은 CDS 가 진다: 포털 루트가 `zIndex.portal`(100001)로 body 에
+              붙으므로 이 앱의 `Z_MODAL`(50)·`Z_WINDOW`(45) 위다 — 떠 있는 창
+              안에서 띄운 툴팁도 안 가려진다(`ui/window/layers.ts`). */}
+          <PortalProvider>
+            <div data-sr-scheme={scheme}>{children}</div>
+          </PortalProvider>
         </ThemeProvider>
       </MediaQueryProvider>
     </SchemeContext.Provider>

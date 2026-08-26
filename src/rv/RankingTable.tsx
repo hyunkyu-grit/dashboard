@@ -33,7 +33,7 @@ import { useEffect, useRef } from 'react';
 
 import { VStack } from '@coinbase/cds-web/layout';
 import { Tooltip } from '@coinbase/cds-web/overlays';
-import { TextLegal } from '@coinbase/cds-web/typography';
+import { Text, TextLegal } from '@coinbase/cds-web/typography';
 
 import { tintFor } from '@/theme/tint';
 
@@ -51,14 +51,21 @@ function ThHelp({ label, help }: { label: string; help: string }) {
   return (
     <Tooltip
       content={
-        /* .sr-rv-tiptext — 이 표의 th 는 nowrap 이고 툴팁이 그 안에 렌더되어
-           문장을 **한 줄로 상속**받는다. 그래서 패널은 한 줄 높이로 서고 긴
-           문장이 패널 밖으로 흘러나갔다(실측 2026-08-19 [OWNER — "패널 밖으로
-           글씨가 빠져나가"]). 줄바꿈을 되살리고 keep-all 로 **단어 사이에서만**
-           줄을 넘긴다 — 패널은 세로로 자란다. */
-        <TextLegal as="span" className="sr-rv-tiptext">
+        /* 폭은 **`maxWidth` prop 이 진다** — 여기 클래스로 적지 않는다.
+           2026-08-19 에 이 자리에 `.sr-rv-tiptext`(max-width 236 + white-space
+           normal + keep-all)가 붙어 있었다. 툴팁이 `<th>` 안에 렌더돼 그 칸의
+           nowrap 을 상속했고 긴 문장이 패널 밖으로 흘렀기 때문이다
+           [OWNER — "패널 밖으로 글씨가 빠져나가"]. **그건 증상이었다**: 뿌리는
+           루트에 `PortalProvider` 가 없어 CDS `Portal` 이 포털을 포기하고
+           인라인 Fragment 로 떨어진 것이었다(`app/providers.tsx` 의 주석).
+           프로바이더가 서면서 툴팁은 `#tooltipContainer` 로 나가고, 줄바꿈은
+           body 의 `keep-all` 을 상속한다 — 실측(2026-08-26): inPortal true ·
+           inTh false · white-space normal · word-break keep-all. 남은 것은
+           폭뿐이고 그건 이미 아래 prop 이 말하고 있었다(클래스의 236 이 그
+           prop 의 280 을 덮고 있었다). */
+        <Text font="legal" as="span">
           {help}
-        </TextLegal>
+        </Text>
       }
       maxWidth={280}
       placement="bottom"

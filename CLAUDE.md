@@ -1,29 +1,48 @@
 # sauron-v2 — Claude 세션 규칙
 
-## UI 작업: cds-code × ui-ux-pro-max 병행 규칙 [OWNER 2026-08-19]
+## UI 작업: cds-code 단독 [OWNER 2026-08-26 — "폐기하고 전부 cds-code로 돌리기"]
 
-이 프로젝트에서 UI 작업 시 cds-code 스킬과 ui-ux-pro-max 스킬을 병행한다. 역할 분담과 우선순위는 다음과 같다.
+이 프로젝트의 UI 판단은 **전부 `cds-code`** 가 진다. 2026-08-19 의 «cds-code ×
+ui-ux-pro-max 병행» 규칙은 폐기한다.
 
-1. **우선순위**: 토큰·컴포넌트·스타일링 결정은 항상 CDS(cds-code)가 우선이다.
-   색은 CDS 시맨틱 토큰 또는 `src/theme/direction.css`의 `--sr-*` 토큰만 쓰고
-   (hex는 direction.css에만 — `guards/color-source.test.ts` 가드), 스페이싱·타이포는
-   CDS style prop(`padding`, `gap`, `font` 등)으로 적용한다. ui-ux-pro-max가
-   팔레트·폰트·hex 값을 제안해도 코드에 반영하지 않는다.
+폐기 근거는 취향이 아니라 **출처**다: `ui-ux-pro-max` 는 락파일도 git 메타도
+`source` 필드도 없이 들어와 있던 스킬이고(73파일·3.8MB), 상류가 없어 그 조언의
+근거를 대조할 방법이 없었다. 디자인 시스템이 있는 리포에서 검증 불가능한 두
+번째 의견을 두면, 갈릴 때 어느 쪽이 옳은지 판정할 자료가 없다.
+2026-08-26 에 `SKILL.md` 를 `.retired` 로 내려 등록 해제했다.
 
-2. **ui-ux-pro-max의 용도**: 접근성, 레이아웃/반응형, 인터랙션·모션, 폼/내비게이션 UX,
-   차트 유형 선택 같은 라이브러리 중립적 판단에만 조회용(`--domain ux` 등)으로 쓴다.
-
-3. **금지**: 이 리포에서 ui-ux-pro-max의 `--design-system --persist`로 MASTER.md를
-   생성하지 않는다. `src/theme/sauronTheme.ts`와 `src/theme/direction.css`가 유일한
+1. **UI 코드를 쓰거나 리뷰하기 전에 `cds-code` 를 먼저 부른다.** 문서가 필요하면
+   `cds-docs` — MCP `list-cds-routes`/`get-cds-doc`, 안 붙은 세션이면 curl 폴백
+   (`https://cds.coinbase.com/llms/web/routes.txt`). **이 규칙이 안 지켜진
+   세션이 있었다** [OWNER 2026-08-26 — "너 마음대로 진행했던 것들이 너무 많아"]:
+   스킬이 없어서가 아니라 **안 불러서**였고, 그 결과 CDS 카탈로그를 모른 채
+   node_modules 를 grep 해 답한 자리와, 캐논에 이미 있는 부품을 «CDS 로 바꿔야
+   할 것» 으로 올린 감사가 나왔다.
+2. **컴포넌트를 새로 만들기 전에 카탈로그를 먼저 본다.** 아래 «화면 문법의 캐논»
+   에 있으면 그것을 쓰고, 없으면 CDS 카탈로그를 보고, 거기도 없을 때만 만든다.
+   그리고 만든 이유를 주석으로 남긴다.
+3. 색은 CDS 시맨틱 토큰 또는 `src/theme/direction.css` 의 `--sr-*` 만
+   (hex 는 direction.css 에만 — `guards/color-source.test.ts`).
+4. 스페이싱·타이포·반경은 CDS style prop 으로. **raw px 금지**, inline style 대신
+   style prop. 반경 스케일은 `100`=4 · `200`=8 · `300`=12 · `400`=16 · `500`=24
+   (`defaultTheme.borderRadius`) — 같은 수를 px 로 다시 적지 않는다.
+5. deprecated 임포트 금지. 기존 타이포 shorthand(`TextCaption`/`TextLegal`/
+   `TextLabel1·2`/`TextBody` 등 **573건**)는 시각 무변이라 존치 중 —
+   **새 코드에서 추가 사용 금지**, 일괄 마이그레이션(`Text font=…`)은 CDS 메이저
+   승급 전 별도 레인으로.
+6. **CDS 오버레이는 프로바이더를 요구한다.** `Modal`·`Toast`·`Alert`·`Tooltip`·
+   `Tray` 는 루트의 `PortalProvider` 가 만든 컨테이너로 포털한다. 없으면
+   `Portal.js` 가 `!document.getElementById(containerId)` 에서 **조용히 인라인
+   Fragment 로 떨어진다** — 에러도 경고도 없다. 실측 판례: 툴팁이 `<th>` 안에
+   렌더돼 `nowrap` 을 상속했고, 그것을 CSS 로 덮은 흔적이 남아 있었다
+   [OWNER 2026-08-19 — "패널 밖으로 글씨가 빠져나가"].
+7. 라이브러리 중립 판단(접근성·반응형·차트 유형)은 **인용 가능한 외부 표준**에
+   둔다 — WCAG 2.2(1.4.1 색 단독 금지 · 1.4.3 텍스트 4.5:1 · 1.4.11 그래픽 3:1) ·
+   ISO 24896:2026(비즈니스 리포팅 표기) · FT Visual Vocabulary(차트 유형 선택).
+   스킬 하나의 의견이 아니라 출처가 있어야 한다.
+8. **금지**: 이 리포에서 `MASTER.md` 류 병렬 디자인 소스를 만들지 않는다.
+   `src/theme/sauronTheme.ts` 와 `src/theme/direction.css` 가 유일한
    디자인 소스오브트루스다.
-
-4. **UI 코드 작성·리뷰 시 cds-code 워크플로우를 따른다**: CDS 컴포넌트 선택을 먼저
-   알리고, inline style 대신 style prop, raw px 스페이싱 금지(동적 값은 CSS 변수),
-   deprecated 임포트 금지.
-   - 참고: 기존 코드의 타이포 shorthand(`TextCaption`/`TextLegal`/`TextLabel1·2`/
-     `TextBody` 등 602건)는 전부 `@deprecated`지만 시각 무변이라 존치 중 —
-     **새 코드에서 추가 사용 금지**, 일괄 마이그레이션(`Text font=…`)은 CDS 메이저
-     승급 전에 별도 레인으로(HANDOFF-2026-08-18c §8.14).
 
 ## 화면 문법의 캐논 [OWNER 2026-08-25 — "이 요청 진짜 자주 하고 있는데 뭐가 문제인거임?"]
 

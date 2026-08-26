@@ -78,7 +78,8 @@ function ThHelp({ label, help }: { label: string; help: string }) {
   return (
     <Tooltip
       content={
-        <Text font="legal" as="span" className="sr-rv-tiptext">
+        /* 폭은 아래 `maxWidth` prop 이 진다 — 근거는 rv `ThHelp` 의 주석. */
+        <Text font="legal" as="span">
           {help}
         </Text>
       }
