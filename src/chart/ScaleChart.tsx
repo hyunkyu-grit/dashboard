@@ -23,6 +23,7 @@ import { LabelledHorzScale, fillWhitespace, nearestIndex, type ScaleNode } from 
 import type { AreaFill } from './dottedArea';
 import type { LwPalette } from './palette';
 import { addLine, removeLines, type PlacedLine } from './series';
+import { sameLines, sameNodes, samePriceLines, useStable } from './stable';
 import { useLwChart } from './useLwChart';
 
 /**
@@ -99,39 +100,53 @@ export function ScaleChart({
 
   const handle = useLwChart<number>('curve', el, { scale });
 
-  const xs = useMemo(() => nodes.map((n) => n.x), [nodes]);
+  /* 프롭은 **내용**으로 본다 — 경위와 계측은 `chart/stable.ts` 머리에.
+     `nodes={pillars.map((p) => p.id)}` 같은 호출부가 있어서, 참조로 비교하면
+     계열이 렌더마다 파괴·재생성되고 커서가 끊긴다. */
+  const sNodes = useStable(nodes, sameNodes);
+  const sLines = useStable(lines, sameLines);
+  const sPriceLines = useStable(priceLines, samePriceLines);
 
-  const notify = useCallback(
-    (k: number | null) => {
-      setHover(k);
-      onHoverNode?.(k);
-    },
-    [onHoverNode],
-  );
+  /** 색·서식·콜백은 최신 것을 ref 로 읽는다(`stable.ts` 「함수는 비교하지
+   *  않는다」). */
+  const latest = useRef({ lines, priceLines, tickFormat, onHoverNode });
+  latest.current = { lines, priceLines, tickFormat, onHoverNode };
 
+  const placedRef = useRef<PlacedLine<number>[] | null>(null);
+  const inkRef = useRef<string[]>([]);
+
+  const xs = useMemo(() => sNodes.map((n) => n.x), [sNodes]);
+
+  const notify = useCallback((k: number | null) => {
+    setHover(k);
+    latest.current.onHoverNode?.(k);
+  }, []);
+
+  /* 구조 — 계열을 세우고 부순다. 색만 바뀔 때는 아래 겉모습 이펙트가 진다. */
   useEffect(() => {
-    if (!handle || nodes.length === 0) return;
+    if (!handle || sNodes.length === 0) return;
     const { chart, palette, alive } = handle;
+    const src = latest.current;
 
     /* 축에 «어느 자리가 진짜인지» 를 알려 준다 — 눈금 글자와 가중치가 거기서
        나온다. `setData` **전에** 해야 첫 그리기부터 맞다. */
-    scale.setNodes(nodes);
+    scale.setNodes(sNodes);
 
     const pad = edgePad((xs[xs.length - 1] ?? 0) - (xs[0] ?? 0));
-    const placed: PlacedLine<number>[] = lines.map((ln) => {
+    const placed: PlacedLine<number>[] = sLines.map((ln, i) => {
       const valueAt = new Map<number, number | null>();
-      nodes.forEach((n, k) => valueAt.set(n.x, ln.values[k] ?? null));
+      sNodes.forEach((n, k) => valueAt.set(n.x, ln.values[k] ?? null));
       return addLine(
         chart,
         palette,
         {
           id: ln.id,
-          color: ln.color,
+          color: src.lines[i]?.color ?? ln.color,
           width: ln.width,
           dash: ln.dash,
           area: ln.area,
-          areaColor: ln.areaColor,
-          format: tickFormat,
+          areaColor: src.lines[i]?.areaColor ?? ln.areaColor,
+          format: src.tickFormat,
           data: fillWhitespace(xs, (x) => valueAt.get(x), pad) as (
             | LineData<number>
             | WhitespaceData<number>
@@ -140,27 +155,48 @@ export function ScaleChart({
         precision,
       );
     });
+    placedRef.current = placed;
+    inkRef.current = sLines.map((ln, i) => (src.lines[i]?.color ?? ln.color)(palette));
 
     /* 가로 상수선. 첫 계열에 매단다 — 이 앱의 차트는 값 축이 하나뿐이라
        어느 계열에 붙어도 같은 높이에 선다. */
-    for (const pl of priceLines ?? []) {
+    (sPriceLines ?? []).forEach((pl, i) => {
       placed[0]?.series.createPriceLine({
         price: pl.value,
-        color: pl.color(palette),
+        color: (src.priceLines?.[i]?.color ?? pl.color)(palette),
         lineWidth: 1,
         lineStyle: pl.dash ? LineStyle.Dotted : LineStyle.Solid,
         axisLabelVisible: false,
         title: '',
       });
-    }
+    });
 
     chart.timeScale().fitContent();
 
     /* 차트가 이미 사라졌으면 지울 것이 없다 — `LwHandle.alive` 주석. */
     return () => {
+      placedRef.current = null;
       if (alive.current) removeLines(chart, placed);
     };
-  }, [handle, lines, priceLines, nodes, xs, precision, scale, tickFormat]);
+  }, [handle, sLines, sPriceLines, sNodes, xs, precision, scale]);
+
+  /* 겉모습 — 계열을 부수지 않고 색만. */
+  useEffect(() => {
+    const placed = placedRef.current;
+    if (!handle || !placed) return;
+    const { palette } = handle;
+    const ink = inkRef.current;
+    lines.forEach((ln, i) => {
+      const p = placed[i];
+      if (!p) return;
+      const stroke = ln.color(palette);
+      if (ink[i] !== stroke) {
+        ink[i] = stroke;
+        p.series.applyOptions({ color: stroke });
+      }
+      if (p.area) p.area.setColor(ln.areaColor ? ln.areaColor(palette) : stroke);
+    });
+  }, [handle, lines]);
 
   useEffect(() => {
     if (!handle) return;

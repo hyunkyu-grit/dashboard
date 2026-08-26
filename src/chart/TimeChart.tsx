@@ -31,6 +31,14 @@ import type { LwPalette } from './palette';
 import { VerticalLines } from './verticalLines';
 import type { ScalePriceLine } from './ScaleChart';
 import { addLine, removeLines, type LineAxis, type PlacedLine } from './series';
+import {
+  sameLines,
+  sameMarkLines,
+  sameMarkers,
+  samePriceLines,
+  sameStrings,
+  useStable,
+} from './stable';
 import { useLwChart } from './useLwChart';
 
 export type TimeLine = {
@@ -97,16 +105,30 @@ export function TimeChart({
   const [hover, setHover] = useState<number | null>(null);
   const handle = useLwChart<Time>('time', el);
 
-  /** 날짜 -> 순번. 크로스헤어가 주는 것은 날짜뿐이다. */
-  const indexOf = useMemo(() => new Map(dates.map((d, i) => [d, i])), [dates]);
+  /* ── 프롭은 **내용**으로 본다 [2026-08-27] ───────────────────────────────────
+     호출부는 `dates={points.map((p) => p.t)}` 처럼 매 렌더 새 배열을 줘도 된다.
+     참조로 비교하던 시절에는 그것이 계열 전체의 파괴·재생성을 불렀고 화면이
+     번쩍였다 — 경위와 계측은 `chart/stable.ts` 머리에. */
+  const sDates = useStable(dates, sameStrings);
+  const sLines = useStable(lines, sameLines);
+  const sMarkers = useStable(markers, sameMarkers);
+  const sPriceLines = useStable(priceLines, samePriceLines);
+  const sMarkLines = useStable(markLines, sameMarkLines);
 
-  const notify = useCallback(
-    (i: number | null) => {
-      setHover(i);
-      onHoverIndex?.(i);
-    },
-    [onHoverIndex],
-  );
+  /* 색·서식은 «모양» 이 아니라 안정화 대상이 아니다. 계열을 다시 세우는
+     순간에는 **그때의 최신 것**이 쓰여야 하므로 ref 로 읽는다. */
+  const latest = useRef({ lines, markers, priceLines, onHoverIndex });
+  latest.current = { lines, markers, priceLines, onHoverIndex };
+
+  /** 날짜 -> 순번. 크로스헤어가 주는 것은 날짜뿐이다. */
+  const indexOf = useMemo(() => new Map(sDates.map((d, i) => [d, i])), [sDates]);
+
+  /* 콜백도 ref 로 읽는다 — 인라인 화살표를 넘기는 호출부가 있어서(전략 실험
+     창 셋), 의존성에 두면 크로스헤어 구독이 렌더마다 붙었다 떨어진다. */
+  const notify = useCallback((i: number | null) => {
+    setHover(i);
+    latest.current.onHoverIndex?.(i);
+  }, []);
 
   /** 왼쪽 축은 **쓸 때만** 선다 — 빈 축이 서면 플롯이 그만큼 좁아진다. */
   const hasAux = useMemo(() => lines.some((l) => l.axis === 'aux'), [lines]);
@@ -121,25 +143,37 @@ export function TimeChart({
   /** 크로스헤어를 세울 계열 — 첫 줄(주선)이다. */
   const anchor = useRef<ISeriesApi<'Line', Time> | null>(null);
   const vlines = useRef<VerticalLines<Time> | null>(null);
+  /** 지금 서 있는 계열들 — 겉모습 이펙트가 여기로 색을 갈아입힌다. */
+  const placedRef = useRef<PlacedLine<Time>[] | null>(null);
+  /** 계열에 **실제로 입혀진** 색. 이것과 다를 때만 다시 입힌다. */
+  const inkRef = useRef<string[]>([]);
+  /** 짝 차트가 세운 커서가 있는가 — 없는데 지우면 **내 커서**가 지워진다. */
+  const syncedRef = useRef(false);
 
+  /* ── 이펙트가 둘인 이유 ─────────────────────────────────────────────────────
+     아래는 **구조**다: 계열을 세우고 부순다. 그 아래 «겉모습» 이펙트는 색만
+     갈아입힌다. 가른 이유는 색이 바뀌었다고 계열을 부수면 크로스헤어가 끊기고
+     화면이 번쩍이기 때문이다(MA 색 취향을 바꾸면 값은 그대로인데 색만 바뀐다). */
   useEffect(() => {
-    if (!handle || dates.length === 0) return;
+    if (!handle || sDates.length === 0) return;
     const { chart, palette, alive } = handle;
+    /* 함수는 최신 것 — `sLines` 와 모양이 같으므로 순번이 맞는다. */
+    const src = latest.current;
 
-    const placed: PlacedLine<Time>[] = lines.map((ln) =>
+    const placed: PlacedLine<Time>[] = sLines.map((ln, i) =>
       addLine(
         chart,
         palette,
         {
           id: ln.id,
-          color: ln.color,
+          color: src.lines[i]?.color ?? ln.color,
           width: ln.width,
           dash: ln.dash,
           area: ln.area,
-          areaColor: ln.areaColor,
+          areaColor: src.lines[i]?.areaColor ?? ln.areaColor,
           axis: ln.axis,
-          format: ln.format,
-          data: dates.map((t, k) => {
+          format: src.lines[i]?.format ?? ln.format,
+          data: sDates.map((t, k) => {
             const v = ln.values[k];
             return (v == null ? { time: t as Time } : { time: t as Time, value: v }) as
               | LineData<Time>
@@ -149,44 +183,48 @@ export function TimeChart({
         precision,
       ),
     );
+    placedRef.current = placed;
+    /* 방금 입힌 색을 적어 둔다 — 아래 겉모습 이펙트가 곧바로 다시 입히지
+       않도록. */
+    inkRef.current = sLines.map((ln, i) => (src.lines[i]?.color ?? ln.color)(palette));
 
     /* 고·저 표시점 — CDS `Point` 자리. 주선(첫 계열)에 매단다. */
-    if (markers?.length && placed[0]) {
+    if (sMarkers?.length && placed[0]) {
       markerApi.current = createSeriesMarkers(
         placed[0].series,
-        markers
-          .filter((m) => dates[m.index] != null)
-          .map((m) => ({
-            time: dates[m.index] as Time,
+        sMarkers
+          .filter((m) => sDates[m.index] != null)
+          .map((m, i) => ({
+            time: sDates[m.index] as Time,
             position: 'inBar' as const,
             shape: 'circle' as const,
-            color: m.color(palette),
+            color: (src.markers?.[i]?.color ?? m.color)(palette),
             size: 0.6,
           })),
       );
     }
 
     /* 가로 상수선. 첫 계열에 매단다 — 값 축이 하나뿐이라 어디 붙어도 같다. */
-    for (const pl of priceLines ?? []) {
+    (sPriceLines ?? []).forEach((pl, i) => {
       placed[0]?.series.createPriceLine({
         price: pl.value,
-        color: pl.color(palette),
+        color: (src.priceLines?.[i]?.color ?? pl.color)(palette),
         lineWidth: 1,
         lineStyle: pl.dash ? LineStyle.Dotted : LineStyle.Solid,
         axisLabelVisible: false,
         title: '',
       });
-    }
+    });
 
     anchor.current = placed[0]?.series ?? null;
 
-    if (markLines?.length && placed[0]) {
+    if (sMarkLines?.length && placed[0]) {
       const v = new VerticalLines<Time>();
       placed[0].series.attachPrimitive(v);
       v.update(
-        markLines
-          .filter((m) => dates[m.index] != null)
-          .map((m) => ({ time: dates[m.index] as Time, label: m.label })),
+        sMarkLines
+          .filter((m) => sDates[m.index] != null)
+          .map((m) => ({ time: sDates[m.index] as Time, label: m.label })),
         palette.fgMuted,
         palette.fontFamily,
       );
@@ -199,13 +237,35 @@ export function TimeChart({
       /* 차트가 이미 사라졌으면 지울 것이 없다 — `LwHandle.alive` 주석. */
       markerApi.current = null;
       anchor.current = null;
+      placedRef.current = null;
       if (alive.current && vlines.current && placed[0]) {
         placed[0].series.detachPrimitive(vlines.current);
       }
       vlines.current = null;
       if (alive.current) removeLines(chart, placed);
     };
-  }, [handle, lines, markers, priceLines, markLines, dates, precision]);
+  }, [handle, sDates, sLines, sMarkers, sPriceLines, sMarkLines, precision]);
+
+  /* ── 겉모습 — 계열을 부수지 않고 색만 갈아입힌다 ───────────────────────────
+     값은 그대로인데 색만 바뀌는 자리가 실제로 있다(MA 색 취향). 푼 색이 정말
+     달라졌을 때만 `applyOptions` 를 부른다 — 인라인 화살표를 주는 호출부가
+     있어서, 함수 참조가 바뀐 것만으로는 아무 일도 하지 않는다. */
+  useEffect(() => {
+    const placed = placedRef.current;
+    if (!handle || !placed) return;
+    const { palette } = handle;
+    const ink = inkRef.current;
+    lines.forEach((ln, i) => {
+      const p = placed[i];
+      if (!p) return;
+      const stroke = ln.color(palette);
+      if (ink[i] !== stroke) {
+        ink[i] = stroke;
+        p.series.applyOptions({ color: stroke });
+      }
+      if (p.area) p.area.setColor(ln.areaColor ? ln.areaColor(palette) : stroke);
+    });
+  }, [handle, lines]);
 
   /* 짝 차트가 짚어 준 자리. 값은 주선의 그날 값을 쓴다 — 크로스헤어는 가로
      자리만 보이면 되지만 API 가 값을 요구한다. */
@@ -213,11 +273,21 @@ export function TimeChart({
     if (!handle) return;
     const { chart } = handle;
     const s = anchor.current;
-    const t = syncIndex == null ? null : dates[syncIndex];
-    const v = syncIndex == null ? null : (lines[0]?.values[syncIndex] ?? null);
-    if (s && t != null && v != null) chart.setCrosshairPosition(v, t as Time, s);
-    else chart.clearCrosshairPosition();
-  }, [handle, syncIndex, dates, lines]);
+    const t = syncIndex == null ? null : sDates[syncIndex];
+    const v = syncIndex == null ? null : (sLines[0]?.values[syncIndex] ?? null);
+    if (s && t != null && v != null) {
+      syncedRef.current = true;
+      chart.setCrosshairPosition(v, t as Time, s);
+    } else if (syncedRef.current) {
+      /* **세운 적이 있을 때만 지운다** [실측 2026-08-27]. 그냥 지우면 커서가
+         이 차트 위에 있을 때도 라이브러리가 크로스헤어를 내리고, 그 순간
+         빈 이벤트가 날아와 리드아웃 카드가 사라진다. 짝을 안 쓰는 화면
+         (Main 미리보기는 `syncIndex` 를 아예 안 넘긴다)에서는 렌더마다
+         그 일이 났다 — 번쩍거림의 두 번째 뿌리였다. */
+      syncedRef.current = false;
+      chart.clearCrosshairPosition();
+    }
+  }, [handle, syncIndex, sDates, sLines]);
 
   useEffect(() => {
     if (!handle) return;

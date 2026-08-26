@@ -197,6 +197,14 @@ export class DottedArea<H = Time> implements ISeriesPrimitive<H> {
     this.requestUpdate?.();
   }
 
+  /** 색만 갈아입는다 — 점은 그대로. 겉모습 이펙트가 쓴다(`chart/stable.ts`):
+   *  색이 바뀌었다고 계열을 다시 세우면 크로스헤어가 끊긴다. */
+  setColor(color: string): void {
+    if (this.color === color) return;
+    this.color = color;
+    this.requestUpdate?.();
+  }
+
   paneViews(): readonly IPrimitivePaneView[] {
     return [this.view];
   }
