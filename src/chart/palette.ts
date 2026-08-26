@@ -32,6 +32,8 @@
 
 import { useEffect, useState } from 'react';
 
+import type { CustomColorParser, Rgba } from 'lightweight-charts';
+
 import { useScheme } from '@/app/providers';
 
 /** 이 앱이 캔버스에 넘기는 색 전부. 늘리려면 여기 한 줄을 더한다 —
@@ -101,6 +103,68 @@ function soften(host: Element, color: string, percent: number): string {
   host.removeChild(probe);
   return out || color;
 }
+
+/* 색 문자열을 **라이브러리가 읽을 수 있는 꼴로** 되돌리는 캔버스.
+   한 장만 만들어 재사용한다(픽셀을 쓰지 않으므로 1×1 이면 된다). */
+let normCanvas: CanvasRenderingContext2D | null | undefined;
+function normContext(): CanvasRenderingContext2D | null {
+  if (normCanvas === undefined) {
+    normCanvas = document.createElement('canvas').getContext('2d');
+  }
+  return normCanvas;
+}
+
+/**
+ * **라이브러리에 등록하는 색 파서** — 라이브러리가 못 읽는 색을 픽셀로 재 준다.
+ *
+ * ── 왜 필요한가 (실측 2026-08-26, 화면이 통째로 에러 경계로 떨어졌다) ────────
+ * `lightweight-charts` 는 자기 색 파서를 갖고 있다(가격축 라벨의 대비색을
+ * 계산하느라 색을 채널로 뜯는다). 그 파서가 아는 꼴은 hex·`rgb()`·`rgba()`·
+ * `hsl()`·`hwb()`·이름뿐이다. 그런데 브라우저의 **계산값**은 그 목록 밖일 수
+ * 있다 — `color-mix(in srgb, ...)` 가 크롬에서
+ *
+ *     color(srgb 0.356863 0.380392 0.431373 / 0.5)
+ *
+ * 로 계산되고, 캔버스의 `strokeStyle` 은 그걸 읽지만 라이브러리는
+ * `Failed to parse color` 로 **던진다**. 색 하나 때문에 커브 전체가
+ * «이 종목의 차트를 그리지 못했어요» 로 떨어졌다
+ * [OWNER 2026-08-26 — 화면을 보고 알려 줬다].
+ *
+ * ── 왜 이 방법인가 ──────────────────────────────────────────────────────────
+ * 처음에는 팔레트에서 색 문자열을 옛 표기로 되돌려 넘기려 했다. 두 번 틀렸다:
+ * 캔버스 `fillStyle` 의 getter 는 `color(srgb ...)` 를 **그대로 돌려주고**,
+ * 직접 `rgba(...)` 문자열을 조립하면 이 층이 색을 «만드는» 것이 된다.
+ *
+ * 라이브러리에 **지원되는 확장점**이 있다(`layout.colorParsers`). 문서가 이
+ * 경우를 그대로 적어 뒀다 — «커스텀 파서는 Display P3·Lab·LCH·Oklab·Oklch
+ * 같은 다른 색공간에만 필요하다». 파서는 **문자열이 아니라 채널 넷**을
+ * 돌려주므로 이 파일에 색 리터럴이 생기지 않고, CDS 가 언젠가 토큰을
+ * `oklch()` 로 바꿔도 그대로 버틴다.
+ *
+ * 재는 방법은 «한 픽셀 칠하고 그 픽셀 읽기» 다. 브라우저가 최종 채널값을
+ * 내주고 우리는 받아 적을 뿐이라 색 산술이 없다.
+ */
+export const pixelColorParser: CustomColorParser = (color) => {
+  const ctx = normContext();
+  if (!ctx || !color) return null;
+
+  /* 못 읽는 값이면 `fillStyle` 이 조용히 이전 값을 유지한다 — 서로 다른 두
+     씨앗으로 두 번 시켜 결과가 같을 때만 «읽혔다» 고 본다. 씨앗은 색이 아니라
+     판별용이고 화면에 안 칠해진다. */
+  ctx.fillStyle = 'black';
+  ctx.fillStyle = color;
+  const first = ctx.fillStyle;
+  ctx.fillStyle = 'white';
+  ctx.fillStyle = color;
+  if (ctx.fillStyle !== first) return null;
+
+  ctx.clearRect(0, 0, 1, 1);
+  ctx.fillRect(0, 0, 1, 1);
+  const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+  /* `Rgba` 는 채널마다 브랜드 타입(`RedComponent` 등)이라 평범한 `number` 가
+     안 들어간다. 값은 이미 0~255 / 0~1 범위라 검사할 것이 없어 그대로 못 박는다. */
+  return [r, g, b, a / 255] as Rgba;
+};
 
 /** 그 엘리먼트가 상속받은 계산값으로 팔레트를 읽는다.
  *

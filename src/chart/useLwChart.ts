@@ -41,7 +41,7 @@ import {
 } from 'lightweight-charts';
 import type { DeepPartial, IChartApiBase, ChartOptions } from 'lightweight-charts';
 
-import { useLwPalette, type LwPalette } from './palette';
+import { pixelColorParser, useLwPalette, type LwPalette } from './palette';
 
 export type ChartKind = 'time' | 'curve' | 'numeric';
 
@@ -118,6 +118,29 @@ export function canonOptions(p: LwPalette): DeepPartial<ChartOptions> {
 }
 
 /**
+ * **만들 때만** 들어가는 것들. 스킴이 바뀔 때 다시 넣으면 안 된다.
+ *
+ * `colorParsers` 는 `applyOptions` 로 바꾸면 라이브러리가 대놓고 던진다 —
+ * «colorParsers option should not be changed once the chart has been created»
+ * (실측 2026-08-26: 그 문장이 그대로 에러 경계에 떴다). `attributionLogo`·
+ * `autoSize` 도 생성자에서만 읽힌다. 그래서 «만들 때» 와 «다시 입힐 때» 를
+ * 함수 둘로 갈라 둔다 — 한 함수에 두 시점을 담으면 이 사고가 또 난다.
+ */
+export function creationOptions(p: LwPalette): DeepPartial<ChartOptions> {
+  const canon = canonOptions(p);
+  return {
+    ...canon,
+    layout: {
+      ...canon.layout,
+      /* 라이브러리가 못 읽는 색을 픽셀로 재 주는 파서. 이게 없으면
+         `color-mix` 의 계산값(`color(srgb ...)`) 하나에 차트가 통째로 던진다 —
+         `chart/palette.ts::pixelColorParser` 의 그 판례. */
+      colorParsers: [pixelColorParser],
+    },
+  };
+}
+
+/**
  * 팔레트가 읽히면 차트를 만들고, 스킴이 바뀌면 캐논을 다시 입힌다.
  *
  * ── 캐논은 **만들 때** 들어간다 ────────────────────────────────────────────
@@ -156,7 +179,7 @@ export function useLwChart<H>(
   useEffect(() => {
     const p = paletteRef.current;
     if (!el || !p) return;
-    const canon = canonOptions(p);
+    const canon = creationOptions(p);
     const made =
       kind === 'curve'
         ? createYieldCurveChart(el as HTMLElement, {

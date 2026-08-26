@@ -78,11 +78,13 @@ describe('③ 색을 지어내지 않는다', () => {
     for (const f of fs.readdirSync(CHART)) {
       if (!f.endsWith('.ts') && !f.endsWith('.tsx')) continue;
       const code = codeOf(read(f));
-      /* 폴백 회색 하나만 예외다(위 테스트가 그 값을 못 박는다). */
-      const stripped = code.replace(/rgb\(138,145,158\)/g, '');
-      if (/#[0-9a-fA-F]{3,8}\b/.test(stripped)) bad.push(f);
-      if (/rgba?\(/.test(stripped)) bad.push(f);
+      if (/#[0-9a-fA-F]{3,8}\b/.test(code)) bad.push(f);
+      if (/rgba?\(/.test(code)) bad.push(f);
     }
+    /* **예외가 없다.** 이 층은 색을 읽고 넘길 뿐 만들지 않는다 — 폴백은
+       엘리먼트의 글자색이고(위), 라이브러리에 넘기는 것도 문자열이 아니라
+       채널 넷이다(`pixelColorParser`). 판별용 씨앗은 `'black'`·`'white'` 라
+       이름이지 리터럴이 아니다. */
     expect([...new Set(bad)]).toEqual([]);
   });
 });
@@ -115,6 +117,50 @@ describe('④ 캐논 룩은 한 곳에서만 정의된다', () => {
 
   it('글자체를 넘긴다 — 안 넘기면 그 축만 라이브러리 기본 글자가 된다', () => {
     expect(hook).toMatch(/fontFamily: p\.fontFamily/);
+  });
+});
+
+describe('④-2 라이브러리가 못 읽는 색은 파서가 받는다', () => {
+  const palette = read('palette.ts');
+  const hook = read('useLwChart.ts');
+
+  it('색 파서를 라이브러리에 **등록**한다', () => {
+    /* 없으면 `color-mix` 의 계산값(`color(srgb ...)`) 하나에 차트가 통째로
+       던진다 — 2026-08-26 에 실제로 «이 종목의 차트를 그리지 못했어요» 가 떴다. */
+    expect(palette).toMatch(/export const pixelColorParser: CustomColorParser/);
+    expect(hook).toMatch(/colorParsers: \[pixelColorParser\]/);
+  });
+
+  it('파서는 **문자열이 아니라 채널**을 돌려준다 — 색을 만들지 않는다', () => {
+    expect(codeOf(palette)).toMatch(/return \[r, g, b, a \/ 255\] as Rgba/);
+  });
+
+  it('픽셀을 칠해서 읽는다 — `fillStyle` getter 로는 안 된다', () => {
+    /* 크롬은 `color(srgb ...)` 를 넣으면 **그대로 돌려준다**(실측). 그래서
+       첫 수리가 안 먹었다. */
+    expect(codeOf(palette)).toMatch(/getImageData\(0, 0, 1, 1\)/);
+  });
+
+  it('`colorParsers` 는 **생성 전용 함수**에만 있다', () => {
+    /* `applyOptions` 로 바꾸면 라이브러리가 던진다 —
+       «colorParsers option should not be changed once the chart has been created».
+       그 문장이 그대로 에러 경계에 떴다(실측 2026-08-26). */
+    expect(hook).toMatch(/export function creationOptions/);
+    /* `canonOptions` 의 본문 = 그 선언부터 `creationOptions` 선언 전까지를
+       **주석 걷은 판에서** 자른 것. 두 가지를 피한다 — 중괄호를 세는 정규식은
+       주석 안 중괄호에 걸리고, 주석을 안 걷으면 `creationOptions` 의 머리
+       주석(«왜 생성에만 넣는가» 를 설명하느라 그 낱말을 쓴다)이 딸려 온다. */
+    const code = codeOf(hook);
+    const from = code.indexOf('export function canonOptions');
+    const to = code.indexOf('export function creationOptions');
+    expect(from).toBeGreaterThan(-1);
+    expect(to).toBeGreaterThan(from);
+    expect(code.slice(from, to)).not.toMatch(/colorParsers/);
+  });
+
+  it('만들 때는 `creationOptions`, 다시 입힐 때는 `canonOptions` 다', () => {
+    expect(hook).toMatch(/const canon = creationOptions\(p\)/);
+    expect(hook).toMatch(/chart\.applyOptions\(canonOptions\(palette\)\)/);
   });
 });
 
