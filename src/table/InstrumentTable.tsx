@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { HStack, VStack } from '@coinbase/cds-web/layout';
+import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@coinbase/cds-web/tables';
 import { useSortableCell } from '@coinbase/cds-web/tables/hooks/useSortableCell';
 import { TextCaption, TextLabel1, TextLabel2, TextLegal } from '@coinbase/cds-web/typography';
@@ -503,8 +503,21 @@ export function InstrumentTable({
    * cannot disagree. */
   const colCount = 2 + cols.bases.length + 1;
 
+  /* 표의 host — raw `<div style>` 이 아니라 `Box` 다. 폭은 style prop 이 진다
+   * (cds-code: style prop > inline style).
+   *
+   * **`display="block"` 이 load-bearing 이다**: CDS `Box` 는 기본이
+   * `display: flex` 이고(그 컴포넌트 문서의 첫 줄), 그대로 두면 안의 `<table>`
+   * 이 flex 아이템이 되어 이 표의 폭 규약(`table-layout: fixed` + colgroup)과
+   * 다툰다. 여기서 필요한 것은 블록 컨테이너 하나다.
+   *
+   * `ref`·키보드·포인터 핸들러는 그대로 간다 — Box 는 polymorphic 이고 기본
+   * 요소가 `div` 라 네이티브 prop 을 그대로 받는다. */
   return (
-    <div
+    <Box
+      as="div"
+      display="block"
+      width="100%"
       ref={hostRef}
       tabIndex={-1}
       onClick={handleClick}
@@ -513,7 +526,6 @@ export function InstrumentTable({
       onMouseLeave={handleMouseLeave}
       onFocusCapture={onFocusCapture}
       onBlurCapture={onBlurCapture}
-      style={{ width: '100%' }}
     >
       <Table
         variant="ruled"
@@ -739,6 +751,6 @@ export function InstrumentTable({
           </TextCaption>
         ) : null}
       </HStack>
-    </div>
+    </Box>
   );
 }

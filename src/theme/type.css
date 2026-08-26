@@ -233,12 +233,6 @@ body,
   width: 100%;
 }
 
-.sr-brand {
-  font-size: 16px;
-  font-weight: var(--fontWeight-headline);
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-}
 
 .sr-navitems {
   display: flex;
@@ -423,37 +417,6 @@ tr[aria-current='true'] > td {
   padding: 0 12px 6px;
 }
 
-.sr-megaitem {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 0;
-  border-radius: 12px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--sr-motion-fast) var(--sr-ease-out);
-}
-
-.sr-megaitem:hover {
-  background: var(--sr-control);
-}
-
-.sr-megaitem[data-on='true'] {
-  background: var(--sr-control);
-}
-
-.sr-megaitem:focus-visible {
-  outline: 2px solid var(--color-fg);
-  outline-offset: 2px;
-}
-
-.sr-megaitem-solo {
-  min-width: 320px;
-}
 
 /* The reference's rounded-square icon chip. A glyph rather than an icon font:
  * v1 already chose these characters for these same asset classes, and inventing
@@ -472,12 +435,6 @@ tr[aria-current='true'] > td {
   line-height: 1;
 }
 
-.sr-megatext {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
 
 .sr-mega-aside {
   flex: 0 0 260px;
@@ -1198,21 +1155,6 @@ thead th {
   background: var(--sr-card);
 }
 
-.sr-surface-cut-head,
-.sr-surface-cut-foot {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 0 8px;
-}
-
-.sr-surface-cut-head {
-  padding-top: 6px;
-}
-
-.sr-surface-cut-foot {
-  padding-bottom: 4px;
-}
 
 .sr-surface-cut-date {
   font-size: 12px;
@@ -2109,109 +2051,6 @@ thead th {
   cursor: pointer;
 }
 
-/* ── Lab 시나리오 — 정책 경로 스트립 (`lab/ScenarioPage.tsx`) ────────────────
- *
- * 24분기 i_kr 편차를 0선 위아래 막대로 그린다. 차트가 아니라 **읽는 줄**이라
- * 축도 눈금도 없다 — 이 줄이 답하는 질문은 하나다: 내가 고정한 8분기가 끝난 뒤
- * 준칙이 되받아치는가.
- *
- * 그 되받아침이 이 화면에서 가장 오해받는 자리다(실측: 지속 −25bp 인하 경로가
- * IRS 3y 12개월 이동 **+13.2bp** 를 낸다). 표만 보면 도구가 고장 난 것으로
- * 읽히므로, 표 옆에 원인을 같이 둔다.
- *
- * 높이는 인라인 `--h` 로 온다 — 값마다 다르므로 클래스로 못 적는다(CLAUDE.md
- * §4 의 "동적 값은 CSS 변수"). 색은 방향뿐이다. */
-/* 24분기 스트립. 높이가 **고정이 아니라 양보한다** [OWNER, 2026-08-20 — "스크롤
- * 최대한 안 하는 방향으로"].
- *
- * 36px 로 못 박아 두었더니 창이 911→855 로 줄자 결과 탭이 18px 넘쳤다(실측).
- * 이 막대들은 백분율 높이라 눌려도 서로의 비율이 그대로다 — 표나 각주와 달리
- * 줄어들어도 잃는 정보가 없다. 그래서 이 탭에서 양보하는 자리는 여기가 맞다.
- *
- * 24px 아래로는 방향이 안 읽히므로 거기가 바닥이고, 그보다 낮은 창이면 그때는
- * 스크롤이 맞다. */
-.sr-scn-strip {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  gap: 2px;
-  height: 36px;
-  flex: 0 1 36px;
-  min-height: 24px;
-}
-
-.sr-scn-col {
-  display: grid;
-  grid-template-rows: 1fr 1fr;
-  height: 100%;
-}
-
-/* 두 칸은 **격자 행을 채운다**. `align-self` 로 붙이면 칸이 내용 높이로 줄고,
- * 그러면 막대의 `height: var(--h)`(%)가 높이 없는 부모를 기준으로 풀려 0 이 된다
- * (실측 2026-08-20: 44px 스트립이 2px 선으로 그려졌다). 채운 다음 **안에서**
- * 붙인다. */
-.sr-scn-col > * {
-  display: flex;
-  height: 100%;
-}
-
-/* 0선. 위 칸의 바닥이자 아래 칸의 천장이라 한 번만 긋는다. */
-.sr-scn-col > :first-child {
-  align-items: flex-end;
-  border-bottom: 1px solid var(--color-bgLine);
-}
-
-.sr-scn-col > :last-child {
-  align-items: flex-start;
-}
-
-.sr-scn-bar {
-  width: 100%;
-  height: var(--h);
-  min-height: 1px;
-  border-radius: 1px;
-}
-
-.sr-scn-bar[data-dir='up'] {
-  background: var(--sr-up);
-}
-
-.sr-scn-bar[data-dir='down'] {
-  background: var(--sr-down);
-}
-
-/* 편차가 0 인 분기도 자리를 지킨다 — 빈칸이면 24개 격자가 어긋나 보인다. */
-.sr-scn-bar[data-dir='flat'] {
-  background: var(--color-bgLine);
-}
-
-/* 내가 고정한 8분기와 준칙이 도로 가져가는 16분기의 경계. 스트립 위에 얹는
- * 채운 상자였다가 **바닥 눈금**으로 바꿨다(실측 2026-08-20): 경로가 전부 0 인
- * 기본 상태에서 회색 상자 여덟 개가 «화면이 깨졌다» 로 읽혔다. 눈금은 값이
- * 없을 때 조용하고, 값이 있을 때는 막대가 이미 그 구간을 말한다. */
-.sr-scn-pinned {
-  box-shadow: inset 0 -2px 0 var(--color-fgMuted);
-}
-
-/* 다섯째 칸의 방향 틴트 — Main 의 변화 칸, Strategy 의 Score 칸과 같은 문법.
- *
- * 이 화면의 결론이 표 맨 오른쪽 13px 글자에 숨어 있었다(실측 2026-08-20, 다른
- * 화면들과 나란히 놓고 본 뒤). 잉크 색만으로는 «여기가 답» 이라고 말하기에
- * 모자란다 — 이 앱은 판정이 실린 칸을 칠한다.
- *
- * 10% 틴트는 `.sr-spans` 가 방향에 쓰는 것과 같은 농도다. */
-.sr-scn-vs {
-  border-radius: 6px;
-  padding: 2px 8px;
-}
-
-.sr-scn-vs[data-dir='up'] {
-  background: color-mix(in srgb, var(--sr-up) 10%, transparent);
-}
-
-.sr-scn-vs[data-dir='down'] {
-  background: color-mix(in srgb, var(--sr-down) 10%, transparent);
-}
 
 /* 「모형」 탭의 정의 목록 — 행 사이 헤어라인.
  *
@@ -2778,7 +2617,7 @@ thead th {
 
 .sr-wire-node rect {
   fill: var(--sr-card);
-  stroke: var(--color-lineHeavy);
+  stroke: var(--color-bgLineHeavy);
   stroke-width: 1;
 }
 
@@ -2835,7 +2674,7 @@ thead th {
 /* 등록부·원장의 행 구분. 카드 안이라 테두리가 아니라 헤어라인 하나다. */
 .sr-eqreg > * + *,
 .sr-ledger > * + * {
-  border-top: 2px solid var(--color-line);
+  border-top: 2px solid var(--color-bgLine);
 }
 
 /* ── 곁줄 두 종 — **세로 막대를 안 쓴다** [2026-08-24] ────────────────────

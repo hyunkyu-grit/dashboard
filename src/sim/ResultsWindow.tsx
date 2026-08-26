@@ -752,7 +752,10 @@ function Waterfall({ parts }: { parts: ReturnType<typeof partsOf> }) {
 
   return (
     <HStack gap={2} alignItems="flex-start" flexWrap="wrap" width="100%">
-      <Box className="sr-waterfall" style={{ height: H + 48 }}>
+      {/* 높이는 **prop 이 진다** — Box 는 `height` 를 갖고 있고, style 로 적으면
+          토큰 체계 밖으로 나간다(cds-code: style prop > inline style). 값 자체는
+          실측 고정값이라 그대로다(H=140 + 라벨 여백 48). */}
+      <Box className="sr-waterfall" height={H + 48}>
         {bars.map((b) => (
           <div key={b.label} className="sr-wf-col">
             <div

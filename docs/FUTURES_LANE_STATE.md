@@ -466,3 +466,79 @@ MA120 `var(--color-accentBoldGray)` w1.75 op.95 · 종목 `var(--sr-up)` w2 op1 
 기존 가드 둘이 옛 모양을 재고 있어 새 모양으로 옮겼다 — 재려던 명제는 그대로다
 (`reference-lines`: 둘이 같은 부품·같은 취급 / `readout-card`: 없는 선의 값을 안
 읽는다, 이제 **한 겹 강해져** «꺼 둔 선» 도 포함).
+
+### CDS 전수 감사 (C) — 결과와 조치 [2026-08-26]
+
+프로덕션 UI 115파일(tsx 50 · ts 65, 하니스 넷 제외). `cds-code/guidelines/
+code-review.md` 14규칙을 기계 검출 -> 소스 확인 -> 판정.
+
+**깨끗한 항목**: 원시 hex/rgb **0** · `dangerouslySet*` **0** · 잘못된 CDS 임포트
+경로 **0**(18경로 전부 유효 export) · 레이아웃 스타일 붙은 raw div/span **1**.
+`color-source` 가드가 실제로 일하고 있다는 뜻이다.
+
+**철회한 지적들** — 문서·CLAUDE.md 대조 후. `background`/`color` 를 style 로
+넘기는 9곳은 전부 **계산된 CSS 값**(tint 램프·케이스 팔레트·CSS 변수)이라 토큰
+prop 으로 못 간다. `TableRow style={{height}}` 3곳은 **TableRow 에 height prop 이
+없다**(타이핑 확인). `.sr-pillbtn` raw button 18개는 캐논. deprecated 타이포
+573건은 CLAUDE.md 가 이미 정책화(신규만 금지, 이번 세션 신규 0).
+
+**감사 수치 정정**: 「죽은 클래스 14」는 과다였다 — 넷(`sr-surface-page`·
+`sr-rv-dotlabel`·`sr-rv-hovercard`·`sr-rv-pane-readout`)은 **주석에만** 있는
+은퇴 기록이지 코드가 아니다. 실제는 **10클래스 / 22블록 / 161줄**.
+
+#### 조치한 것
+
+    ① 죽은 CSS 제거      type.css 2,922 -> 2,761 (161줄)
+                         .sr-brand · .sr-megaitem{,:hover,[data-on],:focus-visible}
+                         · .sr-megaitem-solo · .sr-megatext
+                         · .sr-surface-cut-head/foot
+                         · Lab 시나리오 절 통째(.sr-scn-strip/col/bar/pinned/vs)
+    ② Box height         sim/ResultsWindow.tsx 폭포 상자 — style -> `height` prop
+    ③ div -> Box         table/InstrumentTable.tsx 표 host
+
+`.sr-megaitem` 류가 죽은 이유가 드러났다 — 메가 패널 항목이 **CDS `ListCell` 로
+이미 이사**했고 CSS 만 남았다(`ui/TopNav.tsx:125`). `.sr-scn-*` 는
+`lab/ScenarioPage.tsx` 가 아예 없다(2026-08-21 은퇴). 둘 다 «컴포넌트는 옮겼는데
+CSS 는 안 지운» 같은 자국이다.
+
+③ 에서 **`display="block"` 이 load-bearing** 이다: CDS `Box` 는 기본이
+`display: flex` 라 그대로 두면 안의 `<table>` 이 flex 아이템이 되어 폭 규약과
+다툰다. 실측으로 확인했다(host display block · table-layout fixed · colgroup
+157.4/73.6/69.6… 그대로).
+
+#### 인계받아 고친 것 — 존재하지 않는 토큰 이름 2건
+
+동시 세션(Advanced 레인)이 넘긴 건이고 **직접 재검증했다**(dev :3200,
+ThemeProvider 루트에서 getComputedStyle):
+
+    --color-bgLine       rgba(138,145,158,0.2)    OK
+    --color-bgLineHeavy  rgba(138,145,158,0.66)   OK
+    --color-line         ""                       없음  <- type.css 가 부르고 있었다
+    --color-lineHeavy    ""                       없음  <- 같음
+
+프로브로 결과까지 쟀다: `.sr-eqreg > * + *` 의 border-top 계산값이 **`0px none`**
+(테두리가 아예 없음)이고, 이름을 고치면 `2px solid rgba(138,145,158,0.2)`.
+**등록부·원장의 행 구분선이 그동안 안 그려지고 있었다.**
+
+`color-source.test.ts` 가 못 잡은 이유는 `var(--color-*)` **접두사만** 보고 이름의
+실존은 안 보기 때문이다. 가드 신설 `guards/css-token-names.test.ts` 6 — CSS·tsx
+의 모든 `var(--color-X)` 가 실측 화이트리스트 안에 있는지, 그리고 `line`/
+`lineHeavy` 로 되돌아가지 않는지.
+
+#### 동시 세션 확인 (오너 지시 «Advanced 감안»)
+
+- `infomax-f7` = **Advanced 레인**. 리포를 안 건드린다(실행 중인 :3200 에
+  `<style>` 주입 + 스크린샷). 지운 10개 중 되살릴 것 없음. 앞으로 손댈 계획은
+  `sauronTheme.ts`·`table/rowHeight.ts`(ROW_H 60->42)·`type.css` 인데 **미승인·
+  미착수**이고, 착수 전에 알리기로 했다.
+- `infomax-be` = MR 통계 검증 레인. 읽기 전용, CSS 미접촉. 앞으로
+  `src/mr/StrategyWindow.tsx` 를 만질 수 있다(오너 선택 대기).
+
+그래서 ①은 지금 하는 편이 낫다는 데 양쪽이 합의했다 — Advanced 가 나중에
+시작할 때 죽은 클래스가 이미 빠져 있는 편이 낫다.
+
+#### 남은 오너 판단 셋
+
+네이티브 `<input type="date">` ×3(로케일 의존 불변식) · `alpha/select` ×6(안정판
+존재) · cds-web **9.15.0 -> 9.22.0**(첫 항목 = `invertColorScheme` -> `active`
+rename, 이번 작업으로 2곳 -> 4곳).
