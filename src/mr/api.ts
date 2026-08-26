@@ -136,6 +136,7 @@ export interface MrStrategyPoint {
 export interface MrStrategyTrade {
   entryT: string;
   exitT: string;
+  /** 엔진 부호 — 이름은 `run.dirs` 가 진다(계열마다 다른 다리다). */
   dir: number;
   entryZ: number;
   exitZ: number;
@@ -143,6 +144,61 @@ export interface MrStrategyTrade {
   exitV: number;
   pnl: number;
   why: 'exit' | 'stop';
+}
+
+/** 방향 하나의 이름 — 표 칸은 `short`, 문장은 `legs`. 서버가 계열마다 짓는다
+ * (`backend/app/mr.py::DIR_LEGS`) — 「롱/숏」이라고만 적으면 BSS 에서는 정확히
+ * 반대로 읽힌다(스프레드 롱 = 국고 매도). */
+export interface MrDirName {
+  short: string;
+  legs: string;
+}
+
+/** 실행할 수 있는 방향 [OWNER 2026-08-25 — "BSS에서 숏은 없는거야,, 현물대차매도는
+ * 안할거거든"]. 노브가 아니라 데스크의 사실이라 화면에 스위치가 없다 — 백테스트의
+ * 현금채권이 매수만 받는 것과 같은 규칙이다(`backtest/book.ts::runnable`). */
+export interface MrStrategyDirs {
+  /** 엔진 부호 목록 — `+1`은 값이 오르면 버는 쪽. BSS 는 `[-1]` 뿐이다. */
+  allowed: number[];
+  plus: MrDirName;
+  minus: MrDirName;
+  /** 한 방향뿐일 때의 사유 문장. 양방향이면 null. */
+  why: string | null;
+  /** 막혀서 못 들어간 진입 신호 — 구간 수와 일수. 조용히 빠지면 «신호가
+   * 없었다»로 읽히므로 화면이 세어서 말한다. */
+  blocked: { spells: number; days: number };
+}
+
+/** 표본 끝의 미청산 다리. 원본 규약대로 거래·승률·건수에는 **안** 들어가고
+ * 누적에만 있다 — 그래서 화면이 이걸 승률 옆에서 말하지 않으면 열려 있는 손실
+ * 포지션이 승률에서 조용히 사라진다(실측 2026-08-26: 승률 80% = 12/15 였고
+ * 빠진 한 건은 표본 두 번째로 나쁜 −600만이었다). */
+export interface MrStrategyOpen {
+  entryT: string;
+  entryZ: number;
+  entryV: number;
+  pnl: number;
+  /** 진입 이후 지난 봉 수. */
+  bars: number;
+}
+
+/** 노브 하나를 프리셋 안에서 옮겼을 때의 결과 한 칸. */
+export interface MrNeighborCell {
+  v: number;
+  totalPnl: number;
+  sharpe: number | null;
+  winRate: number | null;
+  numTrades: number;
+  /** 지금 고른 칸인가. */
+  current: boolean;
+}
+
+/** 노브 하나의 프리셋 행 — 견고성은 «고른 칸» 이 아니라 «이웃과의 차이» 다. */
+export interface MrNeighborRow {
+  knob: 'lookback' | 'entryZ' | 'exitZ' | 'stopZ';
+  label: string;
+  suffix: string;
+  cells: MrNeighborCell[];
 }
 
 export interface MrStrategyRun {
@@ -153,12 +209,21 @@ export interface MrStrategyRun {
   params: MrStrategyParams;
   points: MrStrategyPoint[];
   trades: MrStrategyTrade[];
+  dirs: MrStrategyDirs;
+  /** 미청산이 없으면 null. */
+  open: MrStrategyOpen | null;
+  neighbors: MrNeighborRow[];
   summary: {
     totalPnl: number;
     maxDrawdown: number;
     winRate: number | null;
     sharpe: number | null;
     numTrades: number;
+    /** 미청산 다리의 MTM(₩) — 총손익에는 있고 승률에는 없다. */
+    openPnl: number | null;
+    /** 총손익이 0 이 되는 편도 비용(bp). 거래가 z 에만 달려 있어 닫힌형이다
+     *  (`mrbacktest.breakeven_cost_bp`). 음수면 «비용 0 이어도 손실» 이다. */
+    breakevenCostBp: number | null;
   };
 }
 

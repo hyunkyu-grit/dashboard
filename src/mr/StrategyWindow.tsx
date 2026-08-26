@@ -162,20 +162,146 @@ function NumInput({
   );
 }
 
-function Panel({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+function Panel({
+  title,
+  sub,
+  aside,
+  children,
+}: {
+  title: string;
+  sub?: string;
+  /** 그 패널**만** 바꾸는 컨트롤이 서는 자리. 결과를 바꾸는 노브는 여기 오면
+   *  안 된다 — 설정 줄에 있어야 「실행」이 그것을 삼킨다. 반대로 그림만 바꾸는
+   *  것을 설정 줄에 두면 실행을 기다리게 만들고 stale 을 거짓으로 세운다. */
+  aside?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <VStack gap={0.5} flexBasis="50%" flexGrow={1} minWidth={0}>
-      <HStack gap={1} alignItems="baseline" justifyContent="space-between">
+      <HStack gap={1} alignItems="center" justifyContent="space-between" minHeight={24}>
         <Text font="label2" as="h3" noWrap>
           {title}
         </Text>
-        {sub ? (
-          <Text font="legal" as="span" color="fgMuted" noWrap>
-            {sub}
-          </Text>
-        ) : null}
+        <HStack gap={1} alignItems="center" minWidth={0}>
+          {sub ? (
+            <Text font="legal" as="span" color="fgMuted" noWrap>
+              {sub}
+            </Text>
+          ) : null}
+          {aside}
+        </HStack>
       </HStack>
       {children}
+    </VStack>
+  );
+}
+
+/** 패널 머리에 눕는 알약 한 줄 — 라벨이 옆에 붙는 납작한 형태다.
+ *
+ *  설정 줄의 `SigmaPick`(라벨 위·32px 등고·상자 폭 고정)과 **일부러 다른 물건**
+ *  이다. 저기는 「실행」을 기다리는 노브들의 격자고, 여기는 지금 이 그림에만
+ *  듣는 손잡이다. 같은 모양으로 만들면 둘이 같은 규율을 따른다고 거짓말을 한다. */
+function InlineSigma({
+  label,
+  value,
+  options,
+  onPick,
+}: {
+  label: string;
+  value: number;
+  options: readonly number[];
+  onPick: (v: number) => void;
+}) {
+  return (
+    <HStack gap={0.5} alignItems="center">
+      <Text font="legal" as="span" color="fgMuted" noWrap>
+        {label}
+      </Text>
+      {options.map((o) => (
+        <button
+          key={o}
+          type="button"
+          className="sr-pillbtn"
+          data-on={value === o || undefined}
+          aria-pressed={value === o}
+          aria-label={`${label} ${fmtSigma(o)}`}
+          onClick={() => onPick(o)}
+        >
+          {Number(o.toFixed(1))}
+        </button>
+      ))}
+    </HStack>
+  );
+}
+
+
+/** 이웃 칸 — 노브를 프리셋 안에서 옮겼을 때 결과가 얼마나 달라지는가.
+ *
+ * ## 왜 이게 성과 카드 바로 밑에 서는가 [OWNER 2026-08-26]
+ *
+ * 창은 고른 칸 하나만 보여 줬다. 그래서 손절 3.5 의 **+2,605만·승률 80%** 는
+ * 보이고 손절 3.0 의 **+1,120만·승률 57%** 는 노브를 눌러 보기 전까지 안
+ * 보였다. 한 칸 차이가 결과를 절반으로 만드는데 화면은 그 사실을 감췄고, 감춘
+ * 채로 보여 준 80% 는 발견처럼 읽혔다.
+ *
+ * 실측으로 그 차이는 2022-12 거래 **한 짝**이었다: 손절 3.0 이면 z 3.22 에
+ * 들어간 다리가 다음 봉에 −139만으로 잘리고, 3.5 면 살아남아 +1,005만 = 표본
+ * 최대 승리가 된다. 「어느 칸이 옳은가」 를 화면이 답할 수는 없다. 답할 수 있는
+ * 것은 **이 결과가 칸 하나에 얼마나 매달려 있는가** 뿐이고, 재현 도구가 그것을
+ * 감추면 재현이 아니라 주장이 된다.
+ *
+ * ## 부품
+ *
+ * 바로 위 성과 스트립과 **같은 것**을 쓴다(`ui/Stat` 의 StatColumn·Stat, 칸
+ * 사이는 여백이 아니라 헤어라인). 이 창이 제 표를 또 만들면 두 벌이 되고 한쪽만
+ * 낡는다 — 형제의 부품을 임포트하는 것이 이 리포의 규칙이다. 칸을 누르면 그
+ * 노브가 옮겨 가되 숫자는 안 바뀐다(pinned 규율: 핀은 「실행」이 옮긴다). */
+function Sensitivity({
+  run,
+  onPick,
+}: {
+  run: MrStrategyRun;
+  onPick: (patch: Partial<MrStrategyParams>) => void;
+}) {
+  if (run.neighbors.length === 0) return null;
+  return (
+    <VStack gap={0.5} width="100%">
+      <HStack gap={1} alignItems="baseline" justifyContent="space-between">
+        <Text font="label2" as="h3" noWrap>
+          이웃 칸
+        </Text>
+        <Text font="legal" as="span" color="fgMuted">
+          노브 하나만 옮기고 나머지는 지금 값 고정 · 누르면 그 값으로 바뀌어요(숫자는 실행해야 바뀌어요)
+        </Text>
+      </HStack>
+      <HStack className="sr-stats" alignItems="stretch" width="100%">
+        {run.neighbors.map((row) => (
+          <StatColumn key={row.knob} title={row.label}>
+            {row.cells.map((c) => (
+              <button
+                key={c.v}
+                type="button"
+                /* 알약(`.sr-pillbtn`)이 아니다 — 그건 32px 단행이고 선택 시 잉크
+                   반전이라 방향색 손익이 그 위에서 안 읽힌다. 여기서 필요한 것은
+                   누를 수 있는 «Stat 한 칸» 뿐이라 버튼의 기본 껍데기만 벗긴다. */
+                style={{ background: 'none', border: 0, padding: 0, font: 'inherit', textAlign: 'left', cursor: 'pointer' }}
+                aria-label={`${row.label} ${c.v}${row.suffix} — 총손익 ${fmtKrw(c.totalPnl)}`}
+                aria-pressed={c.current}
+                onClick={() => onPick({ [row.knob]: c.v } as Partial<MrStrategyParams>)}
+              >
+                <Stat
+                  /* 단위는 열 제목이 진다 — 여기 붙이면 caption 의 대문자 변환이
+                     σ 를 Σ 로 만든다(실측). 칸에는 숫자와 「지금」만 남는다. */
+                  label={`${Number(c.v.toFixed(1))}${c.current ? ' · 지금' : ''}`}
+                  value={fmtKrw(c.totalPnl)}
+                  tone={c.totalPnl > 0 ? 'up' : c.totalPnl < 0 ? 'down' : undefined}
+                  note={`SR ${c.sharpe == null ? '—' : c.sharpe.toFixed(2)} · ${c.numTrades}거래`}
+                />
+              </button>
+            ))}
+          </StatColumn>
+        ))}
+      </HStack>
     </VStack>
   );
 }
@@ -215,14 +341,19 @@ export function StrategyWindow({
       .finally(() => setRunning(false));
   }, [id, knobs]);
 
-  /* pinned 규율 — 실행 시점 파라미터와 지금 노브가 갈리면 stale. */
+  /* pinned 규율 — 실행 시점 파라미터와 지금 노브가 갈리면 stale.
+   *
+   * **`warnZ` 는 여기 없다** [2026-08-26]. 그 값은 엔진에 안 들어간다
+   * (`main.py::mr_strategy` 가 시뮬에 안 넘긴다 — 오실레이터 가이드선 전용).
+   * 그런데도 stale 을 세우고 있었으므로, 결과를 바꾸지 못하는 노브가 결과를
+   * 무효로 만들고 재실행을 요구했다. 이제 가이드선은 `knobs.warnZ` 를 바로
+   * 읽고(핀 안 걸림), 성과 숫자는 그 값과 무관하다는 사실이 화면에서 참이 된다. */
   const stale = useMemo(() => {
     if (!run) return false;
     const p = run.params;
     return (
       p.lookback !== knobs.lookback ||
       p.entryZ !== knobs.entryZ ||
-      p.warnZ !== knobs.warnZ ||
       p.exitZ !== knobs.exitZ ||
       p.stopZ !== knobs.stopZ ||
       p.costBp !== knobs.costBp ||
@@ -241,6 +372,15 @@ export function StrategyWindow({
 
   const unit = (run?.unit ?? 'bp') as Unit;
   const set = (patch: Partial<MrStrategyParams>) => setKnobs((k) => ({ ...k, ...patch }));
+
+  /* 이 계열에서 실제로 할 수 있는 거래 [OWNER 2026-08-25 — "BSS에서 숏은 없는거야,,
+     현물대차매도는 안할거거든"]. 한 방향뿐이면 그 사실을 숫자 옆에서 말한다 —
+     노브가 아니므로 설정 줄이 아니라 「조건」과 거래 표의 머리에 선다. */
+  const only = run && run.dirs.allowed.length === 1
+    ? (run.dirs.allowed[0]! > 0 ? run.dirs.plus : run.dirs.minus)
+    : null;
+  const dirSub = only ? `${only.legs} 한 방향이에요` : undefined;
+  const dirStat = !run ? '—' : only ? only.legs : '양방향';
 
   /* 가격 주선 색 = 구간 순변화 방향(Main 미리보기의 규칙). */
   const priceHue = useMemo(() => {
@@ -312,13 +452,6 @@ export function StrategyWindow({
             value={knobs.entryZ}
             options={MR_STRATEGY_PRESETS.entryZ}
             onPick={(v) => set({ entryZ: v })}
-          />
-          <SigmaPick
-            label="관찰 σ"
-            help="경보 문턱이에요 — 진입보다 낮아야 뜻이 있어요. 첫 PMS 기본은 1.5σ예요."
-            value={knobs.warnZ}
-            options={MR_STRATEGY_PRESETS.warnZ}
-            onPick={(v) => set({ warnZ: v })}
           />
           <SigmaPick
             label="청산 σ"
@@ -397,19 +530,60 @@ export function StrategyWindow({
                 <Stat
                   label="승률"
                   value={run.summary.winRate == null ? '—' : `${Math.round(run.summary.winRate * 100)}%`}
+                  /* 분모를 여기서 말한다 [OWNER 2026-08-26]. 미청산 다리는 원본
+                     규약대로 거래·승률에 안 들어가는데(총손익에는 들어간다),
+                     카드가 그 사실을 안 적으면 열려 있는 손실 포지션이 승률에서
+                     조용히 사라진다 — 실측 80% 는 15건 중 12건이었고 빠진 한
+                     건은 표본 두 번째로 나쁜 −600만이었다. */
+                  note={run.open ? '미청산 1건 제외' : undefined}
                 />
                 <Stat
                   label="Sharpe"
                   value={run.summary.sharpe == null ? '—' : run.summary.sharpe.toFixed(2)}
+                  note="전 봉 기준"
                 />
                 <Stat label="거래" value={String(run.summary.numTrades)} />
+                {run.open ? (
+                  <Stat
+                    label="미청산"
+                    value={fmtKrw(run.open.pnl)}
+                    tone={run.open.pnl > 0 ? 'up' : run.open.pnl < 0 ? 'down' : undefined}
+                    note={`${run.open.entryT} 진입`}
+                  />
+                ) : null}
               </StatColumn>
               <StatColumn title="조건">
                 <Stat label="비용" value={`편도 ${run.params.costBp}bp`} />
+                {/* 손익분기 — 노브를 돌려 0 을 찾는 대신 닫힌형으로 답한다
+                    (`mrbacktest.breakeven_cost_bp`). 「이 구성이 얼마짜리
+                    호가폭까지 견디는가」 는 비용 노브의 값보다 먼저 알아야 하는
+                    사실이고, 그걸 모르면 비용 기본값이 곧 결론이 된다. */}
+                {run.summary.breakevenCostBp != null ? (
+                  <Stat
+                    label="손익분기 비용"
+                    value={`편도 ${run.summary.breakevenCostBp.toFixed(2)}bp`}
+                    tone={run.summary.breakevenCostBp <= run.params.costBp ? 'down' : undefined}
+                    note={
+                      run.summary.breakevenCostBp <= run.params.costBp
+                        ? '지금 비용에서 이미 손실'
+                        : `여유 ${(run.summary.breakevenCostBp - run.params.costBp).toFixed(2)}bp`
+                    }
+                  />
+                ) : null}
                 <Stat label="명목" value={`₩${run.params.notional.toLocaleString()}/bp`} />
                 <Stat label="종가" value={run.asof ?? '—'} />
+                {/* 방향은 노브가 아니라 사실이라 「조건」에 선다 — 이 데스크가
+                    실제로 할 수 있는 거래가 무엇인지가 성과의 전제다. */}
+                <Stat label="방향" value={dirStat} />
+                {run.dirs.why ? (
+                  <Stat label="막힌 진입" value={`${run.dirs.blocked.spells}회`} />
+                ) : null}
               </StatColumn>
             </HStack>
+
+            {/* 견고성은 고른 칸이 아니라 이웃과의 차이다 — 성과 숫자를 읽은
+                바로 그 자리에서 말한다. */}
+            <Sensitivity run={run} onPick={set} />
 
             {/* ── 2×2 패널 — 원본 결과 그리드의 배치. ───────────────────── */}
             <HStack gap={2} width="100%" alignItems="stretch" flexWrap="wrap">
@@ -465,7 +639,20 @@ export function StrategyWindow({
 
               <Panel
                 title="z 오실레이터"
-                sub={`진입 ±${run.params.entryZ}σ · 관찰 ±${run.params.warnZ}σ · 진입 마커 ${stale ? '숨김' : `${entryIdx.length}`}`}
+                sub={`진입 ±${run.params.entryZ}σ · 진입 마커 ${stale ? '숨김' : `${entryIdx.length}`}`}
+                /* 관찰 σ 는 설정 줄에서 여기로 내려왔다 [OWNER 2026-08-26]. 이
+                   값은 엔진에 안 들어가고 이 패널의 가이드선만 옮긴다 — 성과
+                   숫자를 못 바꾸는 노브가 성과 카드 옆에 서 있으면 화면이
+                   «이것도 결과를 바꾼다» 고 거짓말한다. 노브의 자리가 곧 그
+                   노브가 무엇인지에 대한 주장이다. */
+                aside={
+                  <InlineSigma
+                    label="관찰"
+                    value={knobs.warnZ}
+                    options={MR_STRATEGY_PRESETS.warnZ}
+                    onPick={(v) => set({ warnZ: v })}
+                  />
+                }
               >
                 <Box
                   className="sr-plot"
@@ -494,8 +681,9 @@ export function StrategyWindow({
                     <ReferenceLine dataY={0} yAxisId="y" />
                     <ReferenceLine dataY={run.params.entryZ} yAxisId="y" />
                     <ReferenceLine dataY={-run.params.entryZ} yAxisId="y" />
-                    <ReferenceLine dataY={run.params.warnZ} yAxisId="y" />
-                    <ReferenceLine dataY={-run.params.warnZ} yAxisId="y" />
+                    {/* 핀(run.params)이 아니라 지금 값 — 이 선은 실행과 무관하다. */}
+                    <ReferenceLine dataY={knobs.warnZ} yAxisId="y" />
+                    <ReferenceLine dataY={-knobs.warnZ} yAxisId="y" />
                     {/* 마커는 거래 목록에서만 나온다 — 병렬 유도는 원본이 시험으로
                         금지한 결함(s19). stale 이면 숨긴다. */}
                     {stale
@@ -561,7 +749,7 @@ export function StrategyWindow({
                 </Box>
               </Panel>
 
-              <Panel title="거래" sub={run.trades.length === 0 ? '이 창에 거래가 없어요' : undefined}>
+              <Panel title="거래" sub={run.trades.length === 0 ? '이 창에 거래가 없어요' : dirSub}>
                 {/* 표는 Main/Backtest 방언 — CDS Table, 숫자는 label2 tabular
                     우측, 손익만 방향색 글자 [OWNER 2026-08-25 «기준을 Backtest 에»]. */}
                 <Box style={{ position: 'relative', height: CHART_H, overflow: 'auto' }} width="100%">
@@ -602,7 +790,13 @@ export function StrategyWindow({
                             <Text font="label2" as="span" tabularNumbers noWrap>{t.exitT}</Text>
                           </TableCell>
                           <TableCell>
-                            <Text font="label2" as="span" noWrap>{t.dir > 0 ? '롱' : '숏'}</Text>
+                            {/* 「롱/숏」이 아니라 **다리를 적는다** — BSS 에서 스프레드
+                                롱은 국고 매도라 부호말은 정확히 반대로 읽힌다(북의
+                                `directionLabel` 이 플라이에서 내린 그 판단). 이름은
+                                서버가 계열마다 짓는다(§16). */}
+                            <Text font="label2" as="span" noWrap>
+                              {(t.dir > 0 ? run.dirs.plus : run.dirs.minus).short}
+                            </Text>
                           </TableCell>
                           <TableCell className="sr-num" justifyContent="flex-end">
                             <Text font="label2" as="span" tabularNumbers noWrap>{t.entryZ.toFixed(2)}σ</Text>
@@ -638,6 +832,9 @@ export function StrategyWindow({
               {fmtLevel(run.points.at(-1)?.v ?? null, unit)}
               {unitSuffix(unit)} 기준 · 표본 끝의 미청산 포지션은 누적에는 있고 거래 수에는
               없어요(원본 규약).
+              {run.dirs.why
+                ? ` ${run.dirs.why} 그래서 못 들어간 진입 신호가 ${run.dirs.blocked.spells}회(${run.dirs.blocked.days}일) 있어요.`
+                : ''}
             </Text>
           </>
         )}

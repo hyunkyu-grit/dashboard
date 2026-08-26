@@ -916,6 +916,50 @@ def mr_history(series_id: str, window: int = mr_mod.WINDOW, k: float = mr_mod.K)
     return body
 
 
+def _mr_neighbors(dates: list[str], vals: list[float], base: dict,
+                  allow: tuple[int, ...]) -> list[dict]:
+    """노브를 한 칸씩 옮겼을 때의 결과 — 「이 칸이 얼마나 튼튼한가」.
+
+    화면은 고른 칸 하나만 보여 준다. 그러면 손절 3.5 의 +2,605만은 보이고 손절
+    3.0 의 +1,120만은 안 보이므로, 한 칸 차이가 결과를 절반으로 만든다는 사실이
+    노브를 눌러 보기 전까지 감춰진다 — 재현 도구가 그 사실을 감추면 재현이
+    아니라 주장이 된다 [OWNER 2026-08-26].
+
+    격자는 `mr.STRATEGY_PRESETS` 위에서만 돈다(화면이 고를 수 있는 칸 = 견고성을
+    재야 하는 칸). 현재 값이 프리셋 밖이면(딥링크·자유 룩백) 그 값도 한 칸으로
+    끼워 넣는다 — 안 그러면 「현재」가 어느 칸인지 못 가리킨다. 계산은 노브당
+    셋이라 열둘, 밀리초라 캐시를 안 태운다.
+    """
+    rows: list[dict] = []
+    for knob, (label, suffix) in mr_mod.STRATEGY_KNOB_LABELS.items():
+        cur = base[knob]
+        opts = list(mr_mod.STRATEGY_PRESETS[knob])
+        if cur not in opts:
+            opts = sorted(opts + [cur])
+        cells = []
+        for v in opts:
+            lb = int(v) if knob == "lookback" else base["lookback"]
+            if len(vals) < lb + 1 or lb < 2:
+                continue
+            p = dict(base, **{knob: v})
+            r = mrbt.simulate(dates, vals, lookback=int(p["lookback"]),
+                              entry_z=p["entryZ"], exit_z=p["exitZ"],
+                              stop_z=p["stopZ"], cost_bp=p["costBp"],
+                              notional=p["notional"], allow_dirs=allow)
+            sm = r["summary"]
+            cells.append({
+                "v": v,
+                "totalPnl": round(sm["totalPnl"], 2),
+                "sharpe": round(sm["sharpe"], 3) if sm["sharpe"] is not None else None,
+                "winRate": round(sm["winRate"], 4) if sm["winRate"] is not None else None,
+                "numTrades": sm["numTrades"],
+                "current": v == cur,
+            })
+        if cells:
+            rows.append({"knob": knob, "label": label, "suffix": suffix, "cells": cells})
+    return rows
+
+
 @router.get("/api/mr/strategy")
 def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
                 warnZ: float = 1.5, exitZ: float = 0.5, stopZ: float = 3.5,
@@ -925,8 +969,12 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     산술은 `mrbacktest.py`(PMS 원본 이식·적합성 벡터로 잠금), 기본값도 그쪽
     기본(s16) 그대로다. warnZ 는 엔진엔 안 들어가고 오실레이터 가이드가 쓴다.
     캐시 없음 — 파라미터가 자유값이고 계산이 밀리초라 태울 이유가 없다.
+
+    방향은 계열이 정한다(`mr.dirs_for`) — BSS 는 국고 매수 쪽 한 방향뿐이다.
+    파라미터가 아니라 이 데스크의 사실이라 쿼리로 열지 않는다.
     """
     labels = {s: l for s, l, _ in mr_mod.SERIES}
+    kinds = {s: kd for s, _, kd in mr_mod.SERIES}
     if id not in labels:
         raise HTTPException(status_code=404, detail=f"unknown mr series {id}")
     if not 2 <= lookback <= 600:
@@ -947,9 +995,14 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     if len(vals) < lookback + 1:
         raise HTTPException(status_code=422, detail=f"이력이 룩백보다 짧아요: {len(vals)} < {lookback + 1}")
 
+    # 실행할 수 있는 방향만 재현한다 [OWNER 2026-08-25 — "BSS에서 숏은 없는거야,,
+    # 현물대차매도는 안할거거든"]. 노브가 아니라 이 데스크의 사실이라 화면에
+    # 스위치를 두지 않는다 — 백테스트의 현금채권이 매수만 받는 것과 같은 자리다.
+    dirs = mr_mod.dirs_for(kinds[id])
     r = mrbt.simulate(dates, vals, lookback=lookback, entry_z=entryZ,
                       exit_z=exitZ, stop_z=stopZ, cost_bp=costBp,
-                      notional=notional)
+                      notional=notional,
+                      allow_dirs=tuple(dirs["allowed"]))
     roll = r["roll"]
     points = [
         {
@@ -984,12 +1037,34 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
                    "notional": notional},
         "points": points,
         "trades": trades,
+        # 방향의 이름과 «못 들어간 신호» — 조용히 빠진 진입은 «신호가 없었다»
+        # 로 읽히므로 세어서 같이 보낸다(엔진의 blocked).
+        "dirs": {**dirs, "blocked": r["blocked"]},
+        # 표본 끝의 미청산 다리 — 거래·승률에는 원본 규약대로 안 들어가고,
+        # 「안 들어갔다」는 사실만 화면이 승률 옆에 적을 수 있게 낸다.
+        "open": ({
+            "entryT": r["open"]["entryDate"],
+            "entryZ": round(r["open"]["entryZ"], 2),
+            "entryV": round(r["open"]["entryValue"], 4),
+            "pnl": round(r["open"]["pnl"], 2),
+            "bars": r["open"]["bars"],
+        } if r["open"] else None),
+        # 한 칸 옆 — 고른 칸이 이웃보다 얼마나 나은지가 그 칸의 신뢰도다.
+        "neighbors": _mr_neighbors(
+            dates, vals,
+            {"lookback": lookback, "entryZ": entryZ, "exitZ": exitZ,
+             "stopZ": stopZ, "costBp": costBp, "notional": notional},
+            tuple(dirs["allowed"])),
         "summary": {
             "totalPnl": round(s["totalPnl"], 2),
             "maxDrawdown": round(s["maxDrawdown"], 2),
             "winRate": round(s["winRate"], 4) if s["winRate"] is not None else None,
             "sharpe": round(s["sharpe"], 3) if s["sharpe"] is not None else None,
             "numTrades": s["numTrades"],
+            "openPnl": round(s["openPnl"], 2) if s["openPnl"] is not None else None,
+            # 총손익이 0 이 되는 편도 비용 — 노브를 돌려 찾는 대신 닫힌형으로.
+            "breakevenCostBp": (round(s["breakevenCostBp"], 3)
+                                if s["breakevenCostBp"] is not None else None),
         },
     }
 

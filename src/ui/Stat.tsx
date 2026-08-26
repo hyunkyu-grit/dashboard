@@ -51,10 +51,19 @@ export function Stat({
   label,
   value,
   tone,
+  note,
 }: {
   label: string;
   value: string;
   tone?: 'up' | 'down';
+  /** 값의 **모집단**을 좁히는 한 마디 — 「미청산 1건 제외」 같은 것.
+   *
+   *  왜 값이 아니라 따로인가: 값에 붙여 적으면 tabular 열이 깨지고 noWrap 이
+   *  칸을 늘린다. 왜 각주가 아니라 여기인가: 승률 80% 가 무엇의 80% 인지는
+   *  숫자를 읽는 그 자리에서 말해야 한다 — 창 바닥 각주는 그 숫자를 이미 읽고
+   *  난 뒤에 온다(실측 2026-08-26: 미청산 손실 포지션이 승률에서 조용히 빠져
+   *  있었고, 바닥 각주는 그 사실을 적고 있었는데도 카드는 80% 만 말했다). */
+  note?: string;
 }) {
   return (
     <VStack gap={0.25} minWidth={0}>
@@ -70,6 +79,11 @@ export function Stat({
       >
         {value}
       </Text>
+      {note ? (
+        <Text as="span" font="legal" color="fgMuted" noWrap>
+          {note}
+        </Text>
+      ) : null}
     </VStack>
   );
 }
