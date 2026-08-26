@@ -119,7 +119,12 @@ describe('카드를 여는 배선', () => {
   });
 
   it('CD 91일은 그려진 선이 있을 때만 나온다', () => {
-    // 없는 선의 값을 읽지 않는다 — 범례가 지는 규칙과 같다.
-    expect(pane).toMatch(/refs\?\.cd \? \(\s*<ReadoutLevel k=\{READOUT_LABEL\.cd91\}/);
+    /* 없는 선의 값을 읽지 않는다 — 범례가 지는 규칙과 같다.
+
+       2026-08-26 부터 명제가 **한 겹 강해졌다**: 기준선을 끌 수 있게 되면서
+       (`drawn` = 있고 + 켜져 있음) 카드가 읽는 조건도 «그려진 선» 으로 좁아졌다.
+       `refs`(있음)를 읽으면 꺼 둔 선의 값이 카드에 남는다. */
+    expect(pane).toMatch(/drawn\?\.cd \? \(\s*<ReadoutLevel k=\{READOUT_LABEL\.cd91\}/);
+    expect(pane).not.toMatch(/refs\?\.cd \? \(\s*<ReadoutLevel/);
   });
 });

@@ -18,13 +18,14 @@ import { describe, expect, it } from 'vitest';
  *      (실측 2026-08-26: accentBoldGray 가 light rgb(50,53,61) → dark
  *      rgb(193,198,207)). 이 제품에는 이미 뜻을 가진 색이 넷 있어(방향 둘·
  *      기준선 둘) 겹치는 선택지에는 경고를 단다 — 막지는 않는다.
- *   ④ 껏다 켰다 — 취향은 `state/ma.ts` 한 곳이고 차트와 Setting 이 같이 읽는다.
+ *   ④ 껏다 켰다 — 취향은 `state/overlays.ts` 한 곳이고 차트와 Setting 이 같이
+ *      읽는다. MA 다섯과 **기준선 둘**이 같은 저장소·같은 칩 문법을 쓴다.
  *   ⑤ 색이 생겨도 잉크 위계는 남는다 — 주선이 주인공이다.
  */
 
 const read = (p: string) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
 const pane = read('src/ui/PreviewPane.tsx');
-const store = read('src/state/ma.ts');
+const store = read('src/state/overlays.ts');
 const derive = read('backend/app/derive.py');
 
 /** 주석을 뺀 소스 — 이 리포의 주석에는 실측한 hex 가 **근거로** 적혀 있다. */
@@ -79,7 +80,7 @@ describe('③ 색은 CDS 토큰에서만 온다 [OWNER 2026-08-26]', () => {
 
   it('차트는 토큰을 **변수 참조**로 넘긴다 — CDS `Line` 은 SVG 속성이라 이름은 못 읽는다', () => {
     expect(store).toMatch(/`var\(--color-\$\{t\}\)`/);
-    expect(pane).toMatch(/color: maColorVar\(maColorOf\(maPrefs, w\)\)/);
+    expect(pane).toMatch(/color: maColorVar\(maColorOf\(prefs, w\)\)/);
   });
 
   it('기본으로 켜 두는 창은 **뜻이 겹치지 않는 색**을 쓴다', () => {
@@ -111,7 +112,7 @@ describe('③ 색은 CDS 토큰에서만 온다 [OWNER 2026-08-26]', () => {
 
 describe('④ 껏다 켰다 [OWNER 2026-08-26]', () => {
   it('켠 창만 그린다 — 끈 창은 시리즈도 선도 안 만든다', () => {
-    expect(pane).toMatch(/maPrefs\.shown\.includes\(w\)/);
+    expect(pane).toMatch(/prefs\.shown\.includes\(w\)/);
   });
 
   it('켠 것을 거를 때도 **서버 목록의 첨자**를 쓴다', () => {
@@ -122,20 +123,20 @@ describe('④ 껏다 켰다 [OWNER 2026-08-26]', () => {
   });
 
   it('범례가 손잡이다 — 켠 상태가 칩에 실린다', () => {
-    expect(pane).toMatch(/onClick=\{\(\) => ma\.toggle\(w\)\}/);
+    expect(pane).toMatch(/onClick=\{\(\) => ov\.toggle\(w\)\}/);
     expect(pane).toMatch(/invertColorScheme=\{on\}/);
   });
 
-  it('취향은 `state/ma.ts` 한 곳이다 — Setting 과 차트가 같은 저장소를 읽는다', () => {
-    expect(pane).toMatch(/useMaPrefs\(\)/);
-    expect(read('src/ui/SettingView.tsx')).toMatch(/useMaPrefs\(\)/);
-    expect(store).toMatch(/const KEY = 'sr-ma'/);
+  it('취향은 `state/overlays.ts` 한 곳이다 — Setting 과 차트가 같은 저장소를 읽는다', () => {
+    expect(pane).toMatch(/useOverlayPrefs\(\)/);
+    expect(read('src/ui/SettingView.tsx')).toMatch(/useOverlayPrefs\(\)/);
+    expect(store).toMatch(/const KEY = 'sr-overlays'/);
   });
 
   it('리드아웃도 **켠 것만** 적는다 — 없는 선의 값을 읽지 않는다', () => {
     const card = pane.slice(pane.indexOf('<ReadoutCard title={hoverPoint.t}>'));
     const block = card.slice(0, card.indexOf('</ReadoutCard>'));
-    expect(block).toMatch(/maPrefs\.shown\.includes\(w\)/);
+    expect(block).toMatch(/prefs\.shown\.includes\(w\)/);
     expect(block).toMatch(/v=\{hoverPoint\.ma\?\.\[k\]\}/);
   });
 });
@@ -166,5 +167,43 @@ describe('⑤ 잉크 위계는 색이 생겨도 남는다', () => {
     const mainAt = pane.indexOf('seriesId={row.id}');
     expect(maAt).toBeGreaterThan(-1);
     expect(mainAt).toBeGreaterThan(maAt);
+  });
+});
+
+describe('⑥ 기준선도 껏다 켰다 [OWNER 2026-08-26]', () => {
+  it('있음과 그림이 갈려 있다 — `refs` 는 값이 있는가, `drawn` 은 켜져 있는가', () => {
+    /* 없는 기준선은 **끌 수도 없어야** 한다(칩이 안 선다). 그래서 범례는 `refs`
+       를 보고, 시리즈·스크러버·리드아웃·보조축은 `drawn` 을 본다. */
+    expect(pane).toMatch(/const drawn = useMemo\(/);
+    expect(pane).toMatch(/cd: prefs\.refs\.cd \? refs\.cd : null/);
+    expect(pane).toMatch(/policy: prefs\.refs\.policy \? refs\.policy : null/);
+  });
+
+  it('그리는 자리는 전부 `drawn` 을 읽는다 — 하나라도 `refs` 면 끈 선이 남는다', () => {
+    for (const re of [
+      /id: CD_LINE, data: drawn\.cd/,
+      /id: BASE_LINE, data: drawn\.policy/,
+      /\.\.\.\(drawn\?\.cd \? \[CD_LINE\] : \[\]\)/,
+      /\.\.\.\(drawn\?\.policy \? \[BASE_LINE\] : \[\]\)/,
+      /v=\{drawn\.cd\[hoverPoint\.i\]\}/,
+    ]) {
+      expect(pane).toMatch(re);
+    }
+  });
+
+  it('둘 다 끄면 보조 %축도 내려간다 — 빈 축은 폭만 먹고 아무 말도 안 한다', () => {
+    expect(pane).toMatch(/const pctAxis = !!\(drawn && \(drawn\.cd \|\| drawn\.policy\)\)/);
+  });
+
+  it('칩은 **값이 있을 때만** 선다', () => {
+    const legend = pane.slice(pane.indexOf('{refs?.cd ? ('));
+    expect(legend.slice(0, 200)).toMatch(/<RefChip/);
+  });
+
+  it('기준선 색은 **고르는 대상이 아니다** — 저장소에 색 항목이 없다', () => {
+    /* 두 색은 오너가 3차까지 보고 확정한 값이다(`direction.css`). MA 와 다른
+       점이 그 하나이고, 저장소의 `refs` 가 boolean 둘인 것이 그 사실이다. */
+    expect(store).toMatch(/refs: \{ cd: boolean; policy: boolean \}/);
+    expect(store).not.toMatch(/refColors|refs:\s*\{[^}]*Token/);
   });
 });

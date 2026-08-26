@@ -30,7 +30,7 @@ import { type IdleCurve } from '@/chart/curve';
 import { alignByDate, policyByDate, referenceMode } from '@/chart/references';
 import { panRange, sliceRange, zoomRange, type ViewRange } from '@/chart/zoom';
 import { windowExtremes } from '@/chart/extremes';
-import { maColorOf, maColorVar, useMaPrefs } from '@/state/ma';
+import { maColorOf, maColorVar, useOverlayPrefs } from '@/state/overlays';
 import type { Row } from '@/table/rows';
 
 import { useFillHeight } from './useFillHeight';
@@ -218,6 +218,38 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: 'up
         {value}
       </TextBody>
     </VStack>
+  );
+}
+
+/** 기준선 범례 항목 중 **끌 수 있는** 것 [2026-08-26]. `RefKey` 는 못 끄는
+ * 자리(아이들 커브의 오늘/전일)가 아직 쓰고, 이쪽은 MA 칩과 같은 부품이다 —
+ * 한 줄에 나란히 서므로 같은 모양이어야 한다.
+ *
+ * 견본(`.sr-casedash`)이 **그려진 색 그대로**이고, 끄면 흐려져 «있지만 지금은
+ * 안 그린다» 가 읽힌다. MA 칩과 한 글자도 다르지 않은 규칙이다. */
+export function RefChip({
+  label,
+  color,
+  on,
+  onToggle,
+}: {
+  label: string;
+  color: string;
+  on: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <Chip
+      size="xs"
+      accessibilityLabel={`${label} ${on ? '끄기' : '켜기'}`}
+      start={
+        <span className="sr-casedash" style={{ background: color, opacity: on ? 0.9 : 0.3 }} />
+      }
+      invertColorScheme={on}
+      onClick={onToggle}
+    >
+      {label}
+    </Chip>
   );
 }
 
@@ -476,7 +508,7 @@ export function PreviewPane({
 
   /* 켠 것과 색 — Setting 과 **같은 저장소**를 읽는다(`state/ma.ts`). 범례를
      눌러도 여기가 바뀌고, 그래서 두 화면이 갈리지 않는다. */
-  const [maPrefs, ma] = useMaPrefs();
+  const [prefs, ov] = useOverlayPrefs();
 
 
   /* The window the chart actually draws, and everything read off it. Kept in one
@@ -599,8 +631,29 @@ export function PreviewPane({
     return { cd: has(cdLine) ? cdLine : null, policy: has(policyLine) ? policyLine : null };
   }, [view, cd, policy]);
 
-  /** 보조 %축을 그리는가 — 기준선이 있고, 그것이 종목과 **다른 단위**일 때만. */
-  const pctAxis = refs != null && mode === 'own';
+  /**
+   * **그려지는** 기준선 — 있음(`refs`)과 그림(`drawn`)은 다른 질문이다
+   * [OWNER, 2026-08-26 — "기준금리랑 CD금리도 MA처럼 껏다 켰다"].
+   *
+   *   `refs`  그 날짜 위에 얹을 값이 **있는가** — 범례에 칩을 세울지 정한다.
+   *           없는 것은 끌 수도 없어야 하므로 칩 자체가 안 선다.
+   *   `drawn` 있고 **켜져 있는가** — 시리즈·스크러버·리드아웃·보조축이 읽는다.
+   */
+  const drawn = useMemo(
+    () =>
+      refs
+        ? {
+            cd: prefs.refs.cd ? refs.cd : null,
+            policy: prefs.refs.policy ? refs.policy : null,
+          }
+        : null,
+    [refs, prefs.refs],
+  );
+
+  /** 보조 %축을 그리는가 — **그려지는** 기준선이 있고, 그것이 종목과 다른
+   *  단위일 때만. 둘 다 꺼 두면 축도 내려간다: 빈 축은 눈금을 그리고 폭을
+   *  먹으면서 아무것도 말하지 않는다(아래 `yAxes` 의 그 규칙). */
+  const pctAxis = !!(drawn && (drawn.cd || drawn.policy)) && mode === 'own';
 
 
   /* 차트가 먹는 시리즈. `yAxisId` 가 축을 고른다: 같은 단위면 셋 다 종목 축,
@@ -614,11 +667,11 @@ export function PreviewPane({
          네이버 MA 방식]. 색·판정 이력은 `theme/direction.css` 의 토큰 주석에
          있다. 시리즈의 `color` 에 두는 이유: `Line` 의 기본 stroke 도 스크러버
          구슬도 여기서 색을 읽으므로, 선과 구슬이 한 곳에서 갈린다. */
-      ...(refs?.cd
-        ? [{ id: CD_LINE, data: refs.cd, color: 'var(--sr-ref-cd)', yAxisId: refAxis }]
+      ...(drawn?.cd
+        ? [{ id: CD_LINE, data: drawn.cd, color: 'var(--sr-ref-cd)', yAxisId: refAxis }]
         : []),
-      ...(refs?.policy
-        ? [{ id: BASE_LINE, data: refs.policy, color: 'var(--sr-ref-policy)', yAxisId: refAxis }]
+      ...(drawn?.policy
+        ? [{ id: BASE_LINE, data: drawn.policy, color: 'var(--sr-ref-policy)', yAxisId: refAxis }]
         : []),
       /* 이동평균 — **종목과 같은 축**이다(같은 단위의 같은 계열의 평균이므로).
          기준선과 달리 `refAxis` 를 안 탄다: bp 차트에서도 MA 는 bp 다.
@@ -626,17 +679,17 @@ export function PreviewPane({
          `k` 는 **서버 목록의 첨자**다 — 점에 얹힌 `pt.ma` 가 그 순서이므로,
          켠 것만 걸러진 배열의 첨자를 쓰면 다른 창의 평균을 그리게 된다. */
       ...maWindows.flatMap((w, k) =>
-        maPrefs.shown.includes(w)
+        prefs.shown.includes(w)
           ? [{
               id: maSeriesId(w),
               data: view.win.map((pt) => pt.ma?.[k] ?? null),
-              color: maColorVar(maColorOf(maPrefs, w)),
+              color: maColorVar(maColorOf(prefs, w)),
               yAxisId: MAIN_AXIS,
             }]
           : [],
       ),
     ];
-  }, [view, refs, pctAxis, hue, row?.id, maWindows, maPrefs]);
+  }, [view, drawn, pctAxis, hue, row?.id, maWindows, prefs]);
 
   /* 축 설정. 두 번째 축은 **있을 때만** 선언한다 — 빈 축은 눈금을 그리고 폭을
    * 먹으면서 아무것도 말하지 않는다. */
@@ -992,7 +1045,7 @@ export function PreviewPane({
                 서버가 null 로 두므로(`derive.moving_averages` — TA-Lib 의 lookback
                 규약) `connectNulls` 를 끈다: 이으면 없던 평균을 직선으로 메운다. */}
             {maWindows.map((w, k) =>
-              maPrefs.shown.includes(w) ? (
+              prefs.shown.includes(w) ? (
                 <Line
                   key={maSeriesId(w)}
                   seriesId={maSeriesId(w)}
@@ -1040,10 +1093,10 @@ export function PreviewPane({
                 **색 하나**다(호박/보라, 같은 지각적 무게 — `direction.css`).
                 기준금리는 `stepAfter` — 정책금리는 평평하다가 뛴다. 둘 다
                 `connectNulls` 를 끈다(끊긴 구간은 모르는 구간이다). */}
-            {refs?.cd ? (
+            {drawn?.cd ? (
               <Line seriesId={CD_LINE} strokeWidth={1.5} strokeOpacity={0.9} connectNulls={false} />
             ) : null}
-            {refs?.policy ? (
+            {drawn?.policy ? (
               <Line
                 seriesId={BASE_LINE}
                 curve="stepAfter"
@@ -1063,8 +1116,8 @@ export function PreviewPane({
               accessibilityLabel={scrubLabel}
               seriesIds={[
                 row.id,
-                ...(refs?.cd ? [CD_LINE] : []),
-                ...(refs?.policy ? [BASE_LINE] : []),
+                ...(drawn?.cd ? [CD_LINE] : []),
+                ...(drawn?.policy ? [BASE_LINE] : []),
               ]}
             />
           </CartesianChart>
@@ -1085,8 +1138,8 @@ export function PreviewPane({
             <ReadoutLevel k={READOUT_LABEL.rangeHigh} v={stats52.max} unit={row.unit} />
             <ReadoutLevel k={READOUT_LABEL.rangeLow} v={stats52.min} unit={row.unit} />
             <ReadoutLevel k={READOUT_LABEL.rangeAvg} v={stats52.avg} unit={row.unit} />
-            {refs?.cd ? (
-              <ReadoutLevel k={READOUT_LABEL.cd91} v={refs.cd[hoverPoint.i]} unit="%" />
+            {drawn?.cd ? (
+              <ReadoutLevel k={READOUT_LABEL.cd91} v={drawn.cd[hoverPoint.i]} unit="%" />
             ) : null}
             {/* 이동평균 — **켠 것만** [OWNER 2026-08-26: "MA값도 넣어줘야지"].
                 끈 창의 값을 적으면 카드가 화면에 없는 선을 읽는 셈이다(기준선이
@@ -1096,7 +1149,7 @@ export function PreviewPane({
                 서버 목록의 첨자다. 그래서 카드와 선이 다른 수를 말할 수 없다.
                 스크러버가 MA 를 안 짚는 대신 값은 여기가 진다. */}
             {maWindows.map((w, k) =>
-              maPrefs.shown.includes(w) ? (
+              prefs.shown.includes(w) ? (
                 <ReadoutLevel
                   key={maSeriesId(w)}
                   k={`MA${w}`}
@@ -1120,10 +1173,31 @@ export function PreviewPane({
           없다, 이고 그건 bp·ratio 차트에서 정상이다(`referenceMode`). */}
       {refs || maWindows.length ? (
         <HStack gap={2} paddingX={2} paddingBottom={1} flexWrap="wrap">
-          {/* 같은 위계 = 색만 다르고 나머지 취급은 전부 같다. */}
-          {refs?.cd ? <RefKey label="CD 91일" opacity={0.9} color="var(--sr-ref-cd)" /> : null}
+          {/* 기준선도 **누르는 것**이다 [OWNER 2026-08-26 — "기준금리랑 CD금리도
+              MA처럼 껏다 켰다 가능하게"]. MA 칩과 같은 부품·같은 문법이라 한 줄에
+              섰을 때 두 어휘가 안 생긴다.
+
+              **값이 있을 때만 칩이 선다** — 없는 것은 끌 수도 없어야 한다. 그게
+              이 자리의 원래 규칙이기도 하다(«범례가 없다 = 기준선이 없다»).
+
+              색은 **고르는 대상이 아니다**: 두 색은 오너가 3차까지 보고 확정한
+              값이라(`direction.css`) 여기서 바뀌지 않는다. MA 와 다른 점이 그
+              하나다. */}
+          {refs?.cd ? (
+            <RefChip
+              label="CD 91일"
+              color="var(--sr-ref-cd)"
+              on={prefs.refs.cd}
+              onToggle={() => ov.toggleRef('cd')}
+            />
+          ) : null}
           {refs?.policy ? (
-            <RefKey label="기준금리" opacity={0.9} color="var(--sr-ref-policy)" />
+            <RefChip
+              label="기준금리"
+              color="var(--sr-ref-policy)"
+              on={prefs.refs.policy}
+              onToggle={() => ov.toggleRef('policy')}
+            />
           ) : null}
           {/* MA 범례는 **누르는 것**이다 [OWNER 2026-08-26 — "당연히 껏다 켰다
               가능하게"]. 차트 범례를 눌러 계열을 끄는 것은 어느 차트 제품에나
@@ -1135,7 +1209,7 @@ export function PreviewPane({
               그대로 든다. 끈 것은 견본이 흐려져 «있지만 지금은 안 그린다» 가
               읽힌다. 색은 Setting 에서 바꾼다. */}
           {maWindows.map((w, k) => {
-            const on = maPrefs.shown.includes(w);
+            const on = prefs.shown.includes(w);
             return (
               <Chip
                 key={maSeriesId(w)}
@@ -1149,13 +1223,13 @@ export function PreviewPane({
                   <span
                     className="sr-casedash"
                     style={{
-                      background: maColorVar(maColorOf(maPrefs, w)),
+                      background: maColorVar(maColorOf(prefs, w)),
                       opacity: on ? (MA_INK[k]?.opacity ?? 0.6) : 0.3,
                     }}
                   />
                 }
                 invertColorScheme={on}
-                onClick={() => ma.toggle(w)}
+                onClick={() => ov.toggle(w)}
               >
                 {`MA${w}`}
               </Chip>

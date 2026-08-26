@@ -35,12 +35,12 @@ import {
   MA_COLOR_LABEL,
   MA_COLOR_TOKENS,
   MA_COLOR_WARNING,
-  MA_DEFAULT,
+  OVERLAY_DEFAULT,
   maColorOf,
   maColorVar,
-  useMaPrefs,
+  useOverlayPrefs,
   type MaColorToken,
-} from '@/state/ma';
+} from '@/state/overlays';
 import {
   FUNDING_DEFAULT,
   SPREAD_MAX,
@@ -213,7 +213,7 @@ export function SettingView() {
         </VStack>
       </VStack>
 
-      <MaCard />
+      <OverlayCard />
 
       <TextCaption as="p" color="fgMuted">
         조달비용은 <b>초기 투자금액</b>에 실경과일수 ÷ 365 로 붙어요. 이표를
@@ -232,7 +232,7 @@ export function SettingView() {
  * 있게 해주고 컬러토큰에서"]. 둘 다 했다: 기본 배정이 있고, 여기서 바꾼다.
  *
  * **창 목록은 서버 것이다**(`derive.MA_WINDOWS`). 이 화면은 그걸 다시 적지 않고
- * `MA_DEFAULT.colors` 의 열쇠에서 읽는다 — 창을 두 곳에 적으면 갈린다.
+ * `OVERLAY_DEFAULT.colors` 의 열쇠에서 읽는다 — 창을 두 곳에 적으면 갈린다.
  *
  * 색은 **CDS 시맨틱 토큰만** 고를 수 있다. hex 상자를 놓으면 다크에서 안 따라가고
  * `guards/color-source.test.ts` 도 깨진다. 대신 이미 뜻을 가진 색과 겹치는
@@ -243,23 +243,78 @@ export function SettingView() {
 const MA_W_COL = 104;
 const MA_COLOR_COL = 160;
 
-function MaCard() {
-  const [prefs, ma] = useMaPrefs();
-  const windows = Object.keys(MA_DEFAULT.colors)
+function OverlayCard() {
+  const [prefs, ov] = useOverlayPrefs();
+  const windows = Object.keys(OVERLAY_DEFAULT.colors)
     .map(Number)
     .sort((a, b) => a - b);
   const isDefault =
-    prefs.shown.join() === MA_DEFAULT.shown.join() &&
-    windows.every((w) => maColorOf(prefs, w) === MA_DEFAULT.colors[w]);
+    prefs.shown.join() === OVERLAY_DEFAULT.shown.join() &&
+    prefs.refs.cd === OVERLAY_DEFAULT.refs.cd &&
+    prefs.refs.policy === OVERLAY_DEFAULT.refs.policy &&
+    windows.every((w) => maColorOf(prefs, w) === OVERLAY_DEFAULT.colors[w]);
 
   return (
     <VStack className="sr-card" gap={1.5} padding={3}>
-      <TextTitle3 as="h2">이동평균</TextTitle3>
+      <TextTitle3 as="h2">차트에 겹쳐 그리기</TextTitle3>
       <TextBody as="p" color="fgMuted">
-        종목 차트에 겹쳐 그리는 단순이동평균이에요. 창은 증권사 HTS 기본값과
-        같아요 — <b>5일=1주 · 10일=2주 · 20일=1개월 · 60일=1분기 · 120일=반기</b>.
-        차트 범례의 칩을 눌러도 켜고 꺼져요.
+        종목 차트 위에 같이 그릴 것들이에요. <b>차트 범례의 칩을 눌러도</b> 켜고
+        꺼져요 — 여기와 같은 값을 봐요.
       </TextBody>
+
+      {/* 기준선 — **색은 없다.** 두 색은 오너가 확정한 값이라 고르는 대상이
+          아니고, 여기서 정하는 것은 «그릴까» 하나다. 그래서 색 열이 없는
+          한 줄이고, 그 차이가 곧 이 절과 아래 절의 차이다. */}
+      <VStack gap={0.75}>
+        <Text font="caption" as="span" color="fgMuted">
+          기준선
+        </Text>
+        <HStack gap={1} flexWrap="wrap">
+          <Chip
+            size="xs"
+            accessibilityLabel={`CD 91일 ${prefs.refs.cd ? '끄기' : '켜기'}`}
+            start={
+              <span
+                className="sr-casedash"
+                style={{ background: 'var(--sr-ref-cd)', opacity: prefs.refs.cd ? 0.9 : 0.3 }}
+              />
+            }
+            invertColorScheme={prefs.refs.cd}
+            onClick={() => ov.toggleRef('cd')}
+          >
+            CD 91일
+          </Chip>
+          <Chip
+            size="xs"
+            accessibilityLabel={`기준금리 ${prefs.refs.policy ? '끄기' : '켜기'}`}
+            start={
+              <span
+                className="sr-casedash"
+                style={{
+                  background: 'var(--sr-ref-policy)',
+                  opacity: prefs.refs.policy ? 0.9 : 0.3,
+                }}
+              />
+            }
+            invertColorScheme={prefs.refs.policy}
+            onClick={() => ov.toggleRef('policy')}
+          >
+            기준금리
+          </Chip>
+        </HStack>
+        <TextCaption as="span" color="fgMuted">
+          %-단위 차트에서는 종목과 같은 축에, bp·가격 차트에서는 왼쪽에 자기 %축을
+          달고 서요. 둘 다 끄면 그 축도 내려가요.
+        </TextCaption>
+      </VStack>
+
+      <Text font="caption" as="span" color="fgMuted">
+        이동평균
+      </Text>
+      <TextCaption as="span" color="fgMuted">
+        창은 증권사 HTS 기본값과 같아요 — <b>5일=1주 · 10일=2주 · 20일=1개월 ·
+        60일=1분기 · 120일=반기</b>.
+      </TextCaption>
 
       {/* 같은 모양의 줄이 다섯이라 **머리를 한 번만** 적는다 — 줄마다 「색」을
           붙이면 라벨이 다섯 번 반복되고, 그게 CLAUDE.md 「얼라인」 2 가 설정
@@ -296,7 +351,7 @@ function MaCard() {
                     />
                   }
                   invertColorScheme={on}
-                  onClick={() => ma.toggle(w)}
+                  onClick={() => ov.toggle(w)}
                 >
                   {`MA${w}`}
                 </Chip>
@@ -311,7 +366,7 @@ function MaCard() {
                   styles={DROPDOWN_STYLES}
                   accessibilityLabel={`MA${w} 색`}
                   value={color}
-                  onChange={(v) => ma.setColor(w, v as MaColorToken)}
+                  onChange={(v) => ov.setColor(w, v as MaColorToken)}
                   options={MA_COLOR_TOKENS.map((c) => ({
                     value: c,
                     label: MA_COLOR_LABEL[c],
@@ -333,7 +388,7 @@ function MaCard() {
           variant="secondary"
           size="s"
           disabled={isDefault}
-          onClick={() => ma.reset()}
+          onClick={() => ov.reset()}
         >
           기본값으로
         </Button>

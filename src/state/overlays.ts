@@ -1,8 +1,13 @@
 'use client';
 
-/* 이동평균 취향 — Setting 이 정하고 차트가 읽는다
+/* 차트에 **겹쳐 그리는 것들**의 취향 — Setting 이 정하고 차트가 읽는다
  * [OWNER, 2026-08-26 — "당연히 껏다 켰다 가능하게 … 색도 회색이 아니라
- * 컬러토큰에서 가져와서 배정해주고 OR 내가 색상 지정할 수 있게"].
+ * 컬러토큰에서 가져와서 배정해주고 OR 내가 색상 지정할 수 있게" · 그리고
+ * "기준금리랑 CD금리도 MA처럼 껏다 켰다 가능하게"].
+ *
+ * 처음엔 `state/ma.ts` 였다. 기준선 둘이 **같은 질문**(겹쳐 그릴까)을 갖게 되면서
+ * 파일 이름이 내용보다 좁아졌다 — 이름을 넓히는 편이 두 번째 저장소를 만드는
+ * 것보다 낫다(캐논 «같은 것은 한 번만 만든다»).
  *
  * `state/funding.ts` 와 **같은 기계**다(useSyncExternalStore + localStorage +
  * 모듈 리스너). 좌표가 아니라 취향이고 어느 화면에서도 같은 뜻이라 저장 매체도
@@ -67,11 +72,23 @@ export const MA_COLOR_WARNING: Partial<Record<MaColorToken, string>> = {
   accentBoldYellow: '밝아서 흰 배경에서 잘 안 보여요',
 };
 
-export interface MaPrefs {
+export interface OverlayPrefs {
   /** 켜 둔 창. 서버가 주는 창 중 여기 든 것만 그린다. */
   shown: number[];
   /** 창 -> 색 토큰. 없는 창은 `DEFAULT_COLOR` 로 떨어진다. */
   colors: Record<number, MaColorToken>;
+  /**
+   * 기준선 둘 [OWNER, 2026-08-26 — "기준금리랑 CD금리도 MA처럼"].
+   *
+   * **색은 여기 없다.** CD·기준금리의 두 색은 오너가 3차까지 보고 확정한 값이라
+   * (`theme/direction.css` 의 `--sr-ref-cd`/`--sr-ref-policy`) 고르는 대상이
+   * 아니다. 여기서 정하는 것은 «그릴까» 하나다.
+   *
+   * 기본은 **둘 다 켬** — v1 부터의 규약이 "CD와 기준금리는 항상 같이 그린다"
+   * [OWNER 2026-07-31] 이고, 이 변경은 그 규약을 끄는 손잡이를 더한 것이지
+   * 규약을 뒤집은 것이 아니다.
+   */
+  refs: { cd: boolean; policy: boolean };
 }
 
 const DEFAULT_COLOR: MaColorToken = 'accentBoldGray';
@@ -83,7 +100,7 @@ const DEFAULT_COLOR: MaColorToken = 'accentBoldGray';
  * 된다. 20=1개월 · 120=반기가 이 데스크가 실제로 읽는 둘이고, 둘 다 위에서
  * «겹치는 뜻이 없는» 두 색을 받는다. 나머지는 켜는 순간 읽는 사람이 고른 것이다.
  */
-export const MA_DEFAULT: MaPrefs = {
+export const OVERLAY_DEFAULT: OverlayPrefs = {
   shown: [20, 120],
   colors: {
     5: 'accentBoldPurple',
@@ -92,19 +109,22 @@ export const MA_DEFAULT: MaPrefs = {
     60: 'accentBoldBlue',
     120: 'accentBoldGray',
   },
+  refs: { cd: true, policy: true },
 };
 
-const KEY = 'sr-ma';
+/** 저장 열쇠. `sr-ma` 에서 옮겼다 — 옛 열쇠에 든 값은 «MA 만 아는» 모양이라
+ *  기준선 항목이 없다. 새 열쇠로 시작하면 기본값(둘 다 켬)에서 출발한다. */
+const KEY = 'sr-overlays';
 
-function load(): MaPrefs {
+function load(): OverlayPrefs {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return MA_DEFAULT;
-    const v = JSON.parse(raw) as Partial<MaPrefs>;
+    if (!raw) return OVERLAY_DEFAULT;
+    const v = JSON.parse(raw) as Partial<OverlayPrefs>;
     const shown = Array.isArray(v.shown)
       ? v.shown.filter((n): n is number => Number.isFinite(n))
-      : MA_DEFAULT.shown;
-    const colors: Record<number, MaColorToken> = { ...MA_DEFAULT.colors };
+      : OVERLAY_DEFAULT.shown;
+    const colors: Record<number, MaColorToken> = { ...OVERLAY_DEFAULT.colors };
     if (v.colors && typeof v.colors === 'object') {
       for (const [k, c] of Object.entries(v.colors)) {
         const w = Number(k);
@@ -113,22 +133,26 @@ function load(): MaPrefs {
         }
       }
     }
-    return { shown, colors };
+    const refs = {
+      cd: v.refs?.cd !== false,
+      policy: v.refs?.policy !== false,
+    };
+    return { shown, colors, refs };
   } catch {
     // 저장소가 막혔거나 옛 모양이 남아 있다 — 기본값이 안전하다
-    return MA_DEFAULT;
+    return OVERLAY_DEFAULT;
   }
 }
 
 const listeners = new Set<() => void>();
-let snapshot: MaPrefs | null = null;
+let snapshot: OverlayPrefs | null = null;
 
-function read(): MaPrefs {
+function read(): OverlayPrefs {
   if (snapshot === null) snapshot = load();
   return snapshot;
 }
 
-function write(next: MaPrefs) {
+function write(next: OverlayPrefs) {
   snapshot = next;
   try {
     localStorage.setItem(KEY, JSON.stringify(next));
@@ -143,17 +167,18 @@ function subscribe(l: () => void): () => void {
   return () => listeners.delete(l);
 }
 
-export function useMaPrefs(): [
-  MaPrefs,
+export function useOverlayPrefs(): [
+  OverlayPrefs,
   {
     toggle: (w: number) => void;
     setColor: (w: number, c: MaColorToken) => void;
+    toggleRef: (k: 'cd' | 'policy') => void;
     reset: () => void;
   },
 ] {
   /* 서버 스냅샷은 **항상 기본값**이고 하이드레이션에서 교정된다 — 서버는 이
      취향을 알 방법이 없다(`useFunding` 과 같은 처리). */
-  const prefs = useSyncExternalStore(subscribe, read, () => MA_DEFAULT);
+  const prefs = useSyncExternalStore(subscribe, read, () => OVERLAY_DEFAULT);
   return [
     prefs,
     {
@@ -168,12 +193,16 @@ export function useMaPrefs(): [
         const cur = read();
         write({ ...cur, colors: { ...cur.colors, [w]: c } });
       },
-      reset: () => write(MA_DEFAULT),
+      toggleRef: (k) => {
+        const cur = read();
+        write({ ...cur, refs: { ...cur.refs, [k]: !cur.refs[k] } });
+      },
+      reset: () => write(OVERLAY_DEFAULT),
     },
   ];
 }
 
 /** 그 창의 색 토큰 — 안 정해졌으면 기본. */
-export function maColorOf(prefs: MaPrefs, w: number): MaColorToken {
-  return prefs.colors[w] ?? MA_DEFAULT.colors[w] ?? DEFAULT_COLOR;
+export function maColorOf(prefs: OverlayPrefs, w: number): MaColorToken {
+  return prefs.colors[w] ?? OVERLAY_DEFAULT.colors[w] ?? DEFAULT_COLOR;
 }

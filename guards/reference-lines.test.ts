@@ -233,16 +233,22 @@ describe('기준선은 같은 위계의 두 색이다 [OWNER 2026-08-18, 3차 �
     expect(pane).not.toMatch(/<RefLineLabel/);
   });
 
-  it('범례가 선의 색을 입고, 불투명도는 서로 같다 — 점선 견본은 없다', () => {
-    // 범례는 차트의 견본이다(Finviz/네이버 문법). 색만 다르고 취급은 같아야
-    // 한다 — 불투명도가 갈리면 ②의 불평등이 범례에서 돌아온다.
-    expect(pane).toMatch(/RefKey label="CD 91일" opacity=\{([\d.]+)\} color="var\(--sr-ref-cd\)"/);
-    expect(pane).toMatch(
-      /RefKey label="기준금리" opacity=\{([\d.]+)\} color="var\(--sr-ref-policy\)"/,
-    );
-    const ops = [...pane.matchAll(/RefKey label="(?:CD 91일|기준금리)" opacity=\{([\d.]+)\}/g)];
-    expect(ops).toHaveLength(2);
-    expect(ops[0][1]).toBe(ops[1][1]);
+  it('범례가 선의 색을 입고, 둘의 취급이 같다 — 점선 견본은 없다', () => {
+    /* 범례는 차트의 견본이다(Finviz/네이버 문법). 색만 다르고 취급은 같아야
+       한다 — 갈리면 ②의 불평등이 범례에서 돌아온다.
+
+       2026-08-26 부터 이 범례 항목은 **누를 수 있다**(`RefChip`) [OWNER —
+       "기준금리랑 CD금리도 MA처럼 껏다 켰다 가능하게"]. 재는 명제는 그대로다:
+       각자 자기 선의 색을 입고, 둘이 같은 부품·같은 prop 으로 선다. */
+    expect(pane).toMatch(/<RefChip\s+label="CD 91일"\s+color="var\(--sr-ref-cd\)"/);
+    expect(pane).toMatch(/<RefChip\s+label="기준금리"\s+color="var\(--sr-ref-policy\)"/);
+    const chips = [...pane.matchAll(/<RefChip\s+label="(?:CD 91일|기준금리)"/g)];
+    expect(chips).toHaveLength(2);
+    /* 불투명도는 이제 부품 안에 **한 번만** 적힌다 — 두 항목이 그것을 나눠 쓰므로
+       갈릴 자리가 아예 없다(전에는 호출부마다 적어서 갈릴 수 있었다). */
+    const comp = pane.slice(pane.indexOf('export function RefChip'));
+    const ops = [...comp.slice(0, 900).matchAll(/opacity: on \? ([\d.]+) : ([\d.]+)/g)];
+    expect(ops).toHaveLength(1);
     expect(pane).not.toMatch(/dashed/);
   });
 
