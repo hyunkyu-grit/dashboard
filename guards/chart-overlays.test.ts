@@ -87,17 +87,29 @@ describe('③ 색은 CDS 토큰에서만 온다 [OWNER 2026-08-26]', () => {
     /* 실측(2026-08-26, light): accentBoldRed~`--sr-up` #de2b39 ·
        accentBoldBlue~`--sr-down` #2171eb · accentBoldPurple~`--sr-ref-policy`
        #7c3aed · accentBoldYellow 는 흰 배경 대비 ~1.5:1(WCAG 1.4.11 미달).
-       남는 것은 초록과 진회색 둘이고, 기본 노출 둘이 그 둘을 가져간다. */
+       남는 것은 초록과 진회색 둘이고, 기본으로 켜는 창은 그중에서 받는다.
+
+       개수는 안 잰다 — 몇 개를 켜 둘지는 오너가 정하는 취향이고(2026-08-26 에
+       둘에서 하나로 줄었다), 이 시험이 재려는 것은 «켜 두는 것은 겹치는 뜻이
+       없는 색이어야 한다» 하나다. */
     const shown = [...store.matchAll(/shown: \[([\d, ]+)\]/g)][0][1]
       .split(',')
       .map((s) => Number(s.trim()));
-    expect(shown).toHaveLength(2);
+    expect(shown.length).toBeGreaterThan(0);
     const from = store.indexOf('colors: {');
     const colors = store.slice(from, store.indexOf('};', from));
     for (const w of shown) {
       const m = colors.match(new RegExp(String(w) + ": '([A-Za-z]+)'"));
       expect(m).not.toBeNull();
       expect(['accentBoldGreen', 'accentBoldGray']).toContain(m![1]);
+    }
+  });
+
+  it('꺼 둔 창도 **색은 배정돼 있다** — 켜는 순간 제 색으로 선다', () => {
+    const from = store.indexOf('colors: {');
+    const colors = store.slice(from, store.indexOf('};', from));
+    for (const w of [5, 10, 20, 60, 120]) {
+      expect(colors).toMatch(new RegExp(String(w) + ": 'accentBold[A-Za-z]+'"));
     }
   });
 
