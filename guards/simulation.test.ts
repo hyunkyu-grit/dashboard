@@ -500,8 +500,11 @@ describe('색은 실재하는 토큰만 쓴다 `[검증됨]` 2026-08-14', () => 
      * 커브를 다시 그렸다(실측: 두 path 의 `d` 가 완전히 동일). */
     const s = body('src/sim/CurvePreview.tsx');
     expect(s).toMatch(/id: 'now'/);
-    expect(s).toMatch(/seriesId="now"/);
     expect(s).toMatch(/`case:\$\{l\.id\}`/);
+    /* `seriesId` 라는 두 번째 자리가 없어졌다 [2026-08-26 이관] — 이제 id 는
+       선 정의 안에 한 번만 적힌다. 이름을 두 곳에 적던 것이 애초에 이 사고의
+       조건이었다. */
+    expect(s).not.toMatch(/seriesId=/);
   });
 });
 

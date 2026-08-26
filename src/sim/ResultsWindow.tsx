@@ -24,13 +24,6 @@ import { Chip } from '@coinbase/cds-web/chips';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@coinbase/cds-web/tables';
 import { TextLabel1, TextLabel2, TextLegal } from '@coinbase/cds-web/typography';
-import {
-  CartesianChart,
-  Line,
-  Scrubber,
-  XAxis,
-  YAxis,
-} from '@coinbase/cds-web/visualizations/chart';
 
 import { fmtKrw, fmtKrwFromMan, manUnits } from '@/lib/krw';
 /* 방향 **글자**는 클래스(`sr-up`/`sr-down` — Backtest·Main 과 같은 기제),
@@ -40,6 +33,7 @@ import { directionClass } from '@/table/tint';
 import { directionVar } from '@/theme/tint';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { ReconStack, type ReconStackDay } from '@/ui/window/ReconStack';
+import { NumericChart, type NumericLine } from '@/chart/NumericChart';
 import { ReadoutCard, ReadoutMoney, placeReadout } from '@/ui/ReadoutCard';
 
 import type { CaseRuns } from './SimulationPage';
@@ -53,8 +47,6 @@ import {
   type SimReconRow,
   type SimResponse,
 } from './scenario';
-
-const AXIS = 'krw';
 
 /** 성분. 순서가 곧 워터폴의 순서이고 표의 행 순서다.
  *
@@ -87,7 +79,6 @@ const PATH_ROWS = [...SWAP_PARTS, ...BOND_PARTS, ...FUT_PARTS] as readonly {
   key: 'val' | 'carry' | 'roll' | 'bondMtm' | 'bondCarry' | 'bondRoll' | 'fund' | 'futMtm';
   label: string;
 }[];
-const PATH_SERIES: string[] = PATH_ROWS.map((r) => r.key);
 /** 북에 채권이 없으면 서지 않는 셋. */
 const BOND_SERIES = new Set<string>(BOND_PARTS.map((r) => r.key));
 /** 북에 선물이 없으면 서지 않는 것. */
@@ -285,7 +276,10 @@ export function ResultsWindow({
     const daily = run?.decompositionDaily ?? [];
     if (daily.length === 0) return null;
     return {
-      days: daily.map((d) => `D+${d.day}`),
+      /* **숫자**다. 종전에는 `D+${d.day}` 문자열이었고, 그 탓에 리드아웃 제목이
+         `D+${paths.days[i]}` 로 한 번 더 붙어 **「D+D+30」** 이 찍히고 있었다
+         (2026-08-26 이관 중 발견). 「D+」는 이제 **찍는 쪽**이 붙인다. */
+      days: daily.map((d) => d.day),
       val: daily.map((d) => d.swapMtm ?? null),
       carry: daily.map((d) => d.swapCarry ?? null),
       roll: daily.map((d) => d.swapRolldown ?? null),
@@ -324,12 +318,40 @@ export function ResultsWindow({
     [paths],
   );
 
+  /** 성분 선들. 색은 전부 이 리포의 CSS 변수라 `palette.resolve` 가 푼다. */
+  const pathLines = useMemo<NumericLine[]>(() => {
+    if (!paths) return [];
+    const line = (id: string, values: (number | null)[], css: string): NumericLine => ({
+      id,
+      values,
+      color: (pal) => pal.resolve(css),
+    });
+    return [
+      line('val', paths.val, 'var(--sr-up)'),
+      line('carry', paths.carry, 'var(--sr-down)'),
+      line('roll', paths.roll, 'var(--color-fgMuted)'),
+      ...(paths.hasBond
+        ? [
+            line('bondMtm', paths.bondMtm, 'var(--sr-ref-cd)'),
+            line('bondCarry', paths.bondCarry, 'var(--sr-ref-policy)'),
+            line('bondRoll', paths.bondRoll, 'var(--sr-ref-roll)'),
+            line('fund', paths.fund, 'var(--color-fg)'),
+          ]
+        : []),
+      ...(paths.hasFut ? [line('futMtm', paths.futMtm, 'var(--sr-ref-fut)')] : []),
+    ];
+  }, [paths]);
+
+  const setPathHover = useCallback((i: number | null) => setPathIdx(i ?? undefined), []);
+  const dayLabel = useCallback((d: number) => `D+${d}`, []);
+  const krwTick = useCallback((v: number) => fmtKrw(v), []);
+
   const pathScrubLabel = useCallback(
     (i: number) => {
       if (!paths || paths.days[i] == null) return '';
       const rows = PATH_ROWS.filter((r) => drawPath(r.key))
         .map((r) => `${r.label} ${fmtKrw((paths[r.key] as (number | null)[])[i] ?? 0)}`);
-      return [paths.days[i], ...rows].join(', ');
+      return [`D+${paths.days[i]}`, ...rows].join(', ');
     },
     [paths, drawPath],
   );
@@ -499,56 +521,16 @@ export function ResultsWindow({
             </TextLegal>
             {/* 카드가 기준으로 삼는 상자(`.sr-plot` = position:relative). */}
             <Box className="sr-plot" width="100%" onMouseMove={onPathMove}>
-              <CartesianChart
-                animate={false}
-                enableScrubbing
-                onScrubberPositionChange={setPathIdx}
+              <NumericChart
                 height={260}
                 accessibilityLabel="성분 누적 경로"
-                inset={{ top: 12, right: 8, bottom: 0, left: 8 }}
-                series={[
-                  { id: 'val', data: paths.val, color: 'var(--sr-up)', yAxisId: AXIS },
-                  { id: 'carry', data: paths.carry, color: 'var(--sr-down)', yAxisId: AXIS },
-                  { id: 'roll', data: paths.roll, color: 'var(--color-fgMuted)', yAxisId: AXIS },
-                  ...(paths.hasBond
-                    ? [
-                        { id: 'bondMtm', data: paths.bondMtm, color: 'var(--sr-ref-cd)', yAxisId: AXIS },
-                        { id: 'bondCarry', data: paths.bondCarry, color: 'var(--sr-ref-policy)', yAxisId: AXIS },
-                        { id: 'bondRoll', data: paths.bondRoll, color: 'var(--sr-ref-roll)', yAxisId: AXIS },
-                        { id: 'fund', data: paths.fund, color: 'var(--color-fg)', yAxisId: AXIS },
-                      ]
-                    : []),
-                  ...(paths.hasFut
-                    ? [{ id: 'futMtm', data: paths.futMtm, color: 'var(--sr-ref-fut)', yAxisId: AXIS }]
-                    : []),
-                ]}
-                xAxis={{ data: paths.days }}
-                yAxis={[{ id: AXIS }]}
-              >
-                <XAxis showGrid={false} />
-                <YAxis
-                  axisId={AXIS}
-                  position="right"
-                  showGrid={false}
-                  tickLabelFormatter={(v) => fmtKrw(v)}
-                />
-                <Line seriesId="val" curve="linear" connectNulls={false} />
-                <Line seriesId="carry" curve="linear" connectNulls={false} />
-                <Line seriesId="roll" curve="linear" connectNulls={false} />
-                {paths.hasBond ? (
-                  <>
-                    <Line seriesId="bondMtm" curve="linear" connectNulls={false} />
-                    <Line seriesId="bondCarry" curve="linear" connectNulls={false} />
-                    <Line seriesId="bondRoll" curve="linear" connectNulls={false} />
-                    <Line seriesId="fund" curve="linear" connectNulls={false} />
-                  </>
-                ) : null}
-                {paths.hasFut ? <Line seriesId="futMtm" curve="linear" connectNulls={false} /> : null}
-                <Scrubber
-                  accessibilityLabel={pathScrubLabel}
-                  seriesIds={PATH_SERIES.filter((k) => drawPath(k))}
-                />
-              </CartesianChart>
+                nodes={paths.days}
+                lines={pathLines}
+                label={dayLabel}
+                tickFormat={krwTick}
+                onHoverIndex={setPathHover}
+                hoverLabel={pathScrubLabel}
+              />
               {/* 커서가 짚은 날의 성분 — 레인 P1-2. 이 화면은 손익이 어떻게
                   쌓이는지를 보는 자리인데, 특정 날의 숫자를 읽을 길이 없었다. */}
               {pathIdx != null && pathIdx >= 0 && paths.days[pathIdx] != null ? (

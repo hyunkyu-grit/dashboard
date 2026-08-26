@@ -40,21 +40,32 @@ describe('누적 손익의 전진 워크 — 찾기이지 계산이 아니다 (�
 describe('정렬은 구성이다 (소스 핀)', () => {
   const src = read('src/backtest/LinkedCharts.tsx');
 
+  /* **재는 자리가 옮겨졌다** [2026-08-26 라이트웨이트 이관]. 규칙 넷은 그대로다. */
+
   it('두 차트가 **같은 dates 배열**을 x 도메인으로 받는다', () => {
-    expect(src.match(/xAxis=\{\{ data: dates \}\}/g)).toHaveLength(2);
+    expect(src.match(/dates=\{dates\}/g)).toHaveLength(2);
   });
 
-  it('두 차트가 같은 INSET 을 쓴다', () => {
-    expect(src.match(/inset=\{INSET\}/g)).toHaveLength(2);
+  it('두 차트가 같은 여백을 쓴다 — 여백은 이제 부품이 진다', () => {
+    /* CDS 판은 호출부가 `inset={INSET}` 을 두 번 적었다. 캔버스 판에서는 그
+       값이 `chart/useLwChart.ts::canonOptions` 한 곳에 있고, 두 차트가 같은
+       부품을 쓰는 것이 곧 같은 여백이다 — **적을 자리가 없어져서** 어긋날 수
+       없게 됐다. */
+    expect(src.match(/<TimeChart/g)).toHaveLength(2);
+    const canon = read('src/chart/useLwChart.ts');
+    expect(canon).toMatch(/scaleMargins: \{ top: 0\.08, bottom: 0\.04 \}/);
   });
 
-  it('십자선은 반대쪽 차트에 선다 — 짚는 쪽은 CDS 스크러버가 이미 세로선이다', () => {
-    expect(src).toMatch(/hover\?\.src === 'bottom' \? <ReferenceLine dataX=\{hover\.i\}/);
-    expect(src).toMatch(/hover\?\.src === 'top' \? <ReferenceLine dataX=\{hover\.i\}/);
+  it('십자선은 반대쪽 차트에 선다', () => {
+    /* 짚는 쪽은 제 크로스헤어가 이미 세로선이다. 반대쪽에는 `syncIndex` 로
+       같은 자리에 크로스헤어를 세운다(CDS 의 `ReferenceLine dataX` 자리). */
+    expect(src).toMatch(/syncIndex=\{hover\?\.src === 'bottom' \? hover\.i : null\}/);
+    expect(src).toMatch(/syncIndex=\{hover\?\.src === 'top' \? hover\.i : null\}/);
   });
 
-  it('0선은 항상 프레임 안 — 승패의 경계 (ReferenceLine dataY=0)', () => {
-    expect(src).toMatch(/<ReferenceLine dataY=\{0\}/);
+  it('0선은 항상 프레임 안 — 승패의 경계', () => {
+    expect(src).toMatch(/const zeroLine: ScalePriceLine\[\] = \[\{ value: 0/);
+    expect(src).toMatch(/priceLines=\{zeroLine\}/);
   });
 
   it('창이 하나다 — 껍데기가 두 벌이면 정렬 규칙도 두 벌이 된다', () => {

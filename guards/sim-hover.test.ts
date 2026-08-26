@@ -32,23 +32,22 @@ const PREVIEW = 'src/sim/CurvePreview.tsx';
 const RESULTS = 'src/sim/ResultsWindow.tsx';
 
 describe('세 차트가 모두 커서를 받는다', () => {
-  it('커브 미리보기의 두 차트가 스크러빙을 켠다', () => {
+  /* **재는 자리가 옮겨졌다** [2026-08-26 이관]: `enableScrubbing` + `<Scrubber>`
+     라는 두 벌 배선이 없어지고 손잡이 하나(`onHoverIndex`)가 됐다. 규칙은
+     그대로다 — 세 차트 전부 커서 자리를 알려 줘야 한다. */
+
+  it('커브 미리보기의 두 차트가 커서 자리를 알려준다', () => {
     const src = read(PREVIEW);
-    /* **JSX prop 만** 센다 — 주석 안에도 같은 낱말이 있어서 문자열을 그냥 세면
-     * 3이 나온다(실측). 줄 하나를 통째로 차지한 prop 만 잡는다. */
-    expect(src.match(/^\s+enableScrubbing$/gm)?.length ?? 0).toBe(2);
-    expect(src.match(/onScrubberPositionChange=\{setHoverIdx\}/g)?.length ?? 0).toBe(2);
+    expect(src.match(/onHoverIndex=\{setHover\}/g)?.length ?? 0).toBe(2);
   });
 
-  it('성분 경로 차트도 켠다', () => {
-    const src = read(RESULTS);
-    expect(src).toMatch(/enableScrubbing/);
-    expect(src).toMatch(/onScrubberPositionChange=\{setPathIdx\}/);
+  it('성분 경로 차트도 알려준다', () => {
+    expect(read(RESULTS)).toMatch(/onHoverIndex=\{setPathHover\}/);
   });
 
-  it('세 차트에 Scrubber 가 실제로 서 있다', () => {
-    expect(read(PREVIEW).match(/<Scrubber/g)?.length ?? 0).toBe(2);
-    expect(read(RESULTS).match(/<Scrubber/g)?.length ?? 0).toBe(1);
+  it('세 차트가 **부품**을 쓴다 — 각자 만들면 커서 문법이 갈린다', () => {
+    expect(read(PREVIEW).match(/<CurveChart|<NumericChart/g)?.length ?? 0).toBe(2);
+    expect(read(RESULTS).match(/<NumericChart/g)?.length ?? 0).toBe(1);
   });
 });
 
@@ -82,10 +81,12 @@ describe('눈으로 읽는 카드', () => {
 });
 
 describe('귀로 듣는 라벨', () => {
-  it('세 스크러버가 전부 라벨 함수를 받는다 — 기본 문구에 맡기지 않는다', () => {
-    expect(read(PREVIEW)).toMatch(/accessibilityLabel=\{curveScrubLabel\}/);
-    expect(read(PREVIEW)).toMatch(/accessibilityLabel=\{timeScrubLabel\}/);
-    expect(read(RESULTS)).toMatch(/accessibilityLabel=\{pathScrubLabel\}/);
+  it('세 차트가 전부 낭독 문장을 받는다 — 기본 문구에 맡기지 않는다', () => {
+    /* 캔버스에는 읽을 DOM 이 없어서, 스크러버가 읽어 주던 문장을 `hoverLabel`
+       이 받아 `aria-live` 줄에 세운다(`chart/ScaleChart.tsx`). */
+    expect(read(PREVIEW)).toMatch(/hoverLabel=\{curveScrubLabel\}/);
+    expect(read(PREVIEW)).toMatch(/hoverLabel=\{timeScrubLabel\}/);
+    expect(read(RESULTS)).toMatch(/hoverLabel=\{pathScrubLabel\}/);
   });
 });
 

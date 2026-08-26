@@ -62,16 +62,20 @@ describe('시리즈와 x축은 같은 배열에서 나온다', () => {
   /* 길이가 갈리면 CDS 는 짧은 쪽에 맞춰 그리고, 날짜가 통째로 밀린다. 화면은
    * 멀쩡해 보인다 — 값도 날짜도 각각은 진짜니까. */
 
-  it('미리보기: 시리즈와 축이 둘 다 view.win 을 map 한다', () => {
+  /* **재는 자리가 옮겨졌다** [2026-08-26 라이트웨이트 이관]: `xAxis.data` 대신
+     `TimeChart` 의 `dates`, `series.data` 대신 `lines[].values` 다. 규칙은 그대로 —
+     둘이 같은 배열에서 나와야 한다. */
+
+  it('미리보기: 값과 날짜가 둘 다 view.win 에서 나온다', () => {
     const src = read('src/ui/PreviewPane.tsx');
-    expect(src).toMatch(/data: view\.win\.map\(\(p\) => p\.v\)/);
-    expect(src).toMatch(/xAxis=\{\{ data: view\.win\.map\(\(p\) => p\.t\) \}\}/);
+    expect(src).toMatch(/values: view\.win\.map\(\(p\) => p\.v\)/);
+    expect(src).toMatch(/dates=\{view\.win\.map\(\(p\) => p\.t\)\}/);
   });
 
   it('백테스트 연결 차트: 둘 다 points 에서 나온다', () => {
     const src = read('src/backtest/LinkedCharts.tsx');
     expect(src).toMatch(/const dates = useMemo\(\(\) => points\.map\(\(p\) => p\.t\)/);
-    expect(src).toMatch(/data: points\.map\(\(p\) => p\.v\)/);
+    expect(src).toMatch(/values: points\.map\(\(p\) => p\.v\)/);
   });
 
   it('길이가 갈리면 어떻게 되는지 — 그 실패를 재현한다', () => {

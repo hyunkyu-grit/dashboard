@@ -60,54 +60,77 @@ describe('① 자리는 √만기다', () => {
 });
 
 describe('② 눈금과 글자는 **실제 만기**가 정한다', () => {
-  const scale = read('tenorScale.ts');
+  const tenor = codeOf(read('tenorScale.ts'));
+  const horz = codeOf(read('horzScale.ts'));
 
   it('가중치 사다리가 월수로 매겨진다 — √ 값의 배수는 아무 뜻도 없다', () => {
-    const code = codeOf(scale);
-    expect(code).toMatch(/function weightOf\(months: number\)/);
+    expect(tenor).toMatch(/export function weightOf\(months: number\)/);
     for (const step of [120, 60, 36, 12, 6, 3]) {
-      expect(code).toMatch(new RegExp(`months % ${step} === 0`));
+      expect(tenor).toMatch(new RegExp(`months % ${step} === 0`));
     }
   });
 
-  it('우리 만기가 아닌 자리는 가중치 0 — 사이를 메우는 빈 점에 글자가 안 선다', () => {
-    expect(codeOf(scale)).toMatch(/months == null\s*\?\s*0/);
+  it('노드의 글자는 만기 이름이다', () => {
+    expect(tenor).toMatch(/label: monthsLabel\(m\)/);
+    expect(tenor).toMatch(/weight: weightOf\(m\)/);
   });
 
-  it('글자는 노드에서만 나온다 — 없으면 빈 문자열이다', () => {
-    expect(codeOf(scale)).toMatch(/return months == null \? '' : monthsLabel\(months\)/);
+  it('우리 자리가 아니면 가중치 0 — 사이를 메우는 빈 점에 글자가 안 선다', () => {
+    expect(horz).toMatch(/node\?\.weight \?\? 0/);
+    expect(horz).toMatch(/formatTickmark[\s\S]{0,140}\?\.label \?\? ''/);
   });
 });
 
 describe('③ 사이를 빈 점으로 메운다 — 그게 곧 자리다', () => {
-  const curve = codeOf(read('CurveChart.tsx'));
+  const horz = codeOf(read('horzScale.ts'));
+  const chart = codeOf(read('ScaleChart.tsx'));
 
   it('노드만 넣지 않는다 — 노드만 넣으면 **등간격**이 되어 √축이 무효가 된다', () => {
     /* 라이브러리의 가로축은 인덱스 간격이다. 빈 점이 자리를 만든다. */
-    expect(curve).toMatch(/for \(let x = lo; x <= hi; x\+\+\)/);
-    expect(curve).toMatch(/data\.push\(v == null \? \{ time: x \} : \{ time: x, value: v \}\)/);
+    expect(horz).toMatch(/export function fillWhitespace/);
+    expect(horz).toMatch(/for \(let x = lo; x <= hi; x\+\+\)/);
+    expect(horz).toMatch(/out\.push\(v == null \? \{ time: x \} : \{ time: x, value: v \}\)/);
+    expect(chart).toMatch(/fillWhitespace\(xs, \(x\) => valueAt\.get\(x\), pad\)/);
   });
 
-  it('축에 어느 자리가 진짜 만기인지 알려 준다 — `setData` 전에', () => {
-    const setNodes = curve.indexOf('scale.setNodes');
-    const setData = curve.indexOf('s.setData');
+  it('축에 어느 자리가 진짜인지 알려 준다 — `setData` 전에', () => {
+    /* `setData` 는 이제 `series.ts::addLine` 이 부른다 — 여기서는 «축에 알려
+       주는 일이 선을 세우는 일보다 먼저» 를 잰다. */
+    const setNodes = chart.indexOf('scale.setNodes');
+    const addAt = chart.indexOf('addLine(');
     expect(setNodes).toBeGreaterThan(-1);
-    expect(setData).toBeGreaterThan(setNodes);
+    expect(addAt).toBeGreaterThan(setNodes);
   });
 
   it('양 끝에 여백이 있다 — 첫·끝 노드가 모서리에 붙어 잘리지 않게', () => {
-    expect(curve).toMatch(/const lo = \(order\[0\]\?\.x \?\? 0\) - pad/);
+    expect(horz).toMatch(/const lo = xs\[0\] - pad/);
+    /* 고정 칸이 아니라 **폭에 비례**한다 — 같은 4칸이 만기 축에서는 2%,
+       20분기 축에서는 20% 였다(실측 2026-08-26). */
+    expect(chart).toMatch(/function edgePad\(span: number\)/);
+    expect(chart).toMatch(/Math\.max\(1, Math\.round\(span \* 0\.02\)\)/);
   });
 });
 
 describe('④ 리드아웃은 가장 가까운 노드로 붙는다', () => {
-  const curve = codeOf(read('CurveChart.tsx'));
+  const horz = codeOf(read('horzScale.ts'));
+  const chart = codeOf(read('ScaleChart.tsx'));
 
   it('정확히 일치를 찾지 않는다 — 커서는 거의 항상 빈 자리에 선다', () => {
     /* 실측 2026-08-26: 일치로 뒀더니 크로스헤어는 뜨는데 카드가 안 떴다.
        CDS `Scrubber` 는 늘 가장 가까운 노드로 붙었고 이 화면은 그 위에 선다. */
-    expect(curve).toMatch(/const nearest = useMemo/);
-    expect(curve).toMatch(/Math\.abs\(xs\[k\] - x\) < Math\.abs\(xs\[best\] - x\)/);
-    expect(curve).toMatch(/notify\(t == null \? null : nearest\(t\)\)/);
+    expect(horz).toMatch(/export function nearestIndex/);
+    expect(horz).toMatch(/Math\.abs\(xs\[k\] - x\) < Math\.abs\(xs\[best\] - x\)/);
+    expect(chart).toMatch(/notify\(t == null \? null : nearestIndex\(xs, t\)\)/);
+  });
+});
+
+describe('⑤ 차트 몸통은 하나다', () => {
+  it('커브와 숫자축이 같은 `ScaleChart` 를 쓴다 — 각자 만들면 캐논이 갈린다', () => {
+    for (const f of ['CurveChart.tsx', 'NumericChart.tsx']) {
+      const src = codeOf(read(f));
+      expect(src).toMatch(/<ScaleChart/);
+      /* 껍데기가 차트를 직접 만들면 그 순간 둘이 갈린다. */
+      expect(src).not.toMatch(/useLwChart|addSeries|createChart/);
+    }
   });
 });

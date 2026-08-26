@@ -71,6 +71,14 @@ function dotPattern(
   return made;
 }
 
+/** 면을 채우는 두 방식.
+ *
+ *  `dots`   캐논의 `areaType="dotted"` — 시계열·커브의 주선이 쓴다.
+ *  `solid`  CDS 의 `showArea`(무늬 없음) — 손익 차트가 쓴다. 반투명 한 겹이라
+ *           색은 호출부가 이미 흐리게 만들어 넘긴다(`palette.dim`).
+ */
+export type AreaFill = 'dots' | 'solid';
+
 export type AreaPoint<H = Time> = { time: H; value: number | null };
 
 type Host<H> = {
@@ -83,6 +91,7 @@ class DottedAreaRenderer<H> implements IPrimitivePaneRenderer {
     private readonly host: Host<H>,
     private readonly points: readonly AreaPoint<H>[],
     private readonly color: string | null,
+    private readonly fill: AreaFill,
   ) {}
 
   draw(target: CanvasRenderingTarget2D): void {
@@ -96,8 +105,11 @@ class DottedAreaRenderer<H> implements IPrimitivePaneRenderer {
 
     target.useBitmapCoordinateSpace((scope) => {
       const { context: ctx, horizontalPixelRatio: hr, verticalPixelRatio: vr } = scope;
-      const pattern = dotPattern(ctx, this.color as string, vr);
-      if (!pattern) return;
+      const paint =
+        this.fill === 'solid'
+          ? (this.color as string)
+          : dotPattern(ctx, this.color as string, vr);
+      if (!paint) return;
 
       /* 면의 밑변은 **패널 바닥**이다. 0 선이 아니다 — 이 제품의 세로축은
          금리·스프레드라 0 이 화면 밖인 경우가 대부분이고, 그때 0 을 밑변으로
@@ -138,7 +150,7 @@ class DottedAreaRenderer<H> implements IPrimitivePaneRenderer {
       ctx.lineTo(lastX, floor);
       ctx.lineTo(firstX, floor);
       ctx.closePath();
-      ctx.fillStyle = pattern;
+      ctx.fillStyle = paint;
       ctx.fill();
       ctx.restore();
     });
@@ -156,13 +168,14 @@ export class DottedArea<H = Time> implements ISeriesPrimitive<H> {
   private points: readonly AreaPoint<H>[] = [];
   /** `update` 전까지는 **색이 없다** — 그동안은 안 그린다(위 렌더러 주석). */
   private color: string | null = null;
+  private fill: AreaFill = 'dots';
   private requestUpdate?: () => void;
 
   private readonly view: IPrimitivePaneView = {
     /* 면은 **선 아래**다 — `'normal'` 로 두면 주선을 덮는다. */
     zOrder: (): PrimitivePaneViewZOrder => 'bottom',
     renderer: (): IPrimitivePaneRenderer =>
-      new DottedAreaRenderer(this.host, this.points, this.color),
+      new DottedAreaRenderer(this.host, this.points, this.color, this.fill),
   };
 
   attached(p: SeriesAttachedParameter<H>): void {
@@ -177,9 +190,10 @@ export class DottedArea<H = Time> implements ISeriesPrimitive<H> {
     this.requestUpdate = undefined;
   }
 
-  update(points: readonly AreaPoint<H>[], color: string): void {
+  update(points: readonly AreaPoint<H>[], color: string, fill: AreaFill = 'dots'): void {
     this.points = points;
     this.color = color;
+    this.fill = fill;
     this.requestUpdate?.();
   }
 

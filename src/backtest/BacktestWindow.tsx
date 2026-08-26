@@ -45,7 +45,6 @@ import {
   TextLabel2,
   TextLegal,
 } from '@coinbase/cds-web/typography';
-import { CartesianChart, Line, XAxis, YAxis } from '@coinbase/cds-web/visualizations/chart';
 
 import {
   BacktestUnavailable,
@@ -62,6 +61,7 @@ import {
   type PolicyStep,
   type Unit,
 } from '@/lib/api';
+import { TimeChart } from '@/chart/TimeChart';
 import { fmtLevel, unitSuffix } from '@/lib/format';
 import { seriesUrl } from '@/lib/staticPaths';
 import { fmtKrw, fmtKrwFromMan, splitCashBondKrw, splitKrw } from '@/lib/krw';
@@ -101,7 +101,6 @@ import {
 } from './book';
 
 const MEMORY_KEY = 'backtest';
-const AXIS = 'pnl';
 const EOK = 1e8;
 
 /** 줄의 종류. 스왑 셋(아웃라이트·스프레드·플라이)을 하나로 묶은 이유는 그
@@ -986,35 +985,20 @@ export function BacktestWindow({
               }
               return result.points.length > 1 ? (
                 <Box width="100%">
-                  <CartesianChart
-                    animate={false}
+                  <TimeChart
                     height={200}
                     accessibilityLabel="북 손익 추이"
-                    /* `right: 12, bottom: 8` — 본문 pane 의 CHART_INSET 과 같은 값
-                       [OWNER 승인 2026-08-18 점검]. 첫 판(right 8, bottom 0)에서
-                       +300만원 같은 y 라벨이 선 위에 얹혀 있었다. */
-                    inset={{ top: 12, right: 12, bottom: 8, left: 8 }}
-                    series={[
+                    dates={result.points.map((p) => p.t)}
+                    lines={[
                       {
                         id: 'pnl',
-                        data: result.points.map((p) => p.pnl),
-                        color:
-                          result.pnl >= 0 ? 'var(--sr-up)' : 'var(--sr-down)',
-                        yAxisId: AXIS,
+                        values: result.points.map((p) => p.pnl),
+                        color: (pal) =>
+                          pal.resolve(result.pnl >= 0 ? 'var(--sr-up)' : 'var(--sr-down)'),
+                        format: (v) => fmtKrw(v),
                       },
                     ]}
-                    xAxis={{ data: result.points.map((p) => p.t) }}
-                    yAxis={[{ id: AXIS }]}
-                  >
-                    <XAxis showGrid={false} />
-                    <YAxis
-                      axisId={AXIS}
-                      position="right"
-                      showGrid={false}
-                      tickLabelFormatter={(v) => fmtKrw(v)}
-                    />
-                    <Line seriesId="pnl" curve="linear" connectNulls={false} />
-                  </CartesianChart>
+                  />
                 </Box>
               ) : null;
             })()}

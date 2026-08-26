@@ -11,8 +11,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
-import { ThemeProvider } from '@coinbase/cds-web';
-import { defaultTheme } from '@coinbase/cds-web/themes/defaultTheme';
+import { Providers } from '../src/app/providers';
 
 import { ResultsWindow } from '../src/sim/ResultsWindow';
 import { DEFAULT_SCENARIO, type SimResponse } from '../src/sim/scenario';
@@ -20,10 +19,15 @@ import { DEFAULT_SCENARIO, type SimResponse } from '../src/sim/scenario';
 afterEach(cleanup);
 
 function draw(runs: { base: SimResponse }) {
+  /* **앱의 프로바이더로 감싼다** — 차트가 캔버스가 되면서 화면 밝기를 실제로
+     읽어야 하고(`chart/palette.ts`), 그 출처는 `Providers` 의 컨텍스트다
+     [2026-08-26 이관]. 종전처럼 `ThemeProvider` 만 세우면 «useScheme must be
+     used inside <Providers>» 로 렌더가 멈춘다. 그게 옳다: 이 컴포넌트는 정말
+     그 프로바이더 안에서만 산다. */
   return render(
-    <ThemeProvider theme={defaultTheme} activeColorScheme="light">
+    <Providers>
       <ResultsWindow runs={runs} scenario={DEFAULT_SCENARIO} asOf="2026-08-14" onClose={() => {}} />
-    </ThemeProvider>,
+    </Providers>,
   );
 }
 

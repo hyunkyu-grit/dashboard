@@ -26,15 +26,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { TextCaption, TextLabel2 } from '@coinbase/cds-web/typography';
-import {
-  CartesianChart,
-  Line,
-  ReferenceLine,
-  Scrubber,
-  XAxis,
-  YAxis,
-} from '@coinbase/cds-web/visualizations/chart';
 
+import { TimeChart, type TimeLine } from '@/chart/TimeChart';
+import type { ScalePriceLine } from '@/chart/ScaleChart';
 import { alignByDate, policyByDate, referenceMode } from '@/chart/references';
 import type { PolicyStep, Unit } from '@/lib/api';
 import { fmtLevel, unitSuffix } from '@/lib/format';
@@ -52,15 +46,11 @@ export interface PnlSeries {
   points: { t: string; pnl: number; d: number | null }[];
 }
 
-const INSET = { top: 12, right: 12, bottom: 8, left: 8 };
-const TOP_AXIS = 'level';
-const BOT_AXIS = 'pnl';
 /** 기준선 두 개 — 미리보기 pane 과 같은 낱말 [OWNER 2026-07-31: "CD와
  * 기준금리는 항상 같이 그린다" + 2026-08-19: "백테스트에 CD금리는 같이"].
  * %-종목은 같은 축, bp-종목은 왼쪽 %축(`referenceMode`). */
 const CD_LINE = 'CD91';
 const BASE_LINE = 'BASE';
-const PCT_AXIS = 'pct';
 
 /** 날짜별 누적 손익 — 서버 발행점의 **전진 워크**(찾기, 계산 아님 §16).
  * 각 날짜의 돈은 그 날짜 이전(포함) 가장 최근 발행점의 누적이고, 발행점보다
@@ -121,6 +111,48 @@ export function LinkedCharts({
   /* 커서가 짚은 점 — 어느 차트가 짚었는지도 함께. 십자선은 반대쪽에만 선다. */
   const [hover, setHover] = useState<{ i: number; src: 'top' | 'bottom' }>();
 
+  /* 훅은 **조기 반환 위**에 선다 — 아래 `if (points.length < 2) return null` 보다
+     뒤에 두면 렌더마다 훅 순서가 달라진다(eslint `rules-of-hooks`). */
+  /* 진입·청산 마크. **근접 마크를 합친다** [OWNER 2026-08-25 — 겹침 금지,
+     CLAUDE.md «말줄임 절대 금지» §3]: 세로선 라벨에는 충돌 회피가 없어, 며칠
+     차이로 레그인한 두 진입이 몇 년 x 도메인에서 같은 픽셀에 떨어지면 «진입»
+     두 장이 포개진다. 도메인의 ~2% 안에 든 마크는 선 하나로 합치고 라벨이
+     센다 — «진입 ×2», 섞이면 «진입·청산». */
+  const markIdx = useMemo(() => {
+    const raw = (marks ?? [])
+      .map((m) => ({ ...m, i: points.findIndex((p) => p.t >= m.date) }))
+      .filter((m) => m.i >= 0)
+      .sort((a, b) => a.i - b.i);
+    const gap = Math.max(1, Math.round(points.length * 0.02));
+    const out: { index: number; label: string }[] = [];
+    let bucket: typeof raw = [];
+    const flush = () => {
+      if (bucket.length === 0) return;
+      const byLabel = new Map<string, number>();
+      for (const b of bucket) byLabel.set(b.label, (byLabel.get(b.label) ?? 0) + 1);
+      const label = [...byLabel.entries()]
+        .map(([l, n]) => (n > 1 ? `${l} ×${n}` : l))
+        .join('·');
+      out.push({ index: bucket[0]!.i, label });
+      bucket = [];
+    };
+    for (const m of raw) {
+      if (bucket.length > 0 && m.i - bucket[bucket.length - 1]!.i > gap) flush();
+      bucket.push(m);
+    }
+    flush();
+    return out;
+  }, [marks, points]);
+
+  const onTop = useCallback(
+    (i: number | null) => setHover(i == null ? undefined : { i, src: 'top' as const }),
+    [],
+  );
+  const onBot = useCallback(
+    (i: number | null) => setHover(i == null ? undefined : { i, src: 'bottom' as const }),
+    [],
+  );
+
   /* CD 91일 — `PreviewPane.loadCd` 의 모듈 캐시를 그대로 쓴다(한 페이지에서 두
    * 번 받지 않는다). 실패는 null: 기준선이 없다고 백테스트가 안 보일 이유는
    * 없고, 범례가 없는 것으로 그 사실을 말한다. */
@@ -130,7 +162,7 @@ export function LinkedCharts({
     void loadCd().then((p) => {
       if (on) setCd(p);
     });
-    return () => {
+  return () => {
       on = false;
     };
   }, []);
@@ -150,39 +182,6 @@ export function LinkedCharts({
     return { cd: has(cdLine) ? cdLine : null, policy: has(policyLine) ? policyLine : null };
   }, [points, cd, policy]);
   const pctAxis = refs != null && mode === 'own';
-  const refAxis = pctAxis ? PCT_AXIS : TOP_AXIS;
-
-  const markIdx = useMemo(() => {
-    const raw = (marks ?? [])
-      .map((m) => ({ ...m, i: points.findIndex((p) => p.t >= m.date) }))
-      .filter((m) => m.i >= 0)
-      .sort((a, b) => a.i - b.i);
-    /* 근접 마크 병합 [OWNER 2026-08-25 — 겹침 금지, CLAUDE.md «말줄임 절대
-       금지» §3]. CDS ReferenceLine 라벨엔 충돌 회피가 없어, 며칠 차이로
-       레그인한 두 진입이 몇 년 x 도메인에서 같은 픽셀에 떨어지면 «진입» 두
-       장이 포개진다. 도메인의 ~2% 안에 든 마크는 선 하나로 합치고 라벨이
-       센다 — «진입 ×2», 섞이면 «진입·청산». */
-    const gap = Math.max(1, Math.round(points.length * 0.02));
-    const out: { i: number; label: string }[] = [];
-    let bucket: typeof raw = [];
-    const flush = () => {
-      if (bucket.length === 0) return;
-      const byLabel = new Map<string, number>();
-      for (const b of bucket) byLabel.set(b.label, (byLabel.get(b.label) ?? 0) + 1);
-      const label = [...byLabel.entries()]
-        .map(([l, n]) => (n > 1 ? `${l} ×${n}` : l))
-        .join('·');
-      out.push({ i: bucket[0]!.i, label });
-      bucket = [];
-    };
-    for (const m of raw) {
-      if (bucket.length > 0 && m.i - bucket[bucket.length - 1]!.i > gap) flush();
-      bucket.push(m);
-    }
-    flush();
-    return out;
-  }, [marks, points]);
-
   /* 자리는 상자의 CSS 변수 — 상태가 아니다(`placeReadout` 머리글). 이 창은
      차트 둘과 표를 함께 들고 있어 픽셀마다 다시 그리면 값이 실하다. */
   const onMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -203,85 +202,69 @@ export function LinkedCharts({
   if (points.length < 2) return null;
   const up = result.pnl >= 0;
 
+    /* 위 차트 — 종목 선 + 기준선 둘. 기준선은 종목 선보다 얇고, 색 하나로만
+     구분한다(같은 지각적 무게). 단위가 다르면 기준선만 왼쪽 %축으로 간다. */
+  const topLines: TimeLine[] = [
+    {
+      id: 'level',
+      values: points.map((p) => p.v),
+      color: (pal) => (seriesColor ? pal.resolve(seriesColor) : pal.fg),
+      format: (v) => fmtLevel(v, unit),
+    },
+    ...(refs?.cd
+      ? [{
+          id: CD_LINE,
+          values: refs.cd,
+          color: (pal: { refCd: string }) => pal.refCd,
+          width: 1 as const,
+          axis: (pctAxis ? 'aux' : 'main') as 'aux' | 'main',
+          format: (v: number) => fmtLevel(v, pctAxis ? '%' : unit),
+        }]
+      : []),
+    ...(refs?.policy
+      ? [{
+          id: BASE_LINE,
+          values: refs.policy,
+          color: (pal: { refPolicy: string }) => pal.refPolicy,
+          width: 1 as const,
+          axis: (pctAxis ? 'aux' : 'main') as 'aux' | 'main',
+          format: (v: number) => fmtLevel(v, pctAxis ? '%' : unit),
+        }]
+      : []),
+  ];
+
+  /* 아래 차트 — 누적 손익. 부호 방향색 + **채운 면**(점무늬가 아니다: 이 면은
+     «얼마나» 를 말하는 덩어리이지 계열의 무늬가 아니다). 면은 흐리게. */
+  const pnlColor = up ? 'var(--sr-up)' : 'var(--sr-down)';
+  const botLines: TimeLine[] = [
+    {
+      id: 'pnl',
+      values: pnlVals,
+      color: (pal) => pal.resolve(pnlColor),
+      area: 'solid',
+      areaColor: (pal) => pal.dim(pnlColor, 14),
+      format: (v) => fmtKrw(v),
+    },
+  ];
+
+  /* 0선 — 승패의 경계는 항상 프레임 안이다. */
+  const zeroLine: ScalePriceLine[] = [{ value: 0, color: (pal) => pal.line }];
+
+
+
   return (
     <VStack gap={0} width="100%" onMouseMove={onMove} onMouseLeave={leave}>
       {/* ── 종목 차트 ─────────────────────────────────────────────────────── */}
       <Box className="sr-plot" width="100%">
-        <CartesianChart
-          animate={false}
+        <TimeChart
           height={200}
           accessibilityLabel="종목 추이 (진입부터 청산까지)"
-          inset={INSET}
-          enableScrubbing
-          onScrubberPositionChange={(i: number | undefined) =>
-            setHover(i == null ? undefined : { i, src: 'top' })
-          }
-          series={[
-            {
-              id: 'level',
-              data: points.map((p) => p.v),
-              ...(seriesColor ? { color: seriesColor } : {}),
-              yAxisId: TOP_AXIS,
-            },
-            /* 기준선 둘 — 같은 위계의 두 색(미리보기 pane 의 판정 그대로,
-               `direction.css` 토큰). 색을 시리즈에 두는 이유도 같다: 선과
-               스크러버 구슬이 한 곳에서 갈린다. */
-            ...(refs?.cd
-              ? [{ id: CD_LINE, data: refs.cd, color: 'var(--sr-ref-cd)', yAxisId: refAxis }]
-              : []),
-            ...(refs?.policy
-              ? [{ id: BASE_LINE, data: refs.policy, color: 'var(--sr-ref-policy)', yAxisId: refAxis }]
-              : []),
-          ]}
-          xAxis={{ data: dates }}
-          yAxis={pctAxis ? [{ id: TOP_AXIS }, { id: PCT_AXIS }] : [{ id: TOP_AXIS }]}
-        >
-          <XAxis showGrid={false} />
-          <YAxis
-            axisId={TOP_AXIS}
-            position="right"
-            showGrid={false}
-            tickLabelFormatter={(v) => fmtLevel(v, unit)}
-          />
-          {/* bp-종목일 때만 서는 왼쪽 %축 — 기준선의 축. 빈 축은 선언하지
-              않는다(눈금만 그리고 폭을 먹는다). */}
-          {pctAxis ? (
-            <YAxis
-              axisId={PCT_AXIS}
-              position="left"
-              showGrid={false}
-              tickLabelFormatter={(v) => fmtLevel(v, '%')}
-            />
-          ) : null}
-          <Line seriesId="level" curve="linear" connectNulls={false} />
-          {/* 기준선은 종목 선보다 얇게, 색 하나로만 구분(같은 지각적 무게).
-              기준금리는 stepAfter — 정책금리는 평평하다가 뛴다. 끊긴 구간은
-              모르는 구간이라 connectNulls 를 끈다. */}
-          {refs?.cd ? (
-            <Line seriesId={CD_LINE} strokeWidth={1.5} strokeOpacity={0.9} connectNulls={false} />
-          ) : null}
-          {refs?.policy ? (
-            <Line
-              seriesId={BASE_LINE}
-              curve="stepAfter"
-              strokeWidth={1.5}
-              strokeOpacity={0.9}
-              connectNulls={false}
-            />
-          ) : null}
-          {markIdx.map((m) => (
-            <ReferenceLine key={`${m.label}-${m.i}`} dataX={m.i} label={m.label} />
-          ))}
-          {hover?.src === 'bottom' ? <ReferenceLine dataX={hover.i} /> : null}
-          <Scrubber
-            accessibilityLabel="종목 추이 짚기"
-            seriesIds={[
-              'level',
-              ...(refs?.cd ? [CD_LINE] : []),
-              ...(refs?.policy ? [BASE_LINE] : []),
-            ]}
-          />
-        </CartesianChart>
+          dates={dates}
+          lines={topLines}
+          markLines={markIdx}
+          onHoverIndex={onTop}
+          syncIndex={hover?.src === 'bottom' ? hover.i : null}
+        />
       </Box>
 
       {/* 기준선 범례 — 실제로 그려진 것만 이름을 얻는다(미리보기와 같은 규칙:
@@ -297,41 +280,15 @@ export function LinkedCharts({
 
       {/* ── 누적 손익 — 같은 날짜 배열, 같은 inset = 픽셀 정렬 ─────────────── */}
       <Box className="sr-plot" width="100%">
-        <CartesianChart
-          animate={false}
+        <TimeChart
           height={140}
           accessibilityLabel="누적 손익 (위 차트와 같은 구간)"
-          inset={INSET}
-          enableScrubbing
-          onScrubberPositionChange={(i: number | undefined) =>
-            setHover(i == null ? undefined : { i, src: 'bottom' })
-          }
-          series={[
-            {
-              id: 'pnl',
-              data: pnlVals,
-              color: up ? 'var(--sr-up)' : 'var(--sr-down)',
-              yAxisId: BOT_AXIS,
-            },
-          ]}
-          xAxis={{ data: dates }}
-          yAxis={[{ id: BOT_AXIS }]}
-        >
-          {/* x 라벨은 위 차트가 진다 — 두 벌이면 같은 날짜가 두 줄로 선다. */}
-          <YAxis
-            axisId={BOT_AXIS}
-            position="right"
-            showGrid={false}
-            tickLabelFormatter={(v) => fmtKrw(v)}
-          />
-          {/* 0선 — 승패의 경계는 항상 프레임 안이다. CDS 는 시리즈 범위로
-              도메인을 잡으므로, 0 을 스치게 하는 안 그려지는 시리즈까지는
-              필요 없다: ReferenceLine 은 도메인 밖이면 안 보일 뿐 무해하다. */}
-          <ReferenceLine dataY={0} yAxisId={BOT_AXIS} />
-          <Line seriesId="pnl" curve="linear" showArea connectNulls={false} />
-          {hover?.src === 'top' ? <ReferenceLine dataX={hover.i} /> : null}
-          <Scrubber accessibilityLabel="누적 손익 짚기" seriesIds={['pnl']} />
-        </CartesianChart>
+          dates={dates}
+          lines={botLines}
+          priceLines={zeroLine}
+          onHoverIndex={onBot}
+          syncIndex={hover?.src === 'top' ? hover.i : null}
+        />
         {/* 돈 카드 — 날짜 · 레벨 · 누적 · 당일. `당일` 은 늘 1영업일이다(서버가
             발행점마다 전영업일을 따로 평가한다) — 점이 며칠씩 떨어져 그려져도. */}
         {hp ? (

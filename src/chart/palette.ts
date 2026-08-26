@@ -63,13 +63,32 @@ export type LwPalette = {
    *  `color=fgMuted` 에 `strokeOpacity={0.5}` 를 겹쳐 쓰던 그 색이다.
    *  캔버스에는 불투명도 손잡이가 따로 없어 색 자체가 반투명이어야 한다. */
   fgMutedSoft: string;
+  /**
+   * 임의의 CSS 색 표현을 **그 자리에서 계산해** 준다 — `var(--sr-up)` 처럼.
+   *
+   * 팔레트는 이 앱이 «자주 쓰는» 색을 미리 읽어 두지만, 화면마다 제 색이 있다
+   * (시뮬 케이스 넷·모형 계열 등). 캔버스는 `var()` 를 못 푸므로 그 색들도
+   * 누군가 풀어 줘야 하고, 그 자리가 여기다. 호출부가 CSS 변수 이름을 그대로
+   * 들고 있어도 되고(그게 이 리포의 어휘다), 색 리터럴은 여전히 안 생긴다.
+   */
+  resolve: (css: string) => string;
+  /**
+   * 색을 흐리게 — `dim('var(--sr-up)', 35)`.
+   *
+   * 캔버스에는 불투명도 손잡이가 따로 없다(CDS 의 `strokeOpacity` 자리). 색
+   * 자체가 반투명이어야 하고, **섞는 계산은 브라우저가 한다**(`color-mix`).
+   */
+  dim: (css: string, percent: number) => string;
 };
 
 /** 읽을 변수 이름 ↔ 결과 키. 이름을 틀리면 빈 문자열이 나오고 캔버스는
  *  **검게** 그린다 — CSS 라면 선언이 무효가 되어 안 그려질 뿐이지만
  *  캔버스에서는 틀린 색이 **그려진다**. 그래서 아래 `readPalette` 가
  *  빈 값을 잡아 `fallback` 으로 떨어뜨린다. */
-const VARS: Record<keyof LwPalette, string> = {
+/** 변수 하나로 곧장 떨어지는 것들. 나머지 셋은 `readPalette` 가 조립한다. */
+type ColorKey = Exclude<keyof LwPalette, 'fontFamily' | 'fgMutedSoft' | 'resolve' | 'dim'>;
+
+const VARS: Record<ColorKey, string> = {
   fg: '--color-fg',
   fgMuted: '--color-fgMuted',
   bg: '--color-bg',
@@ -81,9 +100,6 @@ const VARS: Record<keyof LwPalette, string> = {
   refPolicy: '--sr-ref-policy',
   refFut: '--sr-ref-fut',
   refRoll: '--sr-ref-roll',
-  /* 아래 둘은 변수 하나로 안 떨어진다 — `readPalette` 가 따로 만든다. */
-  fontFamily: '',
-  fgMutedSoft: '',
 };
 
 /**
@@ -94,14 +110,18 @@ const VARS: Record<keyof LwPalette, string> = {
  * 캔버스로 우회하게 된다. 대신 문서 안에 잠깐 프로브를 세워 `color-mix` 를
  * 시키고 계산값(`rgba(...)`)을 받아 온다. 우리 코드에는 색 산술이 없다.
  */
-function soften(host: Element, color: string, percent: number): string {
+function computeColor(host: Element, expr: string): string {
   const probe = document.createElement('span');
-  probe.style.color = `color-mix(in srgb, ${color} ${percent}%, transparent)`;
+  probe.style.color = expr;
   probe.style.display = 'none';
   host.appendChild(probe);
   const out = getComputedStyle(probe).color;
   host.removeChild(probe);
-  return out || color;
+  return out;
+}
+
+function soften(host: Element, color: string, percent: number): string {
+  return computeColor(host, `color-mix(in srgb, ${color} ${percent}%, transparent)`) || color;
 }
 
 /* 색 문자열을 **라이브러리가 읽을 수 있는 꼴로** 되돌리는 캔버스.
@@ -144,9 +164,19 @@ function normContext(): CanvasRenderingContext2D | null {
  * 재는 방법은 «한 픽셀 칠하고 그 픽셀 읽기» 다. 브라우저가 최종 채널값을
  * 내주고 우리는 받아 적을 뿐이라 색 산술이 없다.
  */
+/* 캔버스가 아예 없는 환경(jsdom)의 중립 채널.
+ *
+ * 이건 «색을 지어내는 것» 이 아니다 — 그 환경에는 **그릴 화면이 없다**. 그런데
+ * 라이브러리가 색을 못 읽으면 던지고, 그러면 이 차트를 품은 컴포넌트를 렌더하는
+ * **테스트 전체가 멈춘다**(실측 2026-08-26: `Failed to parse color: canvastext`
+ * — jsdom 의 `getComputedStyle(el).color` 가 그 시스템 키워드를 준다).
+ * 브라우저에는 이 경로가 없다: 거기서는 `getContext('2d')` 가 항상 있다. */
+const NO_CANVAS: Rgba = [128, 128, 128, 1] as Rgba;
+
 export const pixelColorParser: CustomColorParser = (color) => {
   const ctx = normContext();
-  if (!ctx || !color) return null;
+  if (!ctx) return NO_CANVAS;
+  if (!color) return null;
 
   /* 못 읽는 값이면 `fillStyle` 이 조용히 이전 값을 유지한다 — 서로 다른 두
      씨앗으로 두 번 시켜 결과가 같을 때만 «읽혔다» 고 본다. 씨앗은 색이 아니라
@@ -184,7 +214,7 @@ export function readPalette(el: Element): LwPalette {
   const cs = getComputedStyle(el);
   const fallback = cs.color;
   const out = {} as LwPalette;
-  for (const key of Object.keys(VARS) as (keyof LwPalette)[]) {
+  for (const key of Object.keys(VARS) as ColorKey[]) {
     const v = cs.getPropertyValue(VARS[key]).trim();
     out[key] = v || fallback;
   }
@@ -193,6 +223,10 @@ export function readPalette(el: Element): LwPalette {
      사슬이 온다. 캔버스에 넘길 것은 후자다. */
   out.fontFamily = cs.fontFamily || 'sans-serif';
   out.fgMutedSoft = soften(el, out.fgMuted, 50);
+  /* 프로브는 **이 엘리먼트 안에** 선다 — 상속으로 `--sr-*`·`--color-*` 가
+     전부 보이는 자리라야 `var(...)` 가 풀린다. */
+  out.resolve = (css: string) => computeColor(el, css) || fallback;
+  out.dim = (css: string, percent: number) => soften(el, css, percent);
   return out;
 }
 

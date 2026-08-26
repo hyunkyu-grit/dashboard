@@ -23,19 +23,15 @@
  */
 
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { Chip } from '@coinbase/cds-web/chips';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { SegmentedTabs } from '@coinbase/cds-web/tabs';
 import { Text } from '@coinbase/cds-web/typography';
-import {
-  CartesianChart,
-  Line,
-  ReferenceLine,
-  XAxis,
-  YAxis,
-} from '@coinbase/cds-web/visualizations/chart';
+
+import { NumericChart, type NumericLine } from '@/chart/NumericChart';
+import type { ScalePriceLine } from '@/chart/ScaleChart';
 
 import { anchorProps, ANCHORS } from '../anchors';
 import type { PaperAnchors } from '../contracts';
@@ -58,15 +54,6 @@ const OLD = oldBasisJson as unknown as {
 
 /** 논문 Figure 18 의 가로축에 맞춘다. 기저는 24 를 들고 있다. */
 const QUARTERS = 20;
-/** 캐논 여백(`ui/PreviewPane.tsx::CHART_INSET`) — 나란히 서는 차트끼리 여백이
- * 다르면 플롯 상자가 어긋나 보인다. 2026-08-25 감사 전까지 이 파일만 네 변이
- * 전부 달랐다(`{10,10,20,6}`) — 근거 없는 이탈이었다.
- *
- * 바닥만 28 로 캐논(8)에서 벗어난다: 이 차트는 x 눈금에 라벨이 선다(분기).
- * 같은 사정의 `lab/scenario/ModelChart.tsx` 가 이미 그 값을 실측해 뒀다 —
- * 8 로 두면 y 축 맨 아래 눈금이 x 축 라벨과 같은 줄에 겹친다. */
-const INSET = { top: 16, right: 12, bottom: 28, left: 8 };
-
 const INK = 'var(--color-fg)';
 const AMBER = 'var(--sr-ref-cd)';
 const PURPLE = 'var(--sr-ref-policy)';
@@ -160,13 +147,11 @@ function IrfPanel({
   old: BasisEntry | null;
   refs: { value: number; unit: string; panel: string }[];
 }) {
-  const labels = useMemo(
-    () =>
-      Array.from({ length: QUARTERS }, (_, i) =>
-        i + 1 === 1 || (i + 1) % 5 === 0 ? String(i + 1) : '',
-      ),
-    [],
-  );
+  /** 가로 자리 = 분기 1..N. 글자는 1·5·10·15·20 에만 선다(종전과 같은 규칙 —
+   *  CDS 판은 라벨 배열에 빈 문자열을 끼워 그 일을 했다). */
+  const quarters = useMemo(() => Array.from({ length: QUARTERS }, (_, i) => i + 1), []);
+  const quarterLabel = useCallback((q: number) => String(q), []);
+  const quarterWeight = useCallback((q: number) => (q === 1 || q % 5 === 0 ? 9 : 0), []);
 
   const data = useMemo(
     () =>
@@ -204,14 +189,29 @@ function IrfPanel({
 
   const d = digits(span);
 
-  const series = [
-    ...data.map((l) => ({ id: l.key, data: l.path, color: l.color, yAxisId: panel.id })),
+  /* 지난 판이 **먼저** = 아래에 깔린다. 점선 + 흐리게(35%)로 뒤로 물러난다 —
+     CDS 판의 `type="dotted" strokeOpacity={0.35}` 가 하던 일이고, 캔버스에는
+     불투명도 손잡이가 없어 색 자체를 흐리게 만든다(`palette.dim`). */
+  const lines: NumericLine[] = [
     ...oldData.map((l) => ({
       id: `old_${l.key}`,
-      data: l.path,
-      color: l.color,
-      yAxisId: panel.id,
+      values: l.path,
+      color: (p: { dim: (c: string, n: number) => string }) => p.dim(l.color, 35),
+      width: 1 as const,
+      dash: true,
     })),
+    ...data.map((l) => ({
+      id: l.key,
+      values: l.path,
+      color: (p: { resolve: (c: string) => string }) => p.resolve(l.color),
+      width: 2 as const,
+    })),
+  ];
+
+  /** 0 선과 논문 앵커들. */
+  const priceLines: ScalePriceLine[] = [
+    { value: 0, color: (p) => p.line },
+    ...refs.map((r) => ({ value: r.value, color: (p: { lineHeavy: string }) => p.lineHeavy })),
   ];
 
   return (
@@ -248,9 +248,7 @@ function IrfPanel({
       ))}
 
       <Box className="sr-plot sr-irf-plot" paddingX={0.5}>
-        <CartesianChart
-          animate={false}
-          height="100%"
+        <NumericChart
           accessibilityLabel={`${panel.title}. ${data
             .map((l) => {
               let best = 0;
@@ -258,37 +256,14 @@ function IrfPanel({
               return `${l.label} 최대 ${fmt(best, d)}${panel.unit}`;
             })
             .join('. ')}`}
-          inset={INSET}
-          series={series}
-          xAxis={{ data: labels }}
-          yAxis={[{ id: panel.id }]}
-        >
-          <XAxis showGrid={false} styles={{ tickLabel: { opacity: 0.65 } }} />
-          <YAxis
-            axisId={panel.id}
-            position="right"
-            showGrid={false}
-            styles={{ tickLabel: { opacity: 0.65 } }}
-            tickLabelFormatter={(v) => fmt(Number(v), d)}
-          />
-          <ReferenceLine dataY={0} yAxisId={panel.id} />
-          {refs.map((r) => (
-            <ReferenceLine key={r.panel} dataY={r.value} yAxisId={panel.id} />
-          ))}
-          {oldData.map((l) => (
-            <Line
-              key={`old_${l.key}`}
-              seriesId={`old_${l.key}`}
-              curve="linear"
-              type="dotted"
-              strokeWidth={1}
-              strokeOpacity={0.35}
-            />
-          ))}
-          {data.map((l) => (
-            <Line key={l.key} seriesId={l.key} curve="linear" strokeWidth={1.5} strokeOpacity={0.9} />
-          ))}
-        </CartesianChart>
+          nodes={quarters}
+          lines={lines}
+          priceLines={priceLines}
+          label={quarterLabel}
+          weight={quarterWeight}
+          precision={d}
+          tickFormat={(v) => fmt(Number(v), d)}
+        />
       </Box>
 
       {data.length > 1 ? (

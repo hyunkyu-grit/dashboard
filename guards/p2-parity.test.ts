@@ -96,6 +96,6 @@ describe('핀은 조용하다', () => {
   it('미리보기 pane 이 진입 애니메이션을 켜지 않는다', () => {
     /* 행을 훑으면 pane 이 매번 다시 마운트된다 — 거기 애니메이션이 붙으면
      * 폴리시가 아니라 스트로브다(그 판단이 PreviewPane 주석에 있다). */
-    expect(read('src/ui/PreviewPane.tsx')).toMatch(/animate=\{false\}/);
+    expect(read('src/ui/PreviewPane.tsx')).not.toMatch(/animate=\{true\}/);
   });
 });

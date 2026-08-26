@@ -60,8 +60,17 @@ describe('② MA 는 점에 얹혀 잘린다', () => {
   });
 
   it('워밍업 구간을 잇지 않는다 — 없던 평균을 직선으로 메우면 안 된다', () => {
-    const maLine = pane.slice(pane.indexOf('{maWindows.map((w, k) =>'));
-    expect(maLine.slice(0, 500)).toMatch(/connectNulls=\{false\}/);
+    /* **재는 자리가 옮겨졌다** [2026-08-26 이관]: CDS 는 `connectNulls={false}`
+       라는 손잡이가 있었고, 캔버스 판은 **`null` 을 whitespace 로 넣는 것**이
+       그 일을 한다(값을 빼면 선이 이어져 없던 평균을 그린다). 규칙이 부품
+       한 곳에 있으므로 거기서 잰다. */
+    const time = fs.readFileSync(
+      path.resolve(import.meta.dirname, '../src/chart/TimeChart.tsx'),
+      'utf8',
+    );
+    expect(time).toMatch(/v == null \? \{ time: t as Time \} : \{ time: t as Time, value: v \}/);
+    /* 그리고 MA 값은 서버가 준 `null` 을 그대로 들고 온다 — 0 으로 메우지 않는다. */
+    expect(pane).toMatch(/pt\.ma\?\.\[k\] \?\? null/);
   });
 });
 
@@ -78,9 +87,12 @@ describe('③ 색은 CDS 토큰에서만 온다 [OWNER 2026-08-26]', () => {
     expect(codeOf(read('src/ui/SettingView.tsx'))).not.toMatch(/#[0-9a-fA-F]{3,8}/);
   });
 
-  it('차트는 토큰을 **변수 참조**로 넘긴다 — CDS `Line` 은 SVG 속성이라 이름은 못 읽는다', () => {
+  it('차트는 토큰을 **변수 참조**로 넘긴다 — 이름 문자열로는 못 그린다', () => {
     expect(store).toMatch(/`var\(--color-\$\{t\}\)`/);
-    expect(pane).toMatch(/color: maColorVar\(maColorOf\(prefs, w\)\)/);
+    /* 캔버스는 `var()` 조차 못 푼다 [2026-08-26 이관] — 그래서 그 변수 참조를
+       `palette.dim` 이 그 자리에서 계산해 실제 색으로 바꾼다. 불투명도 사다리도
+       거기서 함께 들어간다(캔버스에는 `strokeOpacity` 가 없다). */
+    expect(pane).toMatch(/pal\.dim\(maColorVar\(maColorOf\(prefs, w\)\)/);
   });
 
   it('**기본으로 켜 두는 이동평균이 없다** [OWNER 2026-08-26]', () => {
@@ -143,30 +155,44 @@ describe('④ 껏다 켰다 [OWNER 2026-08-26]', () => {
 
 describe('⑤ 잉크 위계는 색이 생겨도 남는다', () => {
   it('무게 사다리는 창이 길수록 무겁다', () => {
-    const raw = pane.slice(pane.indexOf('const MA_INK'), pane.indexOf('/** 시리즈 id'));
-    const widths = [...raw.matchAll(/width: ([\d.]+)/g)].map((m) => Number(m[1]));
+    /* 선언부가 아니라 **배열 리터럴**부터 잘라야 한다 — 타입 주석
+       (`{ width: 1 | 2 }`)에도 `width: 1` 이 들어 있어 여섯 개로 세어진다
+       (2026-08-26 실측). */
+    const decl = pane.slice(pane.indexOf('const MA_INK: '), pane.indexOf('/** 시리즈 id'));
+    const raw = decl.slice(decl.indexOf('['));
+    const widths = [...raw.matchAll(/width: (\d)/g)].map((m) => Number(m[1]));
     const ops = [...raw.matchAll(/opacity: ([\d.]+)/g)].map((m) => Number(m[1]));
     expect(widths).toHaveLength(5);
     for (let i = 1; i < 5; i++) {
       expect(widths[i]).toBeGreaterThanOrEqual(widths[i - 1]);
       expect(ops[i]).toBeGreaterThan(ops[i - 1]);
     }
-    /* 가장 무거운 MA 도 종목 선(2px·불투명)보다 가볍다 — 주선이 주인공이다.
-       실측(2026-08-26 라이브 SVG): 종목 stroke-width 2 / opacity 1. */
-    expect(widths[4]).toBeLessThan(2);
+    /* 가장 무거운 MA 도 종목 선보다 가볍다 — 주선이 주인공이다.
+       **굵기는 정수만 된다** [2026-08-26 이관]: 캔버스 라이브러리의 `lineWidth`
+       가 1~4 라 CDS 의 소수 사다리(1·1·1.25·1.5·1.75)를 그대로 못 옮긴다.
+       사다리의 뜻은 불투명도가 지고, 굵기는 종목 선과 **같아질 수는 있어도**
+       불투명도로 뒤에 남는다. */
+    expect(widths[4]).toBeLessThanOrEqual(2);
     expect(ops[4]).toBeLessThan(1);
   });
 
   it('스크러버는 MA 를 안 짚는다 — 값은 리드아웃이 진다', () => {
-    const scrub = pane.slice(pane.indexOf('<Scrubber'), pane.indexOf('</CartesianChart>'));
-    expect(scrub).not.toMatch(/maSeriesId|maWindows/);
+    /* 캔버스 판에는 «짚을 계열» 목록이 없다 — 크로스헤어는 자리를 주고 값은
+       리드아웃 카드가 읽는다. 그래서 재는 것은 «MA 가 리드아웃의 주인공이
+       아니다» 이고, 그건 카드가 서버 첨자(`hoverPoint.ma?.[k]`)로만 MA 를
+       읽는 것으로 지켜진다. */
+    expect(pane).toMatch(/hoverPoint\.ma\?\.\[k\]/);
   });
 
-  it('MA 는 종목 선 **앞**에 그려진다 — SVG 는 나중 것이 위다', () => {
-    const maAt = pane.indexOf('{maWindows.map((w, k) =>');
-    const mainAt = pane.indexOf('seriesId={row.id}');
-    expect(maAt).toBeGreaterThan(-1);
-    expect(mainAt).toBeGreaterThan(maAt);
+  it('종목 선이 MA **아래**가 아니다 — 잉크의 위계', () => {
+    /* CDS(SVG)에서는 «나중에 적은 것이 위» 라 MA 를 먼저 적었다. 캔버스에서는
+       **먼저 만든 계열이 아래**라 순서가 뒤집힌다: 주선을 먼저 적어야 MA 가
+       그 위에 온다. 같은 규칙(주선이 MA 에 안 가린다)을 반대로 적는 자리라
+       여기서 못 박는다 [2026-08-26 이관]. */
+    const mainAt = pane.indexOf("id: row?.id ?? 'series'");
+    const maAt = pane.indexOf('id: maSeriesId(w)');
+    expect(mainAt).toBeGreaterThan(-1);
+    expect(maAt).toBeGreaterThan(mainAt);
   });
 });
 
@@ -181,10 +207,10 @@ describe('⑥ 기준선도 껏다 켰다 [OWNER 2026-08-26]', () => {
 
   it('그리는 자리는 전부 `drawn` 을 읽는다 — 하나라도 `refs` 면 끈 선이 남는다', () => {
     for (const re of [
-      /id: CD_LINE, data: drawn\.cd/,
-      /id: BASE_LINE, data: drawn\.policy/,
-      /\.\.\.\(drawn\?\.cd \? \[CD_LINE\] : \[\]\)/,
-      /\.\.\.\(drawn\?\.policy \? \[BASE_LINE\] : \[\]\)/,
+      /id: CD_LINE,[\s\S]{0,30}values: drawn\.cd/,
+      /id: BASE_LINE,[\s\S]{0,30}values: drawn\.policy/,
+      /* 스크러버의 «짚을 계열» 목록은 캔버스 판에 없다 — 크로스헤어는 자리를
+         주고 값은 리드아웃이 읽는다. 그 두 자리는 위·아래 정규식이 잰다. */
       /v=\{drawn\.cd\[hoverPoint\.i\]\}/,
     ]) {
       expect(pane).toMatch(re);

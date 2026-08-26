@@ -14,6 +14,7 @@
  *
  *   `time`    `createChart`      x = 날짜.                     시계열 9개
  *   `curve`   `createChartEx`    x = **√만기**(`tenorScale.ts`)  커브 3개
+ *   `scale`   `createChartEx`    x = 숫자(경과일·분기)           시뮬 3개
  *   `numeric` `createOptionsChart` x = 숫자.                    시뮬 일수·분기 3개
  *
  * 커브를 시계열로 위장하지 않는 것이 요점이다. 만기 3M·6M·1Y·…·10Y 는 날짜가
@@ -44,17 +45,33 @@ import {
 import type { DeepPartial, IChartApiBase, ChartOptions } from 'lightweight-charts';
 
 import { pixelColorParser, useLwPalette, type LwPalette } from './palette';
-import { TenorHorzScale } from './tenorScale';
+import { LabelledHorzScale } from './horzScale';
 
 export type ChartKind = 'time' | 'curve' | 'numeric';
 
 /** 커브 차트에만 있는 설정. */
 export type CurveSetup = {
   /** 이 커브의 가로축. **참조가 안정해야 한다** — 바뀌면 차트가 새로 만들어진다. */
-  scale: TenorHorzScale;
+  scale: LabelledHorzScale;
 };
 
-export type LwHandle<H> = { chart: IChartApiBase<H>; palette: LwPalette };
+export type LwHandle<H> = {
+  chart: IChartApiBase<H>;
+  palette: LwPalette;
+  /**
+   * 차트가 아직 살아 있는가.
+   *
+   * **정리 순서 때문에 필요하다.** 이 훅의 생성 효과가 호출부의 시리즈 효과보다
+   * 먼저 선언되므로, 언마운트에서도 **먼저 정리된다** — 차트가 이미 `remove()`
+   * 된 뒤에 호출부가 `removeSeries` 를 부르면 라이브러리가 `Value is undefined`
+   * 로 던지고 화면이 에러 경계로 떨어진다(실측 2026-08-26: 커브에서 종목 차트로
+   * 넘어가는 순간 재현).
+   *
+   * 차트가 통째로 사라질 때는 시리즈를 따로 지울 일이 없다 — `remove()` 가
+   * 전부 걷어간다. 그래서 호출부는 이 깃발이 서 있을 때만 지운다.
+   */
+  alive: { current: boolean };
+};
 
 /**
  * 캐논 룩. **이 함수가 이 앱 차트의 «생김새» 다** — 개별 차트가 여기서 벗어나면
@@ -169,6 +186,9 @@ export function useLwChart<H>(
   paletteRef.current = palette;
   const ready = palette != null;
 
+  /** 위 `LwHandle.alive` 참조. */
+  const alive = useRef(false);
+
   /* 축은 **만들 때 한 번** 들어간다. 호출부가 `useRef` 로 붙잡아 두므로
      참조가 안 바뀌고, 그래서 차트도 안 다시 만들어진다. */
   const scale = curve?.scale;
@@ -180,15 +200,17 @@ export function useLwChart<H>(
     const made =
       kind === 'curve'
         ? scale
-          ? createChartEx<number, TenorHorzScale>(el as HTMLElement, scale, canon)
+          ? createChartEx<number, LabelledHorzScale>(el as HTMLElement, scale, canon)
           : null
         : kind === 'numeric'
           ? createOptionsChart(el as HTMLElement, canon)
           : createChart(el as HTMLElement, canon);
     if (!made) return;
 
+    alive.current = true;
     setChart(made as unknown as IChartApiBase<H>);
     return () => {
+      alive.current = false;
       setChart(null);
       made.remove();
     };
@@ -203,7 +225,7 @@ export function useLwChart<H>(
   /* **참조가 매 렌더 바뀌면 안 된다** — 이 값은 호출부 효과의 의존성으로
      쓰이므로, 새 객체를 매번 주면 시리즈를 렌더마다 지웠다 다시 만든다. */
   return useMemo(
-    () => (chart && palette ? { chart, palette } : null),
+    () => (chart && palette ? { chart, palette, alive } : null),
     [chart, palette],
   );
 }

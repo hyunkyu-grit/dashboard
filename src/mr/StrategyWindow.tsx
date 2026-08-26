@@ -36,15 +36,9 @@ import { TextInput } from '@coinbase/cds-web/controls';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@coinbase/cds-web/tables';
 import { Text } from '@coinbase/cds-web/typography';
-import {
-  CartesianChart,
-  Line,
-  ReferenceLine,
-  Scrubber,
-  XAxis,
-  YAxis,
-} from '@coinbase/cds-web/visualizations/chart';
 
+import { TimeChart, type TimeLine } from '@/chart/TimeChart';
+import type { ScalePriceLine } from '@/chart/ScaleChart';
 import type { Unit } from '@/lib/api';
 import { BacktestUnavailable } from '@/lib/api';
 import { fmtLevel, unitSuffix } from '@/lib/format';
@@ -389,6 +383,55 @@ export function StrategyWindow({
     return net === 0 ? 'var(--color-fgMuted)' : net > 0 ? 'var(--sr-up)' : 'var(--sr-down)';
   }, [run]);
 
+  /* 주선 = 구간 방향색 + 점선 면(Main 미리보기·MR 상세 카드와 같은 문법 — 같은
+     값+밴드 그림이 두 결이면 안 된다), 보조선 뮤트. **밴드가 먼저** = 아래에 깔린다.
+     캔버스에는 불투명도 손잡이가 없어 색 자체를 흐리게 만든다(`palette.dim`). */
+  const priceLines: TimeLine[] = !run ? [] : [
+    { id: 'up', values: run.points.map((p) => p.up), color: (pa) => pa.dim('var(--color-fgMuted)', 45), width: 1 },
+    { id: 'lo', values: run.points.map((p) => p.lo), color: (pa) => pa.dim('var(--color-fgMuted)', 45), width: 1 },
+    { id: 'ma', values: run.points.map((p) => p.ma), color: (pa) => pa.dim('var(--color-fgMuted)', 70), width: 1 },
+    {
+      id: 'v',
+      values: run.points.map((p) => p.v),
+      color: (pa) => pa.resolve(priceHue),
+      area: 'dots',
+      format: (v: number) => fmtLevel(v, unit),
+    },
+  ];
+
+  const zLines: TimeLine[] = !run ? [] : [
+    {
+      id: 'z',
+      values: run.points.map((p) => p.z),
+      color: (pa) => pa.fg,
+      format: (v: number) => `${v.toFixed(1)}σ`,
+    },
+  ];
+
+  /* 0선·진입 문턱·경고 문턱. 경고는 **핀이 아니라 지금 값**이다 — 이 선은
+     실행과 무관하다. */
+  const zBands: ScalePriceLine[] = !run ? [] : [
+    { value: 0, color: (pa) => pa.line },
+    { value: run.params.entryZ, color: (pa) => pa.lineHeavy },
+    { value: -run.params.entryZ, color: (pa) => pa.lineHeavy },
+    { value: knobs.warnZ, color: (pa) => pa.line, dash: true },
+    { value: -knobs.warnZ, color: (pa) => pa.line, dash: true },
+  ];
+
+  /* 손익 곡선은 부호가 색을 정한다 — LinkedCharts 누적 손익의 그 문법. */
+  const eqHue = (run?.summary.totalPnl ?? 0) >= 0 ? 'var(--sr-up)' : 'var(--sr-down)';
+  const eqLines: TimeLine[] = !run ? [] : [
+    {
+      id: 'cum',
+      values: run.points.map((p) => p.cum),
+      color: (pa) => pa.resolve(eqHue),
+      area: 'solid',
+      areaColor: (pa) => pa.dim(eqHue, 14),
+      format: (v: number) => fmtKrw(v),
+    },
+  ];
+  const zeroLine: ScalePriceLine[] = [{ value: 0, color: (pa) => pa.line }];
+
   return (
     <FloatingWindow
       windowKey="mrstrategy"
@@ -594,38 +637,13 @@ export function StrategyWindow({
                   onMouseMove={(e: React.MouseEvent<HTMLDivElement>) => placeReadout(e.currentTarget, e.clientX)}
                   onMouseLeave={() => setIdx(null)}
                 >
-                  <CartesianChart
-                    enableScrubbing
-                    onScrubberPositionChange={(i) => setIdx(i == null ? null : { chart: 'price', i })}
-                    animate={false}
+                  <TimeChart
                     height={CHART_H}
                     accessibilityLabel={`${label} 가격과 밴드`}
-                    inset={{ top: 16, right: 12, bottom: 8, left: 8 }}
-                    /* 주선 = 구간 방향색 + 점선 면(Main 미리보기·MR 상세 카드와
-                       같은 문법 — 같은 값+밴드 그림이 두 결이면 안 된다),
-                       보조선 뮤트, 축 라벨 fmtLevel. */
-                    series={[
-                      { id: 'v', data: run.points.map((p) => p.v), color: priceHue, yAxisId: 'y' },
-                      { id: 'ma', data: run.points.map((p) => p.ma), color: 'var(--color-fgMuted)', yAxisId: 'y' },
-                      { id: 'up', data: run.points.map((p) => p.up), color: 'var(--color-fgMuted)', yAxisId: 'y' },
-                      { id: 'lo', data: run.points.map((p) => p.lo), color: 'var(--color-fgMuted)', yAxisId: 'y' },
-                    ]}
-                    xAxis={{ data: dates }}
-                    yAxis={[{ id: 'y' }]}
-                  >
-                    <XAxis showGrid={false} />
-                    <YAxis
-                      axisId="y"
-                      position="right"
-                      showGrid={false}
-                      tickLabelFormatter={(v: number) => fmtLevel(v, unit)}
-                    />
-                    <Line seriesId="up" strokeWidth={1} strokeOpacity={0.45} connectNulls={false} />
-                    <Line seriesId="lo" strokeWidth={1} strokeOpacity={0.45} connectNulls={false} />
-                    <Line seriesId="ma" strokeWidth={1.5} strokeOpacity={0.7} connectNulls={false} />
-                    <Line seriesId="v" curve="linear" showArea areaType="dotted" connectNulls={false} />
-                    <Scrubber accessibilityLabel="가격 짚기" seriesIds={['v']} />
-                  </CartesianChart>
+                    dates={dates}
+                    lines={priceLines}
+                    onHoverIndex={(i) => setIdx(i == null ? null : { chart: 'price', i })}
+                  />
                   {idx?.chart === 'price' && run.points[idx.i] ? (
                     <ReadoutCard title={run.points[idx.i]!.t}>
                       <ReadoutLevel k="값" v={run.points[idx.i]!.v} unit={unit} />
@@ -660,38 +678,15 @@ export function StrategyWindow({
                   onMouseMove={(e: React.MouseEvent<HTMLDivElement>) => placeReadout(e.currentTarget, e.clientX)}
                   onMouseLeave={() => setIdx(null)}
                 >
-                  <CartesianChart
-                    enableScrubbing
-                    onScrubberPositionChange={(i) => setIdx(i == null ? null : { chart: 'z', i })}
-                    animate={false}
+                  <TimeChart
                     height={CHART_H}
                     accessibilityLabel={`${label} z-스코어`}
-                    inset={{ top: 16, right: 12, bottom: 8, left: 8 }}
-                    series={[{ id: 'z', data: run.points.map((p) => p.z), color: 'var(--color-fg)', yAxisId: 'y' }]}
-                    xAxis={{ data: dates }}
-                    yAxis={[{ id: 'y' }]}
-                  >
-                    <XAxis showGrid={false} />
-                    <YAxis
-                      axisId="y"
-                      position="right"
-                      showGrid={false}
-                      tickLabelFormatter={(v: number) => `${v.toFixed(1)}σ`}
-                    />
-                    <ReferenceLine dataY={0} yAxisId="y" />
-                    <ReferenceLine dataY={run.params.entryZ} yAxisId="y" />
-                    <ReferenceLine dataY={-run.params.entryZ} yAxisId="y" />
-                    {/* 핀(run.params)이 아니라 지금 값 — 이 선은 실행과 무관하다. */}
-                    <ReferenceLine dataY={knobs.warnZ} yAxisId="y" />
-                    <ReferenceLine dataY={-knobs.warnZ} yAxisId="y" />
-                    {/* 마커는 거래 목록에서만 나온다 — 병렬 유도는 원본이 시험으로
-                        금지한 결함(s19). stale 이면 숨긴다. */}
-                    {stale
-                      ? null
-                      : entryIdx.map((m) => <ReferenceLine key={m.i} dataX={m.i} />)}
-                    <Line seriesId="z" curve="linear" connectNulls={false} />
-                    <Scrubber accessibilityLabel="z 짚기" seriesIds={['z']} />
-                  </CartesianChart>
+                    dates={dates}
+                    lines={zLines}
+                    priceLines={zBands}
+                    markLines={stale ? [] : entryIdx.map((m) => ({ index: m.i }))}
+                    onHoverIndex={(i) => setIdx(i == null ? null : { chart: 'z', i })}
+                  />
                   {idx?.chart === 'z' && run.points[idx.i] ? (
                     <ReadoutCard title={run.points[idx.i]!.t}>
                       <ReadoutLevel k="z" v={run.points[idx.i]!.z} unit={'ratio' as Unit} />
@@ -712,35 +707,14 @@ export function StrategyWindow({
                   onMouseMove={(e: React.MouseEvent<HTMLDivElement>) => placeReadout(e.currentTarget, e.clientX)}
                   onMouseLeave={() => setIdx(null)}
                 >
-                  <CartesianChart
-                    enableScrubbing
-                    onScrubberPositionChange={(i) => setIdx(i == null ? null : { chart: 'eq', i })}
-                    animate={false}
+                  <TimeChart
                     height={CHART_H}
                     accessibilityLabel={`${label} 누적 손익`}
-                    inset={{ top: 16, right: 12, bottom: 8, left: 8 }}
-                    /* 손익 곡선은 부호가 색을 정한다 — LinkedCharts 누적 손익의
-                       그 문법(`--sr-up`/`--sr-down`). */
-                    series={[{
-                      id: 'cum',
-                      data: run.points.map((p) => p.cum),
-                      color: run.summary.totalPnl >= 0 ? 'var(--sr-up)' : 'var(--sr-down)',
-                      yAxisId: 'y',
-                    }]}
-                    xAxis={{ data: dates }}
-                    yAxis={[{ id: 'y' }]}
-                  >
-                    <XAxis showGrid={false} />
-                    <YAxis
-                      axisId="y"
-                      position="right"
-                      showGrid={false}
-                      tickLabelFormatter={(v: number) => fmtKrw(v)}
-                    />
-                    <ReferenceLine dataY={0} yAxisId="y" />
-                    <Line seriesId="cum" curve="linear" showArea connectNulls={false} />
-                    <Scrubber accessibilityLabel="누적 손익 짚기" seriesIds={['cum']} />
-                  </CartesianChart>
+                    dates={dates}
+                    lines={eqLines}
+                    priceLines={zeroLine}
+                    onHoverIndex={(i) => setIdx(i == null ? null : { chart: 'eq', i })}
+                  />
                   {idx?.chart === 'eq' && run.points[idx.i] ? (
                     <ReadoutCard title={run.points[idx.i]!.t}>
                       <ReadoutMoney k="누적" v={run.points[idx.i]!.cum} />

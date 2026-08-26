@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 import { Button } from '@coinbase/cds-web/buttons';
 import { HStack, VStack } from '@coinbase/cds-web/layout';
@@ -8,11 +8,7 @@ import { TextCaption, TextTitle3 } from '@coinbase/cds-web/typography';
 
 import { useScheme } from '@/app/providers';
 
-import { LineSeries } from 'lightweight-charts';
-
-import { DottedArea } from '@/chart/dottedArea';
-import { monthsLabel, tenorMonths } from '@/chart/tenor';
-import { useLwChart } from '@/chart/useLwChart';
+import { CurveChart, type CurveLine } from '@/chart/CurveChart';
 
 /**
  * 이관 벤치 [2026-08-26].
@@ -37,44 +33,19 @@ const TENORS = ['3M', '6M', '9M', '1Y', '18M', '2Y', '3Y', '5Y', '7Y', '10Y', '2
 const PAR = [2.61, 2.58, 2.55, 2.54, 2.56, 2.6, 2.68, 2.79, 2.87, 2.95, 3.02, 3.0];
 
 function CurveBench() {
-  const [el, setEl] = useState<HTMLDivElement | null>(null);
-  const handle = useLwChart<number>('curve', el, {
-    formatTime: monthsLabel,
-    minimumTimeRange: 360,
-  });
-
-  const data = useMemo(
-    () =>
-      TENORS.map((t, i) => ({ time: tenorMonths(t)!, value: PAR[i] })).sort(
-        (a, b) => a.time - b.time,
-      ),
+  const lines = useMemo<CurveLine[]>(
+    () => [{ id: 'PAR', values: PAR, color: (p) => p.up }],
     [],
   );
-
-  useEffect(() => {
-    if (!handle) return;
-    const { chart, palette } = handle;
-    const series = chart.addSeries(LineSeries, {
-      color: palette.up,
-      lineWidth: 2,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
-    });
-    series.setData(data);
-
-    const area = new DottedArea<number>();
-    series.attachPrimitive(area);
-    area.update(data, palette.up);
-
-    chart.timeScale().fitContent();
-    return () => {
-      series.detachPrimitive(area);
-      chart.removeSeries(series);
-    };
-  }, [handle, data]);
-
-  return <div ref={setEl} style={{ height: 260 }} />;
+  return (
+    <CurveChart
+      height={260}
+      accessibilityLabel="합성 파 커브"
+      nodes={TENORS}
+      lines={lines}
+      hoverLabel={(i) => `${TENORS[i]} ${PAR[i].toFixed(2)}%`}
+    />
+  );
 }
 
 function SchemeToggle() {

@@ -103,10 +103,12 @@ describe('카드를 여는 배선', () => {
        아직 CDS `Scrubber`(`onScrubberPositionChange`), 커브는 캔버스라
        크로스헤어(`onHoverIndex`)다. 재는 것은 이름이 아니라 **둘 다 배선돼
        있는가** 이므로 각각 한 번씩을 확인한다. */
-    const scrub = pane.match(/onScrubberPositionChange=\{setHoverIdx\}/g) ?? [];
+    /* 이제 둘 다 크로스헤어다 [2026-08-26 이관 완료] — 커브도 히스토리도
+       같은 손잡이(`onHoverIndex`)로 자리를 알려 준다. 재는 것은 **둘 다
+       배선돼 있는가** 다: 하나만 배선하면 pane 이 어느 상태냐에 따라
+       "패널이 나왔다 안 나왔다" 하고, 그건 버그로 안 읽히고 착각으로 읽힌다. */
     const cross = pane.match(/onHoverIndex=\{setCurveHover\}/g) ?? [];
-    expect(scrub.length + cross.length).toBe(2);
-    expect(cross.length).toBe(1);
+    expect(cross.length).toBe(2);
   });
 
   it('카드가 놓일 상자가 위치 기준을 진다', () => {

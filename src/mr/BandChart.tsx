@@ -14,14 +14,8 @@
 import { useState } from 'react';
 
 import { Box } from '@coinbase/cds-web/layout';
-import {
-  CartesianChart,
-  Line,
-  Scrubber,
-  XAxis,
-  YAxis,
-} from '@coinbase/cds-web/visualizations/chart';
 
+import { TimeChart, type TimeLine } from '@/chart/TimeChart';
 import type { Unit } from '@/lib/api';
 import { ReadoutCard, ReadoutLevel, placeReadout } from '@/ui/ReadoutCard';
 
@@ -42,6 +36,17 @@ export function BandChart({ history }: { history: MrHistory }) {
   const net = v.length > 1 ? v[v.length - 1]! - v[0]! : 0;
   const hue = net === 0 ? 'var(--color-fgMuted)' : net > 0 ? 'var(--sr-up)' : 'var(--sr-down)';
 
+  /* 주선 = 구간 방향색(hue), 보조선(밴드·중심)은 뮤트 — Main 미리보기의 종목 선 +
+     기준선 위계 그대로. **밴드가 먼저** = 아래에 깔린다.
+     캔버스에는 불투명도 손잡이가 없어 색 자체를 흐리게 만든다(`palette.dim`). */
+  const lines: TimeLine[] = [
+    { id: 'up', values: up, color: (p) => p.dim('var(--color-fgMuted)', 45), width: 1 },
+    { id: 'lo', values: lo, color: (p) => p.dim('var(--color-fgMuted)', 45), width: 1 },
+    { id: 'ma', values: ma, color: (p) => p.dim('var(--color-fgMuted)', 70), width: 1 },
+    /* 점선 면 — Main 미리보기 종목 선의 그 채움(areaType="dotted"). */
+    { id: 'v', values: v, color: (p) => p.resolve(hue), area: 'dots' },
+  ];
+
   return (
     <Box
       className="sr-plot"
@@ -52,36 +57,14 @@ export function BandChart({ history }: { history: MrHistory }) {
       }}
       onMouseLeave={() => setIdx(null)}
     >
-      <CartesianChart
-        enableScrubbing
-        onScrubberPositionChange={(i) => setIdx(i ?? null)}
-        animate={false}
+      <TimeChart
         height={240}
         accessibilityLabel={`${history.label} 값과 밴드 이력`}
-        /* Main 미리보기와 같은 여백(PreviewPane CHART_INSET) — 여백이 다르면
-           나란히 선 두 화면이 어긋나 보인다. */
-        inset={{ top: 16, right: 12, bottom: 8, left: 8 }}
-        /* 주선 = 구간 방향색(hue), 보조선(밴드·중심)은 뮤트 — Main 미리보기의
-           종목 선 + 기준선 위계 그대로. */
-        series={[
-          { id: 'v', data: v, color: hue, yAxisId: 'y' },
-          { id: 'ma', data: ma, color: 'var(--color-fgMuted)', yAxisId: 'y' },
-          { id: 'up', data: up, color: 'var(--color-fgMuted)', yAxisId: 'y' },
-          { id: 'lo', data: lo, color: 'var(--color-fgMuted)', yAxisId: 'y' },
-        ]}
-        xAxis={{ data: dates }}
-        yAxis={[{ id: 'y' }]}
-      >
-        <XAxis showGrid={false} />
-        <YAxis axisId="y" position="right" showGrid={false} />
-        {/* 밴드 먼저, 값 마지막 — 값 선이 밴드 위에 선다. */}
-        <Line seriesId="up" strokeWidth={1} strokeOpacity={0.45} connectNulls={false} />
-        <Line seriesId="lo" strokeWidth={1} strokeOpacity={0.45} connectNulls={false} />
-        <Line seriesId="ma" strokeWidth={1.5} strokeOpacity={0.7} connectNulls={false} />
-        {/* 점선 면 — Main 미리보기 종목 선의 그 채움(areaType="dotted"). */}
-        <Line seriesId="v" curve="linear" showArea areaType="dotted" connectNulls={false} />
-        <Scrubber accessibilityLabel={`${history.label} 이력 짚기`} seriesIds={['v']} />
-      </CartesianChart>
+        dates={dates}
+        lines={lines}
+        onHoverIndex={setIdx}
+        hoverLabel={() => `${history.label} 이력 짚기`}
+      />
       {cur ? (
         <ReadoutCard title={cur.t}>
           <ReadoutLevel k="값" v={cur.v} unit={unit} />

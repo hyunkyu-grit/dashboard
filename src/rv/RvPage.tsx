@@ -59,15 +59,9 @@ import {
   TextLabel2,
   TextLegal,
 } from '@coinbase/cds-web/typography';
-import {
-  CartesianChart,
-  Line,
-  ReferenceLine,
-  Scrubber,
-  XAxis,
-  YAxis,
-} from '@coinbase/cds-web/visualizations/chart';
 
+import { TimeChart, type TimeLine } from '@/chart/TimeChart';
+import type { ScalePriceLine } from '@/chart/ScaleChart';
 import { BacktestUnavailable } from '@/lib/api';
 import { useFunding } from '@/state/funding';
 import { ErrorState, LoadingState } from '@/ui/DataState';
@@ -246,6 +240,20 @@ function BandChart({
   stats: { now: number | null; mean: number | null; sd: number | null };
 }) {
   const [idx, setIdx] = useState<number | null>(null);
+  const lines: TimeLine[] = [{ id: 'v', values, color: (p) => p.fg }];
+
+  /* ±σ 밴드 — 창 평균(가운데)과 평균±σ. 도메인 밖이면 안 보일 뿐 무해하다
+     (LinkedCharts 의 같은 판단). */
+  const bands: ScalePriceLine[] = [
+    ...(stats.mean != null ? [{ value: stats.mean, color: (p: { line: string }) => p.line }] : []),
+    ...(stats.mean != null && stats.sd != null
+      ? [
+          { value: stats.mean + stats.sd, color: (p: { line: string }) => p.line, dash: true },
+          { value: stats.mean - stats.sd, color: (p: { line: string }) => p.line, dash: true },
+        ]
+      : []),
+  ];
+
   return (
     <VStack gap={0.25} width="100%">
       <TextLabel2 as="span">{title}</TextLabel2>
@@ -258,31 +266,15 @@ function BandChart({
         }}
         onMouseLeave={() => setIdx(null)}
       >
-        <CartesianChart
-          enableScrubbing
-          onScrubberPositionChange={(i) => setIdx(i ?? null)}
-          animate={false}
+        <TimeChart
           height={180}
           accessibilityLabel={title}
-          inset={{ top: 12, right: 12, bottom: 8, left: 8 }}
-          series={[{ id: 'v', data: values, yAxisId: 'y' }]}
-          xAxis={{ data: dates }}
-          yAxis={[{ id: 'y' }]}
-        >
-          <XAxis showGrid={false} />
-          <YAxis axisId="y" position="right" showGrid={false} />
-          {/* ±σ 밴드 — 창 평균(가운데)과 평균±σ. 도메인 밖이면 안 보일 뿐
-              무해하다(LinkedCharts 의 같은 판단). */}
-          {stats.mean != null ? <ReferenceLine dataY={stats.mean} yAxisId="y" /> : null}
-          {stats.mean != null && stats.sd != null ? (
-            <ReferenceLine dataY={stats.mean + stats.sd} yAxisId="y" />
-          ) : null}
-          {stats.mean != null && stats.sd != null ? (
-            <ReferenceLine dataY={stats.mean - stats.sd} yAxisId="y" />
-          ) : null}
-          <Line seriesId="v" curve="linear" connectNulls={false} />
-          <Scrubber accessibilityLabel={`${title} 스크러버`} />
-        </CartesianChart>
+          dates={dates}
+          lines={lines}
+          priceLines={bands}
+          onHoverIndex={setIdx}
+          hoverLabel={() => `${title} 스크러버`}
+        />
         {idx != null && values[idx] != null ? (
           <ReadoutCard title={dates[idx]}>
             <ReadoutLevel k="값" v={values[idx]} unit="bp" />

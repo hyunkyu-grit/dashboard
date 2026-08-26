@@ -36,11 +36,21 @@ ui-ux-pro-max 병행» 규칙은 폐기한다.
    Fragment 로 떨어진다** — 에러도 경고도 없다. 실측 판례: 툴팁이 `<th>` 안에
    렌더돼 `nowrap` 을 상속했고, 그것을 CSS 로 덮은 흔적이 남아 있었다
    [OWNER 2026-08-19 — "패널 밖으로 글씨가 빠져나가"].
-7. 라이브러리 중립 판단(접근성·반응형·차트 유형)은 **인용 가능한 외부 표준**에
+7. **차트는 CDS 가 아니다** [OWNER 2026-08-26 — "싹 다 돌려 15개"]. 15개 전부
+   `lightweight-charts` 로 옮겼다(3D 표면 `Surface3D` 는 오너 지시로 제외).
+   CDS `visualizations/chart` 에서 아직 쓰는 것은 `PeriodSelector` 뿐이고 그건
+   차트가 아니라 구간 선택 컨트롤이다. 캔버스라 규칙이 셋 바뀐다:
+   - **색은 `var()` 가 안 통한다.** 팔레트가 산 DOM 에서 읽어 넘긴다. 불투명도
+     손잡이도 없어 «흐린 선» 은 색 자체를 흐리게 만든다(`palette.dim`).
+   - **읽을 DOM 이 없다.** 스크러버가 읽어 주던 문장은 `hoverLabel` →
+     `.sr-a11y-only` 의 `aria-live` 줄이 진다.
+   - **배경 탭에서는 안 그려진다.** 탭을 보는 순간 그려진다(라이브러리 성질 —
+     `useLwChart.ts` 머리 주석에 뿌리가 적혀 있다).
+8. 라이브러리 중립 판단(접근성·반응형·차트 유형)은 **인용 가능한 외부 표준**에
    둔다 — WCAG 2.2(1.4.1 색 단독 금지 · 1.4.3 텍스트 4.5:1 · 1.4.11 그래픽 3:1) ·
    ISO 24896:2026(비즈니스 리포팅 표기) · FT Visual Vocabulary(차트 유형 선택).
    스킬 하나의 의견이 아니라 출처가 있어야 한다.
-8. **금지**: 이 리포에서 `MASTER.md` 류 병렬 디자인 소스를 만들지 않는다.
+9. **금지**: 이 리포에서 `MASTER.md` 류 병렬 디자인 소스를 만들지 않는다.
    `src/theme/sauronTheme.ts` 와 `src/theme/direction.css` 가 유일한
    디자인 소스오브트루스다.
 
@@ -62,8 +72,13 @@ ui-ux-pro-max 병행» 규칙은 폐기한다.
 | 범위 위치 | `.sr-track`/`.sr-track-mark`(폭은 바깥이 준다) | `table/InstrumentTable.tsx`·`lib/range.ts` |
 | 사실 스트립 | `StatColumn`+`Stat`, 감싸는 `.sr-stats` — 차트 **아래** | `ui/Stat.tsx` |
 | 커서 리드아웃 | `ReadoutCard`+`ReadoutLevel`/`ReadoutMoney`+`placeReadout`, 상자는 `.sr-plot` | `ui/ReadoutCard.tsx` |
-| 시계열 차트 | 주선 = **보이는 구간 순변화 방향색**(`--sr-up`/`--sr-down`/뮤트) + `showArea areaType="dotted"` + `CHART_INSET{16,12,8,8}` + `animate={false}` + 축 `showGrid={false}`·y 오른쪽 | `ui/PreviewPane.tsx` |
-| 손익 차트 | 부호 방향색 + 면 | `backtest/LinkedCharts.tsx` |
+| 시계열 차트 | `TimeChart` — x = 날짜 | `chart/TimeChart.tsx` |
+| 만기 커브 | `CurveChart` — x = **√만기**(선형 월수는 짧은 쪽을 뭉갠다) | `chart/CurveChart.tsx` |
+| 숫자축 차트 | `NumericChart` — x = 경과일·분기 | `chart/NumericChart.tsx` |
+| 차트의 «생김새» | `canonOptions` **한 곳** — 격자 없음·y 오른쪽·여백·크로스헤어·글자체 | `chart/useLwChart.ts` |
+| 차트 색 | 팔레트에서 받는다(`p.up`·`p.refCd`·`p.resolve('var(--…)')`·`p.dim(css, %)`) | `chart/palette.ts` |
+| 주선 잉크 | **보이는 구간 순변화 방향색** + `area: 'dots'` | 호출부가 `color`·`area` 로 준다 |
+| 손익 차트 | 부호 방향색 + `area: 'solid'`(흐린 면) | `backtest/LinkedCharts.tsx` |
 | 화면 컨트롤 | `.sr-pillbtn`(32px·14/600 알약) — **앱 공용**이다 | `theme/type.css` |
 | 떠 있는 창 | `FloatingWindow`(windowKey 등록) | `ui/window/` |
 | 대사 표 | `ReconStack` | `ui/window/ReconStack.tsx` |

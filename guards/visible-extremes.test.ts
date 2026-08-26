@@ -141,11 +141,14 @@ describe('화면이 그 결과를 쓴다', () => {
   });
 
   it('차트가 고·저 두 점을 찍는다', () => {
+    /* **재는 자리가 옮겨졌다** [2026-08-26 이관]: CDS `Point dataX/dataY` 대신
+       `TimeChart` 의 `markers`(순번 + 색)다. y 는 안 준다 — 그 점의 값은
+       계열이 이미 알고 있어서 순번만으로 자리가 정해진다(값을 따로 주면
+       두 곳에서 갈릴 수 있는 것이 하나 줄었다). */
     const src = read(PANE);
-    expect(src).toMatch(/dataX=\{view\.ext\.hiIdx\}/);
-    expect(src).toMatch(/dataY=\{view\.ext\.hi\}/);
-    expect(src).toMatch(/dataX=\{view\.ext\.loIdx\}/);
-    expect(src).toMatch(/dataY=\{view\.ext\.lo\}/);
+    expect(src).toMatch(/index: view\.ext\.hiIdx/);
+    expect(src).toMatch(/index: view\.ext\.loIdx/);
+    expect(src).toMatch(/markers=\{chartMarkers\}/);
   });
 
   it('리드아웃의 숫자도 같은 결과를 읽는다', () => {

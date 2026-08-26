@@ -133,25 +133,25 @@ describe('한 단위에 축 하나', () => {
     expect(referenceMode('%')).toBe('shared');
   });
 
-  it('축에 이름을 붙였으면 시리즈도 그 이름을 가리켜야 한다 — 안 그러면 선이 조용히 사라진다', () => {
-    /* 실측 2026-08-14: x 축 설정에만 `id: 'date'` 를 주고 시리즈에 `xAxisId` 를
-     * 안 달았더니 CDS 가 `xAxisId ?? DEFAULT_AXIS_ID` 로 스케일을 찾다 빗나갔고,
-     * `Line` 이 `if (!xScale || !yScale || !path) return` 으로 **아무 말 없이**
-     * 사라졌다. 축과 눈금은 멀쩡히 그려져서 "선만 없는 차트" 가 됐고 콘솔에는
-     * 한 줄도 안 남았다. x 축은 하나뿐이므로 이름을 주지 않는 것이 규칙이다. */
-    const src = fs.readFileSync(
+  it('축을 시리즈가 이름으로 가리키지 않는다 — 이제 **부품이 축을 안다**', () => {
+    /* 종전 실패(2026-08-14): x 축 설정에만 `id: 'date'` 를 주고 시리즈에
+       `xAxisId` 를 안 달았더니 CDS 가 스케일을 못 찾아 `Line` 이 **아무 말 없이**
+       사라졌다. 축과 눈금은 멀쩡히 그려져 "선만 없는 차트" 가 됐다.
+
+       그 함정 자체가 없어졌다 [2026-08-26 이관]: 이제 계열은 이름 대신
+       `axis: 'main' | 'aux'` 로 **어느 쪽인지**만 말하고, 그 이름을 실제 축에
+       맞추는 일은 `chart/series.ts` 한 곳이 한다. 그래서 여기서는 «호출부가
+       축 이름을 다루지 않는다» 를 잰다. */
+    const pane = fs.readFileSync(
       path.resolve(import.meta.dirname, '../src/ui/PreviewPane.tsx'),
       'utf8',
     );
-    const xAxisProp = /xAxis=\{\{([^}]*)\}\}/.exec(src)?.[1] ?? '';
-    expect(xAxisProp, 'x 축 설정을 못 찾음').toContain('data:');
-    expect(xAxisProp, 'x 축에 id 를 주려면 시리즈에 xAxisId 도 달아야 한다').not.toMatch(/\bid:/);
-
-    // y 축은 반대로 **반드시** 이름이 있어야 한다(둘일 수 있으므로), 그리고
-    // 시리즈가 그 이름을 쓴다.
-    expect(src).toMatch(/yAxisId: MAIN_AXIS/);
-    expect(src).toMatch(/axisId=\{MAIN_AXIS\}/);
-    expect(src).toMatch(/axisId=\{PCT_AXIS\}/);
+    expect(pane).not.toMatch(/yAxisId|xAxisId|axisId=/);
+    const series = fs.readFileSync(
+      path.resolve(import.meta.dirname, '../src/chart/series.ts'),
+      'utf8',
+    );
+    expect(series).toMatch(/priceScaleId: line\.axis === 'aux' \? 'left' : 'right'/);
   });
 
   it('bp·ratio·가격 은 기준선이 **자기 %축**을 왼쪽에 단다 [OWNER 2026-08-14]', () => {
@@ -169,8 +169,14 @@ describe('한 단위에 축 하나', () => {
       'utf8',
     );
     // 종목 축은 오른쪽(레퍼런스의 자리), 기준선 축은 왼쪽.
-    expect(src).toMatch(/axisId=\{MAIN_AXIS\}[\s\S]{0,80}position="right"/);
-    expect(src).toMatch(/axisId=\{PCT_AXIS\}[\s\S]{0,80}position="left"/);
+    // 자리 규칙은 이제 `chart/series.ts` 한 곳에 있고, 호출부는 «보조축이냐» 만 말한다.
+    expect(src).toMatch(/axis: refAxis/);
+    expect(src).toMatch(/const refAxis = pctAxis \? \('aux' as const\) : \('main' as const\)/);
+    const series = fs.readFileSync(
+      path.resolve(import.meta.dirname, '../src/chart/series.ts'),
+      'utf8',
+    );
+    expect(series).toMatch(/'aux' \? 'left' : 'right'/);
   });
 });
 
@@ -205,24 +211,32 @@ describe('기준선은 같은 위계의 두 색이다 [OWNER 2026-08-18, 3차 �
   });
 
   it('두 시리즈가 각자의 토큰을 든다', () => {
-    expect(pane).toMatch(/id: CD_LINE[^}]*color: 'var\(--sr-ref-cd\)'/);
-    expect(pane).toMatch(/id: BASE_LINE[^}]*color: 'var\(--sr-ref-policy\)'/);
+    /* 색은 이제 **팔레트 토큰**으로 간다 — 캔버스는 `var()` 를 못 읽어서
+       문자열이 아니라 이미 계산된 색이어야 한다(`chart/palette.ts`). */
+    expect(pane).toMatch(/id: CD_LINE,[\s\S]{0,160}pal\.refCd/);
+    expect(pane).toMatch(/id: BASE_LINE,[\s\S]{0,160}pal\.refPolicy/);
+    const palette = fs.readFileSync(
+      path.resolve(import.meta.dirname, '../src/chart/palette.ts'),
+      'utf8',
+    );
+    expect(palette).toMatch(/refCd: '--sr-ref-cd'/);
+    expect(palette).toMatch(/refPolicy: '--sr-ref-policy'/);
   });
 
-  it('두 선이 같은 굵기·같은 불투명도로 그려진다', () => {
+  it('두 선이 같은 굵기로 그려진다 — 같은 위계', () => {
     /* 숫자 자체가 아니라 **같음**이 계약이다 — 한쪽만 조정하면 위계가 다시
-     * 갈라지고, 그건 화면에서만 보인다. */
-    const lines = [...pane.matchAll(/<Line\s+seriesId=\{(CD_LINE|BASE_LINE)\}[\s\S]*?\/>/g)];
-    expect(lines).toHaveLength(2);
-    const recipe = lines.map((m) => ({
-      id: m[1],
-      width: /strokeWidth=\{([\d.]+)\}/.exec(m[0])?.[1],
-      opacity: /strokeOpacity=\{([\d.]+)\}/.exec(m[0])?.[1],
-    }));
-    expect(recipe[0].width, '굵기가 다르면 위계가 다르다').toBe(recipe[1].width);
-    expect(recipe[0].opacity, '불투명도가 다르면 위계가 다르다').toBe(recipe[1].opacity);
-    // 그리고 첫 판(0.45)의 흐림으로 돌아가지 않는다 — 원래 불만이 그것이었다.
-    expect(Number(recipe[0].opacity)).toBeGreaterThanOrEqual(0.7);
+       갈라지고, 그건 화면에서만 보인다.
+
+       불투명도는 이제 잴 것이 없다 [2026-08-26 이관]: 캔버스에는 불투명도
+       손잡이가 따로 없어 **둘 다 토큰 색 그대로** 그려진다. 첫 판(0.45)의
+       흐림으로 돌아갈 자리가 아예 없어졌다. */
+    const widths = [...pane.matchAll(/id: (?:CD_LINE|BASE_LINE),[\s\S]{0,200}?width: (\d) as const/g)].map(
+      (m) => m[1],
+    );
+    expect(widths).toHaveLength(2);
+    expect(widths[0], '굵기가 다르면 위계가 다르다').toBe(widths[1]);
+    /* 그리고 종목 선보다 얇다 — 배경은 배경이다. */
+    expect(Number(widths[0])).toBe(1);
   });
 
   it('선 끝 가격 칩은 없다 — 오너 지시로 내렸다', () => {

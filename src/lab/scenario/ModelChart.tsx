@@ -39,26 +39,12 @@ import { Text } from '@coinbase/cds-web/typography';
    「모형」 레인이 같은 것을 다시 만들려던 참이었고, 두 벌이 되면 한쪽만
    낡는다. 모양은 한 글자도 안 바뀌었다. */
 import { Stat, StatColumn } from '@/ui/Stat';
-import {
-  CartesianChart,
-  Line,
-  Scrubber,
-  XAxis,
-  YAxis,
-} from '@coinbase/cds-web/visualizations/chart';
 
+import { CurveChart, type CurveLine } from '@/chart/CurveChart';
 import { ReadoutCard, ReadoutChange, ReadoutLevel, placeReadout } from '@/ui/ReadoutCard';
 import { RefKey } from '@/ui/PreviewPane';
 
 import type { ScenarioRow } from './assemble';
-
-/** 백테스트 종목 차트와 같은 값. 다르면 두 카드의 플롯이 어긋나 보인다.
- *
- * 바닥이 28 인 것은 x 눈금 라벨의 자리다 — 8 로 두었더니 y 축의 맨 아래 눈금
- * («3.40»)이 x 축의 마지막 라벨(«10Y»)과 같은 줄에 겹쳤다(실측 2026-08-20). */
-const CHART_INSET = { top: 16, right: 12, bottom: 28, left: 8 };
-
-const AXIS = 'rate';
 
 const MODEL = 'MODEL';
 const MARKET = 'MARKET';
@@ -102,6 +88,33 @@ export function ModelChart({ rows, asof }: { rows: ScenarioRow[]; asof: string }
   );
 
   const hasMarket = s.market.some((v) => v != null);
+
+  /* 선 셋. **먼저 선언한 것이 아래에 깔린다** — 잉크(모형)가 맨 위여야 한다.
+     참조선 둘은 똑같이 그려진다(같은 굵기·불투명도, 다른 것은 색 하나). */
+  const lines = useMemo<CurveLine[]>(
+    () => [
+      { id: TODAY, values: s.today, color: (p) => p.refPolicy, width: 1 },
+      ...(hasMarket
+        ? [{ id: MARKET, values: s.market, color: (p: { refCd: string }) => p.refCd, width: 1 as const }]
+        : []),
+      { id: MODEL, values: s.model, color: (p) => p.fg, area: 'dots' },
+    ],
+    [s, hasMarket],
+  );
+
+  const setHover = useCallback((i: number | null) => setHoverIdx(i ?? undefined), []);
+  const rateTick = useCallback((v: number) => Number(v).toFixed(2), []);
+  const nodeLabel = useCallback(
+    (i: number) => {
+      const r = rows[i];
+      if (!r) return '';
+      return (
+        `${TENOR_LABEL[r.tenor] ?? r.tenor} 모형 ${lvl(r.scenario12m)}%` +
+        (r.vsMarketBp == null ? ', 시장 캐리 없음' : `, 시장 대비 ${bp(r.vsMarketBp)}bp`)
+      );
+    },
+    [rows],
+  );
   const head = rows.find((r) => r.tenor === HEADLINE) ?? rows[0];
   const dir = head?.vsMarketBp == null ? 'flat' : head.vsMarketBp > 0 ? 'up' : head.vsMarketBp < 0 ? 'down' : 'flat';
 
@@ -153,60 +166,15 @@ export function ModelChart({ rows, asof }: { rows: ScenarioRow[]; asof: string }
         onMouseMove={onMove}
         onMouseLeave={onLeave}
       >
-        <CartesianChart
-          enableScrubbing
-          onScrubberPositionChange={setHoverIdx}
-          animate={false}
-          height="100%"
-          accessibilityLabel={`12개월 뒤 IRS 커브. ${rows
-            .map(
-              (r) =>
-                `${TENOR_LABEL[r.tenor]} 모형 ${lvl(r.scenario12m)}%` +
-                (r.vsMarketBp == null ? ', 시장 캐리 없음' : `, 시장 대비 ${bp(r.vsMarketBp)}bp`),
-            )
-            .join('. ')}`}
-          inset={CHART_INSET}
-          series={[
-            /* 먼저 선언한 것이 아래에 깔린다. 잉크(모형)가 맨 위여야 한다. */
-            { id: TODAY, data: s.today, color: 'var(--sr-ref-policy)', yAxisId: AXIS },
-            ...(hasMarket
-              ? [{ id: MARKET, data: s.market, color: 'var(--sr-ref-cd)', yAxisId: AXIS }]
-              : []),
-            { id: MODEL, data: s.model, color: 'var(--color-fg)', yAxisId: AXIS },
-          ]}
-          xAxis={{ data: s.labels }}
-          yAxis={[{ id: AXIS }]}
-        >
-          <XAxis showGrid={false} styles={{ tickLabel: { opacity: 0.65 } }} />
-          <YAxis
-            axisId={AXIS}
-            position="right"
-            showGrid={false}
-            styles={{ tickLabel: { opacity: 0.65 } }}
-            tickLabelFormatter={(v) => Number(v).toFixed(2)}
-          />
-          {/* 참조선 둘은 **똑같이 그려진다** — 같은 굵기, 같은 불투명도. 다른 것은
-              색 하나다(direction.css 의 호박/보라, 같은 지각적 무게). */}
-          <Line seriesId={TODAY} curve="linear" strokeWidth={1.5} strokeOpacity={0.9} />
-          {hasMarket ? (
-            <Line
-              seriesId={MARKET}
-              curve="linear"
-              strokeWidth={1.5}
-              strokeOpacity={0.9}
-              connectNulls={false}
-            />
-          ) : null}
-          {/* `curve="linear"` — CDS 기본 `bump` 는 노드 사이를 **지어낸다**. 우리가
-              아는 것은 다섯 테너의 값뿐이다(백테스트 커브와 같은 규율). */}
-          <Line seriesId={MODEL} curve="linear" showArea areaType="dotted" />
-          {/* 짚을 시리즈를 명시한다 — 기본값은 `series` 전부라, 안 그려진 자리에도
-              구슬이 찍힌다(`Scrubber.js`). */}
-          <Scrubber
-            accessibilityLabel="테너를 훑어 값 보기"
-            seriesIds={[MODEL, ...(hasMarket ? [MARKET] : []), TODAY]}
-          />
-        </CartesianChart>
+        <CurveChart
+          accessibilityLabel={`12개월 뒤 IRS 커브. ${rows.map((_, i) => nodeLabel(i)).join('. ')}`}
+          nodes={s.labels}
+          lines={lines}
+          precision={4}
+          tickFormat={rateTick}
+          onHoverIndex={setHover}
+          hoverLabel={nodeLabel}
+        />
 
         {hit ? (
           <ReadoutCard title={TENOR_LABEL[hit.tenor] ?? hit.tenor}>

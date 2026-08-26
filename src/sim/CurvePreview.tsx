@@ -23,14 +23,9 @@ import { Chip } from '@coinbase/cds-web/chips';
 import { HStack, VStack } from '@coinbase/cds-web/layout';
 import { SegmentedTabs } from '@coinbase/cds-web/tabs';
 import { TextLegal } from '@coinbase/cds-web/typography';
-import {
-  CartesianChart,
-  Line,
-  Scrubber,
-  XAxis,
-  YAxis,
-} from '@coinbase/cds-web/visualizations/chart';
 
+import { CurveChart, type CurveLine } from '@/chart/CurveChart';
+import { NumericChart, type NumericLine } from '@/chart/NumericChart';
 import type { SeriesSummary } from '@/lib/api';
 import { fmtLevel } from '@/lib/format';
 import { ReadoutCard, ReadoutLevel, placeReadout } from '@/ui/ReadoutCard';
@@ -46,8 +41,6 @@ import {
   type CaseId,
   type Scenario,
 } from './scenario';
-
-const AXIS = 'pct';
 
 /** 미리보기 두 종류. 밖에 두는 이유는 `SegmentedTabs` 가 `activeTab` 으로 **객체
  * 신원**을 비교하기 때문이다 — 렌더마다 새 배열을 만들면 활성 표시가 흔들린다. */
@@ -193,6 +186,40 @@ export function CurvePreview({
     [pillars, caseLines, base],
   );
 
+  /* 이 화면의 «안 고름» 은 `undefined` 인데 차트는 `null` 로 말한다. 한 번 맞춘다 —
+     인라인 화살표로 넘기면 매 렌더 새 함수라 크로스헤어 구독이 붙었다 떨어진다. */
+  const setHover = useCallback((i: number | null) => setHoverIdx(i ?? undefined), []);
+
+  /** 커브 선들 — 기준이 먼저 = 아래에 깔린다.
+   *
+   * 케이스 색은 `var(--sr-…)` 라 캔버스가 못 읽는다. `palette.resolve` 가 그
+   * 자리에서 계산해 준다 — 호출부는 이 리포의 어휘(CSS 변수)를 그대로 쓴다. */
+  const curveLines = useMemo<CurveLine[]>(
+    () => [
+      { id: 'now', values: base, color: (p) => p.fgMuted, width: 1 },
+      ...caseLines.map((l) => ({
+        id: `case:${l.id}`,
+        values: l.data,
+        color: (p: { resolve: (c: string) => string }) => p.resolve(CASE_COLOR[l.id]),
+      })),
+    ],
+    [base, caseLines],
+  );
+
+  const pathLines = useMemo<NumericLine[]>(
+    () =>
+      timeLines.lines.map((l) => ({
+        id: `case:${l.id}`,
+        values: l.data,
+        color: (p: { resolve: (c: string) => string }) => p.resolve(CASE_COLOR[l.id]),
+      })),
+    [timeLines],
+  );
+
+  const dayLabel = useCallback((d: number) => `D+${d}`, []);
+  const pctTick = useCallback((v: number) => fmtLevel(v, '%'), []);
+  const bpTick = useCallback((v: number) => `${v.toFixed(0)}bp`, []);
+
   const timeScrubLabel = useCallback(
     (i: number) => {
       const d = timeLines.days[i];
@@ -243,81 +270,26 @@ export function CurvePreview({
           가 준다. */}
       <VStack className="sr-plot" onMouseMove={onMove} width="100%">
       {view === 'curve' ? (
-        <CartesianChart
-          animate={false}
-          enableScrubbing
-          onScrubberPositionChange={setHoverIdx}
+        <CurveChart
           height={height}
           accessibilityLabel="시나리오 커브 미리보기"
-          inset={{ top: 12, right: 8, bottom: 0, left: 8 }}
-          series={[
-            /* 기준 커브의 id 는 `now` 다 — 첫 판이 `base` 였고 **Base 케이스와
-               부딪혔다**. CDS 는 같은 id 의 두 시리즈에서 하나만 남기므로 케이스
-               선이 조용히 기준 커브를 다시 그렸다(실측: 두 path 의 `d` 가 동일). */
-            {
-              id: 'now',
-              data: base,
-              color: 'var(--color-fgMuted)',
-              yAxisId: AXIS,
-            },
-            ...caseLines.map((l) => ({
-              id: `case:${l.id}`,
-              data: l.data,
-              color: CASE_COLOR[l.id],
-              yAxisId: AXIS,
-            })),
-          ]}
-          xAxis={{ data: pillars.map((p) => p.id) }}
-          yAxis={[{ id: AXIS }]}
-        >
-          <XAxis showGrid={false} />
-          <YAxis
-            axisId={AXIS}
-            position="right"
-            showGrid={false}
-            tickLabelFormatter={(v) => fmtLevel(v, '%')}
-          />
-          <Line seriesId="now" curve="linear" connectNulls={false} />
-          {caseLines.map((l) => (
-            <Line key={l.id} seriesId={`case:${l.id}`} curve="linear" connectNulls={false} />
-          ))}
-          <Scrubber
-            accessibilityLabel={curveScrubLabel}
-            seriesIds={['now', ...caseLines.map((l) => `case:${l.id}`)]}
-          />
-        </CartesianChart>
+          nodes={pillars.map((p) => p.id)}
+          lines={curveLines}
+          tickFormat={pctTick}
+          onHoverIndex={setHover}
+          hoverLabel={curveScrubLabel}
+        />
       ) : (
-        <CartesianChart
-          animate={false}
-          enableScrubbing
-          onScrubberPositionChange={setHoverIdx}
+        <NumericChart
           height={height}
           accessibilityLabel="시나리오 경로 미리보기"
-          inset={{ top: 12, right: 8, bottom: 0, left: 8 }}
-          series={timeLines.lines.map((l) => ({
-            id: `case:${l.id}`,
-            data: l.data,
-            color: CASE_COLOR[l.id],
-            yAxisId: AXIS,
-          }))}
-          xAxis={{ data: timeLines.days.map((d) => `D+${d}`) }}
-          yAxis={[{ id: AXIS }]}
-        >
-          <XAxis showGrid={false} />
-          <YAxis
-            axisId={AXIS}
-            position="right"
-            showGrid={false}
-            tickLabelFormatter={(v) => `${v.toFixed(0)}bp`}
-          />
-          {timeLines.lines.map((l) => (
-            <Line key={l.id} seriesId={`case:${l.id}`} curve="linear" connectNulls={false} />
-          ))}
-          <Scrubber
-            accessibilityLabel={timeScrubLabel}
-            seriesIds={timeLines.lines.map((l) => `case:${l.id}`)}
-          />
-        </CartesianChart>
+          nodes={timeLines.days}
+          lines={pathLines}
+          label={dayLabel}
+          tickFormat={bpTick}
+          onHoverIndex={setHover}
+          hoverLabel={timeScrubLabel}
+        />
       )}
       {/* 커서가 짚은 자리의 값 — 시뮬 차트에는 이게 없었다. 경로를 설계하는
           화면인데 "D+37 에 얼마" 를 읽을 길이 없었다(v1 `HoverPanel` 이 하던

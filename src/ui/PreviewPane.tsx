@@ -12,21 +12,15 @@ import {
   TextLabel2,
   TextTitle3,
 } from '@coinbase/cds-web/typography';
-import {
-  CartesianChart,
-  Line,
-  PeriodSelector,
-  Point,
-  Scrubber,
-  XAxis,
-  YAxis,
-} from '@coinbase/cds-web/visualizations/chart';
 
 import { CD_SERIES_ID, type PolicyStep } from '@/lib/api';
 import { fmtDelta, fmtLevel, unitSuffix } from '@/lib/format';
 import { rangePosition } from '@/lib/range';
 import { cashbondSeriesUrl, seriesUrl, universeSeriesUrl } from '@/lib/staticPaths';
+import { PeriodSelector } from '@coinbase/cds-web/visualizations/chart';
+
 import { CurveChart, type CurveLine } from '@/chart/CurveChart';
+import { TimeChart, type TimeLine, type TimeMarker } from '@/chart/TimeChart';
 import { type IdleCurve } from '@/chart/curve';
 import { alignByDate, policyByDate, referenceMode } from '@/chart/references';
 import { panRange, sliceRange, zoomRange, type ViewRange } from '@/chart/zoom';
@@ -63,12 +57,15 @@ type Point = { t: string; v: number; d?: number | null; ma?: (number | null)[] }
  * MA 는 스크러버가 짚지 않는다(아래 `seriesIds`) — 구슬이 다섯 개 더 뜨면 커서가
  * 무엇을 읽는지 모르게 된다. 값은 리드아웃 카드가 줄로 적는다.
  */
-const MA_INK: { width: number; opacity: number }[] = [
+/* 굵기는 **정수만** 된다 — 캔버스 라이브러리의 `lineWidth` 가 1~4 다(CDS 는
+   소수 굵기를 받았다). 사다리의 뜻(«긴 창일수록 진하게»)은 불투명도가 그대로
+   지고, 굵기는 뒤 두 개만 한 칸 올린다. */
+const MA_INK: { width: 1 | 2; opacity: number }[] = [
   { width: 1, opacity: 0.55 },
   { width: 1, opacity: 0.65 },
-  { width: 1.25, opacity: 0.75 },
-  { width: 1.5, opacity: 0.85 },
-  { width: 1.75, opacity: 0.95 },
+  { width: 1, opacity: 0.75 },
+  { width: 2, opacity: 0.85 },
+  { width: 2, opacity: 0.95 },
 ];
 
 /** 시리즈 id — 문자열을 두 군데 적으면 한 군데만 고쳐지는 날이 온다(§MAIN_AXIS). */
@@ -109,18 +106,6 @@ type SeriesStats = { min: number | null; max: number | null; avg: number | null 
  * the last print ticked down.
  */
 
-/* 축과 기준선 시리즈의 id. 문자열을 여러 군데 적으면 한 군데만 고쳐지는 날이
- * 오고, 그때 시리즈는 존재하지 않는 축을 가리키며 조용히 기본 축으로 떨어진다.
- *
- * ── x 축에는 일부러 id 를 주지 않는다 (실측 2026-08-14) ─────────────────────
- * 축에 이름을 붙이면 **시리즈도 그 이름을 가리켜야 한다.** CDS 는 시리즈의
- * `xAxisId ?? DEFAULT_AXIS_ID` 로 스케일을 찾는데(`CartesianChart.js:214`),
- * 축 설정에만 `id: 'date'` 를 주고 시리즈에 `xAxisId` 를 안 달면 조회가 빗나가고
- * `Line` 이 `if (!xScale || !yScale || !path) return` 으로 **아무 말 없이 사라진다**
- * (`Line.js:113`). 축과 눈금은 멀쩡히 그려지므로 "선만 안 나오는 차트" 가 되고,
- * 콘솔에는 한 줄도 안 남는다. x 축은 하나뿐이니 이름이 필요 없다. */
-const MAIN_AXIS = 'main';
-const PCT_AXIS = 'pct';
 const CD_LINE = 'CD91';
 const BASE_LINE = 'BASE';
 
@@ -129,18 +114,9 @@ const BASE_LINE = 'BASE';
  * `derive.py::ohlc_buckets` 는 남는다(v1 과 바이트 대사 유지·`/chart` 하니스가
  * 여전히 쓴다). 되살릴 일이 생기면 그 세션의 함정 셋을 함께 가져올 것:
  * 구간 days 는 영업일이라 봉 수로 환산해야 하고(1Y 주봉 = 52봉), 꼬리는 안
- * 그려지는 시리즈로 y 도메인에 넣어야 하고, 캔들 레이어는 이름 있는 축을
- * `yAxisId` 로 가리켜야 한다(셋 다 조용히 틀린다). */
-
-/** 그림 둘레의 여백. 두 차트가 **같은 값**을 쓴다 — 하나만 고치면 커브와 히스토리가
- * 서로 다른 여백을 지고, 그 둘은 나란히 서는 화면이 아니라 같은 자리를 번갈아 쓰는
- * 화면이라 차이가 어긋남으로 보인다.
- *
- * `right` 12 · `bottom` 8 은 실측해서 올린 값이다(2026-08-14). 예전 값
- * (`right: 8, bottom: 0`)에서 오른쪽 y 눈금이 SVG 오른쪽 끝에 **딱 붙었다** —
- * 라벨 오른쪽 2529px, SVG 오른쪽 2529px, 여백 0. CDS 가 축 폭을 따로 잡아주므로
- * 잘리지는 않았지만 여백이 0 이면 폰트나 자릿수가 조금만 바뀌어도 잘린다. */
-const CHART_INSET = { top: 16, right: 12, bottom: 8, left: 8 };
+ * 그려지는 시리즈로 y 도메인에 넣어야 한다(둘 다 조용히 틀린다). 축 이름
+ * 함정은 없어졌다 — 이제 계열이 `axis: 'main'|'aux'` 로만 말한다
+ * [2026-08-26 이관]. 캔들은 `lightweight-charts` 가 기본으로 갖고 있다. */
 
 /** The spans offered, and how many trailing points each keeps. `null` = all. */
 const SPANS = [
@@ -619,6 +595,8 @@ export function PreviewPane({
 
   const unit = data?.unit ?? row?.unit ?? '%';
   const fmtY = useCallback((v: number) => fmtLevel(v, unit as Row['unit']), [unit]);
+  /** 왼쪽 축의 눈금은 언제나 % — 그게 이 축의 존재 이유다. */
+  const fmtPct = useCallback((v: number) => fmtLevel(v, '%'), []);
 
   /* 기준선 두 개. 종목 선과 **같은 x 날짜 위에** 얹는다(`alignByDate`). 어느 축에
    * 실릴지는 단위가 정한다 — `chart/references.ts::referenceMode`. */
@@ -657,50 +635,77 @@ export function PreviewPane({
   const pctAxis = !!(drawn && (drawn.cd || drawn.policy)) && mode === 'own';
 
 
-  /* 차트가 먹는 시리즈. `yAxisId` 가 축을 고른다: 같은 단위면 셋 다 종목 축,
-   * 다른 단위면 기준선 둘만 왼쪽 %축으로 간다. */
-  const chartSeries = useMemo(() => {
+  /* 차트가 먹는 선들. `axis` 가 어느 쪽인지 말한다: 같은 단위면 셋 다 종목
+   * 축(오른쪽), 다른 단위면 기준선 둘만 왼쪽 %축으로 간다. */
+  const chartLines = useMemo<TimeLine[]>(() => {
     if (!view) return [];
-    const refAxis = pctAxis ? PCT_AXIS : MAIN_AXIS;
+    const refAxis = pctAxis ? ('aux' as const) : ('main' as const);
     return [
-      { id: row?.id ?? 'series', data: view.win.map((p) => p.v), color: hue, yAxisId: MAIN_AXIS },
+      {
+        id: row?.id ?? 'series',
+        values: view.win.map((p) => p.v),
+        color: (pal) => pal.resolve(hue),
+        area: 'dots',
+        format: fmtY,
+      },
       /* 두 기준선은 **같은 위계의 두 색**이다 [OWNER 2026-08-18, 3차 확정 —
          네이버 MA 방식]. 색·판정 이력은 `theme/direction.css` 의 토큰 주석에
-         있다. 시리즈의 `color` 에 두는 이유: `Line` 의 기본 stroke 도 스크러버
-         구슬도 여기서 색을 읽으므로, 선과 구슬이 한 곳에서 갈린다. */
+         있다. */
       ...(drawn?.cd
-        ? [{ id: CD_LINE, data: drawn.cd, color: 'var(--sr-ref-cd)', yAxisId: refAxis }]
+        ? [{
+            id: CD_LINE,
+            values: drawn.cd,
+            color: (pal: { refCd: string }) => pal.refCd,
+            width: 1 as const,
+            axis: refAxis,
+            format: pctAxis ? fmtPct : fmtY,
+          }]
         : []),
       ...(drawn?.policy
-        ? [{ id: BASE_LINE, data: drawn.policy, color: 'var(--sr-ref-policy)', yAxisId: refAxis }]
+        ? [{
+            id: BASE_LINE,
+            values: drawn.policy,
+            color: (pal: { refPolicy: string }) => pal.refPolicy,
+            width: 1 as const,
+            axis: refAxis,
+            format: pctAxis ? fmtPct : fmtY,
+          }]
         : []),
       /* 이동평균 — **종목과 같은 축**이다(같은 단위의 같은 계열의 평균이므로).
          기준선과 달리 `refAxis` 를 안 탄다: bp 차트에서도 MA 는 bp 다.
 
          `k` 는 **서버 목록의 첨자**다 — 점에 얹힌 `pt.ma` 가 그 순서이므로,
-         켠 것만 걸러진 배열의 첨자를 쓰면 다른 창의 평균을 그리게 된다. */
+         켠 것만 걸러진 배열의 첨자를 쓰면 다른 창의 평균을 그리게 된다.
+
+         불투명도는 캔버스에 손잡이가 없어 **색 자체를 흐리게** 만든다. */
       ...maWindows.flatMap((w, k) =>
         prefs.shown.includes(w)
           ? [{
               id: maSeriesId(w),
-              data: view.win.map((pt) => pt.ma?.[k] ?? null),
-              color: maColorVar(maColorOf(prefs, w)),
-              yAxisId: MAIN_AXIS,
+              values: view.win.map((pt) => pt.ma?.[k] ?? null),
+              color: (pal: { dim: (c: string, n: number) => string }) =>
+                pal.dim(maColorVar(maColorOf(prefs, w)), (MA_INK[k]?.opacity ?? 0.6) * 100),
+              width: MA_INK[k]?.width ?? 1,
+              format: fmtY,
             }]
           : [],
       ),
     ];
-  }, [view, drawn, pctAxis, hue, row?.id, maWindows, prefs]);
+  }, [view, drawn, pctAxis, hue, row?.id, maWindows, prefs, fmtY, fmtPct]);
 
-  /* 축 설정. 두 번째 축은 **있을 때만** 선언한다 — 빈 축은 눈금을 그리고 폭을
-   * 먹으면서 아무것도 말하지 않는다. */
-  const yAxes = useMemo(
-    () => (pctAxis ? [{ id: MAIN_AXIS }, { id: PCT_AXIS }] : [{ id: MAIN_AXIS }]),
-    [pctAxis],
+  /** 보이는 구간의 고·저 — CDS `Point` 자리. */
+  const chartMarkers = useMemo<TimeMarker[]>(
+    () =>
+      view?.ext
+        ? [
+            { index: view.ext.hiIdx, color: (pal) => pal.fgMuted },
+            { index: view.ext.loIdx, color: (pal) => pal.fgMuted },
+          ]
+        : [],
+    [view],
   );
 
-  /** 왼쪽 축의 눈금은 언제나 % — 그게 이 축의 존재 이유다. */
-  const fmtPct = useCallback((v: number) => fmtLevel(v, '%'), []);
+
 
   const scrubLabel = useCallback(
     (i: number) => {
@@ -983,136 +988,15 @@ export function PreviewPane({
             history 를 불러오지 못했어요 — {error}
           </TextLabel2>
         ) : view ? (
-          /* `LineChart` 가 아니라 `CartesianChart` 인 이유는 **축이 둘일 수 있어서**다.
-             `LineChart` 는 편의 래퍼이고 y축 설정을 하나만 만든다(LineChart.js:92) —
-             그래서 bp 차트의 보조 %축이 "CDS 로는 안 된다" 로 잘못 기록돼 있었다.
-             한 겹 내려오면 `yAxis` 는 배열이고 시리즈는 `yAxisId` 로 축을 고른다.
-             아래 자식들은 `LineChart` 가 원래 대신 그려주던 것 그대로다. */
-          <CartesianChart
-            enableScrubbing
-            onScrubberPositionChange={setHoverIdx}
+          <TimeChart
             height={chartH}
             accessibilityLabel={`${row.label} ${SPANS.find((s) => s.key === span)?.label} 추이, ${view.win.length}개 점`}
-            inset={CHART_INSET}
-            /* No reveal animation.
-             *
-             * The enter transition is a clip-path growing from zero width. On a
-             * page you land on once that reads as polish; here the pane re-mounts
-             * on every row click, so a desk scanning twenty instruments would
-             * watch the same line draw itself twenty times. That is motion
-             * carrying no information, and it delays the number the reader came
-             * for. The reference animates because it is a destination; this pane
-             * is not one.
-             *
-             * CLOSED 2026-08-14, and hover settled it. The pane now follows the
-             * POINTER: crossing the table re-mounts this chart every 120ms-plus-
-             * a-fetch. A reveal animation there would not read as polish, it
-             * would strobe. Do not re-open it without a reason that survives
-             * hover. */
-            animate={false}
-            series={chartSeries}
-            xAxis={{ data: view.win.map((p) => p.t) }}
-            yAxis={yAxes}
-          >
-            <XAxis showGrid={false} />
-            {/* 종목 축은 오른쪽 — 레퍼런스(coinbase.com/price/*)의 자리다. */}
-            <YAxis axisId={MAIN_AXIS} position="right" showGrid={false} tickLabelFormatter={fmtY} />
-            {/* 보조 %축은 **왼쪽** [OWNER 2026-08-14]. bp 차트에서만 존재하고,
-                기준선 둘이 이 축을 쓴다. 눈금이 muted 인 이유는 이게 종목의 축이
-                아니라 배경의 축이기 때문이다 — 읽는 사람이 어느 숫자가 어느 선의
-                것인지 헷갈리면 안 된다. */}
-            {pctAxis ? (
-              <YAxis
-                axisId={PCT_AXIS}
-                position="left"
-                showGrid={false}
-                /* 눈금 글자만 흐리게. `color` prop 은 축에 없고(타입 확인),
-                   `styles.tickLabel` 이 CDS 가 주는 자리다. */
-                styles={{ tickLabel: { opacity: 0.65 } }}
-                tickLabelFormatter={fmtPct}
-              />
-            ) : null}
-            {/* 이동평균이 종목 선 **앞**에 온다 — SVG 는 나중에 그린 것이 위다.
-                주선이 MA 밑에 깔리면 잉크의 위계가 뒤집힌다. 창이 안 찬 앞 구간은
-                서버가 null 로 두므로(`derive.moving_averages` — TA-Lib 의 lookback
-                규약) `connectNulls` 를 끈다: 이으면 없던 평균을 직선으로 메운다. */}
-            {maWindows.map((w, k) =>
-              prefs.shown.includes(w) ? (
-                <Line
-                  key={maSeriesId(w)}
-                  seriesId={maSeriesId(w)}
-                  curve="linear"
-                  strokeWidth={MA_INK[k]?.width ?? 1}
-                  strokeOpacity={MA_INK[k]?.opacity ?? 0.6}
-                  connectNulls={false}
-                />
-              ) : null,
-            )}
-            <Line
-              seriesId={row.id}
-              showArea
-              areaType="dotted"
-              connectNulls={false}
-            />
-            {/* 보이는 구간의 고·저 — **그려진 조각의 성질**이다(52주 통계와
-                다른 질문에 답한다). 확대하면 따라 움직이고, 리드아웃의
-                최고/최저 숫자와 **같은 스캔**에서 나오므로 점과 숫자가 어긋날
-                수 없다(`chart/extremes.ts`).
-
-                라벨은 안 붙인다 — 값은 이미 리드아웃 카드에 있고, 점이 하는 말은
-                "그게 언제였나" 하나다. 잉크는 muted: 종목 선이 주인공이고 이건
-                그 위의 주석이다. */}
-            {view.ext ? (
-              <>
-                <Point
-                  dataX={view.ext.hiIdx}
-                  dataY={view.ext.hi}
-                  yAxisId={MAIN_AXIS}
-                  radius={3}
-                  fill="var(--color-fgMuted)"
-                />
-                <Point
-                  dataX={view.ext.loIdx}
-                  dataY={view.ext.lo}
-                  yAxisId={MAIN_AXIS}
-                  radius={3}
-                  fill="var(--color-fgMuted)"
-                />
-              </>
-            ) : null}
-            {/* 기준선은 종목 선 뒤에 선다: 채움 없고, 종목 선(2px)보다 얇게.
-                **둘이 똑같이 그려진다** — 같은 굵기, 같은 불투명도. 다른 것은
-                **색 하나**다(호박/보라, 같은 지각적 무게 — `direction.css`).
-                기준금리는 `stepAfter` — 정책금리는 평평하다가 뛴다. 둘 다
-                `connectNulls` 를 끈다(끊긴 구간은 모르는 구간이다). */}
-            {drawn?.cd ? (
-              <Line seriesId={CD_LINE} strokeWidth={1.5} strokeOpacity={0.9} connectNulls={false} />
-            ) : null}
-            {drawn?.policy ? (
-              <Line
-                seriesId={BASE_LINE}
-                curve="stepAfter"
-                strokeWidth={1.5}
-                strokeOpacity={0.9}
-                connectNulls={false}
-              />
-            ) : null}
-            {/* 선 끝 가격 칩(price line 라벨)이 여기 살았다가 오너 지시로
-                내렸다 [OWNER 2026-08-18 — "굳이 선 끝에 가격 칩은 안 넣어줘도
-                될듯"]. 칩이 축 눈금·날짜 라벨과 겹치던 것도 함께 사라졌다.
-                이름은 색 범례가, 값은 리드아웃 카드(hover)가 진다. */}
-            {/* 스크러버가 짚는 시리즈를 **명시**한다. 기본값은 `series` 전부라
-                (`Scrubber.js:74`) 캔들의 꼬리 시리즈 둘에도 구슬이 찍힌다 — 안
-                그려진 선 위에 점 두 개가 뜨는 셈이다. 여기 나열된 것만 찍는다. */}
-            <Scrubber
-              accessibilityLabel={scrubLabel}
-              seriesIds={[
-                row.id,
-                ...(drawn?.cd ? [CD_LINE] : []),
-                ...(drawn?.policy ? [BASE_LINE] : []),
-              ]}
-            />
-          </CartesianChart>
+            dates={view.win.map((p) => p.t)}
+            lines={chartLines}
+            markers={chartMarkers}
+            onHoverIndex={setCurveHover}
+            hoverLabel={scrubLabel}
+          />
         ) : (
           <Box height={chartH} />
         )}
