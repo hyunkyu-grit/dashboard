@@ -118,6 +118,24 @@ describe('④ 캐논 룩은 한 곳에서만 정의된다', () => {
   it('글자체를 넘긴다 — 안 넘기면 그 축만 라이브러리 기본 글자가 된다', () => {
     expect(hook).toMatch(/fontFamily: p\.fontFamily/);
   });
+
+  it('**눈금이 조용하다** — 밀도를 라이브러리 기본에 안 맡긴다', () => {
+    /* 기본은 `2.5` 이고 작을수록 촘촘하다. 그냥 두면 560px 패널에 눈금이
+       **11칸** 선다(실측 2026-08-26 라이브) — CDS 판은 같은 자리에 5칸이었고,
+       축이 그림보다 눈에 띄면 읽는 사람이 선이 아니라 눈금을 읽는다
+       [OWNER 2026-08-26 — "좀 개판된거 같은데"]. 4 에서 4~7칸이다. */
+    expect(hook).toMatch(/tickMarkDensity: 4/);
+  });
+
+  it('**날짜는 ISO 다** — 라이브러리 기본 로케일 글자가 아니다', () => {
+    /* 그냥 두면 「9월」·「2026년」 이 선다(실측). 이 제품의 날짜 어휘는 화면
+       전체가 ISO 다 — 표 머리·신선도 칩·대사표·URL 인코딩, 그리고
+       `ui/IsoDateField.tsx` 한 레인이 통째로 그 규칙이다. 차트만 다른 말을
+       쓰면 안 된다. */
+    expect(hook).toMatch(/tickMarkFormatter: isoTick/);
+    expect(hook).toMatch(/function isoTick/);
+    expect(codeOf(hook)).toMatch(/\$\{b\.year\}-\$\{p\(b\.month \?\? 1\)\}-\$\{p\(b\.day \?\? 1\)\}/);
+  });
 });
 
 describe('④-2 라이브러리가 못 읽는 색은 파서가 받는다', () => {

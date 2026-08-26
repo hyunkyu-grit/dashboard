@@ -77,6 +77,22 @@ export type LwHandle<H> = {
  * 캐논 룩. **이 함수가 이 앱 차트의 «생김새» 다** — 개별 차트가 여기서 벗어나면
  * 왜인지 주석으로 남긴다(CLAUDE.md 캐논 규칙 3).
  */
+/**
+ * 가로축 눈금 글자 — **ISO**.
+ *
+ * 라이브러리는 `BusinessDay | UTCTimestamp` 로 준다. 우리가 넣은 것은 `'YYYY-MM-DD'`
+ * 문자열이고 그건 `BusinessDay` 로 파싱돼 돌아온다.
+ */
+function isoTick(time: unknown): string {
+  const b = time as { year?: number; month?: number; day?: number };
+  if (typeof b?.year === 'number') {
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${b.year}-${p(b.month ?? 1)}-${p(b.day ?? 1)}`;
+  }
+  /* 숫자 축(커브·시뮬)은 자기 축이 글자를 진다 — 여기 안 온다. */
+  return String(time);
+}
+
 export function canonOptions(p: LwPalette): DeepPartial<ChartOptions> {
   return {
     layout: {
@@ -100,9 +116,28 @@ export function canonOptions(p: LwPalette): DeepPartial<ChartOptions> {
          200px 패널 기준으로 맞춘 값이다. 선이 위아래 테두리에 닿지 않게 하는
          것이 이 여백의 일이고, 그 목적은 같다. */
       scaleMargins: { top: 0.08, bottom: 0.04 },
+      /**
+       * **눈금은 조용해야 한다.**
+       *
+       * 라이브러리 기본은 `2.5` 다 — 눈금 한 칸의 높이를 `글자크기 × 이 값` 으로
+       * 잡고, 작을수록 촘촘하다. 그냥 두면 560px 짜리 패널에 **11칸**이 선다
+       * (실측 2026-08-26 라이브). CDS 판은 같은 자리에 **5칸**이었다
+       * [OWNER 2026-08-26 — "좀 개판된거 같은데"]. 축이 그림보다 눈에 띄면
+       * 읽는 사람이 선이 아니라 눈금을 읽는다.
+       */
+      tickMarkDensity: 4,
     },
     leftPriceScale: { visible: false },
-    timeScale: { borderVisible: false, fixLeftEdge: true, fixRightEdge: true },
+    timeScale: {
+      borderVisible: false,
+      fixLeftEdge: true,
+      fixRightEdge: true,
+      /* 날짜는 **ISO 다** — 이 제품의 화면 전체가 그렇다(표 머리·신선도 칩·
+         대사표·URL 인코딩, 그리고 `ui/IsoDateField.tsx` 한 레인이 통째로 그
+         규칙이다). 라이브러리 기본은 「9월」·「2026년」 같은 로케일 글자라
+         그냥 두면 **차트만 다른 말을 쓴다**(실측 2026-08-26 라이브). */
+      tickMarkFormatter: isoTick,
+    },
     crosshair: {
       /* 자석 — 커서가 값에 붙는다. 이 제품의 리드아웃은 «그 점의 값» 을
          읽어 주므로 자유 크로스헤어면 카드의 숫자와 커서가 어긋난다. */
