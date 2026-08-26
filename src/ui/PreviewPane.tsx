@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { Chip } from '@coinbase/cds-web/chips';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import {
   TextBody,
@@ -29,6 +30,7 @@ import { type IdleCurve } from '@/chart/curve';
 import { alignByDate, policyByDate, referenceMode } from '@/chart/references';
 import { panRange, sliceRange, zoomRange, type ViewRange } from '@/chart/zoom';
 import { windowExtremes } from '@/chart/extremes';
+import { maColorOf, maColorVar, useMaPrefs } from '@/state/ma';
 import type { Row } from '@/table/rows';
 
 import { useFillHeight } from './useFillHeight';
@@ -48,24 +50,24 @@ type Point = { t: string; v: number; d?: number | null; ma?: (number | null)[] }
 /**
  * 이동평균 — **벤더 표준 그대로** [OWNER, 2026-08-26 — "차트 회사들에서 제공하는
  * 표준 MA로"]. 창은 서버가 정한다(`derive.MA_WINDOWS` = 5·10·20·60·120, 키움 HTS
- * 공장 기본값). 여기 배열은 **그리는 법**만 말한다.
+ * 공장 기본값). 켤지 말지와 무슨 색인지는 `state/ma.ts` 가 기억한다
+ * [OWNER — "당연히 껏다 켰다 가능하게 … 색도 컬러토큰에서"].
  *
- * ── 왜 색이 아니라 무게인가 ────────────────────────────────────────────────
- * HTS 는 MA 선마다 다른 색을 준다. 이 제품에서 색은 이미 두 사전을 갖고 있다 —
- * 방향(`--sr-up`/`--sr-down`)과 기준선(CD·기준금리의 호박/보라). 거기에 다섯 색을
- * 더하면 「빨간 선」이 상승인지 MA5 인지 화면이 못 정한다. 그래서 MA 는 **한 색
- * (fgMuted)의 무게 사다리**다: 창이 길수록 굵고 진하다 — 느리고 구조적인 선이
- * 무거워야 눈이 층을 읽는다. 캐논의 «주선 잉크 · 보조선 뮤트» 안이다.
+ * ── 무게 사다리는 남는다 ───────────────────────────────────────────────────
+ * 색이 생겼다고 굵기까지 같아지면, 켤 수 있는 다섯이 전부 같은 무게로 서서
+ * 종목 선과 다툰다. 창이 길수록 굵고 진하다 — 느리고 구조적인 선이 무거워야
+ * 눈이 층을 읽는다. 가장 무거운 MA 도 종목 선(2px·불투명)보다 가볍다: 주선이
+ * 주인공이라는 캐논은 색과 무관하다.
  *
- * MA 는 스크러버가 짚지 않는다(아래 `seriesIds`) — 다섯 개 구슬이 더 뜨면 커서가
- * 무엇을 읽는지 모르게 된다.
+ * MA 는 스크러버가 짚지 않는다(아래 `seriesIds`) — 구슬이 다섯 개 더 뜨면 커서가
+ * 무엇을 읽는지 모르게 된다. 값은 리드아웃 카드가 줄로 적는다.
  */
 const MA_INK: { width: number; opacity: number }[] = [
-  { width: 1, opacity: 0.3 },
-  { width: 1, opacity: 0.4 },
-  { width: 1.25, opacity: 0.55 },
-  { width: 1.5, opacity: 0.7 },
-  { width: 1.75, opacity: 0.85 },
+  { width: 1, opacity: 0.55 },
+  { width: 1, opacity: 0.65 },
+  { width: 1.25, opacity: 0.75 },
+  { width: 1.5, opacity: 0.85 },
+  { width: 1.75, opacity: 0.95 },
 ];
 
 /** 시리즈 id — 문자열을 두 군데 적으면 한 군데만 고쳐지는 날이 온다(§MAIN_AXIS). */
@@ -472,6 +474,11 @@ export function PreviewPane({
    *  「MA120」이 서로 다른 수를 가리키는 날이 온다. */
   const maWindows = useMemo(() => data?.maWindows ?? [], [data]);
 
+  /* 켠 것과 색 — Setting 과 **같은 저장소**를 읽는다(`state/ma.ts`). 범례를
+     눌러도 여기가 바뀌고, 그래서 두 화면이 갈리지 않는다. */
+  const [maPrefs, ma] = useMaPrefs();
+
+
   /* The window the chart actually draws, and everything read off it. Kept in one
    * memo so the line's sign, the hero's change and the range readout can never
    * describe different windows — the defect that makes a chart argue with its
@@ -512,7 +519,9 @@ export function PreviewPane({
   const hoverPoint = useMemo(() => {
     if (!view || hoverIdx == null || hoverIdx < 0 || hoverIdx >= view.win.length) return null;
     const p = view.win[hoverIdx];
-    return { i: hoverIdx, t: p.t, v: p.v, d: p.d ?? null };
+    /* `ma` 도 여기서 실어 보낸다 — 카드가 `view` 를 다시 뒤지면 널 검사가
+       두 곳이 되고, 선과 카드가 다른 점을 읽을 길이 생긴다. */
+    return { i: hoverIdx, t: p.t, v: p.v, d: p.d ?? null, ma: p.ma };
   }, [view, hoverIdx]);
 
   /* 52주 세 줄의 출처. 스왑 라우트는 `stats` 를 싣고(252관측) 유니버스 라우트는
@@ -612,15 +621,22 @@ export function PreviewPane({
         ? [{ id: BASE_LINE, data: refs.policy, color: 'var(--sr-ref-policy)', yAxisId: refAxis }]
         : []),
       /* 이동평균 — **종목과 같은 축**이다(같은 단위의 같은 계열의 평균이므로).
-         기준선과 달리 `refAxis` 를 안 탄다: bp 차트에서도 MA 는 bp 다. */
-      ...maWindows.map((w, k) => ({
-        id: maSeriesId(w),
-        data: view.win.map((pt) => pt.ma?.[k] ?? null),
-        color: 'var(--color-fgMuted)',
-        yAxisId: MAIN_AXIS,
-      })),
+         기준선과 달리 `refAxis` 를 안 탄다: bp 차트에서도 MA 는 bp 다.
+
+         `k` 는 **서버 목록의 첨자**다 — 점에 얹힌 `pt.ma` 가 그 순서이므로,
+         켠 것만 걸러진 배열의 첨자를 쓰면 다른 창의 평균을 그리게 된다. */
+      ...maWindows.flatMap((w, k) =>
+        maPrefs.shown.includes(w)
+          ? [{
+              id: maSeriesId(w),
+              data: view.win.map((pt) => pt.ma?.[k] ?? null),
+              color: maColorVar(maColorOf(maPrefs, w)),
+              yAxisId: MAIN_AXIS,
+            }]
+          : [],
+      ),
     ];
-  }, [view, refs, pctAxis, hue, row?.id, maWindows]);
+  }, [view, refs, pctAxis, hue, row?.id, maWindows, maPrefs]);
 
   /* 축 설정. 두 번째 축은 **있을 때만** 선언한다 — 빈 축은 눈금을 그리고 폭을
    * 먹으면서 아무것도 말하지 않는다. */
@@ -975,16 +991,18 @@ export function PreviewPane({
                 주선이 MA 밑에 깔리면 잉크의 위계가 뒤집힌다. 창이 안 찬 앞 구간은
                 서버가 null 로 두므로(`derive.moving_averages` — TA-Lib 의 lookback
                 규약) `connectNulls` 를 끈다: 이으면 없던 평균을 직선으로 메운다. */}
-            {maWindows.map((w, k) => (
-              <Line
-                key={maSeriesId(w)}
-                seriesId={maSeriesId(w)}
-                curve="linear"
-                strokeWidth={MA_INK[k]?.width ?? 1}
-                strokeOpacity={MA_INK[k]?.opacity ?? 0.5}
-                connectNulls={false}
-              />
-            ))}
+            {maWindows.map((w, k) =>
+              maPrefs.shown.includes(w) ? (
+                <Line
+                  key={maSeriesId(w)}
+                  seriesId={maSeriesId(w)}
+                  curve="linear"
+                  strokeWidth={MA_INK[k]?.width ?? 1}
+                  strokeOpacity={MA_INK[k]?.opacity ?? 0.6}
+                  connectNulls={false}
+                />
+              ) : null,
+            )}
             <Line
               seriesId={row.id}
               showArea
@@ -1070,6 +1088,23 @@ export function PreviewPane({
             {refs?.cd ? (
               <ReadoutLevel k={READOUT_LABEL.cd91} v={refs.cd[hoverPoint.i]} unit="%" />
             ) : null}
+            {/* 이동평균 — **켠 것만** [OWNER 2026-08-26: "MA값도 넣어줘야지"].
+                끈 창의 값을 적으면 카드가 화면에 없는 선을 읽는 셈이다(기준선이
+                «그려진 것만» 이름을 얻는 그 규칙과 같다).
+
+                값의 출처가 선의 출처와 **같다**: 둘 다 `pt.ma[k]` 이고 `k` 는
+                서버 목록의 첨자다. 그래서 카드와 선이 다른 수를 말할 수 없다.
+                스크러버가 MA 를 안 짚는 대신 값은 여기가 진다. */}
+            {maWindows.map((w, k) =>
+              maPrefs.shown.includes(w) ? (
+                <ReadoutLevel
+                  key={maSeriesId(w)}
+                  k={`MA${w}`}
+                  v={hoverPoint.ma?.[k]}
+                  unit={row.unit}
+                />
+              ) : null,
+            )}
             <ReadoutChange
               k={READOUT_LABEL.dailyChange}
               v={hoverPoint.d}
@@ -1090,12 +1125,42 @@ export function PreviewPane({
           {refs?.policy ? (
             <RefKey label="기준금리" opacity={0.9} color="var(--sr-ref-policy)" />
           ) : null}
-          {/* MA 는 색을 안 받으므로 `RefKey` 의 색 없는 갈래로 선다 — 견본이 곧
-              그려진 선이라는 그 부품의 규칙 그대로이고, 무게 사다리가 견본에도
-              그대로 실린다(같은 opacity). */}
-          {maWindows.map((w, k) => (
-            <RefKey key={maSeriesId(w)} label={`MA${w}`} opacity={MA_INK[k]?.opacity ?? 0.5} />
-          ))}
+          {/* MA 범례는 **누르는 것**이다 [OWNER 2026-08-26 — "당연히 껏다 켰다
+              가능하게"]. 차트 범례를 눌러 계열을 끄는 것은 어느 차트 제품에나
+              있는 관례라 새 어휘가 아니고, 무엇보다 «지금 그려진 것» 과 «끄는
+              손잡이» 가 한 자리에 있으면 둘이 갈릴 수가 없다.
+
+              CDS `Chip` — 이 리포가 이미 여덟 곳에서 쓰는 부품이다. `active` 가
+              켜진 상태를 대비로 말하고, 견본(색 막대)이 **실제로 그려진 색**을
+              그대로 든다. 끈 것은 견본이 흐려져 «있지만 지금은 안 그린다» 가
+              읽힌다. 색은 Setting 에서 바꾼다. */}
+          {maWindows.map((w, k) => {
+            const on = maPrefs.shown.includes(w);
+            return (
+              <Chip
+                key={maSeriesId(w)}
+                size="xs"
+                accessibilityLabel={`MA${w} ${on ? '끄기' : '켜기'}`}
+                /* 견본은 **그려진 선 그대로**다 — `RefKey` 가 기준선에 대해 지는
+                   그 규칙이고, 여기서는 `.sr-casedash`(시뮬 케이스 칩의 그 부품)
+                   가 같은 일을 한다. 끈 것은 흐려져 «있지만 지금은 안 그린다» 가
+                   읽힌다. */
+                start={
+                  <span
+                    className="sr-casedash"
+                    style={{
+                      background: maColorVar(maColorOf(maPrefs, w)),
+                      opacity: on ? (MA_INK[k]?.opacity ?? 0.6) : 0.3,
+                    }}
+                  />
+                }
+                invertColorScheme={on}
+                onClick={() => ma.toggle(w)}
+              >
+                {`MA${w}`}
+              </Chip>
+            );
+          })}
         </HStack>
       ) : null}
 

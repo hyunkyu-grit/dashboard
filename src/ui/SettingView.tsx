@@ -21,13 +21,26 @@
 import { useEffect, useState } from 'react';
 
 import { Button } from '@coinbase/cds-web/buttons';
+import { Chip } from '@coinbase/cds-web/chips';
+import { Select } from '@coinbase/cds-web/alpha/select';
 import { TextInput } from '@coinbase/cds-web/controls';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { SegmentedTabs } from '@coinbase/cds-web/tabs';
-import { TextBody, TextCaption, TextHeadline, TextLabel2, TextTitle3 } from '@coinbase/cds-web/typography';
+import { Text, TextBody, TextCaption, TextHeadline, TextLabel2, TextTitle3 } from '@coinbase/cds-web/typography';
 
 import { fetchFundingSettings, type FundingSettings } from '@/lib/api';
+import { DROPDOWN_STYLES } from '@/ui/window/popup';
 import { fmtLevel } from '@/lib/format';
+import {
+  MA_COLOR_LABEL,
+  MA_COLOR_TOKENS,
+  MA_COLOR_WARNING,
+  MA_DEFAULT,
+  maColorOf,
+  maColorVar,
+  useMaPrefs,
+  type MaColorToken,
+} from '@/state/ma';
 import {
   FUNDING_DEFAULT,
   SPREAD_MAX,
@@ -200,12 +213,131 @@ export function SettingView() {
         </VStack>
       </VStack>
 
+      <MaCard />
+
       <TextCaption as="p" color="fgMuted">
         조달비용은 <b>초기 투자금액</b>에 실경과일수 ÷ 365 로 붙어요. 이표를
         받아도 줄지 않아요 — 매수금액을 텀 레포로 통째로 조달한다고 봐요. 매도
         포지션에는 붙지 않아요: 공매도는 돈이 아니라 채권을 빌리는 것이고, 그
         비용은 이 화면이 아는 값이 아니에요.
       </TextCaption>
+    </VStack>
+  );
+}
+
+
+/**
+ * 이동평균 — 켤 창과 그 색 [OWNER, 2026-08-26 — "당연히 껏다 켰다 가능하게 …
+ * 색도 회색이 아니라 컬러토큰에서 가져와서 배정해주고 OR 내가 색상 지정할 수
+ * 있게 해주고 컬러토큰에서"]. 둘 다 했다: 기본 배정이 있고, 여기서 바꾼다.
+ *
+ * **창 목록은 서버 것이다**(`derive.MA_WINDOWS`). 이 화면은 그걸 다시 적지 않고
+ * `MA_DEFAULT.colors` 의 열쇠에서 읽는다 — 창을 두 곳에 적으면 갈린다.
+ *
+ * 색은 **CDS 시맨틱 토큰만** 고를 수 있다. hex 상자를 놓으면 다크에서 안 따라가고
+ * `guards/color-source.test.ts` 도 깨진다. 대신 이미 뜻을 가진 색과 겹치는
+ * 선택지는 **경고 문장을 달아** 알려 준다 — 막지는 않는다. 겹치는 색을 쓸지는
+ * 읽는 사람이 정할 일이다.
+ */
+/** 두 열의 폭. 머리와 줄이 같은 수를 읽어야 열이 선다 — 두 번 적으면 어긋난다. */
+const MA_W_COL = 104;
+const MA_COLOR_COL = 160;
+
+function MaCard() {
+  const [prefs, ma] = useMaPrefs();
+  const windows = Object.keys(MA_DEFAULT.colors)
+    .map(Number)
+    .sort((a, b) => a - b);
+  const isDefault =
+    prefs.shown.join() === MA_DEFAULT.shown.join() &&
+    windows.every((w) => maColorOf(prefs, w) === MA_DEFAULT.colors[w]);
+
+  return (
+    <VStack className="sr-card" gap={1.5} padding={3}>
+      <TextTitle3 as="h2">이동평균</TextTitle3>
+      <TextBody as="p" color="fgMuted">
+        종목 차트에 겹쳐 그리는 단순이동평균이에요. 창은 증권사 HTS 기본값과
+        같아요 — <b>5일=1주 · 10일=2주 · 20일=1개월 · 60일=1분기 · 120일=반기</b>.
+        차트 범례의 칩을 눌러도 켜고 꺼져요.
+      </TextBody>
+
+      {/* 같은 모양의 줄이 다섯이라 **머리를 한 번만** 적는다 — 줄마다 「색」을
+          붙이면 라벨이 다섯 번 반복되고, 그게 CLAUDE.md 「얼라인」 2 가 설정
+          패널에 대해 «고정폭 라벨 열» 을 말하는 이유다. 창 이름은 칩이 이미
+          지고 있으므로 첫 열의 라벨은 칩 자신이다. */}
+      <VStack gap={0.75}>
+        <HStack gap={2} alignItems="flex-end">
+          <Box width={MA_W_COL}>
+            <Text font="caption" as="span" color="fgMuted" noWrap>
+              창
+            </Text>
+          </Box>
+          <Box width={MA_COLOR_COL}>
+            <Text font="caption" as="span" color="fgMuted" noWrap>
+              색
+            </Text>
+          </Box>
+        </HStack>
+
+        {windows.map((w) => {
+          const on = prefs.shown.includes(w);
+          const color = maColorOf(prefs, w);
+          const warn = MA_COLOR_WARNING[color];
+          return (
+            <HStack key={w} gap={2} alignItems="center" flexWrap="wrap">
+              <Box width={MA_W_COL} flexShrink={0}>
+                <Chip
+                  size="xs"
+                  accessibilityLabel={`MA${w} ${on ? '끄기' : '켜기'}`}
+                  start={
+                    <span
+                      className="sr-casedash"
+                      style={{ background: maColorVar(color), opacity: on ? 1 : 0.3 }}
+                    />
+                  }
+                  invertColorScheme={on}
+                  onClick={() => ma.toggle(w)}
+                >
+                  {`MA${w}`}
+                </Chip>
+              </Box>
+              {/* 폭은 감싸는 `Box` 가 주고, 트리거를 그 끝까지 채우는 것은
+                  `DROPDOWN_STYLES` 다 — 안 주면 «지금 값» 만큼만 넓어져 이 열이
+                  줄마다 계단이 진다(CLAUDE.md 「얼라인」 7). */}
+              <Box width={MA_COLOR_COL} flexShrink={0}>
+                <Select
+                  font="legal"
+                  compact
+                  styles={DROPDOWN_STYLES}
+                  accessibilityLabel={`MA${w} 색`}
+                  value={color}
+                  onChange={(v) => ma.setColor(w, v as MaColorToken)}
+                  options={MA_COLOR_TOKENS.map((c) => ({
+                    value: c,
+                    label: MA_COLOR_LABEL[c],
+                  }))}
+                />
+              </Box>
+              {warn ? (
+                <Text font="caption" as="span" color="fgMuted">
+                  {warn}
+                </Text>
+              ) : null}
+            </HStack>
+          );
+        })}
+      </VStack>
+
+      <HStack>
+        <Button
+          variant="secondary"
+          size="s"
+          disabled={isDefault}
+          onClick={() => ma.reset()}
+        >
+          기본값으로
+        </Button>
+      </HStack>
     </VStack>
   );
 }

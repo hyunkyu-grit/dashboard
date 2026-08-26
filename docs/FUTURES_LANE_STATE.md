@@ -391,3 +391,45 @@ cds-code로"]. `ui-ux-pro-max` 는 출처 미기록(락파일·git 메타·sourc
 상승인지 MA5 인지 화면이 못 정한다. 한 색(`fgMuted`)의 사다리로 창이 길수록
 굵고 진하다(1/0.30 → 1.75/0.85, 가장 무거운 것도 종목 선 2px 보다 가볍다).
 스크러버는 MA 를 안 짚는다.
+
+### MA — 껏다 켰다 + 색은 컬러토큰에서 [OWNER 2026-08-26]
+
+오너: "당연히 껏다 켰다 가능하게 해주고, MA값도 넣어줘야지 … 색도 회색이 아니라
+컬러토큰에서 가져와서 배정해주고 OR 내가 색상 지정할 수 있게". **셋 다 했다.**
+
+취향은 `src/state/ma.ts` 한 곳이다 — `state/funding.ts` 와 같은 기계
+(`useSyncExternalStore` + localStorage + 모듈 리스너). **창 목록은 여기 없다**:
+서버(`derive.MA_WINDOWS`)가 유일한 목록이고 이 파일은 «보여줄까 · 무슨 색» 만
+기억한다.
+
+- **껏다 켰다** — 차트 범례의 칩이 곧 손잡이다(시뮬 케이스 칩 `CurvePreview.tsx`
+  의 판례 그대로: `Chip size="xs"` + `.sr-casedash` 견본 + `invertColorScheme`).
+  Setting 「이동평균」 카드에서도 같은 칩으로 켠다 — 같은 저장소라 갈리지 않는다.
+- **MA 값** — 리드아웃 카드에 **켠 창만** 줄로 선다. 값의 출처가 선의 출처와
+  같다(`hoverPoint.ma[k]`, `k` 는 서버 목록 첨자)라 카드와 선이 다른 수를 말할 수
+  없다. 스크러버는 여전히 MA 를 안 짚는다(구슬 다섯이 더 뜨면 안 된다).
+- **색** — CDS 시맨틱 토큰 여섯 중에서 고른다(`accentBold*`). hex 는 없다:
+  실측으로 토큰이 테마를 따라간다(accentBoldGray light `rgb(50,53,61)` → dark
+  `rgb(193,198,207)`, accentBoldGreen `rgb(9,133,81)` → `rgb(39,173,117)`).
+
+**색 충돌은 실측해서 갈랐다**(light):
+
+| CDS 토큰 | 이미 뜻을 가진 색 |
+|---|---|
+| accentBoldRed #CF202F | `--sr-up` #de2b39 (상승) |
+| accentBoldBlue #0052FF | `--sr-down` #2171eb (하락) |
+| accentBoldPurple #5A30AD | `--sr-ref-policy` #7c3aed (기준금리) |
+| accentBoldYellow #F7D21A | 흰 배경 대비 ~1.5:1 — WCAG 1.4.11(3:1) 미달 |
+| **accentBoldGreen · accentBoldGray** | **충돌 없음** |
+
+그래서 **기본 노출 둘(MA20·MA120)이 그 둘을 가져간다.** 나머지 넷도 고를 수
+있고, 고르면 Setting 이 «상승 방향색과 비슷해요» 같은 문장을 옆에 단다 —
+막지는 않는다. 겹치는 색을 쓸지는 읽는 사람이 정할 일이다.
+
+기본은 **20·120 둘만 켬**. 다섯을 다 켜면 금리 차트에 선이 일곱(종목·CD·기준금리·
+MA 다섯)이 된다. 20=1개월 · 120=반기가 이 데스크가 실제로 읽는 둘이다.
+
+라이브 SVG 실측(2026-08-26): MA20 `var(--color-accentBoldGreen)` w1.25 op.75 ·
+MA120 `var(--color-accentBoldGray)` w1.75 op.95 · 종목 `var(--sr-up)` w2 op1 —
+**끈 창은 path 자체가 없다.** 범례에서 MA60 을 켜니 파랑 path 가 생기고
+`localStorage['sr-ma']` 가 `shown:[20,60,120]` 으로 남았다.
