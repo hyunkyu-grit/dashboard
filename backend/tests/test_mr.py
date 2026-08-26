@@ -182,3 +182,31 @@ def test_series_points_dispatch():
     assert mr.series_points("FSW-3Y", fut_bundle=bundle)["unit"] == "bp"
     with pytest.raises(KeyError):
         mr.series_points("없는계열")
+
+
+def test_bss_has_no_short_side():
+    """BSS 는 국고 매수 쪽 한 방향뿐이다 [OWNER 2026-08-25 — "BSS에서 숏은
+    없는거야,, 현물대차매도는 안할거거든"].
+
+    부호의 뜻을 같이 못 박는다: 엔진의 `+1` 은 값(국고 − IRS)이 **오르면** 버는
+    쪽이고, 그건 국고를 빌려 파는 다리다. 그래서 허용되는 것은 `-1` 이고 그
+    이름에 「국고 매수」가 들어 있어야 한다 — 부호와 이름이 갈리면 화면이
+    반대 거래를 시킨다.
+    """
+    d = mr.dirs_for("bss")
+    assert d["allowed"] == [-1]
+    assert "국고 매수" in d["minus"]["legs"] and "IRS 페이" in d["minus"]["legs"]
+    assert "국고 매도" in d["plus"]["legs"]
+    assert d["why"]
+
+    # 선물은 대차가 필요 없다 — 양방향 그대로.
+    for kind in ("fut", "fsw"):
+        assert mr.dirs_for(kind)["allowed"] == [-1, 1]
+        assert mr.dirs_for(kind)["why"] is None
+
+
+def test_every_series_kind_has_a_direction_rule():
+    # 계열을 늘렸는데 방향 사전을 안 늘리면 그 행의 전략 창이 KeyError 로 죽는다.
+    for _, _, kind in mr.SERIES:
+        assert kind in mr.TRADABLE_DIRS and kind in mr.DIR_LEGS
+        assert mr.dirs_for(kind)["plus"]["short"] and mr.dirs_for(kind)["minus"]["short"]
