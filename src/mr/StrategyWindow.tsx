@@ -320,6 +320,12 @@ export function StrategyWindow({
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string>();
   const [idx, setIdx] = useState<{ chart: 'price' | 'z' | 'eq'; i: number } | null>(null);
+  /* 눌러서 편 거래 — 그 구간의 **일별 대사**를 연다 [OWNER 2026-08-27 — "개별
+     거래 눌러보면 대사도 가능하게 해주고,, 원래 우리가 그렇게 해왔듯이"].
+     백테스트 창의 「일별 대사」와 같은 문법이다: 하루씩 펴 놓고, 가로합이
+     그날 손익이 되고, 세로합이 거래 손익이 된다. 실행할 때마다 닫는다 —
+     다른 실행의 거래를 펴 놓고 있으면 그 표가 거짓이 된다. */
+  const [openTrade, setOpenTrade] = useState<string | null>(null);
 
   /* 종목이 바뀌면 지난 실행은 딴 종목의 숫자다 — 남겨 두지 않는다. */
   useEffect(() => {
@@ -328,6 +334,8 @@ export function StrategyWindow({
   }, [id]);
 
   const exec = useCallback(() => {
+    /* 다른 실행의 거래를 펴 놓고 있으면 그 대사가 거짓이 된다. */
+    setOpenTrade(null);
     setError(undefined);
     setRunning(true);
     fetchMrStrategy(id, knobs)
@@ -383,6 +391,14 @@ export function StrategyWindow({
     ? (run.dirs.allowed[0]! > 0 ? run.dirs.plus : run.dirs.minus)
     : null;
   const dirSub = only ? `${only.legs} 한 방향이에요` : undefined;
+
+  /* 펴 놓은 거래와 그 구간의 봉들 — 대사표의 재료. 키는 «진입-청산» 이라
+     실행이 바뀌면 자연히 안 맞고, 그때는 목록으로 돌아간다. */
+  const sel = run?.trades.find((t) => `${t.entryT}-${t.exitT}` === openTrade) ?? null;
+  const reconRows = useMemo(
+    () => (sel && run ? run.points.filter((p) => p.t >= sel.entryT && p.t <= sel.exitT) : []),
+    [sel, run],
+  );
   const dirStat = !run ? '—' : only ? only.legs : '양방향';
 
   /* 가격 주선 색 = 구간 순변화 방향(Main 미리보기의 규칙). */
@@ -741,9 +757,82 @@ export function StrategyWindow({
                 </Box>
               </Panel>
 
-              <Panel title="거래" sub={run.trades.length === 0 ? '이 창에 거래가 없어요' : dirSub}>
-                {/* 표는 Main/Backtest 방언 — CDS Table, 숫자는 label2 tabular
-                    우측, 손익만 방향색 글자 [OWNER 2026-08-25 «기준을 Backtest 에»]. */}
+              {/* 거래 하나의 **일별 대사** — 백테스트 창의 그 문법이다.
+                  가로합이 그날 손익이고 세로합이 거래 손익이다. 바닥 줄이 그
+                  항등을 그대로 적는다 — 대사표는 «맞다» 고 주장하는 것이 아니라
+                  **맞는지 보이는** 표다. */}
+              <Panel
+                title={sel ? '일별 대사' : '거래'}
+                sub={sel
+                  ? `${sel.entryT} → ${sel.exitT} · ${sel.bars}봉 · ${(sel.dir > 0 ? run.dirs.plus : run.dirs.minus).legs}`
+                  : run.trades.length === 0 ? '이 창에 거래가 없어요' : dirSub}
+                aside={sel ? (
+                  <button type="button" className="sr-pillbtn" onClick={() => setOpenTrade(null)}>
+                    거래 목록
+                  </button>
+                ) : undefined}
+              >
+                {sel ? (
+                  <Box style={{ position: 'relative', height: CHART_H, overflow: 'auto' }} width="100%">
+                    <Table bordered={false}>
+                      <TableHeader sticky>
+                        <TableRow>
+                          <TableCell as="th" scope="col">
+                            <Text font="caption" as="span" color="fgMuted">날짜</Text>
+                          </TableCell>
+                          {(['평가', '캐리', '비용', '그날'] as const).map((h) => (
+                            <TableCell key={h} as="th" scope="col" className="sr-num" justifyContent="flex-end">
+                              <Text font="caption" as="span" color="fgMuted">{h}</Text>
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {reconRows.map((p) => (
+                          <TableRow key={p.t}>
+                            <TableCell>
+                              <Text font="label2" as="span" tabularNumbers noWrap>{p.t}</Text>
+                            </TableCell>
+                            {([p.mtm, p.carry, p.cost, p.pnl] as const).map((v, k) => (
+                              <TableCell key={k} className="sr-num" justifyContent="flex-end">
+                                <Text
+                                  font="label2"
+                                  as="span"
+                                  tabularNumbers
+                                  noWrap
+                                  color={v === 0 ? 'fgMuted' : undefined}
+                                  className={k === 3 && v !== 0 ? (v > 0 ? 'sr-up' : 'sr-down') : undefined}
+                                >
+                                  {v === 0 ? '—' : fmtKrw(v)}
+                                </Text>
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                        <TableRow>
+                          <TableCell>
+                            <Text font="label1" as="span" noWrap>합계</Text>
+                          </TableCell>
+                          {([sel.mtm, sel.carry, sel.cost, sel.pnl] as const).map((v, k) => (
+                            <TableCell key={k} className="sr-num" justifyContent="flex-end">
+                              <Text
+                                font="label1"
+                                as="span"
+                                tabularNumbers
+                                noWrap
+                                className={k === 3 && v !== 0 ? (v > 0 ? 'sr-up' : 'sr-down') : undefined}
+                              >
+                                {fmtKrw(v)}
+                              </Text>
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </Box>
+                ) : (
+                /* 표는 Main/Backtest 방언 — CDS Table, 숫자는 label2 tabular
+                   우측, 손익만 방향색 글자 [OWNER 2026-08-25 «기준을 Backtest 에»]. */
                 <Box style={{ position: 'relative', height: CHART_H, overflow: 'auto' }} width="100%">
                   <Table bordered={false}>
                     {/* 거래가 수십 줄이라 머리가 따라와야 한다(Main 규칙). */}
@@ -774,7 +863,12 @@ export function StrategyWindow({
                     </TableHeader>
                     <TableBody>
                       {run.trades.map((t) => (
-                        <TableRow key={`${t.entryT}-${t.exitT}`}>
+                        /* 줄을 누르면 그 거래의 일별 대사가 열린다 — rv 랭킹 표의
+                           그 문법(«줄을 누르면 이력이 열려요»)이다. */
+                        <TableRow
+                          key={`${t.entryT}-${t.exitT}`}
+                          onClick={() => setOpenTrade(`${t.entryT}-${t.exitT}`)}
+                          style={{ cursor: 'pointer' }}>
                           <TableCell>
                             <Text font="label2" as="span" tabularNumbers noWrap>{t.entryT}</Text>
                           </TableCell>
@@ -817,6 +911,7 @@ export function StrategyWindow({
                     </TableBody>
                   </Table>
                 </Box>
+                )}
               </Panel>
             </HStack>
 
@@ -826,6 +921,12 @@ export function StrategyWindow({
               없어요(원본 규약).
               {run.dirs.why
                 ? ` ${run.dirs.why} 그래서 못 들어간 진입 신호가 ${run.dirs.blocked.spells}회(${run.dirs.blocked.days}일) 있어요.`
+                : ''}
+              {/* 캐리가 무엇인지 화면이 말한다 — 부호 기준이 한 방향이라 정의가
+                  없으면 읽는 사람이 자기 방향으로 읽는다. 원본 PMS 산술에는 이
+                  항이 없었다는 사실도 같이 적는다(재현 도구의 명구 의무). */}
+              {run.carry.on && run.carry.defn
+                ? ` 캐리는 ${run.carry.defn}이고 조달은 ${run.carry.funding} 이에요 — 원본 PMS 산술에는 없던 항이에요.`
                 : ''}
             </Text>
           </>

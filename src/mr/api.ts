@@ -131,6 +131,14 @@ export interface MrStrategyPoint {
   lo: number | null;
   /** 누적 손익(₩) — 표본 끝 미청산 MTM 포함. */
   cum: number;
+  /** 그날의 분해 — 셋의 합이 `pnl` 이다. 거래를 누르면 **일별 대사**가 이걸
+   *  편다(백테스트 창의 「일별 대사」와 같은 문법). */
+  mtm: number;
+  carry: number;
+  cost: number;
+  pnl: number;
+  /** 그날의 포지션(엔진 부호). 0 이면 무포지션이다. */
+  pos: number;
 }
 
 export interface MrStrategyTrade {
@@ -144,6 +152,12 @@ export interface MrStrategyTrade {
   exitV: number;
   pnl: number;
   why: 'exit' | 'stop';
+  /** 대사 삼분해 — `mtm + carry + cost = pnl`. 화면이 그 항등을 보여 준다. */
+  mtm: number;
+  carry: number;
+  cost: number;
+  /** 보유 봉 수. */
+  bars: number;
 }
 
 /** 방향 하나의 이름 — 표 칸은 `short`, 문장은 `legs`. 서버가 계열마다 짓는다
@@ -213,6 +227,9 @@ export interface MrStrategyRun {
   /** 미청산이 없으면 null. */
   open: MrStrategyOpen | null;
   neighbors: MrNeighborRow[];
+  /** 캐리 — 두 다리의 중간 현금흐름 [OWNER 2026-08-27]. 끄면 `{on:false}` 이고
+   *  그때의 수는 원본 PMS 산술 그대로다(`backend/app/mrcarry.py` 머리에 근거). */
+  carry: { on: boolean; defn?: string | null; funding?: string };
   summary: {
     totalPnl: number;
     maxDrawdown: number;

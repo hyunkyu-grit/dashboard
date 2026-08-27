@@ -70,6 +70,7 @@ from . import calendar_cache
 from . import df_cache
 from . import mr as mr_mod
 from . import mrbacktest as mrbt
+from . import mrcarry as mrc
 from . import payloads
 from . import rv as rv_mod
 from . import schedule_cache
@@ -85,11 +86,11 @@ from . import dev_marker
 from . import cashbond
 from . import creditmatrix
 from . import funding
-from .curves import build_basis_curves
+from .curves import TENOR_T, build_basis_curves
 from .dataset import load_dataset_merged
 from .derive import basis_dates, derived_ids, ohlc_buckets, series_history
 from .theta import theta_table
-from .dv01 import build_dv01_table
+from .dv01 import build_dv01_table, pv01
 from .events import detect_event_clusters
 from .forwards import forwards_payload
 from .issuance import IssuanceUnavailable, build as build_issuance, day_detail as issuance_day, months_from
@@ -963,7 +964,10 @@ def _mr_neighbors(dates: list[str], vals: list[float], base: dict,
 @router.get("/api/mr/strategy")
 def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
                 warnZ: float = 1.5, exitZ: float = 0.5, stopZ: float = 3.5,
-                costBp: float = 0.05, notional: float = 1_000_000.0) -> dict:
+                costBp: float = 0.05, notional: float = 1_000_000.0,
+                carry: bool = True,
+                fundingBasis: str = funding.DEFAULT_BASIS,
+                fundingSpreadBp: float = funding.DEFAULT_SPREAD_BP) -> dict:
     """전략 실험 창 — 첫 PMS entry-signals 의 z-스코어 백테스트 재현(§16).
 
     산술은 `mrbacktest.py`(PMS 원본 이식·적합성 벡터로 잠금), 기본값도 그쪽
@@ -999,10 +1003,24 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     # 현물대차매도는 안할거거든"]. 노브가 아니라 이 데스크의 사실이라 화면에
     # 스위치를 두지 않는다 — 백테스트의 현금채권이 매수만 받는 것과 같은 자리다.
     dirs = mr_mod.dirs_for(kinds[id])
+
+    # ── 캐리 [OWNER 2026-08-27 — "중간에 CF는 상쇄되는건가?"] ──────────────────
+    # 안 상쇄된다(`app/mrcarry.py` 머리에 다리별 산술). 원본 PMS 산술에는 이 항이
+    # 없으므로 **끌 수 있게** 둔다 — `carry=false` 면 예전 수 그대로다.
+    spec = _funding_spec(fundingBasis, fundingSpreadBp)
+    carry_krw: list[float] | None = None
+    carry_defn: str | None = None
+    if carry:
+        rates, carry_defn = mrc.carry_rates(id, kinds[id], dates, spec)
+        # 명목 노브가 ₩/bp(DV01)라 원금 환산이 필요하다 — 그 근거도 그 파일에.
+        pv = pv01(_curves["now"], TENOR_T[mrc._tenor_of(id)])
+        carry_krw = mrc.carry_krw(rates, dates, notional_per_bp=notional, pv01=pv)
+
     r = mrbt.simulate(dates, vals, lookback=lookback, entry_z=entryZ,
                       exit_z=exitZ, stop_z=stopZ, cost_bp=costBp,
                       notional=notional,
-                      allow_dirs=tuple(dirs["allowed"]))
+                      allow_dirs=tuple(dirs["allowed"]),
+                      carry=carry_krw)
     roll = r["roll"]
     points = [
         {
@@ -1015,6 +1033,13 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
             "lo": round(roll["mean"][i] - entryZ * roll["std"][i], 4)
                   if roll["mean"][i] is not None else None,
             "cum": round(r["points"][i]["cumulativePnl"], 2),
+            # 그날의 분해 — 거래를 누르면 화면이 이 셋으로 **일별 대사**를 편다.
+            # 셋의 합 = `pnl`(그날 손익)이고, 대사표가 그 항등을 잰다.
+            "mtm": round(r["points"][i]["mtm"], 2),
+            "carry": round(r["points"][i]["barCarry"], 2),
+            "cost": round(r["points"][i]["barCost"], 2),
+            "pnl": round(r["points"][i]["dailyPnl"], 2),
+            "pos": r["points"][i]["position"],
         }
         for i in range(len(vals))
     ]
@@ -1025,6 +1050,12 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
             "entryZ": round(t["entryZ"], 2), "exitZ": round(t["exitZ"], 2),
             "entryV": round(t["entryValue"], 4), "exitV": round(t["exitValue"], 4),
             "pnl": round(t["pnl"], 2), "why": t["exitReason"],
+            # 대사용 삼분해 — 셋의 합이 `pnl` 이다. 거래 한 줄을 눌렀을 때
+            # 화면이 그 항등을 그대로 보여 준다(이 앱의 3분해 문법).
+            "mtm": round(t["mtm"], 2),
+            "carry": round(t["carry"], 2),
+            "cost": round(t["cost"], 2),
+            "bars": t["bars"],
         }
         for t in r["trades"]
     ]
@@ -1035,6 +1066,9 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
         "params": {"lookback": lookback, "entryZ": entryZ, "warnZ": warnZ,
                    "exitZ": exitZ, "stopZ": stopZ, "costBp": costBp,
                    "notional": notional},
+        # 캐리가 무엇인지 화면이 읽을 문장 — 부호 기준이 −1 이라 정의가 없으면
+        # 읽는 사람이 자기 방향으로 읽는다(`mr.KIND_DEFN` 과 같은 규율).
+        "carry": {"on": carry, "defn": carry_defn, "funding": spec.label} if carry else {"on": False},
         "points": points,
         "trades": trades,
         # 방향의 이름과 «못 들어간 신호» — 조용히 빠진 진입은 «신호가 없었다»

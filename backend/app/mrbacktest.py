@@ -79,7 +79,8 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
              entry_z: float, exit_z: float, stop_z: float,
              cost_bp: float, notional: float,
              allow_dirs: tuple[int, ...] = (-1, 1),
-             gate: list[Any] | None = None) -> dict[str, Any]:
+             gate: list[Any] | None = None,
+             carry: list[float] | None = None) -> dict[str, Any]:
     """원본 simulateMeanReversion 의 바-루프 그대로. 반환 키도 그 어휘를 쓴다.
 
     `allow_dirs` 만 원본에 없던 자리다 — 실행할 수 있는 방향(+1 = 값이 오르면
@@ -108,6 +109,28 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
     warm-up 으로 아직 값이 없는 봉(`None`)은 거짓으로 친다 — 지표가 못 서는
     구간에 «조건이 맞았다» 고 할 수는 없다. 다만 그것도 `gated` 에 세므로
     창 앞머리에서 몇 건이 그렇게 빠졌는지가 숫자로 남는다.
+
+    ## `carry` — 두 다리의 중간 현금흐름 [OWNER 2026-08-27 — "중간에 CF는
+       상쇄되는건가?"]
+
+    **안 상쇄된다.** 국고 매수 + IRS 페이의 중간 현금흐름을 적으면
+
+        국고 매수 :  + 쿠폰 − 조달              ≈ +(국고금리 − 조달)
+        IRS 페이  :  − 고정  + CD 91일          ≈ +(CD − 스왑고정)
+        ────────────────────────────────────────────────────────
+        합계      ≈ (국고 − 스왑) + (CD − 조달) =  BSS + (CD − 조달)
+
+    스프레드 자체와 «CD·조달 베이시스» 가 남는다. 원본 PMS 의 산술에는 그 항이
+    없다 — 손익이 스프레드 변화뿐이다. 그래서 여기 **선택 인자**로 둔다:
+    `None` 이면 예전과 완전히 같은 수이고(적합성 벡터가 그것을 잰다), 주면
+    보유 중인 봉마다 더해진다.
+
+    단위는 **봉당 원(₩)**, 부호는 **`position = -1`(국고 매수 · IRS 페이) 기준**
+    이다. 엔진은 `-position` 을 곱하므로 반대 방향에서는 부호가 뒤집힌다 —
+    같은 베이시스를 반대로 무는 것이 맞다.
+
+    쌓이는 자리는 **MTM 과 같다**: 진입 봉에는 안 붙고(그 봉엔 아직 하루를 안
+    들고 있었다), 청산 봉에는 붙는다(전 봉 종가부터 그날 종가까지 들고 있었다).
     """
     n = len(values)
     roll = rolling_series(values, lookback)
@@ -120,6 +143,11 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
     entry_idx: int | None = None
     entry_z_val: float | None = None
     trade_pnl = 0.0
+    # 거래 하나의 삼분해 — 평가·캐리·비용. 셋의 합이 그 거래의 손익이고,
+    # 화면의 대사표가 그 항등을 잰다(이 앱의 3분해·4분해와 같은 문법).
+    trade_mtm = 0.0
+    trade_carry = 0.0
+    trade_cost = 0.0
     cumulative = 0.0
     # 비용을 문 횟수 — 진입 한 번·청산 한 번이 각각 편도 하나다. 손익분기
     # 비용을 닫힌형으로 풀려면 이 수가 필요하고, 표본 끝의 미청산 다리는
@@ -137,12 +165,24 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
 
     for i in range(n):
         daily_pnl = 0.0
+        bar_mtm = 0.0
+        bar_carry = 0.0
+        bar_cost = 0.0
         zi = z[i]
         blocked_now = False
         gated_now = False
 
         if position != 0:
-            daily_pnl += position * notional * (values[i] - values[i - 1])
+            mtm = position * notional * (values[i] - values[i - 1])
+            daily_pnl += mtm
+            trade_mtm += mtm
+            bar_mtm = mtm
+            if carry is not None:
+                # 부호 기준은 `position = -1`(국고 매수 · IRS 페이).
+                c = -position * carry[i]
+                daily_pnl += c
+                trade_carry += c
+                bar_carry = c
             trade_pnl += daily_pnl
 
             if zi is not None:
@@ -152,6 +192,8 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
                     exit_cost = notional * cost_bp
                     daily_pnl -= exit_cost
                     trade_pnl -= exit_cost
+                    trade_cost -= exit_cost
+                    bar_cost = -exit_cost
                     trades.append({
                         "entryDate": dates[entry_idx],
                         "exitDate": dates[i],
@@ -161,12 +203,18 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
                         "entryValue": values[entry_idx],
                         "exitValue": values[i],
                         "pnl": trade_pnl,
+                        # 대사용 삼분해 — 합이 `pnl` 과 같아야 한다.
+                        "mtm": trade_mtm,
+                        "carry": trade_carry,
+                        "cost": trade_cost,
+                        "bars": i - entry_idx,
                         "exitReason": "stop" if should_stop else "exit",
                     })
                     position = 0
                     entry_idx = None
                     entry_z_val = None
                     trade_pnl = 0.0
+                    trade_mtm = trade_carry = trade_cost = 0.0
         elif zi is not None and abs(zi) >= entry_z:
             # 평소 대비 너무 높으면 떨어진다에 건다(숏) — 너무 낮으면 롱.
             want = -1 if zi > 0 else 1
@@ -192,6 +240,10 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
                 entry_cost = notional * cost_bp
                 daily_pnl -= entry_cost
                 trade_pnl = daily_pnl
+                trade_mtm = 0.0
+                trade_carry = 0.0
+                trade_cost = -entry_cost
+                bar_cost = -entry_cost
 
         blocked_prev = blocked_now
         gated_prev = gated_now
@@ -199,6 +251,9 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
         points.append({
             "date": dates[i], "value": values[i], "z": zi,
             "position": position, "dailyPnl": daily_pnl,
+            # 그날의 분해 — 거래 한 줄을 눌렀을 때 **날짜별 대사**가 이걸 편다
+            # (백테스트 창의 「일별 대사」와 같은 문법). 셋의 합이 `dailyPnl` 이다.
+            "mtm": bar_mtm, "barCarry": bar_carry, "barCost": bar_cost,
             "cumulativePnl": cumulative,
         })
 
@@ -209,7 +264,8 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
     if position != 0 and entry_idx is not None:
         open_leg = {"entryDate": dates[entry_idx], "direction": position,
                     "entryZ": entry_z_val, "entryValue": values[entry_idx],
-                    "pnl": trade_pnl, "bars": n - 1 - entry_idx}
+                    "pnl": trade_pnl, "mtm": trade_mtm, "carry": trade_carry,
+                    "cost": trade_cost, "bars": n - 1 - entry_idx}
 
     summary = summarize(points, trades)
     summary["openPnl"] = open_leg["pnl"] if open_leg else None
