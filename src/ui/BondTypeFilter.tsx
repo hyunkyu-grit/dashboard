@@ -3,6 +3,8 @@
 import { Select } from '@coinbase/cds-web/alpha/select';
 import { Box } from '@coinbase/cds-web/layout';
 
+import { Field } from '@/ui/ControlCard';
+
 import { DROPDOWN_STYLES } from '@/ui/window/popup';
 
 /**
@@ -43,19 +45,20 @@ export function BondTypeFilter({
           접혔다(실측). 창 안의 Select 들은 전부 이걸 지고 있었고 제목 줄의
           `compact` 필터 둘만 안 지고 있었다 — `guards/dropdown-width.test.ts`
           가 이제 그 누락을 잰다. */}
-      <Select
-        label="종목군"
-        font="legal"
-        compact
-        styles={DROPDOWN_STYLES}
-        accessibilityLabel="종목군"
-        value={value ?? ALL_TYPES}
-        onChange={(v) => onChange(v === ALL_TYPES || v == null ? undefined : v)}
-        options={[
-          { value: ALL_TYPES, label: '전체' },
-          ...types.map((t) => ({ value: t.id, label: t.label })),
-        ]}
-      />
+      <Field label="종목군">
+        <Select
+          size="s"
+          font="legal"
+          styles={DROPDOWN_STYLES}
+          accessibilityLabel="종목군"
+          value={value ?? ALL_TYPES}
+          onChange={(v) => onChange(v === ALL_TYPES || v == null ? undefined : v)}
+          options={[
+            { value: ALL_TYPES, label: '전체' },
+            ...types.map((t) => ({ value: t.id, label: t.label })),
+          ]}
+        />
+      </Field>
     </Box>
   );
 }

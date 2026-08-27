@@ -501,9 +501,14 @@ const BANNER_H = 34;
         {/* 제목 줄이 포워드 탭에서만 컨트롤을 하나 더 진다. 표 위 별도의 필터
             줄을 만들지 않는 건 오너 지시(칩 줄 제거)의 연장이다 — 컨트롤 한
             개는 제목과 같은 줄에 산다. */}
-        <HStack alignItems="center" justifyContent="space-between" gap={2} width="100%">
+        {/* 제목 줄은 **바닥 정렬**이다 [2026-08-27]. 필터가 `Field` 문법으로
+            오면서 라벨이 컨트롤 **위**에 서고 블록이 50px 이 되는데, 가운데
+            정렬이면 그 블록이 제목과 알약을 위아래로 밀어 셋의 밑선이 갈린다.
+            바닥으로 맞추면 컨트롤·알약·제목이 **같은 밑선**에 서고 라벨만 그
+            위로 올라간다 — 「얼라인」 3 이 설정 줄에 대해 말하는 그것이다. */}
+        <HStack alignItems="flex-end" justifyContent="space-between" gap={2} width="100%">
           <TextTitle3 as="h1">{sectionTitle}</TextTitle3>
-          <HStack gap={1} alignItems="center">
+          <HStack gap={1} alignItems="flex-end">
             {group === 'forward' && isGroupTab ? (
               <>
                 <StartFilter starts={starts} value={start} onChange={setStartParam} />

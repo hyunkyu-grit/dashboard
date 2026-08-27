@@ -414,7 +414,7 @@ export function ResultsWindow({
           ) : null}
           {p ? <CondChip label="Total Return" value={fmtKrwFromMan(p.uPnl)} /> : null}
           <Box style={{ marginInlineStart: 'auto' }}>
-            <Button variant="secondary" size="s" onClick={onClose}>
+            <Button variant="secondary" size="xs" className="sr-ctlfont" onClick={onClose}>
               조건 수정
             </Button>
           </Box>

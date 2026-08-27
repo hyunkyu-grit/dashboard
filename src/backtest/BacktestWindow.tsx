@@ -35,7 +35,6 @@ import { Select } from '@coinbase/cds-web/alpha/select';
 import { Button } from '@coinbase/cds-web/buttons';
 import { TextInput } from '@coinbase/cds-web/controls';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
-import { SegmentedTabs } from '@coinbase/cds-web/tabs';
 import {
   Text,
   TextBody,
@@ -67,7 +66,7 @@ import { seriesUrl } from '@/lib/staticPaths';
 import { fmtKrw, fmtKrwFromMan, splitCashBondKrw, splitKrw } from '@/lib/krw';
 import { useFunding } from '@/state/funding';
 import type { Row } from '@/table/rows';
-import { Field } from '@/ui/ControlCard';
+import { Field, Segmented } from '@/ui/ControlCard';
 import { CONTROL_H } from '@/ui/controlHeight';
 import { IsoDateField } from '@/ui/IsoDateField';
 import { loadCd } from '@/ui/PreviewPane';
@@ -291,29 +290,8 @@ function Part({ label, u }: { label: string; u: number }) {
    (`ui/ControlCard`). 이 파일에도 같은 것이 있었고 라벨만 `TextCaption` 으로
    달라서, 시뮬·전략 창과 같은 칸이 조금씩 다르게 생겼다 [OWNER 2026-08-25]. */
 
-/** 배타 선택은 CDS `SegmentedTabs` 다 [OWNER 2026-08-13 §5.4] — 시뮬레이션의
- * 같은 래퍼와 같은 근거(그 파일의 주석: `SegmentedControl` 은 deprecated). */
-function Segmented<T extends string>({
-  value,
-  options,
-  onChange,
-  label,
-}: {
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (v: T) => void;
-  label: string;
-}) {
-  const tabs = options.map((o) => ({ id: o.value, label: o.label }));
-  return (
-    <SegmentedTabs
-      accessibilityLabel={label}
-      tabs={tabs}
-      activeTab={tabs.find((t) => t.id === value) ?? null}
-      onChange={(t) => t && onChange(t.id)}
-    />
-  );
-}
+/* `Segmented` 는 앱에 하나뿐이다 — `ui/ControlCard` 에서 온다(캐논 규칙 1).
+   2026-08-27 까지 여기와 시뮬에 같은 것이 두 벌 있었다. */
 
 export function BacktestWindow({
   rows,
@@ -629,7 +607,15 @@ export function BacktestWindow({
             const maxDate = bond ? cashbondAsOf : asOf;
             return (
               <VStack key={r.key} gap={0.5} width="100%">
-                <HStack gap={1.5} alignItems="flex-end" flexWrap="wrap">
+                {/* 묶음 안은 좁게, 묶음 사이는 넓게 [OWNER 2026-08-27 — "진입레벨과 진입일
+                    청산일 이런거도 너무 따닥따닥 붙어있어서 … 자연스러움을 추구할
+                    수는 없을까"]. 종전에는 칸 일곱이 **전부 12px 등간격**이라
+                    어디까지가 한 덩어리인지 화면이 말하지 않았다. 행의 기본 간격을
+                    묶음 **안**의 값(8)으로 내리고, 새 묶음이 시작되는 칸만
+                    `.sr-fgroup` 으로 한 칸 더 벌린다(합 24). 읽히는 묶음은 넷이다 —
+                    무엇을(종류·종목·만기) · 얼마나(규모) · 언제(진입일·청산일) ·
+                    그래서 얼마(진입 레벨). */}
+                <HStack gap={1} alignItems="flex-end" flexWrap="wrap">
                   {/* 종류 140 — 가장 긴 라벨 "현금채권" 이 13px legal 로 ~52px 이고
                       CDS 컨트롤의 크롬(좌우 패딩 + 셰브론)이 82px 을 먹는다(이 창의
                       다른 칸들과 같은 실측 산술). 132 이던 시절 그 합(134)이 상자보다
@@ -700,7 +686,7 @@ export function BacktestWindow({
                       </Field>
                     </Box>
                   ) : null}
-                  <Box width={88}>
+                  <Box width={88} className="sr-fgroup">
                     <Field label="규모 (억)">
                       {/* fontSize legal(13) — 컨트롤 값 13px 통일(popup.ts 의 근거).
                           height 32 — 이 행의 등고. 13px 패스가 `Select` 는
@@ -722,7 +708,7 @@ export function BacktestWindow({
                       종전 근거였던 «네이티브가 ISO 로 보인다» 는 **로케일
                       의존**이라 en-US 에서는 08/24/2026 이 된다. 라벨은
                       컨트롤이 지므로 `Field` 를 벗었다. */}
-                  <Box width={150}>
+                  <Box width={150} className="sr-fgroup">
                     <IsoDateField
                       label="진입일"
                       value={r.entry}
@@ -748,7 +734,7 @@ export function BacktestWindow({
                       꽂히는지**가 실행을 누르기 전에 읽혀야 한다. 그 날짜에 관측이
                       없으면(휴일·데이터 끝 이후) 서버가 스냅할 그 날의 값을 그대로
                       보여준다 — 규칙이 하나여야 두 개의 진입 레벨이 안 생긴다. */}
-                  <Box width={96}>
+                  <Box width={96} className="sr-fgroup">
                     <Field label="진입 레벨">
                       {/* 컨트롤이 아닌 값도 컨트롤과 같은 32px 상자에 담는다.
                           이 행은 `alignItems="flex-end"` 라 바닥이 정렬되는데, 그
@@ -831,7 +817,8 @@ export function BacktestWindow({
           <HStack gap={1} alignItems="center" flexWrap="wrap">
             <Button
               variant="secondary"
-              size="s"
+              size="xs"
+              className="sr-ctlfont"
               disabled={book.length >= MAX_POSITIONS}
               onClick={() => {
                 /* 새 줄은 **바로 위 줄을 닮는다** — 같은 상품을 다른 날짜로
@@ -848,7 +835,7 @@ export function BacktestWindow({
               줄 추가
             </Button>
             {/* 실행은 사람이 누른다 — 이 화면의 규칙 중 하나다. */}
-            <Button size="s" onClick={() => void run()} disabled={running || runnable(book).length === 0}>
+            <Button size="xs" className="sr-ctlfont" onClick={() => void run()} disabled={running || runnable(book).length === 0}>
               {running ? '계산 중…' : '실행'}
             </Button>
             {book.length >= MAX_POSITIONS ? (

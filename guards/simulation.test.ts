@@ -519,7 +519,12 @@ describe('컴포넌트는 CDS 것만 [OWNER 2026-08-13 §5.4]', () => {
     /* 직접 만들면 키보드 이동·활성 인디케이터·포커스 링을 전부 다시 만들게 되고,
      * CDS 는 그걸 이미 조율해 뒀다(§5.4 가 `PeriodSelector` 에서 얻은 이득). */
     const page = src('src/sim/SimulationPage.tsx');
-    expect(page).toMatch(/from '@coinbase\/cds-web\/tabs'/);
+    /* 배타 선택은 이제 **앱에 하나뿐인** `Segmented` 가 진다(`ui/ControlCard`)
+       — 2026-08-27 까지 이 파일과 백테스트에 같은 래퍼가 두 벌 있었고 둘 다
+       CDS 기본 치수(36/16)를 그대로 써서 같은 행의 알약(32/14)과 어긋났다.
+       재는 것은 **CDS 를 쓰는가** 이지 어느 파일이 임포트하는가가 아니다. */
+    expect(page).toMatch(/import \{[^}]*\bSegmented\b[^}]*\} from '@\/ui\/ControlCard'/);
+    expect(src('src/ui/ControlCard.tsx')).toMatch(/from '@coinbase\/cds-web\/tabs'/);
     expect(page).toMatch(/from '@coinbase\/cds-web\/collapsible'/);
     const results = src('src/sim/ResultsWindow.tsx');
     expect(results).toMatch(/from '@coinbase\/cds-web\/chips'/);

@@ -29,7 +29,6 @@ import { Collapsible as CdsCollapsible } from '@coinbase/cds-web/collapsible';
 import { TextInput } from '@coinbase/cds-web/controls';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Pressable } from '@coinbase/cds-web/system';
-import { SegmentedTabs } from '@coinbase/cds-web/tabs';
 /* 새 코드는 `Text font=…` 를 쓴다 — CLAUDE.md 5. 남은 shorthand 는 시각 무변이라
    존치 중이고, 여기서 하나(`TextLabel2`)는 이번 얼라인 수리로 자리를 잃었다. */
 import { Text, TextBody, TextLabel1, TextLegal } from '@coinbase/cds-web/typography';
@@ -38,7 +37,7 @@ import { directionLabel } from '@/backtest/book';
 import { runErrorMessage, type WallSummary } from '@/lib/api';
 import { fmtLevel } from '@/lib/format';
 import { fmtKrw } from '@/lib/krw';
-import { Field } from '@/ui/ControlCard';
+import { Field, Segmented } from '@/ui/ControlCard';
 import { CONTROL_H } from '@/ui/controlHeight';
 import { useFillHeight } from '@/ui/useFillHeight';
 import { IsoDateField } from '@/ui/IsoDateField';
@@ -293,27 +292,7 @@ function NumField({
  *
  * 이 래퍼는 두 가지만 한다: 제네릭을 좁히고(케이스 id 같은 유니온), CDS 의
  * `activeTab` 객체 API 를 이 화면이 쓰는 값 API 로 바꾼다. */
-function Segmented<T extends string>({
-  value,
-  options,
-  onChange,
-  label,
-}: {
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (v: T) => void;
-  label: string;
-}) {
-  const tabs = options.map((o) => ({ id: o.value, label: o.label }));
-  return (
-    <SegmentedTabs
-      accessibilityLabel={label}
-      tabs={tabs}
-      activeTab={tabs.find((t) => t.id === value) ?? null}
-      onChange={(t) => t && onChange(t.id)}
-    />
-  );
-}
+/* `Segmented` 는 앱에 하나뿐이다 — `ui/ControlCard` 에서 온다(캐논 규칙 1). */
 
 export type CaseRuns = Partial<Record<CaseId, SimResponse>>;
 
@@ -778,7 +757,8 @@ export function SimulationPage({
                             // 옮겼나" 를 물으려고 다시 계산하게 두지 않는다.
                             <Button
                               variant="tertiary"
-                              size="s"
+                              size="xs"
+                              className="sr-ctlfont"
                               onClick={() => patchRow(r.key, setLegRate(r, l.id, null))}
                             >
                               par {l.couponRate.toFixed(4)}%로
@@ -806,7 +786,8 @@ export function SimulationPage({
                   <Box>
                     <Button
                       variant="tertiary"
-                      size="s"
+                      size="xs"
+                      className="sr-ctlfont"
                       onClick={() => setRows(rows.filter((x) => x.key !== r.key))}
                     >
                       삭제
@@ -819,7 +800,8 @@ export function SimulationPage({
           <Box>
             <Button
               variant="secondary"
-              size="s"
+              size="xs"
+              className="sr-ctlfont"
               disabled={rows.length >= MAX_ROWS}
               onClick={() => setRows([...rows, newRow(rows.at(-1)?.seriesId)])}
             >
@@ -925,7 +907,8 @@ export function SimulationPage({
                         한 번 누를 때마다 어긋난다. */}
                     <Button
                       variant="secondary"
-                      size="s"
+                      size="xs"
+                      className="sr-ctlfont"
                       accessibilityLabel={`D+${day} ${WAYPOINT_STEP_BP}bp 내리기`}
                       onClick={() => set(bp - WAYPOINT_STEP_BP)}
                     >
@@ -933,7 +916,8 @@ export function SimulationPage({
                     </Button>
                     <Button
                       variant="secondary"
-                      size="s"
+                      size="xs"
+                      className="sr-ctlfont"
                       accessibilityLabel={`D+${day} ${WAYPOINT_STEP_BP}bp 올리기`}
                       onClick={() => set(bp + WAYPOINT_STEP_BP)}
                     >
@@ -949,7 +933,8 @@ export function SimulationPage({
                 <Box>
                   <Button
                     variant="tertiary"
-                    size="s"
+                    size="xs"
+                    className="sr-ctlfont"
                     onClick={() => patchCase({ waypoints: {} })}
                   >
                     직선으로 되돌리기
@@ -1035,7 +1020,8 @@ export function SimulationPage({
               </Field>
               <Button
                 variant="tertiary"
-                size="s"
+                size="xs"
+                className="sr-ctlfont"
                 onClick={() => patchCase({ events: cur.events.filter((x) => x.key !== ev.key) })}
               >
                 삭제
@@ -1045,7 +1031,8 @@ export function SimulationPage({
           <Box>
             <Button
               variant="secondary"
-              size="s"
+              size="xs"
+              className="sr-ctlfont"
               disabled={cur.events.length >= MAX_EVENTS}
               onClick={() =>
                 patchCase({
@@ -1063,6 +1050,8 @@ export function SimulationPage({
 
         <Button
           block
+          size="xs"
+          className="sr-ctlfont"
           onClick={() => void run()}
           disabled={running || legs.length === 0}
         >
@@ -1082,7 +1071,7 @@ export function SimulationPage({
         ) : null}
         {runs && !open ? (
           <Box>
-            <Button variant="tertiary" size="s" onClick={onOpen}>
+            <Button variant="tertiary" size="xs" className="sr-ctlfont" onClick={onOpen}>
               지난 결과 다시 보기
             </Button>
           </Box>

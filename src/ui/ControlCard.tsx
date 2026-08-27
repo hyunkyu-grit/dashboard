@@ -24,7 +24,10 @@ import { useState } from 'react';
 import { Collapsible as CdsCollapsible } from '@coinbase/cds-web/collapsible';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Pressable } from '@coinbase/cds-web/system';
+import { SegmentedTabs } from '@coinbase/cds-web/tabs';
 import { Text } from '@coinbase/cds-web/typography';
+
+import { CONTROL_H } from './controlHeight';
 
 /** 설정 카드 한 장. v1 의 카드 열과 같은 문법이다. */
 export function ControlCard({
@@ -142,5 +145,45 @@ export function Field({
       </Text>
       {children}
     </VStack>
+  );
+}
+
+/**
+ * 배타 선택 한 줄 — **앱에 하나뿐인 그것** [OWNER 2026-08-27].
+ *
+ * `Field` 와 같은 내력이다. 2026-08-27 까지 이 컴포넌트는 **두 번** 따로
+ * 정의돼 있었고(`backtest/BacktestWindow` · `sim/SimulationPage`) 둘 다 CDS
+ * 기본값을 그대로 썼다 — 그래서 페이·리시브가 **36px · 16px** 로 서서, 같은
+ * 행의 알약(32 · 14)과 어긋났다 [OWNER — "컴포넌트의 사이즈와 그 안에 들어가는
+ * 폰트 사이즈가 너무 커서 얼라인이 안 맞는"].
+ *
+ * 부품은 CDS `SegmentedTabs` 다 [OWNER 2026-08-13 §5.4] — `SegmentedControl` 은
+ * deprecated 이고 그 파일 주석이 "Please use Tabs or SegmentedTabs instead"
+ * 라고 적고 있다. 여기서 더하는 것은 **이 앱의 치수** 둘뿐이다:
+ *
+ *   상자  `CONTROL_H`  — 한 행에 서는 것들의 등고(「얼라인」 1)
+ *   글자  `.sr-ctlfont` — 캐논 알약과 같은 14/600(그 클래스 주석에 근거)
+ */
+export function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+  label: string;
+}) {
+  const tabs = options.map((o) => ({ id: o.value, label: o.label }));
+  return (
+    <SegmentedTabs
+      accessibilityLabel={label}
+      className="sr-ctlfont"
+      styles={{ tab: { height: CONTROL_H }, tabContainer: { height: CONTROL_H } }}
+      tabs={tabs}
+      activeTab={tabs.find((t) => t.id === value) ?? null}
+      onChange={(t) => t && onChange(t.id)}
+    />
   );
 }
