@@ -27,8 +27,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { TextCaption, TextLabel2 } from '@coinbase/cds-web/typography';
 
-import { TimeChart, type TimeLine } from '@/chart/TimeChart';
+import { TimeChart, useStackedScales, type TimeLine } from '@/chart/TimeChart';
 import type { ScalePriceLine } from '@/chart/ScaleChart';
+import type { LwPalette } from '@/chart/palette';
 import { alignByDate, policyByDate, referenceMode } from '@/chart/references';
 import type { PolicyStep, Unit } from '@/lib/api';
 import { fmtLevel, unitSuffix } from '@/lib/format';
@@ -153,6 +154,11 @@ export function LinkedCharts({
     [],
   );
 
+  /* 두 차트가 **같은 값-축 폭**을 쓴다 — 이 파일의 계약이 «픽셀까지 같다» 인데
+     레벨 라벨(`3.245`)과 금액 라벨(`+20원`)의 폭이 달라 플롯이 914 대 920 으로
+     어긋나 있었다(실측 2026-08-27). */
+  const stack = useStackedScales();
+
   /* CD 91일 — `PreviewPane.loadCd` 의 모듈 캐시를 그대로 쓴다(한 페이지에서 두
    * 번 받지 않는다). 실패는 null: 기준선이 없다고 백테스트가 안 보일 이유는
    * 없고, 범례가 없는 것으로 그 사실을 말한다. */
@@ -211,11 +217,13 @@ export function LinkedCharts({
       color: (pal) => (seriesColor ? pal.resolve(seriesColor) : pal.fg),
       format: (v) => fmtLevel(v, unit),
     },
+    /* 잉크는 종목 선보다 한 칸 뒤로 — 아래 범례가 쓰는 `opacity={0.9}` 와 같은
+       칸이다. 캔버스에는 불투명도 손잡이가 없어 색 자체를 흐리게 만든다. */
     ...(refs?.cd
       ? [{
           id: CD_LINE,
           values: refs.cd,
-          color: (pal: { refCd: string }) => pal.refCd,
+          color: (pal: LwPalette) => pal.dim(pal.refCd, 90),
           width: 1 as const,
           axis: (pctAxis ? 'aux' : 'main') as 'aux' | 'main',
           format: (v: number) => fmtLevel(v, pctAxis ? '%' : unit),
@@ -225,8 +233,10 @@ export function LinkedCharts({
       ? [{
           id: BASE_LINE,
           values: refs.policy,
-          color: (pal: { refPolicy: string }) => pal.refPolicy,
+          color: (pal: LwPalette) => pal.dim(pal.refPolicy, 90),
           width: 1 as const,
+          /* 기준금리는 계단 — 정책금리는 평평하다가 뛴다. */
+          step: true,
           axis: (pctAxis ? 'aux' : 'main') as 'aux' | 'main',
           format: (v: number) => fmtLevel(v, pctAxis ? '%' : unit),
         }]
@@ -264,6 +274,7 @@ export function LinkedCharts({
           markLines={markIdx}
           onHoverIndex={onTop}
           syncIndex={hover?.src === 'bottom' ? hover.i : null}
+          {...stack}
         />
       </Box>
 
@@ -278,8 +289,11 @@ export function LinkedCharts({
         </HStack>
       ) : null}
 
-      {/* ── 누적 손익 — 같은 날짜 배열, 같은 inset = 픽셀 정렬 ─────────────── */}
+      {/* ── 누적 손익 — 같은 날짜 배열, 같은 축 폭 = 픽셀 정렬 ─────────────── */}
       <Box className="sr-plot" width="100%">
+        {/* x 라벨은 **위 차트가 진다** — 두 벌이면 같은 날짜가 두 줄로 선다.
+            CDS 판은 이 차트에 `<XAxis>` 를 아예 안 뒀고, 이관 때 그 손잡이가
+            없어서 날짜가 두 줄이 됐다 [2026-08-27 수리]. */}
         <TimeChart
           height={140}
           accessibilityLabel="누적 손익 (위 차트와 같은 구간)"
@@ -288,6 +302,8 @@ export function LinkedCharts({
           priceLines={zeroLine}
           onHoverIndex={onBot}
           syncIndex={hover?.src === 'top' ? hover.i : null}
+          hideTimeAxis
+          {...stack}
         />
         {/* 돈 카드 — 날짜 · 레벨 · 누적 · 당일. `당일` 은 늘 1영업일이다(서버가
             발행점마다 전영업일을 따로 평가한다) — 점이 며칠씩 떨어져 그려져도. */}

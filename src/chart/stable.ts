@@ -87,6 +87,7 @@ type LineShape = {
   values: readonly (number | null)[];
   width?: number;
   dash?: boolean;
+  step?: boolean;
   area?: string;
   axis?: string;
 };
@@ -102,6 +103,7 @@ export function sameLines(
       x.id === y.id &&
       x.width === y.width &&
       x.dash === y.dash &&
+      x.step === y.step &&
       x.area === y.area &&
       x.axis === y.axis &&
       sameValues(x.values, y.values),

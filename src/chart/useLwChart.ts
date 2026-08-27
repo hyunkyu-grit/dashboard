@@ -53,6 +53,18 @@ export type ChartKind = 'time' | 'curve' | 'numeric';
 export type CurveSetup = {
   /** 이 커브의 가로축. **참조가 안정해야 한다** — 바뀌면 차트가 새로 만들어진다. */
   scale: LabelledHorzScale;
+  /**
+   * 같은 무게의 눈금은 전부 그리거나 아예 안 그린다 — 숫자축이 켠다
+   * (`ScaleChart.uniformTicks`).
+   *
+   * **생성자 전용이다** [실측 2026-08-27]. `applyOptions` 로 넘기면 조용히
+   * 아무 일도 안 난다 — 라이브러리가 `TickMarks.setUniformDistribution` 을
+   * `TimeScale` **생성자에서 한 번만** 부르기 때문이다. 처음에 `applyOptions`
+   * 로 넣었다가 축이 그대로인 것을 보고서야 찾았다. `colorParsers`·
+   * `attributionLogo`·`autoSize` 와 같은 족속이고, 그래서 여기 CurveSetup 에
+   * 산다 — 이 객체가 «만들 때 정해지는 것들» 의 자리다.
+   */
+  uniform?: boolean;
 };
 
 export type LwHandle<H> = {
@@ -227,11 +239,16 @@ export function useLwChart<H>(
   /* 축은 **만들 때 한 번** 들어간다. 호출부가 `useRef` 로 붙잡아 두므로
      참조가 안 바뀌고, 그래서 차트도 안 다시 만들어진다. */
   const scale = curve?.scale;
+  const uniform = !!curve?.uniform;
 
   useEffect(() => {
     const p = paletteRef.current;
     if (!el || !p) return;
-    const canon = creationOptions(p);
+    const base = creationOptions(p);
+    const canon: DeepPartial<ChartOptions> = {
+      ...base,
+      timeScale: { ...base.timeScale, uniformDistribution: uniform },
+    };
     const made =
       kind === 'curve'
         ? scale
@@ -249,12 +266,34 @@ export function useLwChart<H>(
       setChart(null);
       made.remove();
     };
-  }, [el, kind, scale, ready]);
+  }, [el, kind, scale, uniform, ready]);
 
   useEffect(() => {
     if (!chart || !palette) return;
     chart.applyOptions(canonOptions(palette));
   }, [chart, palette]);
+
+  /* ── 가로축의 «글자» 는 축마다 다르다 [2026-08-27] ──────────────────────────
+     캐논은 세 축이 함께 쓰는 한 벌이라 여기까지는 못 정한다. 두 축이 각자
+     다른 이유로 어긋나 있었고 둘 다 실측으로 잡았다. `applyOptions` 는 깊은
+     병합이라 위의 캐논 재적용이 이 값을 지우지 않는다. */
+  useEffect(() => {
+    if (!chart) return;
+    chart.applyOptions({
+      timeScale: {
+        /* 날짜 라벨은 **10자**(`2026-08-20`)인데 라이브러리의 자리 계산은
+           **8자**를 가정한다(`defaultTickMarkMaxCharacterLength = 8`). 그래서
+           눈금 사이를 실제 글자보다 좁게 잡았고, 고정된 오른쪽 끝에서 마지막
+           라벨이 앞 라벨 위로 포개졌다 — 실측 2026-08-27 Main: `2026-05-01`
+           위에 `2026-08-20`. CLAUDE.md 「말줄임 절대 금지」 §3 이 글자 겹침을
+           같은 등급의 결함으로 못 박고 있다. */
+        ...(kind === 'time' ? { tickMarkMaxCharacterLength: 10 } : {}),
+      },
+    });
+  }, [chart, kind]);
+  /* 만기축·숫자축은 **둘 다 `kind === 'curve'`** 로 만들어진다(`ScaleChart` 가
+     우리 축을 태우는 자리). 그래서 그 둘을 가르는 규칙은 여기서 못 정하고
+     `ScaleChart` 의 `uniformTicks` 가 진다 — 축의 성격을 아는 쪽이 거기다. */
 
 
   /* **참조가 매 렌더 바뀌면 안 된다** — 이 값은 호출부 효과의 의존성으로

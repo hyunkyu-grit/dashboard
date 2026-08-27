@@ -48,6 +48,8 @@ export type TimeLine = {
   color: (p: LwPalette) => string;
   width?: 1 | 2;
   dash?: boolean;
+  /** 각진 계단 — 기준금리가 쓴다(`series.ts::ChartLine.step`). */
+  step?: boolean;
   /** 선 아래 면 — 캐논은 점무늬. 주선에만. */
   area?: AreaFill;
   areaColor?: (p: LwPalette) => string;
@@ -71,6 +73,9 @@ export function TimeChart({
   priceLines,
   markLines,
   syncIndex,
+  hideTimeAxis,
+  scaleWidth,
+  onScaleWidth,
   height,
   onHoverIndex,
   precision = 2,
@@ -95,6 +100,20 @@ export function TimeChart({
    * 때와 **같은 그림**이라 두 차트가 한 커서를 공유하는 것으로 읽힌다.
    */
   syncIndex?: number | null;
+  /**
+   * 가로축(날짜 줄)을 감춘다 — **위아래로 쌓인 차트의 위쪽**이 쓴다.
+   *
+   * CDS 판의 백테스트는 아래 손익 차트에 `<XAxis>` 를 아예 안 뒀고 그 자리에
+   * «x 라벨은 위 차트가 진다 — 두 벌이면 같은 날짜가 두 줄로 선다» 라고 적어
+   * 두었다. 이관하면서 그 손잡이가 없어져 날짜가 두 줄이 됐다(실측
+   * 2026-08-27 백테스트: 같은 세 날짜가 y≈396 과 y≈523 에 두 번).
+   */
+  hideTimeAxis?: boolean;
+  /** 값 축이 **최소한** 차지할 폭. 쌓인 차트들을 같은 폭으로 맞춘다
+   *  (`useStackedScales`). */
+  scaleWidth?: number;
+  /** 이 차트의 값 축이 실제로 먹은 폭 — 쌓인 형제끼리 최대값을 나눈다. */
+  onScaleWidth?: (w: number) => void;
   height?: number;
   onHoverIndex?: (i: number | null) => void;
   precision?: number;
@@ -117,8 +136,8 @@ export function TimeChart({
 
   /* 색·서식은 «모양» 이 아니라 안정화 대상이 아니다. 계열을 다시 세우는
      순간에는 **그때의 최신 것**이 쓰여야 하므로 ref 로 읽는다. */
-  const latest = useRef({ lines, markers, priceLines, onHoverIndex });
-  latest.current = { lines, markers, priceLines, onHoverIndex };
+  const latest = useRef({ lines, markers, priceLines, onHoverIndex, onScaleWidth });
+  latest.current = { lines, markers, priceLines, onHoverIndex, onScaleWidth };
 
   /** 날짜 -> 순번. 크로스헤어가 주는 것은 날짜뿐이다. */
   const indexOf = useMemo(() => new Map(sDates.map((d, i) => [d, i])), [sDates]);
@@ -135,9 +154,42 @@ export function TimeChart({
   useEffect(() => {
     if (!handle) return;
     handle.chart.applyOptions({
-      leftPriceScale: { visible: hasAux, borderVisible: false, scaleMargins: { top: 0.08, bottom: 0.04 } },
+      leftPriceScale: {
+        visible: hasAux,
+        borderVisible: false,
+        scaleMargins: { top: 0.08, bottom: 0.04 },
+        /* 눈금 글자만 한 칸 더 흐리게 — CDS 판의
+           `styles={{ tickLabel: { opacity: 0.65 } }}` 자리다. 이 축은 종목의
+           축이 아니라 **배경의 축**이고(기준선 둘이 쓴다), 읽는 사람이 어느
+           숫자가 어느 선의 것인지 헷갈리면 안 된다. 이관 때 빠져서 두 축의
+           잉크가 같았다 [2026-08-27 수리]. */
+        textColor: handle.palette.dim(handle.palette.fgMuted, 65),
+      },
     });
   }, [handle, hasAux]);
+
+  /* ── 쌓인 차트의 «픽셀 정렬» [2026-08-27] ───────────────────────────────────
+     값 축의 폭은 **그 축 라벨의 폭**으로 정해진다. 백테스트의 두 차트는
+     `3.245`(56px)와 `+20원`(50px)이라 플롯이 914 대 920 으로 어긋났다 — 그
+     파일의 계약이 «픽셀까지 같다» 인데도. `minimumWidth` 는 라이브러리가 바로
+     이 용도로 둔 옵션이다("multiple charts positioned in a vertical stack each
+     have an identical price scale width"). 형제 중 가장 넓은 폭을 다 같이 쓴다.
+
+     폭을 재는 것은 `applyOptions` **뒤**여야 하고, 그리기 한 프레임 뒤에야
+     확정되므로 rAF 로 한 번 더 잰다. 값이 커지기만 하므로(형제의 최대) 되먹임
+     없이 한두 프레임에 수렴한다. */
+  useEffect(() => {
+    if (!handle) return;
+    const { chart } = handle;
+    chart.applyOptions({
+      rightPriceScale: { minimumWidth: scaleWidth ?? 0 },
+      timeScale: { visible: !hideTimeAxis },
+    });
+    const report = () => latest.current.onScaleWidth?.(chart.priceScale('right').width());
+    report();
+    const id = requestAnimationFrame(report);
+    return () => cancelAnimationFrame(id);
+  }, [handle, scaleWidth, hideTimeAxis, sDates, sLines]);
 
   const markerApi = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   /** 크로스헤어를 세울 계열 — 첫 줄(주선)이다. */
@@ -169,6 +221,7 @@ export function TimeChart({
           color: src.lines[i]?.color ?? ln.color,
           width: ln.width,
           dash: ln.dash,
+          step: ln.step,
           area: ln.area,
           areaColor: src.lines[i]?.areaColor ?? ln.areaColor,
           axis: ln.axis,
@@ -331,4 +384,29 @@ export function TimeChart({
       </span>
     </>
   );
+}
+
+/**
+ * 위아래로 쌓인 차트들이 **같은 값-축 폭**을 쓰게 한다.
+ *
+ * 돌려주는 둘을 형제 차트마다 그대로 펼쳐 준다:
+ *
+ *     const stack = useStackedScales();
+ *     <TimeChart … {...stack} />
+ *     <TimeChart … {...stack} hideTimeAxis={false} />
+ *
+ * 폭은 형제 중 **가장 넓은 것**으로 수렴한다. 줄어들지 않는 이유는 좁아지는
+ * 쪽으로 따라가면 둘이 서로를 밀며 진동하기 때문이다 — 창은 새 실행마다 다시
+ * 서므로 한 화면 안에서 단조인 것으로 충분하다.
+ */
+export function useStackedScales(): {
+  scaleWidth: number | undefined;
+  onScaleWidth: (w: number) => void;
+} {
+  const [scaleWidth, setScaleWidth] = useState<number>();
+  const onScaleWidth = useCallback(
+    (w: number) => setScaleWidth((prev) => (prev == null || w > prev ? w : prev)),
+    [],
+  );
+  return { scaleWidth, onScaleWidth };
 }

@@ -177,7 +177,10 @@ describe('④-2 라이브러리가 못 읽는 색은 파서가 받는다', () =>
   });
 
   it('만들 때는 `creationOptions`, 다시 입힐 때는 `canonOptions` 다', () => {
-    expect(hook).toMatch(/const canon = creationOptions\(p\)/);
+    /* 생성 옵션에 «만들 때만 읽히는 것» 이 하나 더 얹혀서(`uniformDistribution`
+       — 그것도 생성자 전용이다) 받는 이름이 `base` 로 바뀌었다 [2026-08-27].
+       재는 것은 **어느 함수를 부르는가** 이지 지역 변수의 이름이 아니다. */
+    expect(hook).toMatch(/creationOptions\(p\)/);
     expect(hook).toMatch(/chart\.applyOptions\(canonOptions\(palette\)\)/);
   });
 });
@@ -194,7 +197,10 @@ describe('⑤ 스킴이 바뀌어도 차트를 다시 만들지 않는다', () =
     const create = /createChartEx[\s\S]*?\}, \[([^\]]*)\]\)/.exec(code);
     expect(create).not.toBeNull();
     expect(create![1]).not.toMatch(/palette/);
-    expect(create![1]).toMatch(/el, kind, scale, ready/);
+    /* `uniform` 이 2026-08-27 에 들어왔다 — 생성자 전용 옵션이라 값이 바뀌면
+       차트를 정말 다시 만들어야 한다(만기축 대 숫자축). 그래서 이 목록에 있는
+       것이 맞다. 재는 것은 **팔레트가 없다**는 것 하나다. */
+    expect(create![1]).toMatch(/el, kind, scale, uniform, ready/);
   });
 
   it('팔레트가 바뀌면 **옵션만** 덧입힌다', () => {

@@ -22,6 +22,7 @@ import { PeriodSelector } from '@coinbase/cds-web/visualizations/chart';
 import { CurveChart, type CurveLine } from '@/chart/CurveChart';
 import { TimeChart, type TimeLine, type TimeMarker } from '@/chart/TimeChart';
 import { type IdleCurve } from '@/chart/curve';
+import type { LwPalette } from '@/chart/palette';
 import { alignByDate, policyByDate, referenceMode } from '@/chart/references';
 import { panRange, sliceRange, zoomRange, type ViewRange } from '@/chart/zoom';
 import { windowExtremes } from '@/chart/extremes';
@@ -650,12 +651,15 @@ export function PreviewPane({
       },
       /* 두 기준선은 **같은 위계의 두 색**이다 [OWNER 2026-08-18, 3차 확정 —
          네이버 MA 방식]. 색·판정 이력은 `theme/direction.css` 의 토큰 주석에
-         있다. */
+         있다. 잉크는 종목 선보다 한 칸 뒤로 물러난다 — CDS 판의
+         `strokeOpacity={0.9}` 자리이고, 캔버스에는 불투명도 손잡이가 없어
+         **색 자체를 흐리게** 만든다(`palette.dim`). 이관 때 이 한 칸이 빠져
+         기준선이 주선보다 진했다 [2026-08-27 수리]. */
       ...(drawn?.cd
         ? [{
             id: CD_LINE,
             values: drawn.cd,
-            color: (pal: { refCd: string }) => pal.refCd,
+            color: (pal: LwPalette) => pal.dim(pal.refCd, 90),
             width: 1 as const,
             axis: refAxis,
             format: pctAxis ? fmtPct : fmtY,
@@ -665,8 +669,11 @@ export function PreviewPane({
         ? [{
             id: BASE_LINE,
             values: drawn.policy,
-            color: (pal: { refPolicy: string }) => pal.refPolicy,
+            color: (pal: LwPalette) => pal.dim(pal.refPolicy, 90),
             width: 1 as const,
+            /* 각진 모서리 — 정책금리는 평평하다가 뛴다(`chart/references.ts`).
+               CDS 판의 `curve="stepAfter"` 자리다. */
+            step: true,
             axis: refAxis,
             format: pctAxis ? fmtPct : fmtY,
           }]

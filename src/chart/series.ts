@@ -7,7 +7,7 @@
  * 화면마다 이걸 다시 적으면 곧 조금씩 달라진다 — CLAUDE.md 「얼라인」 8.
  */
 
-import { LineSeries, LineStyle } from 'lightweight-charts';
+import { LineSeries, LineStyle, LineType } from 'lightweight-charts';
 import type { IChartApiBase, ISeriesApi, LineData, WhitespaceData } from 'lightweight-charts';
 
 import { DottedArea, type AreaFill } from './dottedArea';
@@ -23,6 +23,15 @@ export type ChartLine<H> = {
   color: (p: LwPalette) => string;
   width?: 1 | 2;
   dash?: boolean;
+  /**
+   * 각진 계단으로 그린다 — CDS `Line curve="stepAfter"` 의 자리.
+   *
+   * 기준금리가 이것을 쓴다: 정책금리는 평평하다가 뛴다. 두 결정 사이를 사선으로
+   * 이으면 시행된 적 없는 금리를, 시행된 적 없는 날에 그리는 것이다
+   * (`chart/references.ts` 머리). 이관 때 이 손잡이가 없어서 두 곳
+   * (Main 미리보기·백테스트)이 사선이 되어 있었다 [2026-08-27 수리].
+   */
+  step?: boolean;
   /** 선 아래 면. `dots` 는 캐논의 `areaType="dotted"`, `solid` 는 손익 차트의
    *  채운 면. 주선에만 준다(참조선까지 채우면 어느 것이 잉크인지 안 보인다). */
   area?: AreaFill;
@@ -53,6 +62,7 @@ export function addLine<H>(
     color: line.color(palette),
     lineWidth: line.width ?? 2,
     lineStyle: line.dash ? LineStyle.Dotted : LineStyle.Solid,
+    lineType: line.step ? LineType.WithSteps : LineType.Simple,
     /* 마지막값 라벨과 가격선은 이 제품의 화면 문법에 없다 — 값은 리드아웃
        카드와 사실 스트립이 읽어 준다. */
     priceLineVisible: false,

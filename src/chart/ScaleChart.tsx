@@ -70,6 +70,7 @@ export function ScaleChart({
   height,
   onHoverNode,
   tickFormat,
+  uniformTicks,
   precision = 2,
   accessibilityLabel,
   hoverLabel,
@@ -84,6 +85,17 @@ export function ScaleChart({
   onHoverNode?: (k: number | null) => void;
   /** 세로축 눈금 글자. */
   tickFormat?: (v: number) => string;
+  /**
+   * 같은 무게의 눈금은 **전부 그리거나 아예 안 그린다** — 숫자축이 쓴다.
+   *
+   * 라이브러리는 자리가 남으면 무게가 다른 마크를 섞어 그린다. 「둥근 수」
+   * 사다리를 쓰는 축에서는 그게 곧 축이 제멋대로 읽히는 것이다 — 실측
+   * 2026-08-27 시뮬 시계열: `D+0·16·30·48·60·72·90·104·120·136·150·168·180`.
+   *
+   * 만기축에는 **켜면 안 된다.** 그 사다리는 1Y·2Y·4Y·6Y·7Y·8Y·9Y 가 한 무게라
+   * (월수 12의 배수), 전부-아니면-전무로 바꾸면 1Y·2Y 가 통째로 사라진다.
+   */
+  uniformTicks?: boolean;
   precision?: number;
   accessibilityLabel: string;
   /** 그 노드의 낭독 문장 — CDS `Scrubber` 의 `accessibilityLabel` 자리다. */
@@ -98,7 +110,10 @@ export function ScaleChart({
   if (scaleRef.current === null) scaleRef.current = new LabelledHorzScale();
   const scale = scaleRef.current;
 
-  const handle = useLwChart<number>('curve', el, { scale });
+  /* 이 객체는 **만들 때 한 번** 읽힌다(`CurveSetup`). `uniform` 이 생성자
+     전용이라 그 안에 산다 — 컴포넌트 종류가 정하는 값이라(만기축은 끄고
+     숫자축은 켠다) 살아 있는 동안 안 바뀐다. */
+  const handle = useLwChart<number>('curve', el, { scale, uniform: !!uniformTicks });
 
   /* 프롭은 **내용**으로 본다 — 경위와 계측은 `chart/stable.ts` 머리에.
      `nodes={pillars.map((p) => p.id)}` 같은 호출부가 있어서, 참조로 비교하면

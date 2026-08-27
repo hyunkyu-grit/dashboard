@@ -37,7 +37,7 @@ import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@coinbase/cds-web/tables';
 import { Text } from '@coinbase/cds-web/typography';
 
-import { TimeChart, type TimeLine } from '@/chart/TimeChart';
+import { TimeChart, useStackedScales, type TimeLine } from '@/chart/TimeChart';
 import type { ScalePriceLine } from '@/chart/ScaleChart';
 import type { Unit } from '@/lib/api';
 import { BacktestUnavailable } from '@/lib/api';
@@ -356,6 +356,11 @@ export function StrategyWindow({
   }, [run, knobs]);
 
   const dates = useMemo(() => run?.points.map((p) => p.t) ?? [], [run]);
+
+  /* 세 패널(값·z·누적)이 **같은 값-축 폭**을 쓴다 — 라벨이 `2.55`·`-1.85`·
+     `+1.2억` 으로 제각각이라 그냥 두면 셋의 플롯이 서로 다른 폭이 되고, 같은
+     날짜가 세 패널에서 다른 가로 자리에 선다(CLAUDE.md 「얼라인」 7). */
+  const stack = useStackedScales();
   const entryIdx = useMemo(() => {
     if (!run) return [];
     const at = new Map(dates.map((t, i) => [t, i]));
@@ -643,6 +648,7 @@ export function StrategyWindow({
                     dates={dates}
                     lines={priceLines}
                     onHoverIndex={(i) => setIdx(i == null ? null : { chart: 'price', i })}
+                    {...stack}
                   />
                   {idx?.chart === 'price' && run.points[idx.i] ? (
                     <ReadoutCard title={run.points[idx.i]!.t}>
@@ -686,6 +692,7 @@ export function StrategyWindow({
                     priceLines={zBands}
                     markLines={stale ? [] : entryIdx.map((m) => ({ index: m.i }))}
                     onHoverIndex={(i) => setIdx(i == null ? null : { chart: 'z', i })}
+                    {...stack}
                   />
                   {idx?.chart === 'z' && run.points[idx.i] ? (
                     <ReadoutCard title={run.points[idx.i]!.t}>
@@ -714,6 +721,7 @@ export function StrategyWindow({
                     lines={eqLines}
                     priceLines={zeroLine}
                     onHoverIndex={(i) => setIdx(i == null ? null : { chart: 'eq', i })}
+                    {...stack}
                   />
                   {idx?.chart === 'eq' && run.points[idx.i] ? (
                     <ReadoutCard title={run.points[idx.i]!.t}>

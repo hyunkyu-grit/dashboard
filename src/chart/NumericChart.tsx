@@ -94,6 +94,9 @@ export function NumericChart({
       height={height}
       onHoverNode={onNode}
       tickFormat={tickFormat}
+      /* 이 축의 무게는 「둥근 수」 사다리다(`roundWeight`). 섞어 그리면 그
+         사다리가 아무 뜻도 없어진다 — `ScaleChart.uniformTicks` 주석. */
+      uniformTicks
       precision={precision}
       accessibilityLabel={accessibilityLabel}
       hoverLabel={hoverLabel}
