@@ -77,6 +77,36 @@ describe('② 표시는 로케일과 무관하게 ISO 다', () => {
     expect(providers).not.toMatch(/LocaleProvider/);
   });
 
+  it('빈 칸은 **무엇을 적을지** 말한다 — CDS 기본은 「-  -」였다', () => {
+    /* CDS 기본 placeholder 는 로케일이 만든 것이 아니라 문자열 조립이다
+       (`cds-common/esm/dates/useDateInput.js`):
+
+           "   ".concat(separator, "   ").concat(separator)
+
+       슬래시에서는 빈 칸 마스크로 읽히지만 우리 구분자는 `-` 라 화면에는
+       「-  -」 두 글자만 남았다(실측 2026-08-27 백테스트 청산일). 3-3 이라
+       yyyy-mm-dd(4-2-2)와 자릿수도 안 맞는다. */
+    expect(src).toMatch(/placeholder: 'yyyy-mm-dd'/);
+  });
+
+  it('placeholder 의 철자는 **CDS 자신의 것**이다 — 한 컨트롤에 두 철자를 두지 않는다', () => {
+    /* 이 컨트롤의 형식 안내 문장이 쓰는 그 철자다. 문자열 대조가 아니라
+       패키지에서 **읽어서** 잰다 — CDS 가 대문자로 바꾸면 여기서 터져야 한다. */
+    const intl = fs.readFileSync(
+      path.resolve(
+        import.meta.dirname,
+        '../node_modules/@coinbase/cds-common/esm/dates/IntlDateFormat.js',
+      ),
+      'utf8',
+    );
+    const map = /datePartTypeMap[^)]*?day:\s*'(\w+)'[\s\S]*?month:\s*'(\w+)'[\s\S]*?year:\s*'(\w+)'/.exec(
+      intl,
+    );
+    expect(map).not.toBeNull();
+    const [, dd, mm, yyyy] = map!;
+    expect(src).toMatch(new RegExp(`placeholder: '${yyyy}-${mm}-${dd}'`));
+  });
+
   it('그 순서가 정말 YYYY-MM-DD 인지 Intl 로 직접 잰다', () => {
     /* 문자열 대조가 아니라 **실행**한다 — 라이브러리나 런타임이 바뀌면 여기서
        터져야 한다. */

@@ -135,6 +135,25 @@ export function IsoDateField({
        그려져 같은 행의 형제(`Field` = legal 13px/500)와 어긋난다(실측
        2026-08-26: 라벨 top 133 vs 171). CLAUDE.md 「얼라인」 2·3 의 그 자리다. */
     separator: '-',
+    /* ── 빈 칸이 「-  -」로 보였다 [실측 2026-08-27, 백테스트 청산일] ──────────
+     * CDS 의 기본 placeholder 는 로케일이 만든 것이 아니라 **문자열 조립**이다
+     * (`cds-common/esm/dates/useDateInput.js`):
+     *
+     *     const placeholder = "   ".concat(separator, "   ").concat(separator);
+     *
+     * 공백 셋·구분자·공백 셋·구분자다. 슬래시(`/`)에서는 빈 칸 마스크로 읽히지만
+     * 우리 구분자는 `-` 라 화면에는 「-  -」 두 글자만 남는다. 게다가 3-3 이라
+     * `yyyy-mm-dd`(4-2-2)와 자릿수도 안 맞고, 마지막 구분자 뒤에는 칸이 아예
+     * 없다. 무엇을 적으라는 것인지 화면이 말하지 않는 상태였다.
+     *
+     * 철자는 **CDS 자신의 것**을 쓴다 — `IntlDateFormat.datePartTypeMap` 이
+     * `{day:'dd', month:'mm', year:'yyyy'}` 이고, 이 컨트롤의 형식 안내 문장도
+     * 같은 소문자를 쓴다(위 `helperText` 주석의 그 줄). 한 컨트롤 안에서 날짜의
+     * 꼴을 두 가지 철자로 말하지 않는다.
+     *
+     * 값이 이 순서인 것은 위 `locale="en-CA"` + `separator: '-'` 가 정한다 —
+     * 셋은 한 묶음이고 `guards/iso-date-field.test.ts` 가 같이 잰다. */
+    placeholder: 'yyyy-mm-dd',
     /* 32px 등고 — CLAUDE.md 「얼라인」 1. `size="s"` 가 밀도를 낮추고, 높이는 이
        리포가 `TextInput` 에 하는 것과 같이 못 박는다(`compact` 는 v11 에서 빠질
        예정이라 안 쓴다). */
