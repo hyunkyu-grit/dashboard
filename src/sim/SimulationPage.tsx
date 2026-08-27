@@ -175,8 +175,15 @@ function Collapsible({
   const [open, setOpen] = useState(false);
   return (
     <VStack className="sr-simcard" gap={open ? 1 : 0} width="100%">
+      {/* 머리는 **보통 카드 머리와 같은 높이**여야 한다 — 한 열에 서는 같은
+          위계의 카드들이라(CLAUDE.md 「얼라인」 5). 실측 2026-08-27: 접히는
+          카드만 22px 이고 보통 카드는 20px 이었다. 뿌리는 `Pressable` 의
+          `<button>` 이 **블록 자식을 인라인 줄상자에 담는** 것이라 글리프 아래
+          여유가 1px 씩 붙은 것이다. 상자를 flex 로 만들면 자식을 정확히 안는다
+          (`.sr-simcard-head`). */}
       <Pressable
         as="button"
+        className="sr-simcard-head"
         noScaleOnPress
         accessibilityLabel={`${title} — ${summary}`}
         aria-expanded={open}
