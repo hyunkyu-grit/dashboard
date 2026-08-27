@@ -128,10 +128,16 @@ export function samePriceLines(
 
 /** 세로 사실선 — «그 날 들어갔다». */
 export function sameMarkLines(
-  a: readonly { index: number; label?: string }[] | undefined,
-  b: readonly { index: number; label?: string }[] | undefined,
+  a: readonly { index: number; label?: string; tone?: string }[] | undefined,
+  b: readonly { index: number; label?: string; tone?: string }[] | undefined,
 ): boolean {
-  return sameEach(a, b, (x, y) => x.index === y.index && x.label === y.label);
+  /* `tone` 도 내용이다 — 같은 자리의 선이 색만 바뀌는 일이 실제로 있다(전략
+     창에서 거래 하나를 펴면 그 진입선만 잉크가 된다). 빼면 그 변화가 화면에
+     안 온다. */
+  return sameEach(
+    a, b,
+    (x, y) => x.index === y.index && x.label === y.label && x.tone === y.tone,
+  );
 }
 
 /** 우리 가로축의 노드 — 자리·글자·무게. */

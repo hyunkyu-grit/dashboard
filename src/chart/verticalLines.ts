@@ -34,7 +34,7 @@ type Host<H> = {
 class VerticalLinesRenderer<H> implements IPrimitivePaneRenderer {
   constructor(
     private readonly host: Host<H>,
-    private readonly at: readonly { time: H; label?: string }[],
+    private readonly at: readonly { time: H; label?: string; color?: string }[],
     private readonly color: string | null,
     private readonly font: string,
   ) {}
@@ -47,7 +47,6 @@ class VerticalLinesRenderer<H> implements IPrimitivePaneRenderer {
     target.useBitmapCoordinateSpace((scope) => {
       const { context: ctx, horizontalPixelRatio: hr } = scope;
       ctx.save();
-      ctx.strokeStyle = this.color as string;
       ctx.lineWidth = Math.max(1, Math.round(hr));
       const vr = scope.verticalPixelRatio;
       ctx.font = `${Math.round(10 * vr)}px ${this.font}`;
@@ -58,6 +57,10 @@ class VerticalLinesRenderer<H> implements IPrimitivePaneRenderer {
            선이 쌓인다(`dottedArea.ts` 의 같은 가드). */
         if (x == null) continue;
         const px = Math.round(x * hr) + 0.5;
+        /* 선마다 제 색 [2026-08-28]. 한 색뿐이던 시절에는 「들어갔다」와
+           「나왔다」가 같은 선이었다 — 전략 창의 진입·청산이 그렇게 보였다.
+           안 주면 종전 색 그대로다. */
+        ctx.strokeStyle = m.color ?? (this.color as string);
         ctx.beginPath();
         ctx.moveTo(px, 0);
         ctx.lineTo(px, scope.bitmapSize.height);
@@ -66,7 +69,7 @@ class VerticalLinesRenderer<H> implements IPrimitivePaneRenderer {
            미리 합쳐서 준다(`LinkedCharts::markIdx`). 여기서 다시 피하면 두
            곳이 같은 일을 하게 된다. */
         if (m.label) {
-          ctx.fillStyle = this.color as string;
+          ctx.fillStyle = m.color ?? (this.color as string);
           ctx.fillText(m.label, px + Math.round(3 * hr), Math.round(2 * vr));
         }
       }
@@ -77,7 +80,7 @@ class VerticalLinesRenderer<H> implements IPrimitivePaneRenderer {
 
 export class VerticalLines<H = Time> implements ISeriesPrimitive<H> {
   private readonly host: Host<H> = { chart: null, series: null };
-  private at: readonly { time: H; label?: string }[] = [];
+  private at: readonly { time: H; label?: string; color?: string }[] = [];
   private font = 'sans-serif';
   private color: string | null = null;
   private requestUpdate?: () => void;
@@ -101,7 +104,8 @@ export class VerticalLines<H = Time> implements ISeriesPrimitive<H> {
     this.requestUpdate = undefined;
   }
 
-  update(at: readonly { time: H; label?: string }[], color: string, font: string): void {
+  update(at: readonly { time: H; label?: string; color?: string }[], color: string,
+         font: string): void {
     this.at = at;
     this.color = color;
     this.font = font;

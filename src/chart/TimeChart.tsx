@@ -59,6 +59,10 @@ export type TimeLine = {
   format?: (v: number) => string;
 };
 
+/** 세로선의 결 — 색을 직접 주지 않고 **뜻**을 준다(`theme/tint.ts` 의 규율).
+ *  `muted` 가 기본이고, `ink` 는 지금 펴 놓은 것, `up`·`down` 은 방향색이다. */
+export type MarkLineTone = 'muted' | 'ink' | 'up' | 'down';
+
 /** 보이는 구간의 고·저 같은 표시점. CDS `Point` 의 자리. */
 export type TimeMarker = {
   /** `dates` 의 순번. */
@@ -91,7 +95,7 @@ export function TimeChart({
   /** 세로로 서는 선들 — «그 날 들어갔다» 같은 **사실**을 긋는다.
    *  CDS `ReferenceLine dataX={…} label={…}` 의 자리. 겹침 회피(근접 마크
    *  합치기)는 **호출부가** 한다 — 라벨을 아는 쪽이 거기다. */
-  markLines?: readonly { index: number; label?: string }[];
+  markLines?: readonly { index: number; label?: string; tone?: MarkLineTone }[];
   /**
    * 바깥에서 짚어 주는 자리 — **짝 차트**가 쓴다(백테스트의 위/아래 차트).
    *
@@ -274,10 +278,20 @@ export function TimeChart({
     if (sMarkLines?.length && placed[0]) {
       const v = new VerticalLines<Time>();
       placed[0].series.attachPrimitive(v);
+      const tone: Record<MarkLineTone, string> = {
+        muted: palette.fgMuted,
+        ink: palette.fg,
+        up: palette.up,
+        down: palette.down,
+      };
       v.update(
         sMarkLines
           .filter((m) => sDates[m.index] != null)
-          .map((m) => ({ time: sDates[m.index] as Time, label: m.label })),
+          .map((m) => ({
+            time: sDates[m.index] as Time,
+            label: m.label,
+            color: m.tone ? tone[m.tone] : undefined,
+          })),
         palette.fgMuted,
         palette.fontFamily,
       );

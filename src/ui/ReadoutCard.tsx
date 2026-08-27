@@ -181,6 +181,24 @@ export function ReadoutMoney({ k, v }: { k: string; v: number | null | undefined
   );
 }
 
+/** 숫자가 아닌 **사실** 한 줄 — 「밴드 밖 3일째」·「보유 6봉째」 같은 것.
+ *
+ * 레벨·돈 줄과 같은 격자(왼쪽 뮤트 라벨 · 오른쪽 값)를 쓴다. 이 줄을 따로 두는
+ * 이유는 서식이 아니라 **뜻**이다: 위의 줄들은 축에서 읽은 값이고 이것은 상태다.
+ * 색은 안 가진다 — 카드에서 색을 갖는 줄은 변화 줄 하나뿐이라는 규칙 그대로다. */
+export function ReadoutFact({ k, v }: { k: string; v: string | null | undefined }) {
+  return (
+    <HStack justifyContent="space-between" gap={1}>
+      <Text as="span" font="label2" color="fgMuted" noWrap>
+        {k}
+      </Text>
+      <Text as="span" font="label2" noWrap>
+        {v ?? '—'}
+      </Text>
+    </HStack>
+  );
+}
+
 /**
  * 부호 있는 **변화** 줄 — 카드에서 색을 가지는 유일한 줄이고, 그것이 위의 레벨
  * 줄들이 색을 안 가지는 이유다. 위쪽에 여백을 두는 이유는 이게 위 네 줄의 또

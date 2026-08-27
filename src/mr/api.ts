@@ -74,6 +74,25 @@ export interface MrHistory {
  * 산술은 서버(backend/app/mrbacktest.py — PMS 원본 이식·적합성 벡터로 잠금).
  * 기본값도 PMS s16 기본 그대로다. */
 
+/** 진입 규칙 — 「언제 실행에 옮기는가」 [OWNER 2026-08-28 — "진입 기준이 외부로
+ * 이탈했다가 다시 그 선을 터치할 때"].
+ *
+ *   level — |z| ≥ 진입σ 인 봉에 들어간다. 밴드를 **뚫는** 그 봉이다(원본 PMS).
+ *   touch — 밖에 있다가 밴드로 **복귀하는** 봉에 들어간다. 방향은 나갔던 쪽이
+ *           정한다(복귀 봉의 z 부호가 아니다 — 지나쳐 내려올 수 있다).
+ *
+ * 규칙 둘의 전문은 서버가 진다(`backend/app/mrbacktest.py::_entry_signal`).
+ * 측정면의 「재진입」 판정(`MrStateKind`)이 가리키는 봉이 `touch` 의 진입 봉이다 —
+ * 두 화면이 같은 사건을 다른 규칙으로 말하지 않게 어휘를 맞춰 둔다. */
+export type MrEntryMode = 'level' | 'touch';
+
+export const MR_ENTRY_MODES: { v: MrEntryMode; label: string; help: string }[] = [
+  { v: 'level', label: '이탈 즉시',
+    help: '|z|가 진입σ를 넘는 봉에 들어가요 — 밴드를 뚫는 그 봉이에요. 첫 PMS 규칙이에요.' },
+  { v: 'touch', label: '밴드 복귀',
+    help: '밖에 있다가 밴드 선으로 돌아오는 봉에 들어가요. 방향은 나갔던 쪽이 정해요.' },
+];
+
 export interface MrStrategyParams {
   lookback: number;
   entryZ: number;
@@ -82,6 +101,7 @@ export interface MrStrategyParams {
   stopZ: number;
   costBp: number;
   notional: number;
+  entryMode: MrEntryMode;
 }
 
 export const MR_STRATEGY_DEFAULTS: MrStrategyParams = {
@@ -92,6 +112,7 @@ export const MR_STRATEGY_DEFAULTS: MrStrategyParams = {
   stopZ: 3.5,
   costBp: 0.05,
   notional: 1_000_000,
+  entryMode: 'level',
 };
 
 /** PMS 룩백 프리셋 그대로 — 20/60/120 + 자유 입력. */
@@ -139,6 +160,21 @@ export interface MrStrategyPoint {
   pnl: number;
   /** 그날의 포지션(엔진 부호). 0 이면 무포지션이다. */
   pos: number;
+  /** 그 봉을 **통과해서 들고 있던** 포지션 — `pos` 와 다르다(진입 봉 0 · 청산
+   *  봉 ±1). 대사표의 「감도」가 이 값이고, `평가 = 감도 × 명목 × Δ` 가 한 줄
+   *  안에서 닫힌다(백테스트 대사표의 「전일 종가 KRD」와 같은 자리). */
+  hold: number;
+  /** 전 봉 대비 변화(**bp**). 첫 봉은 null. 브라우저는 계산하지 않는다(§16) —
+   *  %-계열(선물 내재금리)의 환산도 서버가 끝낸다. */
+  dv: number | null;
+  /** 그 거래 안에서의 누적(₩) — 무포지션이면 0, 청산 봉이면 확정 손익이다.
+   *  대사표의 **세로합**을 줄마다 적어서, 「합계」 줄이 스스로 맞는지 보이게 한다. */
+  tradePnl: number;
+  /** 밴드 밖 여부 — `+1` 위(비쌈) · `-1` 아래(쌈) · `0` 안. 측정 보드의
+   *  `MrState` 와 같은 어휘다(`밖`/`재진입`). */
+  out: number;
+  /** 연속 며칠째 밖인가. 안이면 0. */
+  outRun: number;
 }
 
 export interface MrStrategyTrade {
@@ -158,6 +194,16 @@ export interface MrStrategyTrade {
   cost: number;
   /** 보유 봉 수. */
   bars: number;
+  /** 진입 직전의 밴드 밖 구간 — 언제 나갔고(outFrom) 며칠이었고(outDays)
+   *  얼마나 벌어졌는지(peakZ · 부호 유지). `밴드 복귀` 판에서는 진입 z 가 밴드
+   *  선 언저리라 이것 없이는 4σ 까지 갔다 온 것과 살짝 넘었다 온 것이 같은
+   *  줄로 보인다. `이탈 즉시` 판에서는 outDays 가 늘 1 이다. */
+  outFrom: string | null;
+  outDays: number | null;
+  peakZ: number | null;
+  /** 보유 동안의 총 변화(**bp**) — 대사표 「합계」 줄의 Δ 칸이고, 줄마다의
+   *  Δ 를 세로로 더한 값과 같아야 한다. */
+  dv: number;
 }
 
 /** 방향 하나의 이름 — 표 칸은 `short`, 문장은 `legs`. 서버가 계열마다 짓는다
@@ -189,11 +235,16 @@ export interface MrStrategyDirs {
  * 빠진 한 건은 표본 두 번째로 나쁜 −600만이었다). */
 export interface MrStrategyOpen {
   entryT: string;
+  /** 엔진 부호 — 이름은 `run.dirs` 가 진다. */
+  dir: number;
   entryZ: number;
   entryV: number;
   pnl: number;
   /** 진입 이후 지난 봉 수. */
   bars: number;
+  outFrom: string | null;
+  outDays: number | null;
+  peakZ: number | null;
 }
 
 /** 노브 하나를 프리셋 안에서 옮겼을 때의 결과 한 칸. */
@@ -254,6 +305,7 @@ export function fetchMrStrategy(id: string, p: MrStrategyParams): Promise<MrStra
     stopZ: String(p.stopZ),
     costBp: String(p.costBp),
     notional: String(p.notional),
+    entryMode: p.entryMode,
   });
   return get<MrStrategyRun>(mrStrategyUrl(q.toString()), 'mr strategy');
 }

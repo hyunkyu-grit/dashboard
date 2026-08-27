@@ -6,7 +6,7 @@
  *
  * ── 원본에서 가져온 것 ──────────────────────────────────────────────────────
  * · 노브 일곱(룩백 프리셋 20/60/120 + 자유값·진입σ·관찰σ·청산σ·손절σ·비용bp·
- *   명목 ₩/bp)과 그 기본값(s16) — 밴드 배수가 곧 진입σ라는 «노브 하나, 뜻 둘»
+ *   명목 원/bp)과 그 기본값(s16) — 밴드 배수가 곧 진입σ라는 «노브 하나, 뜻 둘»
  *   까지 그대로.
  * · z-문턱 레벨 규칙(진입 |z|≥entryσ 역행·청산 |z|≤exitσ·손절 |z|≥stopσ 우선·
  *   당일 종가 체결·편도 비용) — 산술은 서버가 끝낸다(§16, mrbacktest.py 가
@@ -37,19 +37,20 @@ import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@coinbase/cds-web/tables';
 import { Text } from '@coinbase/cds-web/typography';
 
-import { TimeChart, useStackedScales, type TimeLine } from '@/chart/TimeChart';
+import { TimeChart, useStackedScales, type TimeLine, type TimeMarker } from '@/chart/TimeChart';
 import type { ScalePriceLine } from '@/chart/ScaleChart';
 import type { Unit } from '@/lib/api';
 import { BacktestUnavailable } from '@/lib/api';
-import { fmtLevel, unitSuffix } from '@/lib/format';
+import { fmtBp, fmtLevel, unitSuffix } from '@/lib/format';
 import { fmtKrw } from '@/lib/krw';
 import { Field } from '@/ui/ControlCard';
 import { CONTROL_H } from '@/ui/controlHeight';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
-import { ReadoutCard, ReadoutLevel, ReadoutMoney, placeReadout } from '@/ui/ReadoutCard';
+import { ReadoutCard, ReadoutFact, ReadoutLevel, ReadoutMoney, placeReadout } from '@/ui/ReadoutCard';
 import { Stat, StatColumn } from '@/ui/Stat';
 
 import {
+  MR_ENTRY_MODES,
   MR_STRATEGY_DEFAULTS,
   MR_STRATEGY_LOOKBACKS,
   MR_STRATEGY_PRESETS,
@@ -57,6 +58,7 @@ import {
   fmtSigma,
   type MrStrategyParams,
   type MrStrategyRun,
+  type MrStrategyTrade,
 } from './api';
 
 /* 얼라인 규칙 [OWNER 2026-08-25 — CLAUDE.md «얼라인» 절]. 첫 판은 라벨을
@@ -306,6 +308,123 @@ function Sensitivity({
 
 const CHART_H = 200;
 
+/* ── 사건 어휘 ──────────────────────────────────────────────────────────────
+ * 거래 하나를 가리키는 열쇠는 «진입-청산» 이다 — 실행이 바뀌면 자연히 안 맞고,
+ * 그때 화면은 목록으로 돌아간다(펴 놓은 대사가 딴 실행의 숫자를 이고 있는
+ * 것보다 낫다). 문자열을 두 곳에서 짓지 않으려고 함수로 둔다. */
+export const tradeKey = (t: { entryT: string; exitT: string }): string =>
+  `${t.entryT}-${t.exitT}`;
+
+/** 미청산 다리의 열쇠 — 청산일이 없으므로 거래와 같은 모양을 쓸 수 없다. */
+const OPEN_KEY = 'open';
+
+type MrEvent = {
+  kind: 'entry' | 'exit' | 'stop';
+  /** 엔진 부호. 미청산 다리는 0 으로 두어 방향색을 안 갖는다. */
+  dir: number;
+  /** 거래 순번(1부터) — 세로선의 라벨이 이걸 적는다. */
+  n: number;
+  key: string;
+};
+
+/** 그날 사건의 한 마디 — 판독과 대사표의 「구분」 칸이 같은 말을 쓴다. */
+function eventWord(e: MrEvent | undefined, holding: boolean): string {
+  if (!e) return holding ? '보유' : '—';
+  return e.kind === 'entry' ? '진입' : e.kind === 'stop' ? '손절' : '청산';
+}
+
+/** 진입 규칙의 이름 — 목록이 어휘의 주인이라 여기서 다시 짓지 않는다. */
+const entryWord = (mode: string): string =>
+  MR_ENTRY_MODES.find((m) => m.v === mode)?.label ?? mode;
+
+/** 그 봉의 포지션 한 마디 — 「보유 6봉째 · 거래 3」 또는 「무포지션」.
+ *
+ * `hold`(그 봉을 통과해서 들고 있던 것)로 판정한다. 청산 봉은 `pos` 가 이미 0
+ * 이지만 그날 하루는 들고 있었으므로 무포지션이라고 말하면 거짓이다. */
+function posWord(run: MrStrategyRun, i: number): string {
+  const p = run.points[i];
+  if (!p) return '—';
+  const t = run.trades.find((q) => q.entryT <= p.t && p.t <= q.exitT);
+  const open = !t && run.open && p.t >= run.open.entryT ? run.open : null;
+  const from = t?.entryT ?? open?.entryT;
+  if (from == null) return p.hold === 0 && p.pos === 0 ? '무포지션' : '보유';
+  const e = run.points.findIndex((q) => q.t === from);
+  const day = e < 0 ? null : i - e;
+  const who = t ? `거래 ${run.trades.indexOf(t) + 1}` : '미청산';
+  return day === 0 ? `진입일 · ${who}` : `보유 ${day}봉째 · ${who}`;
+}
+
+/** 대사표의 숫자 열 — 머리와 몸통이 **같은 목록**을 읽는다. 두 벌이면 열이
+ * 어긋나고, 어긋난 대사표는 대사표가 아니다. */
+const RECON_COLS = [
+  { k: 'z' }, { k: 'Δ (bp)' }, { k: '감도' },
+  { k: '평가' }, { k: '캐리' }, { k: '비용' }, { k: '그날' }, { k: '누적' },
+] as const;
+
+/** 대사표의 숫자 한 칸.
+ *
+ * `tone` 은 **손익 두 열에만** 준다 — 방향색은 「번 돈인가 잃은 돈인가」를
+ * 나르는 채널이라, 감도·Δ 처럼 부호가 방향을 뜻하는 열에 같은 색을 쓰면 색이
+ * 두 가지 뜻을 갖게 된다(`theme/tint.ts` 의 「한 셀 한 채널」).
+ * 0 은 `—` 로 적는다: 「그날 그 항이 없었다」와 「0원이었다」는 같은 말이고,
+ * 그 자리에 0 을 찍으면 눈이 자릿수를 세게 된다. */
+function ReconNum({
+  v,
+  kind,
+  tone,
+  head,
+}: {
+  v: number | null;
+  kind: 'sigma' | 'bp' | 'won';
+  tone?: boolean;
+  /** 합계 줄 — 굵기가 한 단계 올라간다. */
+  head?: boolean;
+}) {
+  const text =
+    v == null ? '—'
+    : kind === 'sigma' ? `${v.toFixed(2)}σ`
+    : kind === 'bp' ? fmtBp(v, 2)
+    : v === 0 ? '—'
+    : fmtKrw(v);
+  return (
+    <TableCell className="sr-num" justifyContent="flex-end">
+      <Text
+        font={head ? 'label1' : 'label2'}
+        as="span"
+        tabularNumbers
+        noWrap
+        color={text === '—' ? 'fgMuted' : undefined}
+        className={tone && v ? (v > 0 ? 'sr-up' : 'sr-down') : undefined}
+      >
+        {text}
+      </Text>
+    </TableCell>
+  );
+}
+
+/** 대사표 머리의 한 줄 — 「무엇을 보고 들어가 어떻게 나왔나」.
+ *
+ * 이탈 구간을 여기서 말하는 이유: 「밴드 복귀」 판에서는 진입 z 가 밴드 선
+ * 언저리라, 그 수만 보면 4σ 까지 갔다 온 거래와 살짝 넘었다 온 거래가 같은
+ * 줄이다. 무엇을 보고 들어갔는지는 진입 z 가 아니라 **그 구간**이 진다. */
+function reconSub(t: MrStrategyTrade, run: MrStrategyRun): string {
+  const legs = (t.dir > 0 ? run.dirs.plus : run.dirs.minus).legs;
+  const out =
+    t.outFrom == null || t.outDays == null
+      ? ''
+      : ` · ${t.outFrom}부터 밖 ${t.outDays}일` +
+        (t.peakZ == null ? '' : `(최대 ${t.peakZ.toFixed(2)}σ)`);
+  return `${t.entryT} → ${t.exitT} · ${t.bars}봉 · ${legs}${out} · ${
+    t.why === 'stop' ? '손절' : '청산'
+  }`;
+}
+
+/** 밴드 상태 한 마디 — 측정 보드의 어휘(`MrState`)와 같은 말이다. */
+function bandWord(out: number, run: number): string {
+  if (out === 0) return '밴드 안';
+  return `밴드 ${out > 0 ? '위' : '아래'} 밖 ${run}일째`;
+}
+
 export function StrategyWindow({
   id,
   label,
@@ -363,7 +482,9 @@ export function StrategyWindow({
       p.exitZ !== knobs.exitZ ||
       p.stopZ !== knobs.stopZ ||
       p.costBp !== knobs.costBp ||
-      p.notional !== knobs.notional
+      p.notional !== knobs.notional ||
+      /* 진입 규칙은 `warnZ` 와 반대다 — 이건 엔진에 들어가고 거래 목록을 바꾼다. */
+      p.entryMode !== knobs.entryMode
     );
   }, [run, knobs]);
 
@@ -373,12 +494,30 @@ export function StrategyWindow({
      `+1.2억` 으로 제각각이라 그냥 두면 셋의 플롯이 서로 다른 폭이 되고, 같은
      날짜가 세 패널에서 다른 가로 자리에 선다(CLAUDE.md 「얼라인」 7). */
   const stack = useStackedScales();
-  const entryIdx = useMemo(() => {
-    if (!run) return [];
+  /* 봉마다의 **사건** — 마커·세로선·판독이 이 하나를 같이 읽는다
+     [OWNER 2026-08-28 — "언제 진입했고 그런걸 알 수 있게"].
+     종전에는 진입 순번만 있었고(세로선 하나) 그래서 화면이 「들어갔다」만
+     말하고 「어떻게 나왔다」는 안 말했다 — 청산과 손절이 같은 그림이었다.
+     청산 봉 재진입 금지 규약 덕에 한 봉에 사건이 둘일 수 없으므로 Map 이다. */
+  const events = useMemo(() => {
+    const m = new Map<number, MrEvent>();
+    if (!run) return m;
     const at = new Map(dates.map((t, i) => [t, i]));
-    return run.trades
-      .map((t) => ({ i: at.get(t.entryT) ?? -1, dir: t.dir }))
-      .filter((m) => m.i >= 0);
+    run.trades.forEach((t, k) => {
+      const key = tradeKey(t);
+      const e = at.get(t.entryT);
+      const x = at.get(t.exitT);
+      if (e != null) m.set(e, { kind: 'entry', dir: t.dir, n: k + 1, key });
+      if (x != null) m.set(x, { kind: t.why === 'stop' ? 'stop' : 'exit', dir: t.dir, n: k + 1, key });
+    });
+    /* 미청산 다리도 사건이다 — 표본 끝에 열려 있는 포지션이 차트에서만
+       사라지면, 승률 옆의 「미청산 1건」이 어디 것인지 화면이 못 가리킨다. */
+    if (run.open) {
+      const e = at.get(run.open.entryT);
+      if (e != null && !m.has(e))
+        m.set(e, { kind: 'entry', dir: 0, n: run.trades.length + 1, key: OPEN_KEY });
+    }
+    return m;
   }, [run, dates]);
 
   const unit = (run?.unit ?? 'bp') as Unit;
@@ -394,9 +533,14 @@ export function StrategyWindow({
 
   /* 펴 놓은 거래와 그 구간의 봉들 — 대사표의 재료. 키는 «진입-청산» 이라
      실행이 바뀌면 자연히 안 맞고, 그때는 목록으로 돌아간다. */
-  const sel = run?.trades.find((t) => `${t.entryT}-${t.exitT}` === openTrade) ?? null;
+  const sel = run?.trades.find((t) => tradeKey(t) === openTrade) ?? null;
   const reconRows = useMemo(
-    () => (sel && run ? run.points.filter((p) => p.t >= sel.entryT && p.t <= sel.exitT) : []),
+    () =>
+      sel && run
+        ? run.points
+            .map((p, i) => ({ p, i }))
+            .filter(({ p }) => p.t >= sel.entryT && p.t <= sel.exitT)
+        : [],
     [sel, run],
   );
   const dirStat = !run ? '—' : only ? only.legs : '양방향';
@@ -423,6 +567,32 @@ export function StrategyWindow({
       format: (v: number) => fmtLevel(v, unit),
     },
   ];
+
+  /* 사건의 **점**(오실레이터·손익 곡선)과 **세로선**(세 패널 공통).
+     stale 이면 둘 다 숨는다 — 노브가 실행과 갈린 판에서 마커만 옛 자리에 남으면
+     화면이 「이 설정으로 여기서 들어갔다」고 거짓말한다(원본 규율). */
+  const evList = stale ? [] : [...events.entries()];
+  const evMarkers: TimeMarker[] = evList.map(([i, e]) => ({
+    index: i,
+    /* 진입은 **방향색**(그 다리가 무엇을 사는지), 청산은 뮤트, 손절은 하락색.
+       청산과 손절이 같은 점이면 「어떻게 끝났나」를 표에서만 알 수 있다. */
+    color: (pa) =>
+      e.kind === 'stop' ? pa.down
+      : e.kind === 'exit' ? pa.fgMuted
+      : e.dir === 0 ? pa.fgMuted
+      : e.dir > 0 ? pa.up : pa.down,
+  }));
+  /* 세로선은 **진입**만 긋는다 — 거래마다 둘씩 그으면 15거래에 30줄이라 200px
+     패널이 빗금이 된다. 펴 놓은 거래 하나만 청산선까지 잉크로 세운다.
+     라벨도 그 하나에만 붙인다: 겹침 회피는 호출부의 몫인데(verticalLines 머리),
+     열다섯 개를 다 적으면 회피할 수 없는 밀도가 된다. */
+  const evLines = evList
+    .filter(([, e]) => e.kind === 'entry' || e.key === openTrade)
+    .map(([i, e]) => ({
+      index: i,
+      label: e.key === openTrade ? (e.kind === 'entry' ? '진입' : eventWord(e, false)) : undefined,
+      tone: e.key === openTrade ? ('ink' as const) : ('muted' as const),
+    }));
 
   const zLines: TimeLine[] = !run ? [] : [
     {
@@ -519,6 +689,33 @@ export function StrategyWindow({
               </HStack>
             </Field>
           </Box>
+          {/* 진입 규칙 — σ 문턱 **앞**에 선다. 문턱은 「얼마나 벌어지면」이고
+              이것은 「그때 바로 들어가는가, 돌아올 때까지 기다리는가」라서,
+              읽는 순서가 곧 규칙의 순서다. `관찰 σ` 와 달리 **엔진에 들어가고**
+              거래 목록을 바꾼다 — 그래서 설정 줄에 있고 stale 을 세운다.
+              156 = 알약 둘(「이탈 즉시」·「밴드 복귀」)의 자연폭 + 한 칸 여유. */}
+          <Box width={156} className="sr-fgroup">
+            <Field
+              label="진입 규칙"
+              help="이탈 즉시는 밴드를 뚫는 봉에, 밴드 복귀는 밖에 있다가 돌아오는 봉에 들어가요. 방향은 둘 다 나갔던 쪽이 정해요."
+            >
+              <HStack gap={0.5} alignItems="center" height={CONTROL_H}>
+                {MR_ENTRY_MODES.map((m) => (
+                  <button
+                    key={m.v}
+                    type="button"
+                    className="sr-pillbtn"
+                    data-on={knobs.entryMode === m.v || undefined}
+                    aria-pressed={knobs.entryMode === m.v}
+                    aria-label={`진입 규칙 ${m.label}`}
+                    onClick={() => set({ entryMode: m.v })}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </HStack>
+            </Field>
+          </Box>
           <SigmaPick
             group
             label="진입 σ"
@@ -541,16 +738,34 @@ export function StrategyWindow({
             options={MR_STRATEGY_PRESETS.stopZ}
             onPick={(v) => set({ stopZ: v })}
           />
+          {/* ── 마지막 묶음은 **제 상자에 담는다** [2026-08-28 실측] ─────────
+              진입 규칙 칸이 들어오면서 줄이 넘쳐 감쌈이 생겼는데, 형제로
+              늘어놓으면 감쌈이 묶음을 아무 데서나 자른다 — 실측에서 비용(x
+              1409~1473)만 첫 줄에 남고 명목·실행이 둘째 줄로 갔다. 이 파일의
+              머리가 «읽히는 묶음은 넷» 이라고 적어 놓고 화면은 그 묶음을
+              쪼개고 있었던 셈이다. 셋을 한 상자에 담으면 **묶음째** 넘어간다.
+              (묶음 사이 여백 `.sr-fgroup` 은 이제 상자가 진다.) */}
+          <HStack gap={1} alignItems="flex-end" className="sr-fgroup">
           {/* 비용·명목은 **프리셋이 아니라 실제 값**이다 — 그날 그 종목의
               호가폭이고 이 데스크의 포지션 크기다(api.ts 의 근거 주석). */}
-          <Box width={64} className="sr-fgroup">
+          <Box width={64}>
             <Field label="비용 (bp)" help="왕복이 아니라 편도예요. 그날 그 종목의 호가폭을 넣으세요.">
               <NumInput label="비용(bp)" value={knobs.costBp} onCommit={(v) => set({ costBp: v })} />
             </Field>
           </Box>
           <Box width={96}>
-            <Field label="명목 (₩/bp)" help="1bp 움직일 때의 손익이에요. 포지션 크기라 프리셋이 없어요.">
-              <NumInput label="명목(₩/bp)" value={knobs.notional}
+            {/* 「원」은 한글이다 [OWNER 2026-08-28 — "이게 표기가 왜 이런식으로
+                되는거지?"]. 종전에는 `₩`(U+20A9)를 썼는데, 이 앱의 본문 폰트
+                **Pretendard SR 의 그 글리프가 「W + 가는 가로줄 둘」**이다 —
+                40px 래스터 대조에서 `₩` 와 `W` 의 차이가 202픽셀(같은 폰트의
+                「원」 대 「W」는 684)이었고, 13px 다크에서는 그 두 줄이 사라져
+                화면에 **「명목 (W/bp)」** 로 섰다(실측 2026-08-28). Malgun Gothic
+                에서는 652픽셀로 제대로 갈린다 — 폰트가 없어서가 아니라 이 폰트의
+                U+20A9 가 반각 표기라서다.
+                기호를 바꾸는 대신 한글로 적는다: 이 화면의 돈은 전부 `fmtKrw`
+                가 「+100만원」으로 쓰고 있어서, 「원」이 오히려 같은 어휘다. */}
+            <Field label="명목 (원/bp)" help="1bp 움직일 때의 손익이에요. 포지션 크기라 프리셋이 없어요.">
+              <NumInput label="명목(원/bp)" value={knobs.notional}
                 onCommit={(v) => set({ notional: v })} />
             </Field>
           </Box>
@@ -567,6 +782,7 @@ export function StrategyWindow({
           >
             {running ? '계산 중…' : '실행'}
           </button>
+          </HStack>
         </HStack>
         {stale ? (
           /* 조용한 재계산 금지 — 원본의 stale 배너 + 마커 숨김 규율 그대로. */
@@ -644,7 +860,7 @@ export function StrategyWindow({
                     }
                   />
                 ) : null}
-                <Stat label="명목" value={`₩${run.params.notional.toLocaleString()}/bp`} />
+                <Stat label="명목" value={`${run.params.notional.toLocaleString()}원/bp`} />
                 <Stat label="종가" value={run.asof ?? '—'} />
                 {/* 방향은 노브가 아니라 사실이라 「조건」에 선다 — 이 데스크가
                     실제로 할 수 있는 거래가 무엇인지가 성과의 전제다. */}
@@ -673,6 +889,7 @@ export function StrategyWindow({
                     accessibilityLabel={`${label} 가격과 밴드`}
                     dates={dates}
                     lines={priceLines}
+                    markLines={evLines}
                     onHoverIndex={(i) => setIdx(i == null ? null : { chart: 'price', i })}
                     {...stack}
                   />
@@ -682,6 +899,12 @@ export function StrategyWindow({
                       <ReadoutLevel k="중심선" v={run.points[idx.i]!.ma} unit={unit} />
                       <ReadoutLevel k="상단" v={run.points[idx.i]!.up} unit={unit} />
                       <ReadoutLevel k="하단" v={run.points[idx.i]!.lo} unit={unit} />
+                      {/* 밴드에 대해 지금 어디인지 — 진입 규칙이 보는 바로 그 사실.
+                          「밴드 복귀」 판에서는 이 줄이 신호의 전제다. */}
+                      <ReadoutFact
+                        k="상태"
+                        v={bandWord(run.points[idx.i]!.out, run.points[idx.i]!.outRun)}
+                      />
                     </ReadoutCard>
                   ) : null}
                 </Box>
@@ -689,7 +912,14 @@ export function StrategyWindow({
 
               <Panel
                 title="z 오실레이터"
-                sub={`진입 ±${run.params.entryZ}σ · 진입 마커 ${stale ? '숨김' : `${entryIdx.length}`}`}
+                sub={
+                  stale
+                    ? `진입 ±${run.params.entryZ}σ · 마커 숨김`
+                    : `진입 ±${run.params.entryZ}σ · ${entryWord(run.params.entryMode)}` +
+                      ` · 진입 ${run.trades.length + (run.open ? 1 : 0)} · 청산 ${
+                        run.trades.filter((t) => t.why === 'exit').length
+                      } · 손절 ${run.trades.filter((t) => t.why === 'stop').length}`
+                }
                 /* 관찰 σ 는 설정 줄에서 여기로 내려왔다 [OWNER 2026-08-26]. 이
                    값은 엔진에 안 들어가고 이 패널의 가이드선만 옮긴다 — 성과
                    숫자를 못 바꾸는 노브가 성과 카드 옆에 서 있으면 화면이
@@ -716,13 +946,22 @@ export function StrategyWindow({
                     dates={dates}
                     lines={zLines}
                     priceLines={zBands}
-                    markLines={stale ? [] : entryIdx.map((m) => ({ index: m.i }))}
+                    markers={evMarkers}
+                    markLines={evLines}
                     onHoverIndex={(i) => setIdx(i == null ? null : { chart: 'z', i })}
                     {...stack}
                   />
                   {idx?.chart === 'z' && run.points[idx.i] ? (
+                    /* 종전에는 z 한 줄뿐이었다 — 「이 봉에 무슨 일이 있었나」를
+                       차트가 말하지 못해 거래 표와 눈으로 대조해야 했다. */
                     <ReadoutCard title={run.points[idx.i]!.t}>
                       <ReadoutLevel k="z" v={run.points[idx.i]!.z} unit={'ratio' as Unit} />
+                      <ReadoutFact
+                        k="상태"
+                        v={bandWord(run.points[idx.i]!.out, run.points[idx.i]!.outRun)}
+                      />
+                      <ReadoutFact k="포지션" v={posWord(run, idx.i)} />
+                      <ReadoutMoney k="그날" v={run.points[idx.i]!.pnl} />
                     </ReadoutCard>
                   ) : null}
                 </Box>
@@ -746,26 +985,42 @@ export function StrategyWindow({
                     dates={dates}
                     lines={eqLines}
                     priceLines={zeroLine}
+                    markers={evMarkers}
+                    markLines={evLines}
                     onHoverIndex={(i) => setIdx(i == null ? null : { chart: 'eq', i })}
                     {...stack}
                   />
                   {idx?.chart === 'eq' && run.points[idx.i] ? (
                     <ReadoutCard title={run.points[idx.i]!.t}>
                       <ReadoutMoney k="누적" v={run.points[idx.i]!.cum} />
+                      <ReadoutMoney k="그날" v={run.points[idx.i]!.pnl} />
+                      <ReadoutFact k="포지션" v={posWord(run, idx.i)} />
                     </ReadoutCard>
                   ) : null}
                 </Box>
               </Panel>
 
               {/* 거래 하나의 **일별 대사** — 백테스트 창의 그 문법이다.
-                  가로합이 그날 손익이고 세로합이 거래 손익이다. 바닥 줄이 그
-                  항등을 그대로 적는다 — 대사표는 «맞다» 고 주장하는 것이 아니라
-                  **맞는지 보이는** 표다. */}
+
+                  ── 2026-08-28 다시 세움 [OWNER — "대사가 너무 허술하게"] ──
+                  종전 표는 평가·캐리·비용·그날 넉 줄이었다. 가로합은 닫혔지만
+                  **평가가 어디서 왔는지**를 표가 말하지 않았다 — 그래서 그
+                  숫자가 옳은지 아닌지 화면만 보고는 알 수 없었다. 백테스트
+                  대사표가 「전일 KRD × Δbp = 추정」을 한 줄 안에 두는 이유가
+                  정확히 그것이다(`ui/window/ReconStack.tsx` 머리).
+
+                  여기의 그 곱셈은 **감도 × Δ = 평가** 다. 감도는 그 봉을
+                  통과해서 들고 있던 포지션 × 명목(`hold` — 봉이 끝난 뒤의
+                  포지션이 아니다: 진입 봉은 0, 청산 봉은 ±1). 그 열을 세우자
+                  선물 계열의 단위 오류가 **첫 줄에서** 드러났다(Δ 0.157 을
+                  ₩/bp 명목에 곱하고 있었다 — 서버 주석에 경위).
+
+                  가로합 = 그날 · 세로합 = 거래 손익. 「누적」 열이 세로합을
+                  줄마다 적으므로 마지막 줄이 합계 줄과 같아야 하고, 표는
+                  «맞다» 고 주장하는 대신 **맞는지 보인다**. */}
               <Panel
                 title={sel ? '일별 대사' : '거래'}
-                sub={sel
-                  ? `${sel.entryT} → ${sel.exitT} · ${sel.bars}봉 · ${(sel.dir > 0 ? run.dirs.plus : run.dirs.minus).legs}`
-                  : run.trades.length === 0 ? '이 창에 거래가 없어요' : dirSub}
+                sub={sel ? reconSub(sel, run) : run.trades.length === 0 ? '이 창에 거래가 없어요' : dirSub}
                 aside={sel ? (
                   <button type="button" className="sr-pillbtn" onClick={() => setOpenTrade(null)}>
                     거래 목록
@@ -780,52 +1035,66 @@ export function StrategyWindow({
                           <TableCell as="th" scope="col">
                             <Text font="caption" as="span" color="fgMuted">날짜</Text>
                           </TableCell>
-                          {(['평가', '캐리', '비용', '그날'] as const).map((h) => (
-                            <TableCell key={h} as="th" scope="col" className="sr-num" justifyContent="flex-end">
-                              <Text font="caption" as="span" color="fgMuted">{h}</Text>
+                          <TableCell as="th" scope="col">
+                            <Text font="caption" as="span" color="fgMuted">구분</Text>
+                          </TableCell>
+                          {RECON_COLS.map((c) => (
+                            <TableCell key={c.k} as="th" scope="col" className="sr-num" justifyContent="flex-end">
+                              {/* `caption` 이 아니라 `legal` 이다 — CDS 기본 테마의
+                                  `textTransform.caption = 'uppercase'` 가 「z」를 「Z」로,
+                                  「bp」를 「BP」로 만든다(실측 2026-08-28). 둘은 크기가
+                                  같고(0.8125rem) 중량·대문자화만 다르므로, **기호와
+                                  단위가 든 머리**는 `legal` 이 맞다 — `rv/SectorLane`
+                                  이 같은 근거로 정한 판례다. 이 표는 단위가 곧 검산의
+                                  전제라(감도 ₩/bp × Δbp) 대문자 BP 는 오식이다. */}
+                              <Text font="legal" as="span" color="fgMuted" noWrap>{c.k}</Text>
                             </TableCell>
                           ))}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {reconRows.map((p) => (
+                        {reconRows.map(({ p, i }) => (
                           <TableRow key={p.t}>
                             <TableCell>
                               <Text font="label2" as="span" tabularNumbers noWrap>{p.t}</Text>
                             </TableCell>
-                            {([p.mtm, p.carry, p.cost, p.pnl] as const).map((v, k) => (
-                              <TableCell key={k} className="sr-num" justifyContent="flex-end">
-                                <Text
-                                  font="label2"
-                                  as="span"
-                                  tabularNumbers
-                                  noWrap
-                                  color={v === 0 ? 'fgMuted' : undefined}
-                                  className={k === 3 && v !== 0 ? (v > 0 ? 'sr-up' : 'sr-down') : undefined}
-                                >
-                                  {v === 0 ? '—' : fmtKrw(v)}
-                                </Text>
-                              </TableCell>
-                            ))}
+                            <TableCell>
+                              <Text font="label2" as="span" color="fgMuted" noWrap>
+                                {eventWord(events.get(i), p.hold !== 0)}
+                              </Text>
+                            </TableCell>
+                            <ReconNum v={p.z} kind="sigma" />
+                            <ReconNum v={p.dv} kind="bp" />
+                            {/* 감도 — 이 줄의 곱셈이 곱한 바로 그 수. 무포지션
+                                봉(진입일)은 0 이라 평가도 0 이다. */}
+                            <ReconNum v={p.hold * run.params.notional} kind="won" />
+                            <ReconNum v={p.mtm} kind="won" />
+                            <ReconNum v={p.carry} kind="won" />
+                            <ReconNum v={p.cost} kind="won" />
+                            <ReconNum v={p.pnl} kind="won" tone />
+                            <ReconNum v={p.tradePnl} kind="won" tone />
                           </TableRow>
                         ))}
                         <TableRow>
                           <TableCell>
                             <Text font="label1" as="span" noWrap>합계</Text>
                           </TableCell>
-                          {([sel.mtm, sel.carry, sel.cost, sel.pnl] as const).map((v, k) => (
-                            <TableCell key={k} className="sr-num" justifyContent="flex-end">
-                              <Text
-                                font="label1"
-                                as="span"
-                                tabularNumbers
-                                noWrap
-                                className={k === 3 && v !== 0 ? (v > 0 ? 'sr-up' : 'sr-down') : undefined}
-                              >
-                                {fmtKrw(v)}
-                              </Text>
-                            </TableCell>
-                          ))}
+                          <TableCell>
+                            <Text font="label1" as="span" color="fgMuted" noWrap>{sel.bars}봉</Text>
+                          </TableCell>
+                          {/* z 는 더할 수 있는 양이 아니다 — 진입 → 청산으로 적는다. */}
+                          <TableCell className="sr-num" justifyContent="flex-end">
+                            <Text font="label1" as="span" tabularNumbers noWrap>
+                              {`${sel.entryZ.toFixed(2)}→${sel.exitZ.toFixed(2)}`}
+                            </Text>
+                          </TableCell>
+                          <ReconNum v={sel.dv} kind="bp" head />
+                          <ReconNum v={null} kind="won" head />
+                          <ReconNum v={sel.mtm} kind="won" head />
+                          <ReconNum v={sel.carry} kind="won" head />
+                          <ReconNum v={sel.cost} kind="won" head />
+                          <ReconNum v={sel.pnl} kind="won" tone head />
+                          <ReconNum v={sel.pnl} kind="won" tone head />
                         </TableRow>
                       </TableBody>
                     </Table>
@@ -847,11 +1116,21 @@ export function StrategyWindow({
                         <TableCell as="th" scope="col">
                           <Text font="caption" as="span" color="fgMuted">방향</Text>
                         </TableCell>
+                        {/* 이탈 구간은 **「밴드 복귀」 판에서만** 열이 선다.
+                            「이탈 즉시」 판에서는 진입 봉이 곧 이탈 첫 봉이라
+                            최대 z 가 진입 z 와 같은 수다 — 같은 수를 두 열에
+                            적으면 표가 없는 정보를 있는 척한다. */}
+                        {run.params.entryMode === 'touch' ? (
+                          <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
+                            <Text font="legal" as="span" color="fgMuted" noWrap>이탈 최대</Text>
+                          </TableCell>
+                        ) : null}
+                        {/* z 는 소문자다 — `caption` 은 대문자로 세운다(위 판례). */}
                         <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
-                          <Text font="caption" as="span" color="fgMuted">진입 z</Text>
+                          <Text font="legal" as="span" color="fgMuted">진입 z</Text>
                         </TableCell>
                         <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
-                          <Text font="caption" as="span" color="fgMuted">청산 z</Text>
+                          <Text font="legal" as="span" color="fgMuted">청산 z</Text>
                         </TableCell>
                         <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
                           <Text font="caption" as="span" color="fgMuted">손익</Text>
@@ -866,8 +1145,8 @@ export function StrategyWindow({
                         /* 줄을 누르면 그 거래의 일별 대사가 열린다 — rv 랭킹 표의
                            그 문법(«줄을 누르면 이력이 열려요»)이다. */
                         <TableRow
-                          key={`${t.entryT}-${t.exitT}`}
-                          onClick={() => setOpenTrade(`${t.entryT}-${t.exitT}`)}
+                          key={tradeKey(t)}
+                          onClick={() => setOpenTrade(tradeKey(t))}
                           style={{ cursor: 'pointer' }}>
                           <TableCell>
                             <Text font="label2" as="span" tabularNumbers noWrap>{t.entryT}</Text>
@@ -884,6 +1163,14 @@ export function StrategyWindow({
                               {(t.dir > 0 ? run.dirs.plus : run.dirs.minus).short}
                             </Text>
                           </TableCell>
+                          {run.params.entryMode === 'touch' ? (
+                            <TableCell className="sr-num" justifyContent="flex-end">
+                              <Text font="label2" as="span" tabularNumbers noWrap>
+                                {t.peakZ == null ? '—' : `${t.peakZ.toFixed(2)}σ`}
+                                {t.outDays == null ? '' : ` · ${t.outDays}일`}
+                              </Text>
+                            </TableCell>
+                          ) : null}
                           <TableCell className="sr-num" justifyContent="flex-end">
                             <Text font="label2" as="span" tabularNumbers noWrap>{t.entryZ.toFixed(2)}σ</Text>
                           </TableCell>
@@ -917,7 +1204,12 @@ export function StrategyWindow({
 
             <Text font="legal" as="span" color="fgMuted">
               {fmtLevel(run.points.at(-1)?.v ?? null, unit)}
-              {unitSuffix(unit)} 기준 · 표본 끝의 미청산 포지션은 누적에는 있고 거래 수에는
+              {unitSuffix(unit)} 기준 ·{' '}
+              {run.params.entryMode === 'touch'
+                ? '밖에 있다가 밴드 선으로 돌아오는 봉에 들어가요 — 방향은 나갔던 쪽이 정해요.'
+                : '|z|가 진입σ를 넘는 봉에 들어가요 — 밴드를 뚫는 그 봉이에요.'}{' '}
+              거래 줄을 누르면 일별 대사가 열려요(감도 × Δ = 평가 · 가로합 = 그날 ·
+              세로합 = 거래 손익). 표본 끝의 미청산 포지션은 누적에는 있고 거래 수에는
               없어요(원본 규약).
               {run.dirs.why
                 ? ` ${run.dirs.why} 그래서 못 들어간 진입 신호가 ${run.dirs.blocked.spells}회(${run.dirs.blocked.days}일) 있어요.`

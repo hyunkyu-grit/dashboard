@@ -14,10 +14,15 @@ export function fmtRate(v: number | null | undefined): string {
   return v == null ? "–" : v.toFixed(4);
 }
 
-/** Signed delta in bp, 1 decimal: +4.3 / −12.5 */
-export function fmtBp(v: number | null | undefined): string {
+/** Signed delta in bp, 1 decimal: +4.3 / −12.5
+ *
+ * `digits` 는 **대사표**를 위한 자리다 [2026-08-28]. 그 표는 곱셈이 한 줄 안에서
+ * 닫히는 것을 눈으로 보이는 물건이라 하루 0.17bp 가 정수·1자리 반올림에 지워지면
+ * 안 된다 — `ui/window/ReconStack.tsx` 가 Δbp 를 두 자리로 적는 것과 같은 근거다.
+ * 기본값은 종전 그대로라 부르던 자리는 하나도 안 바뀐다. */
+export function fmtBp(v: number | null | undefined, digits = 1): string {
   if (v == null) return "–";
-  const s = Math.abs(v).toFixed(1);
+  const s = Math.abs(v).toFixed(digits);
   return v < 0 ? `${MINUS}${s}` : `+${s}`;
 }
 
