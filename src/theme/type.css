@@ -212,8 +212,17 @@ body,
   flex-grow: 1;
 }
 
-/* 16px/600 in a 40px stadium — the reference's numbers. Transparent until the
- * pointer or the keyboard reaches it. */
+/* ── 캐논 알약과 **같은 치수** [OWNER 2026-08-27 — "여전히 알약처럼 쓰는 것들
+ *    사이즈가 다 좀 큰 거 같은데 … 그거 사이즈 다 줄인거 기준으로 맞춰줄래?"] ──
+ *
+ * 종전은 40px 상자에 16/600 이었다(레퍼런스의 수). 그런데 이 앱의 화면에는
+ * 알약처럼 생긴 것이 넷 있고(내비·`.sr-pillbtn`·구간 탭·범례 칩) 그 넷이
+ * 40 · 32 · 32 · 34 로 갈려 있었다 — 실측 2026-08-27 Main. 같은 모양이 네 치수면
+ * 그것이 곧 「사이트 전체에 얼라인이 없다」의 한 얼굴이다.
+ *
+ * 오너 선택은 **전부 32/14**(줄인 쪽에 맞춘다)다. 아래 `.sr-pillbtn` 과 같은
+ * 수이고, 가로 패딩만 내비가 한 칸 넓다 — 내비 항목은 서로 붙어 서므로 글자
+ * 사이가 좁으면 한 덩어리로 읽힌다. */
 .sr-navitem {
   /* **글자를 상자 가운데로.** 이게 없으면 안쪽 글자가 상자 위쪽에 붙는다 —
      버튼은 40px 인데 CDS 타이포그래피 span 의 줄상자는 24px 이라, 자동 배치에서
@@ -227,14 +236,14 @@ body,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 40px;
-  padding: 0 16px;
+  height: 32px;
+  padding: 0 14px;
   border: 0;
   border-radius: 999px;
   background: transparent;
   color: var(--color-fg);
   font: inherit;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: var(--fontWeight-headline);
   cursor: pointer;
   white-space: nowrap;
@@ -299,6 +308,14 @@ tr[aria-current='true'] > td {
  *
  * So both states are the same pill and only the tone differs: pointing at
  * something is fainter than being in it. */
+/* 글자 크기는 **안쪽 span 까지** 내려가야 한다. 라벨이 CDS `TextHeadline`
+   (16/600)이라, 버튼에만 적으면 상속이 그 선언에 진다 — 이 리포가 세 번째로
+   같은 자리에서 배우는 것이다(`.sr-ctlfont` 주석의 그 함정). 무게는 그대로
+   600 이라 건드리지 않는다. */
+.sr-navitem * {
+  font-size: 14px;
+}
+
 .sr-navitem:hover,
 .sr-navitem[data-open='true'] {
   background: color-mix(in srgb, var(--color-fg) 6%, transparent);
@@ -505,14 +522,16 @@ tr[aria-current='true'] > td {
   border-left: 1px solid var(--color-bgLine);
 }
 
-/* 첫 칸은 왼쪽 패딩을 안 진다 [2026-08-24].
+/* 첫 칸도 **왼쪽 패딩을 진다** — 2026-08-24 에 뺐던 것을 되돌린다
+ * [OWNER 2026-08-27 — "「이 구간」 앞에 공백이 너무 부족하다", 왼쪽으로 확인].
  *
- * `StatColumn` 이 `paddingX={2}` 라 스트립의 첫 값이 본문보다 32px 안으로 들어가
- * 있었다. 스트립만 그만큼 밀려 보이면 «같은 칼럼» 이라는 느낌이 깨진다 — 백테스트
- * 카드에서는 스트립이 카드 폭을 그대로 쓰기 때문에 이 문제가 없었다. */
-.sr-stats > .sr-statcol:first-child {
-  padding-inline-start: 0;
-}
+ * 뺐던 근거는 «스트립의 첫 값이 본문 열과 밑선을 맞춰야 한다» 였다. 그런데 그
+ * 결과는 「이 구간」 이 카드 왼쪽 끝에 딱 붙는 것이고, 스트립은 위아래를 헤어라인
+ * 으로 나눈 **자기 블록**이라 그 안에서는 첫 칸도 다른 칸과 같은 여백을 져야
+ * 한다 — 지금은 칸 사이에만 세로 헤어라인과 패딩이 있고 맨 앞만 없어서, 읽는
+ * 눈에는 첫 칸이 잘려 보인다.
+ *
+ * 규칙을 지우기만 하면 `StatColumn` 의 `paddingX` 가 그대로 살아난다. */
 
 /* 「모형」 레인의 스트립은 **읽기 폭에 선다.**
  *
@@ -1957,6 +1976,25 @@ thead th {
  * 여기 더하는 것은 그 차 18(3칸)이다.
  * 줄이 접히면 `margin` 이 줄머리에 남지만, 그 자리는 어차피 새 묶음이 시작되는
  * 자리라 읽기를 해치지 않는다. */
+/* ── 범례 칩도 캐논 알약 치수로 [OWNER 2026-08-27] ────────────────────────────
+ *
+ * CDS `Chip size="xs"` 는 **34px · 16px** 이다(실측 2026-08-27: 테두리 1px 두
+ * 겹 + 안쪽 `padding: 6px 12px` + 줄상자). 차트 아래 범례(CD 91일·기준금리·
+ * MA5/10/20)가 그 치수라, 바로 위 구간 탭(32/14)·알약(32/14)과 두 픽셀씩
+ * 어긋나 있었다.
+ *
+ * 상자를 32 로 못 박고 안쪽 세로 패딩을 걷어 낸다 — 글자는 `.sr-ctlfont` 가
+ * 14/20 으로 주므로 20 + 테두리 2 = 22 이고, 남는 10px 을 flex 가 위아래로
+ * 나눈다. 가로 패딩은 그대로 둔다(칩의 폭은 글자가 정한다). */
+.sr-chip {
+  height: 32px;
+}
+
+.sr-chip > * {
+  padding-block: 0;
+  height: 100%;
+}
+
 .sr-fgroup {
   margin-inline-start: 18px;
 }

@@ -219,6 +219,7 @@ export function RefChip({
   return (
     <Chip
       size="xs"
+      className="sr-chip sr-ctlfont"
       accessibilityLabel={`${label} ${on ? '끄기' : '켜기'}`}
       start={
         <span className="sr-casedash" style={{ background: color, opacity: on ? 0.9 : 0.3 }} />
@@ -1097,6 +1098,7 @@ export function PreviewPane({
               <Chip
                 key={maSeriesId(w)}
                 size="xs"
+                className="sr-chip sr-ctlfont"
                 accessibilityLabel={`MA${w} ${on ? '끄기' : '켜기'}`}
                 /* 견본은 **그려진 선 그대로**다 — `RefKey` 가 기준선에 대해 지는
                    그 규칙이고, 여기서는 `.sr-casedash`(시뮬 케이스 칩의 그 부품)
