@@ -48,8 +48,24 @@
  * `Box` 안에 살아서 100% 가 그 상자를 뜻한다 — `guards/control-fill.test.ts`
  * 가 새 `Select` 가 이 상수를 안 지고 들어오는 것을 막는다.
  */
+/* ── 높이도 여기서 못 박는다 [실측 2026-08-27] ────────────────────────────────
+ *
+ * 위 주석은 가로만 다뤘는데, 세로도 어긋나 있었다. `size="s"` 의 CDS 기본
+ * 트리거는 **30px** 이고 이 리포의 컨트롤 등고는 **32px** 다(CLAUDE.md
+ * 「얼라인」 1 — `TextInput` 은 `height={32}` 로 못 박고 있다). 백테스트
+ * 설정 줄을 재면 이렇게 나왔다:
+ *
+ *     종류   30@153   종목   30@153      ← Select
+ *     규모   32@151   진입일 32@151      ← TextInput · IsoDateField
+ *
+ * 컨트롤이 2px 짧으니 라벨까지 2px 내려앉아, 같은 행에서 **라벨 줄이 두 높이로
+ * 갈렸다**(135 대 133). 「얼라인」 3 의 «바닥 정렬 행에서는 블록 높이가 곧 라벨
+ * 높이다» 가 그대로 드러난 자리다.
+ *
+ * 상자 폭과 같은 이유로 여기 둔다 — 이 상수를 지는 `Select` 여덟 개가 한꺼번에
+ * 맞는다. */
 export const DROPDOWN_STYLES = {
   root: { width: "100%" },
-  control: { width: "100%" },
+  control: { width: "100%", height: 32 },
   dropdown: { width: "max-content", minWidth: 120, maxWidth: 340 },
 } as const;

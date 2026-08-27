@@ -30,7 +30,9 @@ import { TextInput } from '@coinbase/cds-web/controls';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Pressable } from '@coinbase/cds-web/system';
 import { SegmentedTabs } from '@coinbase/cds-web/tabs';
-import { TextBody, TextLabel1, TextLabel2, TextLegal } from '@coinbase/cds-web/typography';
+/* 새 코드는 `Text font=…` 를 쓴다 — CLAUDE.md 5. 남은 shorthand 는 시각 무변이라
+   존치 중이고, 여기서 하나(`TextLabel2`)는 이번 얼라인 수리로 자리를 잃었다. */
+import { Text, TextBody, TextLabel1, TextLegal } from '@coinbase/cds-web/typography';
 
 import { directionLabel } from '@/backtest/book';
 import { runErrorMessage, type WallSummary } from '@/lib/api';
@@ -533,18 +535,29 @@ export function SimulationPage({
             {/* 시작일은 **고르는 것이 아니다** — 데이터가 있는 마지막 날이다.
                 오늘을 기본값으로 쓰면 워크북이 며칠 뒤처지는 순간 커브가 비고
                 스왑이 통째로 제외되는데, 화면은 조용히 비기만 한다(v1 실패). */}
+            {/* 컨트롤이 아닌 **값**도 컨트롤과 같은 32px 상자에 담는다 —
+                백테스트 「진입 레벨」과 같은 관용구다(그 자리의 주석에 근거가
+                있다). 이 행은 `alignItems="flex-end"` 라 **블록 높이가 곧 라벨
+                높이**이고, 값이 맨살 글자면 그 칸만 라벨이 내려앉는다. 실측
+                2026-08-27: 시작일·마감일 20@184 대 기간(일) 32@172 — 라벨 줄이
+                12px 로 갈려 있었다. 글자도 같은 행의 입력과 같은 13px(legal)로
+                맞춘다(`ui/window/popup.ts` 의 그 규칙). */}
             <Field label="시작일">
-              <TextLabel2 as="span" tabularNumbers noWrap>
-                {asOf}
-              </TextLabel2>
+              <VStack height={32} justifyContent="center">
+                <Text as="span" font="legal" tabularNumbers noWrap>
+                  {asOf}
+                </Text>
+              </VStack>
             </Field>
             <Field label="기간 (일)">
               <NumField label="기간(일)" width={90} value={scenario.days} onCommit={setDays} />
             </Field>
             <Field label="마감일">
-              <TextLabel2 as="span" tabularNumbers noWrap>
-                {addDays(asOf, scenario.days)}
-              </TextLabel2>
+              <VStack height={32} justifyContent="center">
+                <Text as="span" font="legal" tabularNumbers noWrap>
+                  {addDays(asOf, scenario.days)}
+                </Text>
+              </VStack>
             </Field>
           </HStack>
           <TextLegal as="span" color="fgMuted">
@@ -838,9 +851,14 @@ export function SimulationPage({
                 onCommit={(v) => patchCase({ shockBp: v })}
               />
             </Field>
-            <TextLegal as="span" color="fgMuted">
-              bp · D+{scenario.days} 시점
-            </TextLegal>
+            {/* 단위 꼬리표도 32px 상자에 담는다 — 안 담으면 `flex-end` 가 글자를
+                입력 상자 **바닥**에 붙이고, 입력의 글자는 32px 안에서 가운데라
+                둘의 시선 높이가 어긋난다(실측 2026-08-27: 32 대 16). */}
+            <VStack height={32} justifyContent="center">
+              <TextLegal as="span" color="fgMuted">
+                bp · D+{scenario.days} 시점
+              </TextLegal>
+            </VStack>
           </HStack>
           {anchorError(cur, scenario.anchorTenor) ? (
             <TextLegal as="span" className="sr-up">
