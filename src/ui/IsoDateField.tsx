@@ -55,6 +55,7 @@ import { LocaleProvider } from '@coinbase/cds-common/system/LocaleProvider';
 import type { DateInputValidationError } from '@coinbase/cds-common/dates/DateInputValidationError';
 
 import { Field } from './ControlCard';
+import { CONTROL_H } from './controlHeight';
 
 /** `2026-08-24` → 그 날 **로컬 자정**. 빈 문자열·못 읽는 꼴은 `null`. */
 export function isoToDate(iso: string | undefined | null): Date | null {
@@ -158,7 +159,7 @@ export function IsoDateField({
        리포가 `TextInput` 에 하는 것과 같이 못 박는다(`compact` 는 v11 에서 빠질
        예정이라 안 쓴다). */
     size: 's' as const,
-    height: 32,
+    height: CONTROL_H,
     fontSize: 'legal' as const,
     date,
     onChangeDate: handle,

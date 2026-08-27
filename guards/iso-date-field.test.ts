@@ -135,7 +135,7 @@ describe('③ 힌트 슬롯은 에러 전용 — 행이 어긋나지 않는다',
   });
 
   it('32px 등고를 명시한다 — CDS 기본은 34 다(실측)', () => {
-    expect(src).toMatch(/height: 32/);
+    expect(src).toMatch(/height: CONTROL_H/);
     /* `compact` 는 v11 에서 빠진다 — `size="s"` 가 그 자리다. */
     expect(src).toMatch(/size: 's' as const/);
     expect(code).not.toMatch(/compact/);

@@ -39,6 +39,7 @@ import { runErrorMessage, type WallSummary } from '@/lib/api';
 import { fmtLevel } from '@/lib/format';
 import { fmtKrw } from '@/lib/krw';
 import { Field } from '@/ui/ControlCard';
+import { CONTROL_H } from '@/ui/controlHeight';
 import { useFillHeight } from '@/ui/useFillHeight';
 import { IsoDateField } from '@/ui/IsoDateField';
 import { DROPDOWN_STYLES } from '@/ui/window/popup';
@@ -260,7 +261,7 @@ function NumField({
       <TextInput
         size="s"
         fontSize="legal"
-        height={32}
+        height={CONTROL_H}
         accessibilityLabel={label}
         value={text}
         onChange={(e) => {
@@ -550,7 +551,7 @@ export function SimulationPage({
                 12px 로 갈려 있었다. 글자도 같은 행의 입력과 같은 13px(legal)로
                 맞춘다(`ui/window/popup.ts` 의 그 규칙). */}
             <Field label="시작일">
-              <VStack height={32} justifyContent="center">
+              <VStack height={CONTROL_H} justifyContent="center">
                 <Text as="span" font="legal" tabularNumbers noWrap>
                   {asOf}
                 </Text>
@@ -560,7 +561,7 @@ export function SimulationPage({
               <NumField label="기간(일)" width={90} value={scenario.days} onCommit={setDays} />
             </Field>
             <Field label="마감일">
-              <VStack height={32} justifyContent="center">
+              <VStack height={CONTROL_H} justifyContent="center">
                 <Text as="span" font="legal" tabularNumbers noWrap>
                   {addDays(asOf, scenario.days)}
                 </Text>
@@ -861,7 +862,7 @@ export function SimulationPage({
             {/* 단위 꼬리표도 32px 상자에 담는다 — 안 담으면 `flex-end` 가 글자를
                 입력 상자 **바닥**에 붙이고, 입력의 글자는 32px 안에서 가운데라
                 둘의 시선 높이가 어긋난다(실측 2026-08-27: 32 대 16). */}
-            <VStack height={32} justifyContent="center">
+            <VStack height={CONTROL_H} justifyContent="center">
               <TextLegal as="span" color="fgMuted">
                 bp · D+{scenario.days} 시점
               </TextLegal>

@@ -38,8 +38,14 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 const SRC = path.join(ROOT, 'src');
 
 /** 이 앱의 기본 행 컨트롤 높이. `.sr-pillbtn`·`.sr-naviconbtn`·
- * `.sr-clog-trigger`·`.sr-window-close` 가 CSS 로 적는 값과 같은 수다. */
-export const CONTROL_H = 32;
+ * `.sr-clog-trigger`·`.sr-window-close` 가 CSS 로 적는 값과 같은 수다.
+ *
+ * **수의 출처는 이제 앱이다** [2026-08-27]. 그 전까지 이 상수는 여기 가드에만
+ * 있었고 `src` 는 열세 곳에 `32` 를 따로 적고 있었다 — 그래서 CDS `Select` 가
+ * 30px 로 앉은 것을 아무것도 잡아 주지 못했다. 가드가 캐논을 «정의» 하면 앱은
+ * 그것을 못 읽는다. */
+export { CONTROL_H } from '../src/ui/controlHeight';
+import { CONTROL_H } from '../src/ui/controlHeight';
 
 /**
  * 허용되는 컨트롤 높이 — **등고는 앱 전역 상수가 아니라 행의 성질이다.**
@@ -115,10 +121,14 @@ describe('한 행 = 한 컨트롤 높이', () => {
       const body = stripComments(fs.readFileSync(f, 'utf8'));
       for (const tag of openingTags(body, 'TextInput')) {
         if (!/size=["']s["']/.test(tag)) continue;
-        const m = tag.match(/height=\{(\d+)\}/);
+        /* 값은 숫자거나 캐논 상수다 — 상수 쪽이 기본이고, 숫자를 직접 적는
+           것은 그 행이 36 처럼 다른 수를 골랐을 때뿐이다. */
+        const m = tag.match(/height=\{(\d+|CONTROL_H)\}/);
         if (!m) offenders.push(`${path.relative(ROOT, f)}: height 없음`);
-        else if (!ROW_HEIGHTS.has(Number(m[1])))
-          offenders.push(`${path.relative(ROOT, f)}: height={${m[1]}}`);
+        else {
+          const h = m[1] === 'CONTROL_H' ? CONTROL_H : Number(m[1]);
+          if (!ROW_HEIGHTS.has(h)) offenders.push(`${path.relative(ROOT, f)}: height={${m[1]}}`);
+        }
       }
     }
     expect(

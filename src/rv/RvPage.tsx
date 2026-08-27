@@ -64,6 +64,7 @@ import { TimeChart, type TimeLine } from '@/chart/TimeChart';
 import type { ScalePriceLine } from '@/chart/ScaleChart';
 import { BacktestUnavailable } from '@/lib/api';
 import { useFunding } from '@/state/funding';
+import { CONTROL_H } from '@/ui/controlHeight';
 import { ErrorState, LoadingState } from '@/ui/DataState';
 import { ReadoutCard, ReadoutLevel, placeReadout } from '@/ui/ReadoutCard';
 import { DROPDOWN_STYLES } from '@/ui/window/popup';
@@ -123,7 +124,7 @@ function BpField({
       <TextInput
         size="s"
         fontSize="legal"
-        height={32}
+        height={CONTROL_H}
         accessibilityLabel={label}
         suffix={suffix}
         value={text}

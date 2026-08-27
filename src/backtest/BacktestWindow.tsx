@@ -68,6 +68,7 @@ import { fmtKrw, fmtKrwFromMan, splitCashBondKrw, splitKrw } from '@/lib/krw';
 import { useFunding } from '@/state/funding';
 import type { Row } from '@/table/rows';
 import { Field } from '@/ui/ControlCard';
+import { CONTROL_H } from '@/ui/controlHeight';
 import { IsoDateField } from '@/ui/IsoDateField';
 import { loadCd } from '@/ui/PreviewPane';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
@@ -709,7 +710,7 @@ export function BacktestWindow({
                       <TextInput
                         size="s"
                         fontSize="legal"
-                        height={32}
+                        height={CONTROL_H}
                         accessibilityLabel="규모(억)"
                         value={String(r.eok)}
                         onChange={(e) => patch(r.key, { eok: Number(e.target.value) || 0 })}
@@ -766,7 +767,7 @@ export function BacktestWindow({
                           두 줄이 32px 안에 서고 상자는 안 커진다(legal 13/16 × 2).
                           채권 줄은 만기 칸이 더 붙어 가로 여유가 9px 뿐이라(실측
                           2026-08-25: 977/986) 폭을 늘리는 길은 없었다. */}
-                      <VStack height={32} justifyContent="center">
+                      <VStack height={CONTROL_H} justifyContent="center">
                         {(() => {
                           /* 무엇을 적을지는 `entryLevelLines` 하나가 정한다 —
                              선물은 «가격 + 내재금리», 나머지는 «값 + CD». */

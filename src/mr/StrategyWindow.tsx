@@ -44,6 +44,7 @@ import { BacktestUnavailable } from '@/lib/api';
 import { fmtLevel, unitSuffix } from '@/lib/format';
 import { fmtKrw } from '@/lib/krw';
 import { Field } from '@/ui/ControlCard';
+import { CONTROL_H } from '@/ui/controlHeight';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { ReadoutCard, ReadoutLevel, ReadoutMoney, placeReadout } from '@/ui/ReadoutCard';
 import { Stat, StatColumn } from '@/ui/Stat';
@@ -95,7 +96,7 @@ function SigmaPick({
   return (
     <Box width={SIGMA_W}>
       <Field label={label} help={help}>
-      <HStack gap={0.5} alignItems="center" height={32}>
+      <HStack gap={0.5} alignItems="center" height={CONTROL_H}>
         {options.map((o) => (
           <button
             key={o}
@@ -143,7 +144,7 @@ function NumInput({
     <TextInput
       size="s"
       fontSize="legal"
-      height={32}
+      height={CONTROL_H}
       accessibilityLabel={label}
       value={text}
       onFocus={() => setEditing(true)}
@@ -463,7 +464,7 @@ export function StrategyWindow({
             <Field label="종목">
               {/* 컨트롤이 아닌 값도 같은 32px 상자에 담는다 — 백테스트 「진입
                   레벨」 칸의 판례(안 담으면 이 블록만 바닥에서 어긋난다). */}
-              <HStack height={32} alignItems="center">
+              <HStack height={CONTROL_H} alignItems="center">
                 <Text font="label2" as="span" noWrap>
                   {label}
                 </Text>

@@ -1,3 +1,5 @@
+import { CONTROL_H } from '../controlHeight';
+
 /* 창 안 드롭다운의 폭 — **가장 긴 항목만큼**.
  *
  * CDS `Select` 의 드롭다운은 기본적으로 컨트롤과 같은 폭이다. 값이 토큰일 때는
@@ -66,6 +68,6 @@
  * 맞는다. */
 export const DROPDOWN_STYLES = {
   root: { width: "100%" },
-  control: { width: "100%", height: 32 },
+  control: { width: "100%", height: CONTROL_H },
   dropdown: { width: "max-content", minWidth: 120, maxWidth: 340 },
 } as const;

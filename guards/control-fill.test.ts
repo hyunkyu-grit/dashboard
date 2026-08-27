@@ -89,7 +89,7 @@ describe('컨트롤은 제 상자를 채운다', () => {
        Select 만 2px 짧아지고 «바닥 정렬 행에서는 블록 높이가 곧 라벨 높이»
        (CLAUDE.md 「얼라인」 3)라 라벨 줄까지 갈린다 — 실측 2026-08-27 백테스트
        설정 줄: Select 30@153 대 TextInput 32@151, 라벨 135 대 133. */
-    expect(popup).toMatch(/control:\s*\{[^}]*height:\s*32/);
+    expect(popup).toMatch(/control:\s*\{[^}]*height:\s*CONTROL_H/);
   });
 
   /**
