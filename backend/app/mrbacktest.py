@@ -9,7 +9,9 @@
   - 트레일링 **포함** 창 lookback · **모집단** 표준편차(pstdev, two-pass) ·
     창 미달 또는 σ=0 → z 없음
   - 진입: |z| ≥ entryZ 역행 — z>0(비쌈) 숏, z≤0(쌈) 롱. 교차 감지 아님 —
-    **레벨 검사**다.
+    **레벨 검사**다. (2026-08-28: `entry_mode="touch"` 로 «밖에 있다가 밴드로
+    복귀하는 봉» 규칙을 고를 수 있다 — 기본은 원본 그대로 `"level"` 이다.
+    `_entry_signal` 에 두 규칙이 나란히 적혀 있다.)
   - `allow_dirs` — 부를 사람이 «이 방향은 우리가 못 한다» 를 말할 수 있는
     자리다(기본은 양방향이라 원본 산술 그대로). 막힌 방향의 진입 신호는
     **조용히 사라지지 않고** `blocked` 로 세어서 돌아온다.
@@ -75,12 +77,60 @@ def rolling_series(values: list[float], lookback: int) -> dict[str, list]:
     return {"mean": mean, "std": std, "z": z}
 
 
+ENTRY_MODES = ("level", "touch")
+
+
+def _entry_signal(z: list[float | None], i: int, entry_z: float,
+                  mode: str) -> int | None:
+    """그 봉의 진입 신호 — 방향(±1) 또는 없음(None).
+
+    방향은 두 모드에서 같은 뜻이다: **평소 대비 너무 높으면 떨어진다에 걸고
+    (숏 = −1), 너무 낮으면 롱(+1)** 이다. 다른 것은 «언제 그 판단을 실행에
+    옮기는가» 뿐이다.
+
+    ``level`` — |z| ≥ entryZ 인 **모든** 봉이 신호다(교차 감지가 아니라 레벨
+        검사). 밴드를 뚫고 나가는 그 봉에 들어간다. 원본 PMS 규칙이고 기본값이다.
+
+    ``touch`` — **밖에 있다가 밴드 선으로 되돌아오는** 봉이 신호다
+        [OWNER 2026-08-28 — "진입 기준이 외부로 이탈했다가 다시 그 선을 터치할
+        때"]. 직전 봉이 밖(|z| ≥ entryZ)이고 이 봉이 안(|z| < entryZ)이면
+        복귀한 것이고, 방향은 **나갔던 쪽**이 정한다(위로 나갔으면 숏) — 복귀
+        봉의 z 부호가 아니다. 그 둘은 갈릴 수 있다(위 밴드 밖에서 하루 만에
+        중심선을 지나 아래로 내려오는 봉).
+
+        측정면(`mr.py::_state`)이 이미 이 어휘로 판정한다 — 보드가 «재진입
+        1일째» 라고 적는 바로 그 봉이 여기서 신호다. 두 화면이 같은 사건을
+        다른 규칙으로 말하면 안 된다.
+
+        이 규칙은 **거래를 늦추고 줄인다.** 늦추는 만큼 되돌림의 앞머리를
+        내주고, 줄이는 만큼 「끝까지 벌어지기만 하는」 구간을 피한다. 어느
+        쪽이 큰지는 계열마다 다르고, 그래서 판정이 아니라 **노브**다.
+
+    warm-up(창 미달·σ=0)으로 z 가 없는 봉은 신호가 아니다 — 지표가 못 서는
+    구간에 «조건이 맞았다» 고 할 수 없다. ``touch`` 는 직전 봉의 z 도 필요해서
+    창 앞머리에서 한 봉 더 늦게 선다.
+    """
+    zi = z[i]
+    if zi is None:
+        return None
+    if mode == "level":
+        return None if abs(zi) < entry_z else (-1 if zi > 0 else 1)
+    # touch — 직전 봉이 밖, 이 봉이 안.
+    if abs(zi) >= entry_z or i == 0:
+        return None
+    zp = z[i - 1]
+    if zp is None or abs(zp) < entry_z:
+        return None
+    return -1 if zp > 0 else 1
+
+
 def simulate(dates: list[str], values: list[float], *, lookback: int,
              entry_z: float, exit_z: float, stop_z: float,
              cost_bp: float, notional: float,
              allow_dirs: tuple[int, ...] = (-1, 1),
              gate: list[Any] | None = None,
-             carry: list[float] | None = None) -> dict[str, Any]:
+             carry: list[float] | None = None,
+             entry_mode: str = "level") -> dict[str, Any]:
     """원본 simulateMeanReversion 의 바-루프 그대로. 반환 키도 그 어휘를 쓴다.
 
     `allow_dirs` 만 원본에 없던 자리다 — 실행할 수 있는 방향(+1 = 값이 오르면
@@ -110,6 +160,17 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
     구간에 «조건이 맞았다» 고 할 수는 없다. 다만 그것도 `gated` 에 세므로
     창 앞머리에서 몇 건이 그렇게 빠졌는지가 숫자로 남는다.
 
+    ## `entry_mode` — 「언제 실행에 옮기는가」
+
+    `"level"`(기본) 은 원본 PMS 규칙이고, `"touch"` 는 밖에 있다가 밴드로
+    복귀하는 봉에 들어간다. 규칙 둘의 전문은 `_entry_signal` 에 있다. 기본값이
+    `"level"` 이라 **인자를 안 주면 예전과 완전히 같은 수**다(적합성 벡터가
+    그것을 잰다).
+
+    청산·손절은 모드를 안 본다. 나가는 문의 규칙을 진입 규칙에 매달면 모드를
+    바꿀 때마다 보유기간의 뜻이 같이 흔들려, 두 판을 나란히 놓고 비교할 수
+    없게 된다. **한 번에 하나만 바꾼다.**
+
     ## `carry` — 두 다리의 중간 현금흐름 [OWNER 2026-08-27 — "중간에 CF는
        상쇄되는건가?"]
 
@@ -132,6 +193,9 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
     쌓이는 자리는 **MTM 과 같다**: 진입 봉에는 안 붙고(그 봉엔 아직 하루를 안
     들고 있었다), 청산 봉에는 붙는다(전 봉 종가부터 그날 종가까지 들고 있었다).
     """
+    if entry_mode not in ("level", "touch"):
+        raise ValueError(f"entry_mode 는 level|touch 다: {entry_mode!r}")
+
     n = len(values)
     roll = rolling_series(values, lookback)
     z = roll["z"]
@@ -142,6 +206,7 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
     position = 0
     entry_idx: int | None = None
     entry_z_val: float | None = None
+    entry_run: tuple[int, float] | None = None
     trade_pnl = 0.0
     # 거래 하나의 삼분해 — 평가·캐리·비용. 셋의 합이 그 거래의 손익이고,
     # 화면의 대사표가 그 항등을 잰다(이 앱의 3분해·4분해와 같은 문법).
@@ -162,13 +227,53 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
     gated_days = 0
     gated_spells = 0
     gated_prev = False
+    # ── 밴드 밖 구간 ─────────────────────────────────────────────────────────
+    # 「언제 나갔고 얼마나 벌어졌나」 — 진입 한 줄이 그 사실을 지고 다니게 한다.
+    # `touch` 모드에서는 진입 봉의 z 가 밴드 선 언저리라, 그 수만으로는 무엇을
+    # 보고 들어갔는지 화면이 말할 수 없다(위로 4σ 까지 갔다 온 것과 2.01σ 를
+    # 살짝 넘었다 온 것이 같은 줄로 보인다).
+    cur_start: int | None = None   # 지금 이어지는 이탈 구간의 첫 봉
+    cur_peak: float | None = None  # 그 구간의 |z| 최대(부호 유지)
+    cur_side = 0
+    prev_run: tuple[int, float] | None = None  # 방금 끝난 이탈 구간
+    out_run = 0                    # 지금 봉까지 연속 며칠째 밖인가(안이면 0)
 
     for i in range(n):
         daily_pnl = 0.0
+        # 그 봉의 MTM 을 곱한 바로 그 포지션 — 봉이 끝난 뒤의 `position` 과
+        # **다르다**(진입 봉은 0, 청산 봉은 ±1). 백테스트 대사표가 「전일
+        # 종가 KRD」를 싣는 것과 같은 이유다: 한 줄 안에서 감도 × 변화 = 평가
+        # 가 닫혀야 눈이 위 줄로 오갈 일이 없다.
+        hold = position
+        zi = z[i]
+        # 이 봉이 끝난 시점의 «그 거래» 누적 — 대사표의 세로합을 줄마다 적는다.
+        # 청산 봉에서는 확정된 거래 손익이고, 무포지션이면 0 이다.
+        bar_trade = 0.0
+
+        # 이탈 구간 장부 — 신호를 내기 **전에** 갱신한다.
+        side = 0 if zi is None or abs(zi) < entry_z else (1 if zi > 0 else -1)
+        if side != 0:
+            if side != cur_side:
+                cur_start, cur_peak, cur_side = i, zi, side
+                out_run = 0
+            elif cur_peak is None or abs(zi) > abs(cur_peak):
+                cur_peak = zi
+            out_run += 1
+        elif cur_side != 0:
+            prev_run = (cur_start, cur_peak)  # type: ignore[assignment]
+            cur_start = cur_peak = None
+            cur_side = 0
+            out_run = 0
+        else:
+            out_run = 0
+
+        # 진입 신호는 **봉 머리에서** 낸다 — 그 봉에 청산이 나도 `want` 는
+        # 여전히 «들어오기 전» 의 판정이라, 청산 봉 재진입 금지가 구조로
+        # 지켜진다(원본 규약). 보유 중이면 아예 묻지 않는다.
+        want = None if hold != 0 else _entry_signal(z, i, entry_z, entry_mode)
         bar_mtm = 0.0
         bar_carry = 0.0
         bar_cost = 0.0
-        zi = z[i]
         blocked_now = False
         gated_now = False
 
@@ -184,6 +289,7 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
                 trade_carry += c
                 bar_carry = c
             trade_pnl += daily_pnl
+            bar_trade = trade_pnl
 
             if zi is not None:
                 should_stop = abs(zi) >= stop_z
@@ -202,22 +308,31 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
                         "exitZ": zi,
                         "entryValue": values[entry_idx],
                         "exitValue": values[i],
+                        # 보유 동안의 총 변화 — 대사표 「합계」 줄의 Δ 칸이다.
+                        # 줄마다의 Δ 를 세로로 더한 값과 같아야 한다.
+                        "dv": values[i] - values[entry_idx],
                         "pnl": trade_pnl,
                         # 대사용 삼분해 — 합이 `pnl` 과 같아야 한다.
                         "mtm": trade_mtm,
                         "carry": trade_carry,
                         "cost": trade_cost,
                         "bars": i - entry_idx,
+                        # 진입 직전의 밴드 밖 구간 — 며칠 나가 있었고 얼마나
+                        # 벌어졌는가. `level` 이면 outDays 는 늘 1 이다.
+                        "outFrom": dates[entry_run[0]] if entry_run else None,
+                        "outDays": (entry_idx - entry_run[0] + (0 if entry_mode == "touch" else 1))
+                                   if entry_run else None,
+                        "peakZ": entry_run[1] if entry_run else None,
                         "exitReason": "stop" if should_stop else "exit",
                     })
+                    bar_trade = trade_pnl
                     position = 0
                     entry_idx = None
                     entry_z_val = None
+                    entry_run = None
                     trade_pnl = 0.0
                     trade_mtm = trade_carry = trade_cost = 0.0
-        elif zi is not None and abs(zi) >= entry_z:
-            # 평소 대비 너무 높으면 떨어진다에 건다(숏) — 너무 낮으면 롱.
-            want = -1 if zi > 0 else 1
+        elif want is not None:
             if want not in allow_dirs:
                 # 못 하는 거래는 안 한 것으로 둔다 — 비용도 손익도 없다.
                 # 방향을 **먼저** 본다: 애초에 실행 불가능한 신호를 두고
@@ -236,6 +351,10 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
                 position = want
                 entry_idx = i
                 entry_z_val = zi
+                # 무엇을 보고 들어갔는가 — `level` 은 지금 이어지는 구간(이 봉이
+                # 그 첫 봉이다), `touch` 는 방금 끝난 구간이다.
+                run = (cur_start, cur_peak) if entry_mode == "level" else prev_run
+                entry_run = run if run and run[0] is not None else None
                 entry_events += 1
                 entry_cost = notional * cost_bp
                 daily_pnl -= entry_cost
@@ -244,16 +363,22 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
                 trade_carry = 0.0
                 trade_cost = -entry_cost
                 bar_cost = -entry_cost
+                bar_trade = trade_pnl
 
         blocked_prev = blocked_now
         gated_prev = gated_now
         cumulative += daily_pnl
         points.append({
             "date": dates[i], "value": values[i], "z": zi,
-            "position": position, "dailyPnl": daily_pnl,
+            "position": position, "hold": hold, "dailyPnl": daily_pnl,
             # 그날의 분해 — 거래 한 줄을 눌렀을 때 **날짜별 대사**가 이걸 편다
             # (백테스트 창의 「일별 대사」와 같은 문법). 셋의 합이 `dailyPnl` 이다.
             "mtm": bar_mtm, "barCarry": bar_carry, "barCost": bar_cost,
+            # 거래 안에서의 누적 — 마지막 줄이 그 거래의 손익과 같아야 한다.
+            "tradePnl": bar_trade,
+            # 밴드 밖 여부(부호 = 나간 쪽)와 연속 일수 — 화면이 「지금 어디에
+            # 서 있나」를 말할 수 있게. 측정면 `mr._state` 와 같은 어휘다.
+            "out": side, "outRun": out_run,
             "cumulativePnl": cumulative,
         })
 
@@ -265,7 +390,11 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
         open_leg = {"entryDate": dates[entry_idx], "direction": position,
                     "entryZ": entry_z_val, "entryValue": values[entry_idx],
                     "pnl": trade_pnl, "mtm": trade_mtm, "carry": trade_carry,
-                    "cost": trade_cost, "bars": n - 1 - entry_idx}
+                    "cost": trade_cost, "bars": n - 1 - entry_idx,
+                    "outFrom": dates[entry_run[0]] if entry_run else None,
+                    "outDays": (entry_idx - entry_run[0]
+                                + (0 if entry_mode == "touch" else 1)) if entry_run else None,
+                    "peakZ": entry_run[1] if entry_run else None}
 
     summary = summarize(points, trades)
     summary["openPnl"] = open_leg["pnl"] if open_leg else None

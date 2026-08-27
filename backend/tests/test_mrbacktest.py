@@ -265,3 +265,129 @@ def test_gated_spell_counts_runs_not_bars():
     assert r["trades"] == []
     assert r["gated"]["spells"] >= 1
     assert r["gated"]["days"] > r["gated"]["spells"], "연속 봉이 한 구간으로 묶여야 한다"
+
+
+# ── 진입 규칙 둘 [OWNER 2026-08-28 — "진입 기준이 외부로 이탈했다가 다시 그
+#    선을 터치할 때"] ────────────────────────────────────────────────────────
+
+
+def _excursion():
+    """밴드를 뚫고 나갔다가 되돌아오는 계열 하나.
+
+    잔잔한 40봉 → 이탈 두 봉(D40·D41) → 복귀(D42~). `level` 은 뚫는 봉 D40 에,
+    `touch` 는 복귀 봉 D42 에 들어가야 한다. 이탈이 트레일링 창에 들어가면서
+    σ 가 커져 복귀 뒤 곧 청산되므로, 두 판 다 **닫힌 거래**로 끝난다.
+    """
+    vals = [10.0 + (0.1 if i % 2 else 0.0) for i in range(40)]
+    vals += [12.0, 12.0]
+    vals += [10.05] * 18
+    return [f"D{i:02d}" for i in range(len(vals))], vals
+
+
+_EXC = dict(lookback=20, entry_z=1.5, exit_z=0.5, stop_z=99.0,
+            cost_bp=0.0, notional=1.0)
+
+
+def test_touch_enters_on_the_return_bar_not_the_piercing_bar():
+    dates, vals = _excursion()
+    lvl = bt.simulate(dates, vals, **_EXC, entry_mode="level")
+    tch = bt.simulate(dates, vals, **_EXC, entry_mode="touch")
+    assert [t["entryDate"] for t in lvl["trades"]] == ["D40"]
+    assert [t["entryDate"] for t in tch["trades"]] == ["D42"]
+    # 뚫는 봉은 밴드 **밖**, 복귀 봉은 **안**이다.
+    assert abs(lvl["trades"][0]["entryZ"]) >= _EXC["entry_z"]
+    assert abs(tch["trades"][0]["entryZ"]) < _EXC["entry_z"]
+
+
+def test_touch_direction_comes_from_the_side_it_left_not_the_return_bar():
+    """복귀 봉의 z 부호가 반대여도 방향은 **나갔던 쪽**이 정한다.
+
+    이 픽스처의 복귀 봉 z 는 −0.34 다(중심선을 지나쳐 내려왔다). 그 부호를
+    쓰면 「비싼 것을 샀다」가 되어 규칙이 정확히 뒤집힌다.
+    """
+    dates, vals = _excursion()
+    t = bt.simulate(dates, vals, **_EXC, entry_mode="touch")["trades"][0]
+    assert t["entryZ"] < 0 and t["peakZ"] > 0
+    assert t["direction"] == -1
+
+
+def test_touch_carries_the_excursion_it_entered_on():
+    dates, vals = _excursion()
+    t = bt.simulate(dates, vals, **_EXC, entry_mode="touch")["trades"][0]
+    assert (t["outFrom"], t["outDays"]) == ("D40", 2)
+    assert abs(t["peakZ"]) >= _EXC["entry_z"]
+
+
+def test_level_out_days_is_one_because_entry_is_the_first_bar_outside():
+    dates, vals = _excursion()
+    t = bt.simulate(dates, vals, **_EXC, entry_mode="level")["trades"][0]
+    assert (t["outFrom"], t["outDays"]) == (t["entryDate"], 1)
+
+
+def test_default_entry_mode_is_the_original_rule():
+    """인자를 안 주면 예전 호출과 **같은 객체**가 나온다 — 적합성 벡터의 짝."""
+    dates, vals = _fixture()
+    assert bt.simulate(dates, vals, **PIN) == bt.simulate(dates, vals, **PIN,
+                                                          entry_mode="level")
+
+
+def test_unknown_entry_mode_is_refused_not_silently_defaulted():
+    dates, vals = _fixture()
+    try:
+        bt.simulate(dates, vals, **PIN, entry_mode="reentry")
+    except ValueError as e:
+        assert "level" in str(e) and "touch" in str(e)
+    else:
+        raise AssertionError("모르는 모드를 조용히 기본값으로 삼았다")
+
+
+# ── `hold` — 대사표가 곱셈을 눈으로 닫게 하는 값 [OWNER 2026-08-28] ─────────
+
+
+def test_hold_is_the_position_that_multiplied_the_move():
+    """봉마다 `mtm == hold × 명목 × Δ값` 이 **정확히** 성립한다.
+
+    끝난 뒤의 `position` 으로는 안 닫힌다 — 진입 봉(mtm 0 인데 position ±1)과
+    청산 봉(mtm ≠ 0 인데 position 0)에서 어긋난다. 대사표가 그 값을 실으면
+    「감도 × 변화 = 평가」가 한 줄 안에서 거짓이 된다.
+    """
+    dates, vals = _fixture()
+    r = bt.simulate(dates, vals, **PIN)
+    pts = r["points"]
+    mismatched_with_position = 0
+    for i, p in enumerate(pts):
+        move = 0.0 if i == 0 else vals[i] - vals[i - 1]
+        assert math.isclose(p["mtm"], p["hold"] * PIN["notional"] * move,
+                            abs_tol=1e-6)
+        if not math.isclose(p["mtm"], p["position"] * PIN["notional"] * move,
+                            abs_tol=1e-6):
+            mismatched_with_position += 1
+    # 진입 봉·청산 봉이 실제로 어긋난다 — 이 테스트가 tautology 가 아님을 잰다.
+    assert mismatched_with_position >= 2 * len(r["trades"])
+
+
+def test_trade_running_total_closes_on_the_exit_bar():
+    """거래 안 누적(`tradePnl`)의 마지막 줄 = 그 거래의 손익.
+
+    대사표의 **세로합**이 이 값이다. 표가 「합계」 줄에서 스스로 맞는지 보이려면
+    줄마다의 누적이 있어야 하고, 그 마지막이 거래 손익과 다르면 표가 거짓이다.
+    """
+    dates, vals = _fixture()
+    r = bt.simulate(dates, vals, **PIN)
+    by_date = {p["date"]: p for p in r["points"]}
+    assert r["trades"]
+    for t in r["trades"]:
+        assert math.isclose(by_date[t["exitDate"]]["tradePnl"], t["pnl"], abs_tol=1e-6)
+    # 무포지션 봉은 0 이다 — 지난 거래의 잔상이 남지 않는다.
+    flat = [p for p in r["points"] if p["position"] == 0 and p["hold"] == 0]
+    assert flat and all(p["tradePnl"] == 0.0 for p in flat)
+
+
+def test_out_run_counts_consecutive_bars_outside_the_band():
+    dates, vals = _excursion()
+    r = bt.simulate(dates, vals, **_EXC)
+    by_date = {p["date"]: p for p in r["points"]}
+    assert (by_date["D40"]["out"], by_date["D40"]["outRun"]) == (1, 1)
+    assert (by_date["D41"]["out"], by_date["D41"]["outRun"]) == (1, 2)
+    # 복귀 봉은 밖이 아니다 — 세는 것도 끊긴다.
+    assert (by_date["D42"]["out"], by_date["D42"]["outRun"]) == (0, 0)

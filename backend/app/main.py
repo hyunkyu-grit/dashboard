@@ -918,13 +918,21 @@ def mr_history(series_id: str, window: int = mr_mod.WINDOW, k: float = mr_mod.K)
 
 
 def _mr_neighbors(dates: list[str], vals: list[float], base: dict,
-                  allow: tuple[int, ...]) -> list[dict]:
+                  allow: tuple[int, ...], *,
+                  carry: list[float] | None = None,
+                  entry_mode: str = "level") -> list[dict]:
     """노브를 한 칸씩 옮겼을 때의 결과 — 「이 칸이 얼마나 튼튼한가」.
 
     화면은 고른 칸 하나만 보여 준다. 그러면 손절 3.5 의 +2,605만은 보이고 손절
     3.0 의 +1,120만은 안 보이므로, 한 칸 차이가 결과를 절반으로 만든다는 사실이
     노브를 눌러 보기 전까지 감춰진다 — 재현 도구가 그 사실을 감추면 재현이
     아니라 주장이 된다 [OWNER 2026-08-26].
+
+    **머리 숫자와 같은 규칙으로 돈다** [2026-08-28]. 종전에는 캐리를 안 넘겨서
+    「현재」 칸이 머리의 총손익과 달랐다 — 실측 BSS-3Y 에서 머리 +4,443만 ·
+    현재 칸 +4,160만(SR 0.812 대 0.762). 이웃 표는 «한 칸 옮기면 얼마나
+    달라지는가» 를 재는 물건인데, 기준점이 머리와 다르면 그 차이가 노브 탓인지
+    항이 빠진 탓인지 화면이 구분해 주지 못한다.
 
     격자는 `mr.STRATEGY_PRESETS` 위에서만 돈다(화면이 고를 수 있는 칸 = 견고성을
     재야 하는 칸). 현재 값이 프리셋 밖이면(딥링크·자유 룩백) 그 값도 한 칸으로
@@ -946,7 +954,8 @@ def _mr_neighbors(dates: list[str], vals: list[float], base: dict,
             r = mrbt.simulate(dates, vals, lookback=int(p["lookback"]),
                               entry_z=p["entryZ"], exit_z=p["exitZ"],
                               stop_z=p["stopZ"], cost_bp=p["costBp"],
-                              notional=p["notional"], allow_dirs=allow)
+                              notional=p["notional"], allow_dirs=allow,
+                              carry=carry, entry_mode=entry_mode)
             sm = r["summary"]
             cells.append({
                 "v": v,
@@ -965,7 +974,7 @@ def _mr_neighbors(dates: list[str], vals: list[float], base: dict,
 def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
                 warnZ: float = 1.5, exitZ: float = 0.5, stopZ: float = 3.5,
                 costBp: float = 0.05, notional: float = 1_000_000.0,
-                carry: bool = True,
+                carry: bool = True, entryMode: str = "level",
                 fundingBasis: str = funding.DEFAULT_BASIS,
                 fundingSpreadBp: float = funding.DEFAULT_SPREAD_BP) -> dict:
     """전략 실험 창 — 첫 PMS entry-signals 의 z-스코어 백테스트 재현(§16).
@@ -990,12 +999,29 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
         raise HTTPException(status_code=422, detail=f"비용이 범위를 벗어나요: {costBp}bp (0~10)")
     if not 0.0 <= notional <= 1e12:
         raise HTTPException(status_code=422, detail=f"명목이 범위를 벗어나요: {notional} (0~1e12)")
+    if entryMode not in mrbt.ENTRY_MODES:
+        raise HTTPException(status_code=422,
+                            detail=f"진입 규칙이 이상해요: {entryMode} ({'|'.join(mrbt.ENTRY_MODES)})")
 
     # 보드와 같은 유도 창구 — 선물·퓨처스왑도 여기서 같은 환산을 지난다.
     body = mr_mod.series_points(id)
     pts = [p for p in body["points"] if p.get("v") is not None]
     dates = [p["t"] for p in pts]
-    vals = [float(p["v"]) for p in pts]
+    # ⚠ **손익 산술은 bp 위에서 한다** [2026-08-28].
+    #
+    # 명목 노브의 단위는 `₩/bp` 인데 엔진은 `명목 × Δ값` 을 그대로 곱한다.
+    # 계열의 값이 bp 면 맞지만 **선물 내재금리는 `%`** 라, 15.7bp 움직임이
+    # Δ값 0.157 로 들어가 평가가 100배 작게 나왔다. 비용(`명목 × costBp`)과
+    # 캐리(원금 환산이 `₩/bp` 기준)는 제 단위라, 결과는 «비용만 100배 무거운
+    # 판» 이었다 — 실측 FUT-KTB3 승률 17%·SR −1.25 는 신호가 아니라 그것이다.
+    # (`docs/MR_LANE_STATE.md` 의 «선물 넷은 전부 음수» 도 이 산술의 산물이다.)
+    #
+    # z·밴드는 눈금 변환에 불변이라 값이 안 바뀐다 — 바뀌는 것은 돈뿐이다.
+    # 화면에 되돌려 줄 때는 계열의 자기 단위(%)로 나눠 보낸다.
+    unit = body["unit"]
+    scale = 100.0 if unit == "%" else 1.0
+    vals = [float(p["v"]) * scale for p in pts]
+    disp = (lambda v: round(v / scale, 4)) if scale != 1.0 else (lambda v: round(v, 4))
     if len(vals) < lookback + 1:
         raise HTTPException(status_code=422, detail=f"이력이 룩백보다 짧아요: {len(vals)} < {lookback + 1}")
 
@@ -1012,26 +1038,47 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     carry_defn: str | None = None
     if carry:
         rates, carry_defn = mrc.carry_rates(id, kinds[id], dates, spec)
-        # 명목 노브가 ₩/bp(DV01)라 원금 환산이 필요하다 — 그 근거도 그 파일에.
-        pv = pv01(_curves["now"], TENOR_T[mrc._tenor_of(id)])
-        carry_krw = mrc.carry_krw(rates, dates, notional_per_bp=notional, pv01=pv)
+        if kinds[id] == "fut":
+            # 선물은 캐리가 0 이다(증거금·일일정산 — `mrcarry` 머리). 원금 환산이
+            # 없으므로 pv01 도 필요 없다. 종전에는 그걸 먼저 읽으려 해서
+            # `TENOR_T["KTB3"]` 로 500 이 났다 — `FUT-KTB3` 의 「KTB3」은 만기
+            # 라벨이 아니라 상품명이다. 기본이 `carry=true` 라 **선물 두 계열은
+            # 전략 실험 창에서 아예 열리지 않았다**(실측 2026-08-28).
+            carry_krw = [0.0] * len(dates)
+        else:
+            # 명목 노브가 ₩/bp(DV01)라 원금 환산이 필요하다 — 그 근거도 그 파일에.
+            pv = pv01(_curves["now"], TENOR_T[mrc._tenor_of(id)])
+            carry_krw = mrc.carry_krw(rates, dates, notional_per_bp=notional, pv01=pv)
 
     r = mrbt.simulate(dates, vals, lookback=lookback, entry_z=entryZ,
                       exit_z=exitZ, stop_z=stopZ, cost_bp=costBp,
                       notional=notional,
                       allow_dirs=tuple(dirs["allowed"]),
-                      carry=carry_krw)
+                      carry=carry_krw, entry_mode=entryMode)
     roll = r["roll"]
     points = [
         {
-            "t": dates[i], "v": round(vals[i], 4),
+            "t": dates[i], "v": disp(vals[i]),
             "z": round(r["points"][i]["z"], 4) if r["points"][i]["z"] is not None else None,
-            "ma": round(roll["mean"][i], 4) if roll["mean"][i] is not None else None,
+            "ma": disp(roll["mean"][i]) if roll["mean"][i] is not None else None,
             # 밴드 배수는 entryZ 다 — PMS 의 «노브 하나, 뜻 둘» 그대로.
-            "up": round(roll["mean"][i] + entryZ * roll["std"][i], 4)
+            "up": disp(roll["mean"][i] + entryZ * roll["std"][i])
                   if roll["mean"][i] is not None else None,
-            "lo": round(roll["mean"][i] - entryZ * roll["std"][i], 4)
+            "lo": disp(roll["mean"][i] - entryZ * roll["std"][i])
                   if roll["mean"][i] is not None else None,
+            # ── 대사표가 곱셈을 눈으로 닫게 하는 둘 [OWNER 2026-08-28] ────────
+            # `hold` = 그 봉을 **통과해서 들고 있던** 포지션(엔진 부호). 봉이 끝난
+            # 뒤의 `pos` 와 다르다 — 진입 봉은 0, 청산 봉은 ±1 이다. 백테스트
+            # 대사표가 「전일 종가 KRD」를 싣는 것과 같은 자리이고, 이유도 같다:
+            # 감도 × 변화 = 평가 가 **한 줄 안에서** 닫혀야 한다.
+            # `dv` = 전 봉 대비 변화(**bp**). 브라우저는 계산하지 않는다(§16).
+            "hold": r["points"][i]["hold"],
+            "dv": round(vals[i] - vals[i - 1], 4) if i > 0 else None,
+            # 거래 안 누적 — 대사표의 세로합을 줄마다 적는다(마지막 줄 = 거래 손익).
+            "tradePnl": round(r["points"][i]["tradePnl"], 2),
+            # 밴드 밖 여부와 연속 일수 — 측정 보드(`mr._state`)와 같은 어휘로,
+            # 「지금 어디에 서 있나」를 오실레이터의 판독이 말할 수 있게.
+            "out": r["points"][i]["out"], "outRun": r["points"][i]["outRun"],
             "cum": round(r["points"][i]["cumulativePnl"], 2),
             # 그날의 분해 — 거래를 누르면 화면이 이 셋으로 **일별 대사**를 편다.
             # 셋의 합 = `pnl`(그날 손익)이고, 대사표가 그 항등을 잰다.
@@ -1048,7 +1095,14 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
             "entryT": t["entryDate"], "exitT": t["exitDate"],
             "dir": t["direction"],
             "entryZ": round(t["entryZ"], 2), "exitZ": round(t["exitZ"], 2),
-            "entryV": round(t["entryValue"], 4), "exitV": round(t["exitValue"], 4),
+            "entryV": disp(t["entryValue"]), "exitV": disp(t["exitValue"]),
+            # 진입 직전의 밴드 밖 구간 — 「무엇을 보고 들어갔나」. `touch` 에서는
+            # 진입 z 가 밴드 선 언저리라 이것 없이는 4σ 까지 갔다 온 것과 2.01σ 를
+            # 살짝 넘었다 온 것이 같은 줄로 보인다.
+            "outFrom": t["outFrom"], "outDays": t["outDays"],
+            "peakZ": round(t["peakZ"], 2) if t["peakZ"] is not None else None,
+            # 보유 동안의 총 변화(bp) — 대사표 합계 줄의 Δ.
+            "dv": round(t["dv"], 4),
             "pnl": round(t["pnl"], 2), "why": t["exitReason"],
             # 대사용 삼분해 — 셋의 합이 `pnl` 이다. 거래 한 줄을 눌렀을 때
             # 화면이 그 항등을 그대로 보여 준다(이 앱의 3분해 문법).
@@ -1065,7 +1119,7 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
         "asof": dates[-1] if dates else None,
         "params": {"lookback": lookback, "entryZ": entryZ, "warnZ": warnZ,
                    "exitZ": exitZ, "stopZ": stopZ, "costBp": costBp,
-                   "notional": notional},
+                   "notional": notional, "entryMode": entryMode},
         # 캐리가 무엇인지 화면이 읽을 문장 — 부호 기준이 −1 이라 정의가 없으면
         # 읽는 사람이 자기 방향으로 읽는다(`mr.KIND_DEFN` 과 같은 규율).
         "carry": {"on": carry, "defn": carry_defn, "funding": spec.label} if carry else {"on": False},
@@ -1078,8 +1132,14 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
         # 「안 들어갔다」는 사실만 화면이 승률 옆에 적을 수 있게 낸다.
         "open": ({
             "entryT": r["open"]["entryDate"],
+            # 방향 — 화면이 미청산 다리를 차트에 세우려면 필요하다(마커의 색이
+            # 방향이다). 승률·거래 수에 안 들어가는 것과 별개의 사실이다.
+            "dir": r["open"]["direction"],
             "entryZ": round(r["open"]["entryZ"], 2),
-            "entryV": round(r["open"]["entryValue"], 4),
+            "entryV": disp(r["open"]["entryValue"]),
+            "outFrom": r["open"]["outFrom"], "outDays": r["open"]["outDays"],
+            "peakZ": (round(r["open"]["peakZ"], 2)
+                      if r["open"]["peakZ"] is not None else None),
             "pnl": round(r["open"]["pnl"], 2),
             "bars": r["open"]["bars"],
         } if r["open"] else None),
@@ -1088,7 +1148,7 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
             dates, vals,
             {"lookback": lookback, "entryZ": entryZ, "exitZ": exitZ,
              "stopZ": stopZ, "costBp": costBp, "notional": notional},
-            tuple(dirs["allowed"])),
+            tuple(dirs["allowed"]), carry=carry_krw, entry_mode=entryMode),
         "summary": {
             "totalPnl": round(s["totalPnl"], 2),
             "maxDrawdown": round(s["maxDrawdown"], 2),
