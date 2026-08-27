@@ -83,6 +83,20 @@ NEXT_PUBLIC_API_BASE=https://e110430.tailc7b701.ts.net/v2 npx next build
 넷째를 빼면 안 된다. **tsc·eslint·vitest 는 CSS 를 파싱하지 않는다** — CSS 한
 줄로 프로덕션이 깨진 적이 있다.
 
+**⚠ `next build` 는 dev 서버의 `.next` 를 덮는다** [실측 2026-08-27 — 한 세션에
+네 번 밟았다]. 게이트를 돌리면 `:3200` 이 정적 청크를 404 로 내주고 화면이
+스타일 없는 HTML 로 떨어진다. 「내가 방금 뭘 깨뜨렸나」로 보이지만 아니다.
+
+    빌드를 돌릴 거면 dev 를 내리고, 끝나면 다시 띄운다:
+
+      netstat -ano | grep ":3200" | grep LISTENING     # PID 찾기
+      taskkill //PID <pid> //F
+      NEXT_PUBLIC_API_BASE=… npx next build
+      npx next dev -p 3200
+
+    (`rm -rf .next` 는 dev 가 살아 있으면 "Directory not empty" 로 실패한다 —
+     먼저 죽여야 한다.)
+
 **이미 빨간 것 둘(내 결함 아님, 고치지 말 것):**
 
 - `guards/production-env.test.ts` 2건 — `.next` 가 dev 산출물일 때만 빨갛다.

@@ -83,18 +83,21 @@ function SigmaPick({
   value,
   options,
   onPick,
+  group,
 }: {
   label: string;
   help: string;
   value: number;
   options: readonly number[];
   onPick: (v: number) => void;
+  /** 새 묶음이 여기서 시작한다 — `.sr-fgroup`(`theme/type.css` 의 그 규칙). */
+  group?: boolean;
 }) {
   /* 넷이 같은 폭이어야 눈이 격자로 읽는다 — 자연폭은 113~127 로 제각각이었고
      (실측 2026-08-25) 그만큼 알약 열이 칸마다 어긋나 있었다. 상자를 두르는 것은
      형제 화면의 규약이기도 하다(`<Box width={N}><Field>` — 백테스트·시뮬). */
   return (
-    <Box width={SIGMA_W}>
+    <Box width={SIGMA_W} className={group ? 'sr-fgroup' : undefined}>
       <Field label={label} help={help}>
       <HStack gap={0.5} alignItems="center" height={CONTROL_H}>
         {options.map((o) => (
@@ -455,7 +458,12 @@ export function StrategyWindow({
             바닥 정렬 행: 블록 높이가 곧 라벨 높이(2026-08-19 얼라인 레인),
             한 행의 컨트롤은 전부 32px 등고(control-parity 의 그 등고)라
             실행도 알약이다(rv 「상세 분석」 자리의 그 컨트롤). */}
-        <HStack gap={1.5} alignItems="flex-end" flexWrap="wrap">
+        {/* 묶음 안은 좁게, 묶음 사이는 넓게 — 백테스트 설정 줄과 **같은 리듬**
+            이다(`theme/type.css` 의 `.sr-fgroup` 주석에 근거). 종전에는 노브
+            여덟이 전부 12px 등간격이라 σ 셋이 한 가족인지 각자인지 화면이 말하지
+            않았다(실측 2026-08-27). 읽히는 묶음은 넷이다 —
+            [종목·룩백] · [진입σ·청산σ·손절σ] · [비용·명목] · [실행]. */}
+        <HStack gap={1} alignItems="flex-end" flexWrap="wrap">
           {/* 폭은 감싸는 `Box` 가 준다 — `Field` 규약(`ui/ControlCard` 머리
               주석). 상자 없이 행에 바로 놓으면 그 칸만 자기 내용 폭이 되어
               형제와 어긋난다. 160 은 최장 계열명(「KTB10 내재금리」)이 안 잘리는
@@ -496,6 +504,7 @@ export function StrategyWindow({
             </Field>
           </Box>
           <SigmaPick
+            group
             label="진입 σ"
             help="볼린저 밴드의 통상 배수예요 — 2σ가 기본, 1.5σ는 민감하게, 2.5σ는 보수적으로 잡아요."
             value={knobs.entryZ}
@@ -518,7 +527,7 @@ export function StrategyWindow({
           />
           {/* 비용·명목은 **프리셋이 아니라 실제 값**이다 — 그날 그 종목의
               호가폭이고 이 데스크의 포지션 크기다(api.ts 의 근거 주석). */}
-          <Box width={64}>
+          <Box width={64} className="sr-fgroup">
             <Field label="비용 (bp)" help="왕복이 아니라 편도예요. 그날 그 종목의 호가폭을 넣으세요.">
               <NumInput label="비용(bp)" value={knobs.costBp} onCommit={(v) => set({ costBp: v })} />
             </Field>
@@ -535,7 +544,7 @@ export function StrategyWindow({
               안 보인다(실측). */}
           <button
             type="button"
-            className="sr-pillbtn"
+            className="sr-pillbtn sr-fgroup"
             data-fill
             disabled={running}
             onClick={exec}
