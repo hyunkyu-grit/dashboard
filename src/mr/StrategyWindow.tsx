@@ -285,6 +285,115 @@ function InlineSigma({
 }
 
 
+/** 짧은 날짜 — 구간 라벨용. `2020-01-02` → `20-01`. 칸이 좁아 연·월만 남긴다. */
+const ym = (iso: string): string => `${iso.slice(2, 4)}-${iso.slice(5, 7)}`;
+
+/** 진단 — 성과가 **어디서 왔는지**를 화면이 스스로 말한다
+ *  [OWNER 2026-08-28 — "저렇게 단순한 전략이 승률이 이렇게 높을 수 있다는게
+ *  이해가 잘 안간다" · "과거에 Overfitting 된거 아닌가"].
+ *
+ * 종전에는 성과 카드가 승률 93% 를 내걸고 그것으로 끝이었다. 그 숫자가 진입의
+ * 공로인지 청산 규칙의 산물인지, 최근에도 유지되는지를 화면이 말하지 않아서
+ * 두 의심 다 화면 밖에서만 답할 수 있었다. 세 칸이 그 답이다.
+ *
+ *   신호가 한 일  청산 규칙을 **떼고** 신호일의 고정 보유 수익을 잰다. 승률이
+ *                 청산이 만든 것이라면 신호일과 비신호일이 안 갈린다.
+ *   승률의 출처   사유별로 쪼갠다. 익절만 세면 90%대가 나오고 손절·타임스탑을
+ *                 같이 세면 내려간다. 손익비가 없으면 승률은 거짓말을 한다.
+ *   구간별        과거적합이면 최근이 무너지고, 엣지 소멸이면 크기만 단조로
+ *                 줄어든다 — **모양이 다르다**.
+ */
+/** 신호일의 조건을 **정확히** 적는다.
+ *
+ * `|z| ≥ 2σ` 라고 쓰면 안 된다 — 이 데스크는 한 방향만 실행할 수 있어서 반대쪽
+ * 문턱 돌파는 신호가 아니고, 서버도 실행 가능한 쪽만 센다. 방향을 빼먹고 절대값으로
+ * 읽으면 못 하는 거래의 수익이 섞여 답이 뒤집힌다(실측 2026-08-28: 절대값으로
+ * 세면 신호일 −0.37bp·적중 47%, 방향을 넣으면 +1.84bp·적중 72%였다). */
+function signalCond(run: MrStrategyRun): string {
+  const z = run.params.entryZ;
+  if (run.params.entryMode === 'touch') return `밴드 복귀 · ±${z}σ`;
+  const a = run.dirs.allowed;
+  if (a.length !== 1) return `|z| ≥ ${z}σ`;
+  /* 엔진 부호 −1 = 값이 내리면 버는 쪽 → z 가 **위로** 벌어졌을 때 신호다. */
+  return a[0]! < 0 ? `z ≥ +${z}σ` : `z ≤ −${z}σ`;
+}
+
+function Diagnostics({ run }: { run: MrStrategyRun }) {
+  const { exits, payoff, forward, periods } = run.diag;
+  const on = forward.onSignal;
+  const off = forward.offSignal;
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const bp = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(2)}bp`;
+  return (
+    <VStack gap={0.5} width="100%">
+      <HStack gap={1} alignItems="baseline" justifyContent="space-between">
+        <Text font="label2" as="h3" noWrap>
+          진단
+        </Text>
+        <Text font="legal" as="span" color="fgMuted">
+          승률이 어디서 왔는지 · 최근에도 유지되는지 — 노브를 바꾸면 같이 바뀌어요
+        </Text>
+      </HStack>
+      <HStack className="sr-stats" alignItems="stretch" width="100%">
+        <StatColumn title="신호가 한 일">
+          {on ? (
+            <>
+              <Stat label="신호일" value={`${on.n}일`} note={signalCond(run)} />
+              <Stat
+                label={`${forward.bars}일 앞 평균`}
+                value={bp(on.meanBp)}
+                tone={on.meanBp > 0 ? 'up' : on.meanBp < 0 ? 'down' : undefined}
+                note={`적중 ${pct(on.hitRate)}`}
+              />
+            </>
+          ) : (
+            <Stat label="신호일" value="—" note="신호가 없어요" />
+          )}
+          {/* 대조군이 옆에 없으면 「적중 71%」가 높은 건지 알 수 없다. */}
+          {off ? (
+            <Stat label="비신호일" value={bp(off.meanBp)} note={`적중 ${pct(off.hitRate)} · ${off.n}일`} />
+          ) : null}
+        </StatColumn>
+
+        <StatColumn title="승률의 출처">
+          {exits.map((e) => (
+            <Stat
+              key={e.why}
+              label={WHY_WORD[e.why]}
+              value={`${e.n}건 · ${pct(e.winRate)}`}
+              note={`평균 ${bp(e.avgBp)} · ${e.avgBars.toFixed(1)}일`}
+            />
+          ))}
+          {payoff ? (
+            <Stat
+              label="손익비"
+              value={payoff.payoff == null ? '—' : payoff.payoff.toFixed(2)}
+              /* 프로핏팩터가 1 아래면 승률이 아무리 높아도 돈을 잃는다. */
+              tone={payoff.profitFactor != null && payoff.profitFactor < 1 ? 'down' : undefined}
+              note={payoff.profitFactor == null
+                ? `이긴 ${payoff.wins} / 진 ${payoff.losses}`
+                : `프로핏팩터 ${payoff.profitFactor.toFixed(2)}`}
+            />
+          ) : null}
+        </StatColumn>
+
+        {periods.length ? (
+          <StatColumn title="구간별">
+            {periods.map((p) => (
+              <Stat
+                key={p.from}
+                label={`${ym(p.from)}~${ym(p.to)}`}
+                value={p.sharpe == null ? '—' : `SR ${p.sharpe.toFixed(2)}`}
+                note={fmtKrw(p.totalPnl)}
+              />
+            ))}
+          </StatColumn>
+        ) : null}
+      </HStack>
+    </VStack>
+  );
+}
+
 /** 이웃 칸 — 노브를 프리셋 안에서 옮겼을 때 결과가 얼마나 달라지는가.
  *
  * ## 왜 이게 성과 카드 바로 밑에 서는가 [OWNER 2026-08-26]
@@ -1069,6 +1178,12 @@ export function StrategyWindow({
                 ) : null}
               </StatColumn>
             </HStack>
+
+            {/* 성과를 읽은 **직후**가 「그게 진짜냐」가 나오는 자리다. 진단이
+                먼저 서고 이웃 칸(노브 견고성)이 그다음이다 — 둘 다 같은 질문의
+                다른 축이지만, 「승률이 어디서 왔는가」가 「한 칸 옆은 어떤가」보다
+                앞선 질문이다. */}
+            <Diagnostics run={run} />
 
             {/* 견고성은 고른 칸이 아니라 이웃과의 차이다 — 성과 숫자를 읽은
                 바로 그 자리에서 말한다. */}

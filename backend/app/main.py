@@ -71,6 +71,7 @@ from . import df_cache
 from . import mr as mr_mod
 from . import mrbacktest as mrbt
 from . import mrcarry as mrc
+from . import mrdiag as mrd
 from . import mrregime as mrg
 from . import payloads
 from . import rv as rv_mod
@@ -1167,6 +1168,21 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
         # 필터가 지운 진입 신호 — 조용히 빠지면 「신호가 없었다」로 읽힌다.
         # 방향 때문에 못 한 것(`dirs.blocked`)과 **따로** 센다.
         "gated": r["gated"],
+        # ── 진단 [OWNER 2026-08-28 — "승률이 이렇게 높을 수 있다는게 이해가 잘
+        # 안간다" · "과거에 Overfitting 된거 아닌가"] ──────────────────────────
+        # 의심 둘 다 화면 밖에서만 답할 수 있었다. 산술은 `app/mrdiag.py`.
+        "diag": {
+            "exits": mrd.exit_tally(r["trades"], notional),
+            "payoff": mrd.payoff(r["trades"], notional),
+            # 청산 규칙을 떼고 신호일의 고정 보유 수익을 잰다 — 승률이 진입의
+            # 공로인지 청산 구조의 산물인지가 여기서 갈린다.
+            "forward": mrd.forward_edge(
+                vals, roll["z"], entry_z=entryZ,
+                allow_dirs=tuple(dirs["allowed"]), entry_mode=entryMode),
+            # 구간을 갈라 같은 규칙을 잰다 — 과거적합이면 최근이 무너지고,
+            # 엣지 소멸이면 크기만 단조로 줄어든다. 모양이 다르다.
+            "periods": mrd.period_split(dates, r["points"]),
+        },
         # 캐리가 무엇인지 화면이 읽을 문장 — 부호 기준이 −1 이라 정의가 없으면
         # 읽는 사람이 자기 방향으로 읽는다(`mr.KIND_DEFN` 과 같은 규율).
         "carry": {"on": carry, "defn": carry_defn, "funding": spec.label} if carry else {"on": False},

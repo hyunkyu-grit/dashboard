@@ -337,6 +337,48 @@ export interface MrStrategyRun {
   cost:
     | { model: 'flat'; bp: number }
     | { model: 'dynamic'; lo: number; hi: number; mid: number };
+  /* ── 진단 [OWNER 2026-08-28 — "승률이 이렇게 높을 수 있다는게 이해가 잘
+   *    안간다" · "과거에 Overfitting 된거 아닌가"] ────────────────────────────
+   * 의심 둘 다 화면 밖에서만 답할 수 있었다. 산술은 `backend/app/mrdiag.py`. */
+  diag: {
+    /** 청산 사유별 — 높은 승률의 정체가 여기서 갈린다. 순서는 고정(우선순위). */
+    exits: {
+      why: MrStrategyTrade['why'];
+      n: number;
+      wins: number;
+      winRate: number;
+      /** 명목으로 나눠 bp 로 되돌린 값 — 만기 간 비교가 서게. */
+      avgBp: number;
+      sumBp: number;
+      avgBars: number;
+    }[];
+    /** 이긴 거래나 진 거래가 아예 없으면 null — 0 이나 ∞ 로 채우지 않는다. */
+    payoff: {
+      wins: number;
+      losses: number;
+      avgWinBp: number;
+      avgLossBp: number;
+      payoff: number | null;
+      profitFactor: number | null;
+    } | null;
+    /** 청산 규칙을 **떼고** 신호일의 고정 보유 수익 — 승률이 진입의 공로인지
+     *  청산 구조의 산물인지. 실행 가능한 방향만 센다. */
+    forward: {
+      bars: number;
+      onSignal: { n: number; meanBp: number; hitRate: number; medianBp: number } | null;
+      offSignal: { n: number; meanBp: number; hitRate: number; medianBp: number } | null;
+    };
+    /** 구간을 갈라 같은 규칙을 잰 것 — 과거적합이면 최근이 무너지고, 엣지
+     *  소멸이면 크기만 단조로 줄어든다. 봉이 모자라면 빈 배열. */
+    periods: {
+      from: string;
+      to: string;
+      days: number;
+      totalPnl: number;
+      maxDrawdown: number;
+      sharpe: number | null;
+    }[];
+  };
   /** 레짐 필터가 지운 진입 신호 — 구간 수와 일수. 방향 때문에 못 한 것
    *  (`dirs.blocked`)과 **따로** 센다: 방향은 데스크의 제약이고 필터는 우리가
    *  고른 것이라, 한 숫자로 합치면 선택의 대가가 제약 뒤에 숨는다. */
