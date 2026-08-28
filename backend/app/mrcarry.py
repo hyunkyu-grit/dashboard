@@ -63,6 +63,7 @@ from sqlalchemy import text
 
 from . import funding as fnd
 from .universe import _fetch_curves, _fetch_irs  # noqa: PLC2701 — 같은 데이터 창구
+from . import mrseries as mrs
 from .mysqldb import engine
 from .mr import FSW_IRS_COL
 
@@ -89,6 +90,13 @@ def carry_rates(sid: str, kind: str, dates: list[str],
     """
     if kind == "fut":
         return [0.0] * len(dates), "선물은 조달 현금흐름이 없어요 (캐리 0)"
+
+    if kind == "bss":
+        # 값 계열이 긴 출처로 옮겨갔으므로(`mrseries`) **캐리도 같은 출처**에서
+        # 읽는다 [OWNER 2026-08-28 — "옮기고"]. 안 그러면 2014~2020 구간에서
+        # 국고·IRS 를 못 찾아 캐리가 조용히 0 이 되고, 6년치 손익이 캐리 없이
+        # 계산된다 — 없는 값을 0 으로 채우는 그 사고다.
+        return _bss_rates(sid, dates, spec)
 
     tenor = _tenor_of(sid)
     with engine().connect() as conn:
@@ -131,6 +139,29 @@ def carry_rates(sid: str, kind: str, dates: list[str],
     defn = ("(국고 − 조달) + (CD 91일 − IRS)" if kind == "bss"
             else "CD 91일 − IRS  (선물 다리는 조달이 없어요)")
     return out, defn
+
+
+def _bss_rates(sid: str, dates: list[str],
+               spec: fnd.FundingSpec) -> tuple[list[float | None], str]:
+    """BSS 의 연 캐리(%) — `(국고 − 조달) + (CD 91일 − 스왑)`.
+
+    ⚠ **단위가 다르다.** 커브(국고·IRS·CD)는 %(3.817)이고 `funding.rate_on` 은
+    소수(0.0285)다 — 실측 2026-08-27 에 그대로 빼서 100배 틀린 캐리(중앙
+    2.667%/년)를 냈다. 대수적으로 이 식은 `BSS + (CD − 조달)` 로 접히므로 0.1%
+    안팎이어야 하고, 그 항등이 이 산술의 자기검사다.
+    """
+    d, govt, swap, cd = mrs.legs(sid, need_cd=True)
+    g = dict(zip(d, govt))
+    s = dict(zip(d, swap))
+    c = dict(zip(d, cd))
+    out: list[float | None] = []
+    for t in dates:
+        if t not in g or t not in s or t not in c:
+            out.append(None)
+            continue
+        f = fnd.rate_on(spec, dt.date.fromisoformat(t)) * 100.0
+        out.append((g[t] - f) + (c[t] - s[t]))
+    return out, "(국고 − 조달) + (CD 91일 − IRS)"
 
 
 def carry_krw(rates: list[float | None], dates: list[str], *,

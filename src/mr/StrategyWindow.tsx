@@ -7,7 +7,9 @@
  * ── 원본에서 가져온 것 ──────────────────────────────────────────────────────
  * · 노브 일곱(룩백 프리셋 20/60/120 + 자유값·진입σ·관찰σ·청산σ·손절σ·비용bp·
  *   명목 원/bp)과 그 기본값(s16) — 밴드 배수가 곧 진입σ라는 «노브 하나, 뜻 둘»
- *   까지 그대로.
+ *   까지 그대로. **예외 하나: 비용 기본값은 0.05 가 아니라 0.5 다**
+ *   [OWNER 2026-08-28]. 0.05 는 PMS 의 값이지 이 데스크의 실측이 아니고, 싸게
+ *   잡은 비용은 결론을 통째로 뒤집는다. 규칙은 재현이고 **비용만 실측**이다.
  * · z-문턱 레벨 규칙(진입 |z|≥entryσ 역행·청산 |z|≤exitσ·손절 |z|≥stopσ 우선·
  *   당일 종가 체결·편도 비용) — 산술은 서버가 끝낸다(§16, mrbacktest.py 가
  *   원본과 적합성 벡터로 잠금).
@@ -51,6 +53,7 @@ import { Stat, StatColumn } from '@/ui/Stat';
 
 import {
   MR_COST_MODELS,
+  MR_COST_PRESETS,
   MR_ENTRY_MODES,
   MR_REGIMES,
   MR_STRATEGY_DEFAULTS,
@@ -955,11 +958,36 @@ export function StrategyWindow({
               쪼개고 있었던 셈이다. 셋을 한 상자에 담으면 **묶음째** 넘어간다.
               (묶음 사이 여백 `.sr-fgroup` 은 이제 상자가 진다.) */}
           <HStack gap={1} alignItems="flex-end" className="sr-fgroup">
-          {/* 비용·명목은 **프리셋이 아니라 실제 값**이다 — 그날 그 종목의
-              호가폭이고 이 데스크의 포지션 크기다(api.ts 의 근거 주석). */}
-          <Box width={64}>
-            <Field label="비용 (bp)" help="왕복이 아니라 편도예요. 그날 그 종목의 호가폭을 넣으세요.">
-              <NumInput label="비용(bp)" value={knobs.costBp} onCommit={(v) => set({ costBp: v })} />
+          {/* 비용에 프리셋이 생겼다 [OWNER 2026-08-28]. 종전에는 「근거 없는
+              값을 늘어놓지 않는다」는 이유로 자유 입력만 뒀는데, 그 사이에 근거가
+              생겼다 — 국고3Y·IRS3Y 패키지 실제 편도가 ≤0.5bp 라는 오너 답이다.
+              **기본이 0.5 다.** 0.05 는 첫 PMS 의 값이지 이 데스크의 호가폭이
+              아니고, 싸게 잡은 비용은 결론을 통째로 뒤집는다. 자유 입력은 남긴다 —
+              그날 그 종목의 호가폭이 셋 중 어느 것도 아닐 수 있다.
+              196 = 알약 셋 + 자유 입력 56 + 간격. */}
+          <Box width={196}>
+            <Field
+              label="비용 (bp)"
+              help="왕복이 아니라 편도예요. 0.5는 오너 실측(국고3Y·IRS3Y 패키지)이고 0.05는 첫 PMS 값이에요."
+            >
+              <HStack gap={0.5} alignItems="center">
+                {MR_COST_PRESETS.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    className="sr-pillbtn"
+                    data-on={knobs.costBp === v || undefined}
+                    aria-pressed={knobs.costBp === v}
+                    aria-label={`비용 편도 ${v}bp`}
+                    onClick={() => set({ costBp: v })}
+                  >
+                    {v}
+                  </button>
+                ))}
+                <Box width={56}>
+                  <NumInput label="비용(bp)" value={knobs.costBp} onCommit={(v) => set({ costBp: v })} />
+                </Box>
+              </HStack>
             </Field>
           </Box>
           <Box width={96}>
@@ -1068,7 +1096,10 @@ export function StrategyWindow({
 
         {!run ? (
           <Text font="legal" as="span" color="fgMuted">
-            실행을 누르면 이 종목의 과거 전체(2020~)를 원본 규칙으로 재현해요. 당일 종가
+            {/* 표본 구간을 **박아 두지 않는다** — 2026-08-28 에 출처를 옮기며
+                2020~ 이 2014~ 가 됐고, 그때 이 문장만 옛 구간을 말하고 있었다.
+                구간은 실행 결과가 진다(아래 「종가」·차트 축). */}
+            실행을 누르면 이 종목의 과거 전체를 원본 규칙으로 재현해요. 당일 종가
             체결 규약이라 체결 가능성은 담보하지 않아요.
           </Text>
         ) : (

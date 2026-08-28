@@ -983,7 +983,11 @@ def _mr_neighbors(dates: list[str], vals: list[float], base: dict,
 @router.get("/api/mr/strategy")
 def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
                 warnZ: float = 1.5, exitZ: float = 0.5, stopZ: float = 3.5,
-                costBp: float = 0.05, notional: float = 1_000_000.0,
+                # 편도 비용 기본값 0.05 → 0.5 [OWNER 2026-08-28]. 0.05 은 첫 PMS 의
+                # 값이고 이 데스크의 실측이 아니다 — 국고3Y·IRS3Y 패키지 실제 편도가
+                # ≤0.5bp 라는 오너 답이 있으므로 **보수적인 쪽을 기본**으로 둔다.
+                # 싸게 잡은 비용은 결론을 통째로 뒤집는다(볼린저 레인의 그 자리).
+                costBp: float = 0.5, notional: float = 1_000_000.0,
                 carry: bool = True, entryMode: str = "level",
                 timeStop: int = 0, costModel: str = "flat",
                 regime: str = "none", reverseExit: bool = False,

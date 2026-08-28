@@ -24,7 +24,8 @@ from typing import Any, Callable
 from sqlalchemy import text
 
 from .mysqldb import engine
-from .universe import universe_series
+from . import mrseries as mrs
+from .universe import universe_series  # noqa: F401  (구 출처 — 아래 주석)
 
 # 기본은 검증 레인(mr_backtest.py)과 같은 창·배수 — 화면과 검증이 딴 밴드를
 # 말하면 안 된다. 기본을 바꾸려면 두 곳을 같이 바꾼다.
@@ -323,7 +324,13 @@ def series_points(sid: str, *, fut_bundle: dict | None = None) -> dict[str, Any]
     if kind is None:
         raise KeyError(sid)
     if kind == "bss":
-        return universe_series(sid)
+        # 긴 표본 출처 [OWNER 2026-08-28 — "옮기고"]. 종전에는
+        # `universe_series`(= `credit_matrix`, 2020-01~)였고 그래서 BSS 가
+        # 6.7년이었다. `mrseries` 는 같은 벤더 피드를 2014-05 부터 읽는다 —
+        # 겹치는 1,633일에서 상관 0.9996~1.0000·중앙 차이 0.00~0.10bp 로 같은
+        # 계열임을 확인하고 **이음매 없이** 전 기간을 이쪽으로 옮겼다.
+        # 보드의 오늘 숫자는 트레일링 창이라 안 바뀐다(그쪽 머리 주석).
+        return mrs.points(sid)
     bundle = fut_bundle if fut_bundle is not None else _fut_bundle()
     return bundle[sid]
 
@@ -342,7 +349,7 @@ def build_mr(dataset=None, *, window: int = WINDOW, k: float = K,
     fetch_uni·fetch_fut 은 시험 주입 자리 — 기본은 실제 SQL 을 읽는다. 못 읽은
     계열은 조용히 빼지 않고 `excluded` 에 사유와 함께 선다(rv exclusions 문법).
     """
-    fetch_uni = fetch_uni or universe_series
+    fetch_uni = fetch_uni or mrs.points
 
     rows: list[dict] = []
     histories: dict[str, dict] = {}
