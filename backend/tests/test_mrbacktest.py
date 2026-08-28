@@ -391,3 +391,125 @@ def test_out_run_counts_consecutive_bars_outside_the_band():
     assert (by_date["D41"]["out"], by_date["D41"]["outRun"]) == (1, 2)
     # 복귀 봉은 밖이 아니다 — 세는 것도 끊긴다.
     assert (by_date["D42"]["out"], by_date["D42"]["outRun"]) == (0, 0)
+
+
+# ── 실전 손잡이 넷 [OWNER 2026-08-28 — 실전 운용 재설계] ────────────────────
+
+
+def test_time_stop_closes_at_exactly_n_bars_and_says_so():
+    """진입 후 N봉이면 손익 불문 나온다 — 그리고 사유가 「time」이다.
+
+    픽스처의 기본 판은 19·40·45봉을 들고 있다. 20봉 타임스탑을 걸면 19봉짜리는
+    그대로고 나머지 둘이 잘려야 한다.
+    """
+    dates, vals = _fixture()
+    base = bt.simulate(dates, vals, **PIN)
+    assert [t["bars"] for t in base["trades"]] == [19, 40, 45]
+    r = bt.simulate(dates, vals, **PIN, time_stop=20)
+    assert all(t["bars"] <= 20 for t in r["trades"])
+    cut = [t for t in r["trades"] if t["exitReason"] == "time"]
+    assert cut and all(t["bars"] == 20 for t in cut)
+    # 19봉짜리는 원래대로 청산이다 — 타임스탑이 남의 사유를 뺏지 않는다.
+    assert r["trades"][0]["bars"] == 19 and r["trades"][0]["exitReason"] == "exit"
+
+
+def test_time_stop_does_not_steal_the_name_from_a_real_exit():
+    """같은 봉에 청산 조건도 참이면 이름은 「청산」이다(우선순위 핀)."""
+    dates, vals = _fixture()
+    r = bt.simulate(dates, vals, **PIN, time_stop=19)
+    first = r["trades"][0]
+    assert first["bars"] == 19 and abs(first["exitZ"]) <= PIN["exit_z"]
+    assert first["exitReason"] == "exit"
+
+
+def test_time_stop_fires_even_where_the_indicator_is_blank():
+    """z 가 없는 봉에서도 시간은 흐른다 — 지표가 비어도 갇히지 않는다.
+
+    창이 찬 뒤 값이 완전히 평평해지면 σ=0 이라 z 가 사라지고, 청산·손절은 둘 다
+    z 를 보므로 그 구간에서는 **어떤 문도 열리지 않는다**. 타임스탑만 열린다.
+    """
+    vals = [0.0, 1.0, 0.0, 1.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
+    dates = [f"D{i:02d}" for i in range(len(vals))]
+    kw = dict(lookback=2, entry_z=1.0, exit_z=0.5, stop_z=99.0,
+              cost_bp=0.0, notional=1.0)
+    stuck = bt.simulate(dates, vals, **kw)
+    assert stuck["trades"] == [] and stuck["open"]["entryDate"] == "D01"
+    assert all(z is None for z in stuck["roll"]["z"][5:]), "블랭크 구간의 전제"
+
+    r = bt.simulate(dates, vals, **kw, time_stop=8)
+    assert r["open"] is None
+    assert [(t["exitDate"], t["bars"], t["exitReason"]) for t in r["trades"]]         == [("D09", 8, "time")]
+
+
+def test_cost_series_beats_the_scalar_and_is_read_at_each_bar():
+    """비용은 **그 봉의** 값으로 문다 — 진입 봉과 청산 봉이 다를 수 있다."""
+    dates, vals = _fixture()
+    flat = [0.05] * len(dates)
+    same = bt.simulate(dates, vals, **PIN, cost_bp_series=flat)
+    assert round(same["summary"]["totalPnl"]) == round(
+        bt.simulate(dates, vals, **PIN)["summary"]["totalPnl"])
+    # 진입 봉만 비싸게 매기면 그 차액만큼 정확히 줄어든다.
+    spiky = list(flat)
+    entries = {t["entryDate"] for t in same["trades"]}
+    idx = {d: i for i, d in enumerate(dates)}
+    for d in entries:
+        spiky[idx[d]] = 0.25
+    r = bt.simulate(dates, vals, **PIN, cost_bp_series=spiky)
+    lost = (0.25 - 0.05) * PIN["notional"] * len(entries)
+    assert math.isclose(same["summary"]["totalPnl"] - r["summary"]["totalPnl"],
+                        lost, abs_tol=1e-6)
+
+
+def test_breakeven_multiple_is_exact_for_a_cost_path():
+    """경로를 그 배수만큼 키우면 총손익이 정확히 0 이 된다."""
+    dates, vals = _fixture()
+    path = [0.02 + 0.0001 * i for i in range(len(dates))]
+    r = bt.simulate(dates, vals, **PIN, cost_bp_series=path)
+    m = r["summary"]["breakevenCostMult"]
+    assert m is not None
+    scaled = bt.simulate(dates, vals, **PIN, cost_bp_series=[c * m for c in path])
+    assert abs(scaled["summary"]["totalPnl"]) < 1e-6 * PIN["notional"]
+
+
+def test_reverse_signal_is_an_exit_not_an_entry():
+    """반대 방향 신호는 **나가는 문**일 뿐, 그 방향으로 들어가지는 않는다."""
+    dates, vals = _fixture()
+    r = bt.simulate(dates, vals, **PIN, allow_dirs=(-1,), reverse_exit=True)
+    assert r["trades"], "거래가 있어야 검정이 성립한다"
+    assert all(t["direction"] == -1 for t in r["trades"])
+    if r["open"]:
+        assert r["open"]["direction"] == -1
+
+
+def test_reverse_exit_cuts_a_position_when_the_premise_flips():
+    """위로 나갔다 들어와 아래로 뚫으면, 그 봉에 나온다."""
+    vals = ([10.0 + (0.1 if i % 2 else 0.0) for i in range(40)]
+            + [12.0, 11.5, 11.0, 10.5, 10.2, 7.0])
+    dates = [f"D{i:02d}" for i in range(len(vals))]
+    kw = dict(lookback=20, entry_z=1.5, exit_z=0.0, stop_z=99.0,
+              cost_bp=0.0, notional=1.0)
+    off = bt.simulate(dates, vals, **kw)
+    on = bt.simulate(dates, vals, **kw, reverse_exit=True)
+    assert off["open"] is not None, "역신호가 없으면 못 나온다"
+    assert any(t["exitReason"] == "reverse" for t in on["trades"])
+    cut = [t for t in on["trades"] if t["exitReason"] == "reverse"][0]
+    assert cut["direction"] == -1 and cut["exitZ"] < 0
+
+
+def test_open_leg_can_be_counted_as_a_trade_without_paying_an_exit():
+    """미청산을 거래로 세면 승률·거래 수·보유기간이 달라지고, 총손익은 안 바뀐다.
+
+    팔지 않았으니 청산 비용은 없다 — 없는 비용을 물리면 그건 다른 전략이다.
+    """
+    dates, vals = _fixture()
+    base = bt.simulate(dates, vals, **PIN)
+    r = bt.simulate(dates, vals, **PIN, close_open_at_end=True)
+    assert base["open"] is not None
+    assert r["summary"]["numTrades"] == base["summary"]["numTrades"] + 1
+    # 총손익·낙폭은 원래부터 미청산을 지고 있었다 — 여기서 바뀌면 이중 계상이다.
+    assert math.isclose(r["summary"]["totalPnl"], base["summary"]["totalPnl"])
+    assert math.isclose(r["summary"]["maxDrawdown"], base["summary"]["maxDrawdown"])
+    added = r["trades"][-1]
+    assert added["exitReason"] == "open"
+    assert math.isclose(added["pnl"], base["open"]["pnl"])
+    assert math.isclose(added["cost"], base["open"]["cost"])  # 진입 편도 하나뿐

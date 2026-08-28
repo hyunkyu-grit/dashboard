@@ -130,7 +130,11 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
              allow_dirs: tuple[int, ...] = (-1, 1),
              gate: list[Any] | None = None,
              carry: list[float] | None = None,
-             entry_mode: str = "level") -> dict[str, Any]:
+             entry_mode: str = "level",
+             time_stop: int | None = None,
+             cost_bp_series: list[float] | None = None,
+             reverse_exit: bool = False,
+             close_open_at_end: bool = False) -> dict[str, Any]:
     """원본 simulateMeanReversion 의 바-루프 그대로. 반환 키도 그 어휘를 쓴다.
 
     `allow_dirs` 만 원본에 없던 자리다 — 실행할 수 있는 방향(+1 = 값이 오르면
@@ -171,6 +175,25 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
     바꿀 때마다 보유기간의 뜻이 같이 흔들려, 두 판을 나란히 놓고 비교할 수
     없게 된다. **한 번에 하나만 바꾼다.**
 
+    ## 실전 운용 쪽으로 여는 손잡이 넷 [OWNER 2026-08-28]
+
+    넷 다 **기본값이 꺼짐**이라, 안 주면 원본 PMS 산술 그대로다(적합성 벡터가
+    그것을 잰다). 하나씩 켜서 무엇이 얼마를 바꾸는지 잴 수 있게 따로 둔다.
+
+      `time_stop`        진입 후 N봉이 지나면 손익 불문 강제 청산. **z 를 안 본다** —
+                         시간은 지표가 서든 말든 흐르고, 지표가 비는 구간에
+                         포지션이 갇히는 것을 막는 것이 이 문의 일이다.
+      `cost_bp_series`   봉마다의 **편도** 비용(bp). 주면 `cost_bp` 를 이긴다.
+                         z 가 문턱을 넘는 봉은 호가가 벌어져 있는 봉이므로,
+                         평시 호가를 상수로 쓰면 진입 비용이 조직적으로 싸다.
+      `reverse_exit`     반대 방향 진입 신호를 **나가는 문**으로 쓴다. 이 데스크는
+                         그 방향으로 못 들어가므로(현물 대차매도 불가) 신호를
+                         버리거나 나가는 데 쓰거나 둘 중 하나인데, 버리면
+                         「전제가 뒤집혔다」는 사실까지 같이 버린다.
+      `close_open_at_end` 표본 끝의 미청산 다리를 **거래로 센다**(청산 비용 없음,
+                         `exitReason="open"`). 총손익·MDD 는 이미 미청산을 지고
+                         있고, 빠져 있던 것은 승률·거래 수·보유기간이다.
+
     ## `carry` — 두 다리의 중간 현금흐름 [OWNER 2026-08-27 — "중간에 CF는
        상쇄되는건가?"]
 
@@ -199,6 +222,10 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
     n = len(values)
     roll = rolling_series(values, lookback)
     z = roll["z"]
+
+    def cost_at(i: int) -> float:
+        """그 봉의 **편도** 비용(₩). 경로가 주어지면 그것이 이긴다."""
+        return notional * (cost_bp if cost_bp_series is None else cost_bp_series[i])
 
     points: list[dict[str, Any]] = []
     trades: list[dict[str, Any]] = []
@@ -291,47 +318,60 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
             trade_pnl += daily_pnl
             bar_trade = trade_pnl
 
-            if zi is not None:
-                should_stop = abs(zi) >= stop_z
-                should_exit = abs(zi) <= exit_z
-                if should_stop or should_exit:
-                    exit_cost = notional * cost_bp
-                    daily_pnl -= exit_cost
-                    trade_pnl -= exit_cost
-                    trade_cost -= exit_cost
-                    bar_cost = -exit_cost
-                    trades.append({
-                        "entryDate": dates[entry_idx],
-                        "exitDate": dates[i],
-                        "direction": position,
-                        "entryZ": entry_z_val,
-                        "exitZ": zi,
-                        "entryValue": values[entry_idx],
-                        "exitValue": values[i],
-                        # 보유 동안의 총 변화 — 대사표 「합계」 줄의 Δ 칸이다.
-                        # 줄마다의 Δ 를 세로로 더한 값과 같아야 한다.
-                        "dv": values[i] - values[entry_idx],
-                        "pnl": trade_pnl,
-                        # 대사용 삼분해 — 합이 `pnl` 과 같아야 한다.
-                        "mtm": trade_mtm,
-                        "carry": trade_carry,
-                        "cost": trade_cost,
-                        "bars": i - entry_idx,
-                        # 진입 직전의 밴드 밖 구간 — 며칠 나가 있었고 얼마나
-                        # 벌어졌는가. `level` 이면 outDays 는 늘 1 이다.
-                        "outFrom": dates[entry_run[0]] if entry_run else None,
-                        "outDays": (entry_idx - entry_run[0] + (0 if entry_mode == "touch" else 1))
-                                   if entry_run else None,
-                        "peakZ": entry_run[1] if entry_run else None,
-                        "exitReason": "stop" if should_stop else "exit",
-                    })
-                    bar_trade = trade_pnl
-                    position = 0
-                    entry_idx = None
-                    entry_z_val = None
-                    entry_run = None
-                    trade_pnl = 0.0
-                    trade_mtm = trade_carry = trade_cost = 0.0
+            # ── 나가는 문 넷 — **우선순위가 곧 이름**이다 ──────────────────
+            # 손절 > 청산 > 역신호 > 타임스탑. 같은 봉에 둘이 참이면 위엣것이
+            # 이름을 갖는다: 손절 조건에서 나간 것을 「타임스탑」이라 적으면
+            # 사후에 원인을 셀 수 없다.
+            #
+            # 타임스탑만 z 를 안 본다 — 시간은 지표가 서든 말든 흐른다.
+            # 지표가 비는 구간에 포지션이 갇히는 것을 막는 것이 이 문의 일이다.
+            should_stop = zi is not None and abs(zi) >= stop_z
+            should_exit = zi is not None and abs(zi) <= exit_z
+            # 역신호 = 지금 무포지션이었다면 **반대 방향**으로 들어갔을 봉.
+            # 이 데스크는 그 방향으로 못 들어가므로(현물 대차매도 불가) 진입에
+            # 쓸 수 없다. 대신 «전제가 뒤집혔다» 는 사실로 읽고 나온다.
+            rev = _entry_signal(z, i, entry_z, entry_mode) if reverse_exit else None
+            should_rev = rev is not None and rev != position
+            should_time = time_stop is not None and (i - entry_idx) >= time_stop
+            if should_stop or should_exit or should_rev or should_time:
+                exit_cost = cost_at(i)
+                daily_pnl -= exit_cost
+                trade_pnl -= exit_cost
+                trade_cost -= exit_cost
+                bar_cost = -exit_cost
+                trades.append({
+                    "entryDate": dates[entry_idx],
+                    "exitDate": dates[i],
+                    "direction": position,
+                    "entryZ": entry_z_val,
+                    "exitZ": zi,
+                    "entryValue": values[entry_idx],
+                    "exitValue": values[i],
+                    # 보유 동안의 총 변화 — 대사표 「합계」 줄의 Δ 칸이다.
+                    # 줄마다의 Δ 를 세로로 더한 값과 같아야 한다.
+                    "dv": values[i] - values[entry_idx],
+                    "pnl": trade_pnl,
+                    # 대사용 삼분해 — 합이 `pnl` 과 같아야 한다.
+                    "mtm": trade_mtm,
+                    "carry": trade_carry,
+                    "cost": trade_cost,
+                    "bars": i - entry_idx,
+                    # 진입 직전의 밴드 밖 구간 — 며칠 나가 있었고 얼마나
+                    # 벌어졌는가. `level` 이면 outDays 는 늘 1 이다.
+                    "outFrom": dates[entry_run[0]] if entry_run else None,
+                    "outDays": (entry_idx - entry_run[0] + (0 if entry_mode == "touch" else 1))
+                               if entry_run else None,
+                    "peakZ": entry_run[1] if entry_run else None,
+                    "exitReason": ("stop" if should_stop else "exit" if should_exit
+                                   else "reverse" if should_rev else "time"),
+                })
+                bar_trade = trade_pnl
+                position = 0
+                entry_idx = None
+                entry_z_val = None
+                entry_run = None
+                trade_pnl = 0.0
+                trade_mtm = trade_carry = trade_cost = 0.0
         elif want is not None:
             if want not in allow_dirs:
                 # 못 하는 거래는 안 한 것으로 둔다 — 비용도 손익도 없다.
@@ -356,7 +396,7 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
                 run = (cur_start, cur_peak) if entry_mode == "level" else prev_run
                 entry_run = run if run and run[0] is not None else None
                 entry_events += 1
-                entry_cost = notional * cost_bp
+                entry_cost = cost_at(i)
                 daily_pnl -= entry_cost
                 trade_pnl = daily_pnl
                 trade_mtm = 0.0
@@ -396,10 +436,47 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
                                 + (0 if entry_mode == "touch" else 1)) if entry_run else None,
                     "peakZ": entry_run[1] if entry_run else None}
 
+    # ── 미청산 다리를 거래로 세는 자리 [OWNER 2026-08-28 — 「승률 100% 착시」] ──
+    #
+    # 총손익과 MDD 는 **이미** 미청산을 실시간으로 지고 있다: 누적은 보유 중인
+    # 봉마다 MTM 을 더하므로 열려 있는 손실이 곡선에 그대로 찍히고 낙폭에 든다.
+    # 빠져 있던 것은 **승률·거래 수·보유기간** 뿐이었고, 그래서 「12승 0패」
+    # 옆에서 −600만짜리 열린 다리가 조용히 사라졌다.
+    #
+    # 이 스위치는 그 다리를 마지막 봉의 평가로 **거래 목록에 넣는다**. 청산
+    # 비용은 안 문다 — 팔지 않았으니 없는 비용이다. `exitReason="open"` 으로
+    # 표시해 사후에 걸러낼 수 있게 둔다.
+    if close_open_at_end and open_leg is not None:
+        trades = trades + [{
+            "entryDate": open_leg["entryDate"], "exitDate": dates[-1],
+            "direction": open_leg["direction"], "entryZ": open_leg["entryZ"],
+            "exitZ": z[-1], "entryValue": open_leg["entryValue"],
+            "exitValue": values[-1], "dv": values[-1] - open_leg["entryValue"],
+            "pnl": open_leg["pnl"], "mtm": open_leg["mtm"],
+            "carry": open_leg["carry"], "cost": open_leg["cost"],
+            "bars": open_leg["bars"], "outFrom": open_leg["outFrom"],
+            "outDays": open_leg["outDays"], "peakZ": open_leg["peakZ"],
+            "exitReason": "open",
+        }]
+
     summary = summarize(points, trades)
     summary["openPnl"] = open_leg["pnl"] if open_leg else None
-    summary["breakevenCostBp"] = breakeven_cost_bp(
-        summary["totalPnl"], cost_bp, notional, entry_events + len(trades))
+    # 비용 경로를 주면 「편도 몇 bp 까지 견디는가」가 한 숫자로 안 나온다 —
+    # 봉마다 다른 값이기 때문이다. 대신 **그 경로의 몇 배까지 견디는가**를 답한다.
+    # 거래 목록이 z 에만 달려 있어 총손익이 여전히 비용의 정확한 일차식이라,
+    # 둘 다 닫힌형이다.
+    cost_events = entry_events + len([t for t in trades if t["exitReason"] != "open"])
+    if cost_bp_series is None:
+        summary["breakevenCostBp"] = breakeven_cost_bp(
+            summary["totalPnl"], cost_bp, notional, cost_events)
+        summary["breakevenCostMult"] = None
+    else:
+        # 실제로 문 돈 전부 — **봉에서** 센다. 거래 목록에서 세면 표본 끝
+        # 미청산 다리의 진입 비용이 빠져 답이 틀린다(실측: 잔차 878,409원).
+        paid = -sum(p["barCost"] for p in points)
+        summary["breakevenCostBp"] = None
+        summary["breakevenCostMult"] = (
+            None if paid <= 0 else 1.0 + summary["totalPnl"] / paid)
 
     return {"points": points, "trades": trades,
             "summary": summary, "roll": roll, "open": open_leg,
