@@ -50,10 +50,13 @@ import { ReadoutCard, ReadoutFact, ReadoutLevel, ReadoutMoney, placeReadout } fr
 import { Stat, StatColumn } from '@/ui/Stat';
 
 import {
+  MR_COST_MODELS,
   MR_ENTRY_MODES,
+  MR_REGIMES,
   MR_STRATEGY_DEFAULTS,
   MR_STRATEGY_LOOKBACKS,
   MR_STRATEGY_PRESETS,
+  MR_TIME_STOPS,
   fetchMrStrategy,
   fmtSigma,
   type MrStrategyParams,
@@ -72,6 +75,53 @@ import {
 /** σ 알약 칸 넷의 공통 폭. 가장 넓은 것(진입 σ = 1.5·2·2.5)의 자연폭 127 을
  * 담고 한 칸 여유 — 넷이 같아야 알약 열이 세로로 맞는다. */
 const SIGMA_W = 132;
+
+/** 값 몇 개 중 하나 — 라벨 아래 알약 묶음.
+ *
+ * `SigmaPick` 은 σ 전용(숫자 포맷·고정폭)이고 이것은 **아무 값**이나 받는다.
+ * 하나로 합치지 않은 이유는 σ 칸 넷이 서로 폭을 맞춰야 하기 때문이다(SIGMA_W).
+ * 대신 이 컴포넌트가 생기면서 진입 규칙·레짐·비용모델·타임스탑·스위치 둘이
+ * **한 정의**를 쓴다 — CLAUDE.md 얼라인 8(«같은 것은 한 번만 만든다»). */
+function Choice<T extends string | number | boolean>({
+  label,
+  help,
+  width,
+  value,
+  options,
+  onPick,
+  group,
+}: {
+  label: string;
+  help: string;
+  width: number;
+  value: T;
+  options: readonly { v: T; label: string; help?: string }[];
+  onPick: (v: T) => void;
+  group?: boolean;
+}) {
+  return (
+    <Box width={width} className={group ? 'sr-fgroup' : undefined}>
+      <Field label={label} help={help}>
+        <HStack gap={0.5} alignItems="center" height={CONTROL_H}>
+          {options.map((o) => (
+            <button
+              key={String(o.v)}
+              type="button"
+              className="sr-pillbtn"
+              data-on={value === o.v || undefined}
+              aria-pressed={value === o.v}
+              aria-label={`${label} ${o.label}`}
+              title={o.help}
+              onClick={() => onPick(o.v)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </HStack>
+      </Field>
+    </Box>
+  );
+}
 
 /** σ 문턱 하나 — 근거 있는 셋 중 고른다(`MR_STRATEGY_PRESETS`).
  *
@@ -328,8 +378,21 @@ export const tradeKey = (t: { entryT: string; exitT: string }): string =>
 /** 미청산 다리의 열쇠 — 청산일이 없으므로 거래와 같은 모양을 쓸 수 없다. */
 const OPEN_KEY = 'open';
 
+/** 청산 사유의 우리말 — 서버의 어휘를 화면에서 **한 번만** 옮긴다.
+ *  우선순위가 곧 이름이다: 손절 > 청산 > 역신호 > 타임스탑. `미청산` 은 판정이
+ *  아니라 상태다(팔지 않았고, 그래서 청산 비용도 안 물었다). */
+const WHY_WORD: Record<MrStrategyTrade['why'], string> = {
+  stop: '손절',
+  exit: '청산',
+  reverse: '역신호',
+  time: '타임스탑',
+  open: '미청산',
+};
+
 type MrEvent = {
   kind: 'entry' | 'exit' | 'stop';
+  /** 나간 사유 원본 — 진입 사건에서는 없다. */
+  why?: MrStrategyTrade['why'];
   /** 엔진 부호. 미청산 다리는 0 으로 두어 방향색을 안 갖는다. */
   dir: number;
   /** 거래 순번(1부터) — 세로선의 라벨이 이걸 적는다. */
@@ -340,7 +403,28 @@ type MrEvent = {
 /** 그날 사건의 한 마디 — 판독과 대사표의 「구분」 칸이 같은 말을 쓴다. */
 function eventWord(e: MrEvent | undefined, holding: boolean): string {
   if (!e) return holding ? '보유' : '—';
-  return e.kind === 'entry' ? '진입' : e.kind === 'stop' ? '손절' : '청산';
+  return e.kind === 'entry' ? '진입' : (e.why ? WHY_WORD[e.why] : '청산');
+}
+
+/** 진입 사건의 수 — 거래 + (아직 목록에 없는) 미청산 다리.
+ *
+ * `countOpen` 이 켜져 있으면 미청산이 **이미 거래로 들어와 있으므로** 또 세면
+ * 안 된다. 종전에는 무조건 더해서 「진입 15 · 거래 14」가 화면에 같이 서 있었다
+ * (실측 2026-08-28). */
+function entryCount(run: MrStrategyRun): number {
+  return run.trades.length + (run.open && !run.params.countOpen ? 1 : 0);
+}
+
+/** 나간 사유의 집계 한 마디 — **0 인 사유는 안 적는다**.
+ *
+ * 종전에는 청산과 손절만 셌다. 나가는 문이 넷으로 늘어난 뒤에도 그대로 두었더니
+ * 「청산 10 · 손절 0」이 서 있는데 거래는 14였다 — 타임스탑 2·역신호 1·미청산 1이
+ * 화면에서 사라져 있었다. 사유를 하나라도 빠뜨리면 그 줄은 거짓이 된다. */
+function exitTally(run: MrStrategyRun): string {
+  const order: MrStrategyTrade['why'][] = ['exit', 'stop', 'time', 'reverse', 'open'];
+  const n = (w: MrStrategyTrade['why']) => run.trades.filter((t) => t.why === w).length;
+  const parts = order.filter((w) => n(w) > 0).map((w) => `${WHY_WORD[w]} ${n(w)}`);
+  return parts.length ? parts.join(' · ') : '거래 없음';
 }
 
 /** 진입 규칙의 이름 — 목록이 어휘의 주인이라 여기서 다시 짓지 않는다. */
@@ -424,9 +508,7 @@ function reconSub(t: MrStrategyTrade, run: MrStrategyRun): string {
       ? ''
       : ` · ${t.outFrom}부터 밖 ${t.outDays}일` +
         (t.peakZ == null ? '' : `(최대 ${t.peakZ.toFixed(2)}σ)`);
-  return `${t.entryT} → ${t.exitT} · ${t.bars}봉 · ${legs}${out} · ${
-    t.why === 'stop' ? '손절' : '청산'
-  }`;
+  return `${t.entryT} → ${t.exitT} · ${t.bars}봉 · ${legs}${out} · ${WHY_WORD[t.why]}`;
 }
 
 /** 밴드 상태 한 마디 — 측정 보드의 어휘(`MrState`)와 같은 말이다. */
@@ -494,7 +576,14 @@ export function StrategyWindow({
       p.costBp !== knobs.costBp ||
       p.notional !== knobs.notional ||
       /* 진입 규칙은 `warnZ` 와 반대다 — 이건 엔진에 들어가고 거래 목록을 바꾼다. */
-      p.entryMode !== knobs.entryMode
+      p.entryMode !== knobs.entryMode ||
+      /* 실전 규칙 다섯도 전부 엔진에 들어간다. `countOpen` 은 총손익을 안 바꾸지만
+         승률·거래 수를 바꾸므로 조용히 재계산하면 안 되는 것은 같다. */
+      p.timeStop !== knobs.timeStop ||
+      p.costModel !== knobs.costModel ||
+      p.regime !== knobs.regime ||
+      p.reverseExit !== knobs.reverseExit ||
+      p.countOpen !== knobs.countOpen
     );
   }, [run, knobs]);
 
@@ -518,14 +607,18 @@ export function StrategyWindow({
       const e = at.get(t.entryT);
       const x = at.get(t.exitT);
       if (e != null) m.set(e, { kind: 'entry', dir: t.dir, n: k + 1, key });
-      if (x != null) m.set(x, { kind: t.why === 'stop' ? 'stop' : 'exit', dir: t.dir, n: k + 1, key });
+      /* 손절만 하락색으로 갈라 세운다 — 나머지 셋(청산·역신호·타임스탑)은
+         「계획대로 나왔다」는 같은 종류라 같은 뮤트다. 정확한 사유는 표가 진다. */
+      if (x != null)
+        m.set(x, { kind: t.why === 'stop' ? 'stop' : 'exit', why: t.why,
+                   dir: t.dir, n: k + 1, key });
     });
     /* 미청산 다리도 사건이다 — 표본 끝에 열려 있는 포지션이 차트에서만
        사라지면, 승률 옆의 「미청산 1건」이 어디 것인지 화면이 못 가리킨다. */
     if (run.open) {
       const e = at.get(run.open.entryT);
       if (e != null && !m.has(e))
-        m.set(e, { kind: 'entry', dir: 0, n: run.trades.length + 1, key: OPEN_KEY });
+        m.set(e, { kind: 'entry', dir: run.open.dir, n: run.trades.length + 1, key: OPEN_KEY });
     }
     return m;
   }, [run, dates]);
@@ -554,6 +647,16 @@ export function StrategyWindow({
     [sel, run],
   );
   const dirStat = !run ? '—' : only ? only.legs : '양방향';
+
+  /* 켜져 있는 실전 규칙의 이름들 — 바닥 각주가 읽는다. */
+  const liveOn = !run ? [] : [
+    run.params.timeStop ? `타임스탑 ${run.params.timeStop}일` : null,
+    run.params.regime !== 'none'
+      ? `레짐필터(${MR_REGIMES.find((r) => r.v === run.params.regime)?.label})` : null,
+    run.params.costModel === 'dynamic' ? '동적비용' : null,
+    run.params.reverseExit ? '역신호청산' : null,
+    run.params.countOpen ? '미청산 계상' : null,
+  ].filter((x): x is string => x !== null);
 
   /* 가격 주선 색 = 구간 순변화 방향(Main 미리보기의 규칙). */
   const priceHue = useMemo(() => {
@@ -704,28 +807,15 @@ export function StrategyWindow({
               읽는 순서가 곧 규칙의 순서다. `관찰 σ` 와 달리 **엔진에 들어가고**
               거래 목록을 바꾼다 — 그래서 설정 줄에 있고 stale 을 세운다.
               156 = 알약 둘(「이탈 즉시」·「밴드 복귀」)의 자연폭 + 한 칸 여유. */}
-          <Box width={156} className="sr-fgroup">
-            <Field
-              label="진입 규칙"
-              help="이탈 즉시는 밴드를 뚫는 봉에, 밴드 복귀는 밖에 있다가 돌아오는 봉에 들어가요. 방향은 둘 다 나갔던 쪽이 정해요."
-            >
-              <HStack gap={0.5} alignItems="center" height={CONTROL_H}>
-                {MR_ENTRY_MODES.map((m) => (
-                  <button
-                    key={m.v}
-                    type="button"
-                    className="sr-pillbtn"
-                    data-on={knobs.entryMode === m.v || undefined}
-                    aria-pressed={knobs.entryMode === m.v}
-                    aria-label={`진입 규칙 ${m.label}`}
-                    onClick={() => set({ entryMode: m.v })}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </HStack>
-            </Field>
-          </Box>
+          <Choice
+            group
+            label="진입 규칙"
+            help="이탈 즉시는 밴드를 뚫는 봉에, 밴드 복귀는 밖에 있다가 돌아오는 봉에 들어가요. 방향은 둘 다 나갔던 쪽이 정해요."
+            width={156}
+            value={knobs.entryMode}
+            options={MR_ENTRY_MODES.map((m) => ({ v: m.v, label: m.label, help: m.help }))}
+            onPick={(v) => set({ entryMode: v })}
+          />
           <SigmaPick
             group
             label="진입 σ"
@@ -794,6 +884,67 @@ export function StrategyWindow({
           </button>
           </HStack>
         </HStack>
+
+        {/* ── 실전 운용 규칙 [OWNER 2026-08-28 — "일단 민평 기준으로"] ───────────
+            윗줄과 **다른 줄**에 세운다. 윗줄은 원본 PMS 재현의 노브이고 이 줄은
+            그 위에 얹는 실전 규칙이라, 한 줄에 섞으면 화면이 「둘이 같은 종류」
+            라고 말하는 셈이 된다. 전부 끄면 윗줄만의 수와 정확히 같다.
+
+            기여가 균등하지 않다는 사실을 라벨의 help 가 진다 — 표본외 실측에서
+            타임스탑이 단독 최대(SR 0.63→0.95)이고, 동적 비용은 유일하게 깎는
+            항이며, 변동성 필터는 검증 창에서 한 건도 안 막았다. */}
+        <VStack gap={0.5} width="100%">
+          <Text font="legal" as="span" color="fgMuted">
+            실전 운용 규칙 — 전부 끄면 위 줄만의 수예요(원본 PMS 재현).
+            근거는 전진분석 리포트에 있어요.
+          </Text>
+          <HStack gap={1} alignItems="flex-end" flexWrap="wrap">
+            <Choice
+              label="타임스탑 (일)"
+              help="진입 후 이 영업일이 지나면 손익 불문 청산해요. 표본외 실측에서 단독 기여가 가장 컸어요(SR 0.63→0.95)."
+              width={172}
+              value={knobs.timeStop}
+              options={MR_TIME_STOPS.map((v) => ({ v: v as number, label: v === 0 ? '끔' : String(v) }))}
+              onPick={(v) => set({ timeStop: v })}
+            />
+            <Choice
+              group
+              label="레짐 필터"
+              help="진입만 막아요. 청산·손절은 필터를 안 봐요 — 나가는 문까지 조건을 달면 조건이 꺼진 동안 포지션이 갇혀요."
+              width={168}
+              value={knobs.regime}
+              options={MR_REGIMES}
+              onPick={(v) => set({ regime: v })}
+            />
+            <Choice
+              group
+              label="비용 모델"
+              help="동적은 변동성 백분위에 연동해 편도 0.15~0.25bp를 물려요. 유일하게 성과를 깎는 항이에요."
+              width={128}
+              value={knobs.costModel}
+              options={MR_COST_MODELS}
+              onPick={(v) => set({ costModel: v })}
+            />
+            <Choice
+              group
+              label="역신호 청산"
+              help="반대 방향 진입 신호를 나가는 문으로 써요. 그 방향으로 들어가지는 않아요(현물 대차매도 불가)."
+              width={116}
+              value={knobs.reverseExit}
+              options={[{ v: false, label: '끔' }, { v: true, label: '켬' }]}
+              onPick={(v) => set({ reverseExit: v })}
+            />
+            <Choice
+              group
+              label="미청산 계상"
+              help="표본 끝의 열린 다리를 거래로 세요. 총손익·MDD는 원래부터 이걸 지고 있어서 안 바뀌고, 승률·거래 수·보유기간만 바뀌어요."
+              width={132}
+              value={knobs.countOpen}
+              options={[{ v: false, label: '제외' }, { v: true, label: '포함' }]}
+              onPick={(v) => set({ countOpen: v })}
+            />
+          </HStack>
+        </VStack>
         {stale ? (
           /* 조용한 재계산 금지 — 원본의 stale 배너 + 마커 숨김 규율 그대로. */
           <Text font="legal" as="span" color="fgMuted">
@@ -835,7 +986,11 @@ export function StrategyWindow({
                      카드가 그 사실을 안 적으면 열려 있는 손실 포지션이 승률에서
                      조용히 사라진다 — 실측 80% 는 15건 중 12건이었고 빠진 한
                      건은 표본 두 번째로 나쁜 −600만이었다. */
-                  note={run.open ? '미청산 1건 제외' : undefined}
+                  /* 분모가 무엇인지 한 줄로. 「포함」이면 그 다리가 승패를
+                     이미 갈랐다는 뜻이고, 「제외」면 열린 손실이 승률에서 빠져
+                     있다는 뜻이다 — 둘 다 말해야 숫자가 읽힌다. */
+                  note={!run.open ? undefined
+                    : run.params.countOpen ? '미청산 1건 포함' : '미청산 1건 제외'}
                 />
                 <Stat
                   label="Sharpe"
@@ -853,7 +1008,16 @@ export function StrategyWindow({
                 ) : null}
               </StatColumn>
               <StatColumn title="조건">
-                <Stat label="비용" value={`편도 ${run.params.costBp}bp`} />
+                {/* 비용이 봉마다 다르면 「편도 몇 bp」가 한 숫자로 안 나온다 —
+                    실제로 문 범위와 중앙값을 적는다. 상수 하나로 뭉개면 화면이
+                    실제로 낸 비용을 감추게 된다. */}
+                <Stat
+                  label="비용"
+                  value={run.cost.model === 'flat'
+                    ? `편도 ${run.cost.bp}bp`
+                    : `편도 ${run.cost.lo}~${run.cost.hi}bp`}
+                  note={run.cost.model === 'dynamic' ? `동적 · 중앙 ${run.cost.mid}bp` : undefined}
+                />
                 {/* 손익분기 — 노브를 돌려 0 을 찾는 대신 닫힌형으로 답한다
                     (`mrbacktest.breakeven_cost_bp`). 「이 구성이 얼마짜리
                     호가폭까지 견디는가」 는 비용 노브의 값보다 먼저 알아야 하는
@@ -869,6 +1033,20 @@ export function StrategyWindow({
                         : `여유 ${(run.summary.breakevenCostBp - run.params.costBp).toFixed(2)}bp`
                     }
                   />
+                ) : run.summary.breakevenCostMult != null ? (
+                  /* 동적 비용 판 — 「몇 bp」가 아니라 «이 경로의 몇 배» 다.
+                     여기가 비어 있으면 비용 모델을 바꾸는 순간 손익분기가
+                     화면에서 사라진다(실측 2026-08-28). */
+                  <Stat
+                    label="손익분기 비용"
+                    value={`지금 경로의 ${run.summary.breakevenCostMult.toFixed(1)}배`}
+                    tone={run.summary.breakevenCostMult <= 1 ? 'down' : undefined}
+                    note={run.summary.breakevenCostMult <= 1
+                      ? '지금 비용에서 이미 손실'
+                      : `편도 ${(run.cost.model === 'dynamic'
+                          ? run.cost.mid * run.summary.breakevenCostMult
+                          : run.params.costBp * run.summary.breakevenCostMult).toFixed(2)}bp 중앙 기준`}
+                  />
                 ) : null}
                 <Stat label="명목" value={`${run.params.notional.toLocaleString()}원/bp`} />
                 <Stat label="종가" value={run.asof ?? '—'} />
@@ -877,6 +1055,17 @@ export function StrategyWindow({
                 <Stat label="방향" value={dirStat} />
                 {run.dirs.why ? (
                   <Stat label="막힌 진입" value={`${run.dirs.blocked.spells}회`} />
+                ) : null}
+                {/* 필터가 지운 신호는 **따로** 센다 — 방향은 데스크의 제약이고
+                    필터는 우리가 고른 것이라, 한 숫자로 합치면 선택의 대가가
+                    제약 뒤에 숨는다. 필터를 켰는데 0 이면 그것도 사실이다
+                    (실측: 변동성 상위 10% 는 검증 창에서 한 건도 안 막았다). */}
+                {run.params.regime !== 'none' ? (
+                  <Stat
+                    label="필터가 지운 진입"
+                    value={`${run.gated.spells}회`}
+                    note={run.gated.spells === 0 ? '한 건도 안 막았어요' : `${run.gated.days}일`}
+                  />
                 ) : null}
               </StatColumn>
             </HStack>
@@ -926,9 +1115,7 @@ export function StrategyWindow({
                   stale
                     ? `진입 ±${run.params.entryZ}σ · 마커 숨김`
                     : `진입 ±${run.params.entryZ}σ · ${entryWord(run.params.entryMode)}` +
-                      ` · 진입 ${run.trades.length + (run.open ? 1 : 0)} · 청산 ${
-                        run.trades.filter((t) => t.why === 'exit').length
-                      } · 손절 ${run.trades.filter((t) => t.why === 'stop').length}`
+                      ` · 진입 ${entryCount(run)} · ${exitTally(run)}`
                 }
                 /* 관찰 σ 는 설정 줄에서 여기로 내려왔다 [OWNER 2026-08-26]. 이
                    값은 엔진에 안 들어가고 이 패널의 가이드선만 옮긴다 — 성과
@@ -1200,7 +1387,7 @@ export function StrategyWindow({
                           </TableCell>
                           <TableCell>
                             <Text font="label2" as="span" color="fgMuted" noWrap>
-                              {t.why === 'stop' ? '손절' : '청산'}
+                              {WHY_WORD[t.why]}
                             </Text>
                           </TableCell>
                         </TableRow>
@@ -1230,6 +1417,12 @@ export function StrategyWindow({
               {run.carry.on && run.carry.defn
                 ? ` 캐리는 ${run.carry.defn}이고 조달은 ${run.carry.funding} 이에요 — 원본 PMS 산술에는 없던 항이에요.`
                 : ''}
+              {/* 실전 규칙이 켜져 있으면 화면이 그것을 말한다 — 안 적으면 같은
+                  종목의 두 숫자가 왜 다른지 화면만 보고는 알 수 없다. */}
+              {liveOn.length
+                ? ` 실전 규칙 ${liveOn.join(' · ')}이 켜져 있어요 — 끄면 원본 PMS 재현 그대로예요.`
+                : ''}
+              {' '}국고 다리는 민평(평가사 고시) 기준이에요 — 체결가로 재면 성과가 낮아질 수 있어요.
             </Text>
           </>
         )}

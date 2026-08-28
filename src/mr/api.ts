@@ -93,6 +93,40 @@ export const MR_ENTRY_MODES: { v: MrEntryMode; label: string; help: string }[] =
     help: '밖에 있다가 밴드 선으로 돌아오는 봉에 들어가요. 방향은 나갔던 쪽이 정해요.' },
 ];
 
+/* ── 실전 운용 규칙 [OWNER 2026-08-28 — "일단 민평 기준으로"] ─────────────────
+ *
+ * 다섯 지침을 화면 노브로 올린 것이다. **전부 끄면 원본 PMS 재현 그대로**이고,
+ * 근거·실측은 `docs/MR_LANE_STATE.md` 와 `backend/scripts/mr_live_report.py` 가
+ * 진다. 필터와 비용 경로는 서버가 만든다(§16) — `backend/app/mrregime.py`.
+ *
+ * 표본외 실측에서 기여가 균등하지 않았다는 점을 화면이 말해야 한다: 타임스탑이
+ * 단독 최대(SR 0.63→0.95)이고, 동적 비용은 유일하게 깎는 항이며, 변동성 필터는
+ * 검증 창에서 한 건도 안 막았다. */
+
+/** 레짐 필터 — 진입만 막는다. 청산·손절은 필터를 안 본다(엔진 규약). */
+export type MrRegime = 'none' | 'vol' | 'trend';
+
+/** 거래비용 모델 — 고정 편도 bp 대 변동성 연동 0.15~0.25bp. */
+export type MrCostModel = 'flat' | 'dynamic';
+
+export const MR_REGIMES: { v: MrRegime; label: string; help: string }[] = [
+  { v: 'none', label: '없음', help: 'z 문턱만 봐요. 원본 PMS 규칙이에요.' },
+  { v: 'vol', label: '변동성',
+    help: '30일 실현변동성이 그날까지의 상위 10%면 진입을 막아요. 백분위는 과거만 봐요.' },
+  { v: 'trend', label: '추세',
+    help: '20일 이동평균이 120일 위면(스프레드 확대 추세) 진입을 막아요. 실측에서는 과잉 차단이었어요.' },
+];
+
+export const MR_COST_MODELS: { v: MrCostModel; label: string; help: string }[] = [
+  { v: 'flat', label: '고정', help: '옆 칸의 편도 bp를 모든 봉에 그대로 써요.' },
+  { v: 'dynamic', label: '동적',
+    help: '변동성 백분위에 연동해 편도 0.15~0.25bp를 물려요. 진입일은 평시보다 변동성이 높아요(중앙 백분위 0.71 대 0.46).' },
+];
+
+/** 타임스탑 선택지(영업일). 0 은 끔이다. 20 은 지시가 준 값이고 실측에서 단독
+ *  최대 기여였다 — 앞뒤로 절반·두 배를 둔다. */
+export const MR_TIME_STOPS = [0, 10, 20, 40] as const;
+
 export interface MrStrategyParams {
   lookback: number;
   entryZ: number;
@@ -102,6 +136,15 @@ export interface MrStrategyParams {
   costBp: number;
   notional: number;
   entryMode: MrEntryMode;
+  /** 진입 후 N영업일이면 손익 불문 청산. 0 이면 끔. */
+  timeStop: number;
+  costModel: MrCostModel;
+  regime: MrRegime;
+  /** 반대 방향 진입 신호를 **나가는 문**으로 쓴다(그 방향으로 들어가지는 않는다). */
+  reverseExit: boolean;
+  /** 표본 끝의 미청산 다리를 거래로 센다 — 승률·거래 수·보유기간에 든다.
+   *  총손익·MDD 는 원래부터 미청산을 지고 있어서 안 바뀐다. */
+  countOpen: boolean;
 }
 
 export const MR_STRATEGY_DEFAULTS: MrStrategyParams = {
@@ -113,6 +156,13 @@ export const MR_STRATEGY_DEFAULTS: MrStrategyParams = {
   costBp: 0.05,
   notional: 1_000_000,
   entryMode: 'level',
+  /* 실전 규칙은 **꺼진 채로 시작한다** — 이 창의 계약이 「원본 PMS 재현」이라,
+     열자마자 딴 규칙의 수가 서 있으면 그 계약이 깨진다. */
+  timeStop: 0,
+  costModel: 'flat',
+  regime: 'none',
+  reverseExit: false,
+  countOpen: false,
 };
 
 /** PMS 룩백 프리셋 그대로 — 20/60/120 + 자유 입력. */
@@ -187,7 +237,9 @@ export interface MrStrategyTrade {
   entryV: number;
   exitV: number;
   pnl: number;
-  why: 'exit' | 'stop';
+  /** 청산 사유. 우선순위가 곧 이름이다 — 손절 > 청산 > 역신호 > 타임스탑.
+   *  `open` 은 표본 끝의 미청산 다리를 거래로 셀 때만 나온다(청산 비용 없음). */
+  why: 'exit' | 'stop' | 'reverse' | 'time' | 'open';
   /** 대사 삼분해 — `mtm + carry + cost = pnl`. 화면이 그 항등을 보여 준다. */
   mtm: number;
   carry: number;
@@ -281,6 +333,14 @@ export interface MrStrategyRun {
   /** 캐리 — 두 다리의 중간 현금흐름 [OWNER 2026-08-27]. 끄면 `{on:false}` 이고
    *  그때의 수는 원본 PMS 산술 그대로다(`backend/app/mrcarry.py` 머리에 근거). */
   carry: { on: boolean; defn?: string | null; funding?: string };
+  /** 실제로 문 비용 — 고정이면 한 숫자, 동적이면 범위와 중앙값이다. */
+  cost:
+    | { model: 'flat'; bp: number }
+    | { model: 'dynamic'; lo: number; hi: number; mid: number };
+  /** 레짐 필터가 지운 진입 신호 — 구간 수와 일수. 방향 때문에 못 한 것
+   *  (`dirs.blocked`)과 **따로** 센다: 방향은 데스크의 제약이고 필터는 우리가
+   *  고른 것이라, 한 숫자로 합치면 선택의 대가가 제약 뒤에 숨는다. */
+  gated: { spells: number; days: number };
   summary: {
     totalPnl: number;
     maxDrawdown: number;
@@ -290,8 +350,11 @@ export interface MrStrategyRun {
     /** 미청산 다리의 MTM(₩) — 총손익에는 있고 승률에는 없다. */
     openPnl: number | null;
     /** 총손익이 0 이 되는 편도 비용(bp). 거래가 z 에만 달려 있어 닫힌형이다
-     *  (`mrbacktest.breakeven_cost_bp`). 음수면 «비용 0 이어도 손실» 이다. */
+     *  (`mrbacktest.breakeven_cost_bp`). 음수면 «비용 0 이어도 손실» 이다.
+     *  동적 비용 판에서는 한 숫자로 안 나오므로 null 이고, 대신 아래 배수가 선다. */
     breakevenCostBp: number | null;
+    /** 주어진 비용 **경로의 몇 배**까지 견디는가. 고정 비용 판에서는 null. */
+    breakevenCostMult: number | null;
   };
 }
 
@@ -306,6 +369,11 @@ export function fetchMrStrategy(id: string, p: MrStrategyParams): Promise<MrStra
     costBp: String(p.costBp),
     notional: String(p.notional),
     entryMode: p.entryMode,
+    timeStop: String(p.timeStop),
+    costModel: p.costModel,
+    regime: p.regime,
+    reverseExit: String(p.reverseExit),
+    countOpen: String(p.countOpen),
   });
   return get<MrStrategyRun>(mrStrategyUrl(q.toString()), 'mr strategy');
 }

@@ -28,9 +28,9 @@
                 (누적이 보유 봉마다 MTM 을 더한다). 빠져 있던 것은 승률·거래
                 수·보유기간이라, `close_open_at_end=True` 로 그것까지 센다.
                 타임스탑은 엔진의 `time_stop`.
-  3 레짐 필터    `vol_gate()`(주) · `trend_gate()`(부) → 엔진의 `gate`
+  3 레짐 필터    `app/mrregime.vol_gate`(주) · `trend_gate`(부) → 엔진의 `gate`
   4 단방향 제약  `reverse_exit=True` + `benchmarks()` 의 IR
-  5 동적 비용    `cost_path()` → 엔진의 `cost_bp_series`
+  5 동적 비용    `app/mrregime.cost_path` → 엔진의 `cost_bp_series`
 
 ## 알려진 근사
 
@@ -56,6 +56,7 @@ from app import funding as fnd  # noqa: E402
 from app import mr as mr_mod  # noqa: E402
 from app import mrbacktest as bt  # noqa: E402
 from app import mrcarry as mrc  # noqa: E402
+from app import mrregime as rg  # noqa: E402
 from app import universe as uni  # noqa: E402
 from app.curves import TENOR_T, build_basis_curves  # noqa: E402
 from app.dataset import load_dataset_merged  # noqa: E402
@@ -69,12 +70,8 @@ GRID_EXIT = (0.0, 0.5, 1.0)
 STOP_Z = 3.5
 TIME_STOP = 20
 NOTIONAL = 1_000_000.0
-VOL_WIN = 30
-VOL_BLOCK = 0.90          # 상위 10% 진입 금지
-VOL_MIN_HIST = 250
-TREND_FAST, TREND_SLOW = 20, 120
-COST_LO, COST_HI = 0.15, 0.25
 LEGACY_COST = 0.05
+# 필터·비용의 상수는 `app/mrregime.py` 가 진다(VOL_WIN·VOL_BLOCK·COST_LO/HI 등).
 MIN_TRADES, MIN_TRADES_FALLBACK = 8, 3
 
 
@@ -122,62 +119,27 @@ def load(sid: str) -> dict:
             "cd": [cd.get(t) for t in dates], "fund": fund}
 
 
-# ── 3 레짐 필터 ─────────────────────────────────────────────────────────────
+# ── 3 레짐 필터 · 5 동적 비용 ────────────────────────────────────────────────
+#
+# **여기서 다시 만들지 않는다.** 화면과 이 스크립트가 같은 필터를 써야 하고,
+# 두 벌이면 수가 갈릴 때 어느 쪽이 옳은지 판정할 자료가 없다 — 2026-08-28 에
+# `app/mrregime.py` 로 올렸다(미래를 안 보는 성질은 그쪽 테스트가 잰다).
 
-def realized_vol(vals: list[float], win: int = VOL_WIN) -> list[float | None]:
-    """직전 `win` 봉 변화의 표준편차(bp). 창이 안 차면 None."""
-    out: list[float | None] = [None] * len(vals)
-    d: list[float | None] = [None] + [vals[i] - vals[i - 1] for i in range(1, len(vals))]
-    for i in range(win, len(vals)):
-        w = [x for x in d[i - win + 1:i + 1] if x is not None]
-        out[i] = st.pstdev(w) if len(w) == win else None
-    return out
+realized_vol = rg.realized_vol
+vol_percentile = rg.vol_percentile
+trend_gate = rg.trend_gate
+cost_path_of = rg.cost_path
 
 
 def vol_gate(vals: list[float]) -> tuple[list[bool], list[float | None]]:
-    """변동성 상위 10% 인 봉은 진입 금지.
+    """게이트와 백분위를 같이 — 백분위는 비용 경로가 다시 쓴다."""
+    return rg.vol_gate(vals), rg.vol_percentile(vals)
 
-    백분위는 **확장 창**이다 — 그날까지의 관측만 쓴다. 전 표본 분위를 쓰면
-    「그날 그것이 상위 10% 인지」를 미래를 보고 판정하게 된다.
-    """
-    v = realized_vol(vals)
-    seen: list[float] = []
-    gate: list[bool] = []
-    pct: list[float | None] = []
-    for x in v:
-        if x is None:
-            gate.append(True)
-            pct.append(None)
-            continue
-        p = (sum(1 for s in seen if s <= x) / len(seen)) if seen else None
-        seen.append(x)
-        pct.append(p)
-        gate.append(True if (p is None or len(seen) < VOL_MIN_HIST) else p < VOL_BLOCK)
-    return gate, pct
-
-
-def trend_gate(vals: list[float]) -> list[bool]:
-    """단기 MA 가 장기 MA 위면(스프레드 확대 추세) 진입 금지 — 추세 역행 차단."""
-    def ma(w: int) -> list[float | None]:
-        out: list[float | None] = [None] * len(vals)
-        for i in range(w - 1, len(vals)):
-            out[i] = sum(vals[i - w + 1:i + 1]) / w
-        return out
-    f, s = ma(TREND_FAST), ma(TREND_SLOW)
-    return [True if (f[i] is None or s[i] is None) else not (f[i] > s[i])
-            for i in range(len(vals))]
-
-
-# ── 5 동적 비용 ─────────────────────────────────────────────────────────────
 
 def cost_path(pct: list[float | None]) -> list[float]:
-    """편도 비용(bp) = 0.15 + 0.10 × 변동성 백분위 → [0.15, 0.25].
-
-    z 가 문턱을 넘는 봉은 호가가 벌어져 있는 봉이다. 평시 호가(0.05bp)를 상수로
-    쓰면 **진입 비용이 조직적으로 싸게** 잡히고, 그 편향은 거래가 잦을수록 커진다.
-    백분위를 못 재는 앞머리는 하한(0.15)으로 둔다 — 모르는 날을 싸게 치지 않는다.
-    """
-    return [COST_LO + (COST_HI - COST_LO) * (p if p is not None else 0.0) for p in pct]
+    """백분위 → 편도 비용(bp). 정의는 `mrregime.cost_path` 가 진다."""
+    return [rg.COST_LO + (rg.COST_HI - rg.COST_LO) * (p if p is not None else 0.0)
+            for p in pct]
 
 
 # ── 성과 ────────────────────────────────────────────────────────────────────

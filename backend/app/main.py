@@ -71,6 +71,7 @@ from . import df_cache
 from . import mr as mr_mod
 from . import mrbacktest as mrbt
 from . import mrcarry as mrc
+from . import mrregime as mrg
 from . import payloads
 from . import rv as rv_mod
 from . import schedule_cache
@@ -920,7 +921,12 @@ def mr_history(series_id: str, window: int = mr_mod.WINDOW, k: float = mr_mod.K)
 def _mr_neighbors(dates: list[str], vals: list[float], base: dict,
                   allow: tuple[int, ...], *,
                   carry: list[float] | None = None,
-                  entry_mode: str = "level") -> list[dict]:
+                  entry_mode: str = "level",
+                  gate: list[bool] | None = None,
+                  time_stop: int | None = None,
+                  cost_bp_series: list[float] | None = None,
+                  reverse_exit: bool = False,
+                  close_open_at_end: bool = False) -> list[dict]:
     """노브를 한 칸씩 옮겼을 때의 결과 — 「이 칸이 얼마나 튼튼한가」.
 
     화면은 고른 칸 하나만 보여 준다. 그러면 손절 3.5 의 +2,605만은 보이고 손절
@@ -955,7 +961,10 @@ def _mr_neighbors(dates: list[str], vals: list[float], base: dict,
                               entry_z=p["entryZ"], exit_z=p["exitZ"],
                               stop_z=p["stopZ"], cost_bp=p["costBp"],
                               notional=p["notional"], allow_dirs=allow,
-                              carry=carry, entry_mode=entry_mode)
+                              carry=carry, entry_mode=entry_mode, gate=gate,
+                              time_stop=time_stop, cost_bp_series=cost_bp_series,
+                              reverse_exit=reverse_exit,
+                              close_open_at_end=close_open_at_end)
             sm = r["summary"]
             cells.append({
                 "v": v,
@@ -975,6 +984,9 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
                 warnZ: float = 1.5, exitZ: float = 0.5, stopZ: float = 3.5,
                 costBp: float = 0.05, notional: float = 1_000_000.0,
                 carry: bool = True, entryMode: str = "level",
+                timeStop: int = 0, costModel: str = "flat",
+                regime: str = "none", reverseExit: bool = False,
+                countOpen: bool = False,
                 fundingBasis: str = funding.DEFAULT_BASIS,
                 fundingSpreadBp: float = funding.DEFAULT_SPREAD_BP) -> dict:
     """전략 실험 창 — 첫 PMS entry-signals 의 z-스코어 백테스트 재현(§16).
@@ -1002,6 +1014,17 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     if entryMode not in mrbt.ENTRY_MODES:
         raise HTTPException(status_code=422,
                             detail=f"진입 규칙이 이상해요: {entryMode} ({'|'.join(mrbt.ENTRY_MODES)})")
+    # ── 실전 운용 손잡이 넷 [OWNER 2026-08-28] ─────────────────────────────────
+    # 전부 기본이 꺼짐이라 안 주면 원본 PMS 재현 그대로다. 근거와 실측은
+    # `docs/MR_LANE_STATE.md` 와 `backend/scripts/mr_live_report.py`.
+    if not 0 <= timeStop <= 500:
+        raise HTTPException(status_code=422, detail=f"타임스탑이 범위를 벗어나요: {timeStop} (0~500)")
+    if costModel not in mrg.COST_MODELS:
+        raise HTTPException(status_code=422,
+                            detail=f"비용 모델이 이상해요: {costModel} ({'|'.join(mrg.COST_MODELS)})")
+    if regime not in mrg.REGIMES:
+        raise HTTPException(status_code=422,
+                            detail=f"레짐 필터가 이상해요: {regime} ({'|'.join(mrg.REGIMES)})")
 
     # 보드와 같은 유도 창구 — 선물·퓨처스왑도 여기서 같은 환산을 지난다.
     body = mr_mod.series_points(id)
@@ -1050,11 +1073,22 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
             pv = pv01(_curves["now"], TENOR_T[mrc._tenor_of(id)])
             carry_krw = mrc.carry_krw(rates, dates, notional_per_bp=notional, pv01=pv)
 
+    # 필터·비용 경로는 **서버가** 만든다(§16, 브라우저는 계산하지 않는다).
+    # 값은 bp 로 환산한 `vals` 위에서 잰다 — 화면 단위(%)로 재면 선물 계열의
+    # 변동성 백분위가 딴 계열이 된다.
+    gate = mrg.gate_for(regime, vals)
+    cost_series = mrg.cost_for(costModel, vals)
+
     r = mrbt.simulate(dates, vals, lookback=lookback, entry_z=entryZ,
                       exit_z=exitZ, stop_z=stopZ, cost_bp=costBp,
                       notional=notional,
                       allow_dirs=tuple(dirs["allowed"]),
-                      carry=carry_krw, entry_mode=entryMode)
+                      carry=carry_krw, entry_mode=entryMode,
+                      gate=gate,
+                      time_stop=timeStop or None,
+                      cost_bp_series=cost_series,
+                      reverse_exit=reverseExit,
+                      close_open_at_end=countOpen)
     roll = r["roll"]
     points = [
         {
@@ -1119,7 +1153,20 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
         "asof": dates[-1] if dates else None,
         "params": {"lookback": lookback, "entryZ": entryZ, "warnZ": warnZ,
                    "exitZ": exitZ, "stopZ": stopZ, "costBp": costBp,
-                   "notional": notional, "entryMode": entryMode},
+                   "notional": notional, "entryMode": entryMode,
+                   "timeStop": timeStop, "costModel": costModel,
+                   "regime": regime, "reverseExit": reverseExit,
+                   "countOpen": countOpen},
+        # 비용이 봉마다 다르면 「편도 몇 bp」가 한 숫자로 안 나온다 — 실제로 쓴
+        # 범위와 중앙값을 화면이 적을 수 있게 낸다.
+        "cost": ({"model": "flat", "bp": costBp} if cost_series is None else {
+            "model": "dynamic",
+            "lo": round(min(cost_series), 3), "hi": round(max(cost_series), 3),
+            "mid": round(sorted(cost_series)[len(cost_series) // 2], 3),
+        }),
+        # 필터가 지운 진입 신호 — 조용히 빠지면 「신호가 없었다」로 읽힌다.
+        # 방향 때문에 못 한 것(`dirs.blocked`)과 **따로** 센다.
+        "gated": r["gated"],
         # 캐리가 무엇인지 화면이 읽을 문장 — 부호 기준이 −1 이라 정의가 없으면
         # 읽는 사람이 자기 방향으로 읽는다(`mr.KIND_DEFN` 과 같은 규율).
         "carry": {"on": carry, "defn": carry_defn, "funding": spec.label} if carry else {"on": False},
@@ -1144,11 +1191,15 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
             "bars": r["open"]["bars"],
         } if r["open"] else None),
         # 한 칸 옆 — 고른 칸이 이웃보다 얼마나 나은지가 그 칸의 신뢰도다.
+        # **머리 숫자와 같은 규칙으로** 돈다(필터·비용·타임스탑까지) — 기준점이
+        # 다르면 그 차이가 노브 탓인지 규칙 탓인지 화면이 구분해 주지 못한다.
         "neighbors": _mr_neighbors(
             dates, vals,
             {"lookback": lookback, "entryZ": entryZ, "exitZ": exitZ,
              "stopZ": stopZ, "costBp": costBp, "notional": notional},
-            tuple(dirs["allowed"]), carry=carry_krw, entry_mode=entryMode),
+            tuple(dirs["allowed"]), carry=carry_krw, entry_mode=entryMode,
+            gate=gate, time_stop=timeStop or None, cost_bp_series=cost_series,
+            reverse_exit=reverseExit, close_open_at_end=countOpen),
         "summary": {
             "totalPnl": round(s["totalPnl"], 2),
             "maxDrawdown": round(s["maxDrawdown"], 2),
@@ -1159,6 +1210,11 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
             # 총손익이 0 이 되는 편도 비용 — 노브를 돌려 찾는 대신 닫힌형으로.
             "breakevenCostBp": (round(s["breakevenCostBp"], 3)
                                 if s["breakevenCostBp"] is not None else None),
+            # 비용이 봉마다 다르면 「몇 bp」가 한 숫자로 안 나온다 — 대신 **그
+            # 경로의 몇 배까지 견디는가**를 답한다. 안 내보내면 동적 비용 판에서
+            # 화면의 손익분기 칸이 통째로 비어 버린다(실측 2026-08-28).
+            "breakevenCostMult": (round(s["breakevenCostMult"], 3)
+                                  if s.get("breakevenCostMult") is not None else None),
         },
     }
 
