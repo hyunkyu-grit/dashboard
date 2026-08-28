@@ -17,6 +17,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import mr_live_wfo as W  # noqa: E402
 
+# ── 표본 길이 [OWNER 2026-08-28 — "더 길게 보지 뭐"] ───────────────────────
+# `--long` 이면 `imx_data.timeseries`(2014-06~) 를 쓴다. 화면 출처는 2020-01~
+# 이라 6.7년밖에 안 되고, 그 길이로는 다중검정 문턱을 못 넘는다. 겹치는 1,633일
+# 에서 두 출처가 같은 계열임을 확인했으므로(`W.overlap_check`) **전 기간을 한
+# 출처로** 쓴다 — 이음매를 만들면 그 자리에서 수준이 튀고 그것이 신호로 잡힌다.
+LONG = "--long" in sys.argv
+
+
+def load(sid: str) -> dict:
+    return W.load_long(sid) if LONG else W.load(sid)
+
+
+def oos_window(n: int) -> tuple[int, int]:
+    """폴드를 굴리지 않고 창만 — 격자 탐색이 필요 없는 자리에서 쓴다."""
+    lo, hi = 0, n
+    while lo + W.TRAIN + 1 <= n:
+        a = lo + W.TRAIN
+        b = min(a + W.TEST, n)
+        if b - a < 20:
+            break
+        hi = b
+        lo += W.TEST
+    return W.TRAIN, hi
+
 BSS = ["BSS-6M", "BSS-9M", "BSS-1Y", "BSS-1.5Y", "BSS-2Y", "BSS-3Y",
        "BSS-5Y", "BSS-7Y", "BSS-10Y"]
 # 화면 기본 = 원본 PMS s16. 「고르지 않은」 판의 파라미터다.
@@ -115,7 +139,7 @@ def selection_skill(d: dict, opt: dict) -> list[dict]:
 
 
 def headline(sid: str, deep: bool = True) -> dict:
-    d = W.load(sid)
+    d = load(sid)
     gc = W.gates_and_cost(d)
     ref = W.walk_forward(d, W.final_options(gc))
     lo, hi = ref["oosLo"], ref["oosHi"]
@@ -197,7 +221,7 @@ def all_tenors() -> None:
     tr_old: list[dict] = []
     bm_port: dict[str, list[float]] = {}
     for sid in BSS:
-        d = W.load(sid)
+        d = load(sid)
         gc = W.gates_and_cost(d)
         ref = W.walk_forward(d, W.final_options(gc))
         lo, hi = ref["oosLo"], ref["oosHi"]

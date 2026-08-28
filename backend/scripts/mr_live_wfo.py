@@ -119,6 +119,80 @@ def load(sid: str) -> dict:
             "cd": [cd.get(t) for t in dates], "fund": fund}
 
 
+# ── 긴 표본 [OWNER 2026-08-28 — "더 길게 보지 뭐"] ──────────────────────────
+#
+# 화면이 쓰는 `credit_matrix` 는 2020-01-02 부터라 BSS 가 6.7년이다. 그 길이로는
+# 다중검정 문턱을 못 넘는다(SR 1.05·시행 118 이면 최소 8.7년이 필요한데 3.5년
+# 밖에 없었다). `imx_data.timeseries` 에 **2014-05-28 부터의 국고채커브·IRS·CD**
+# 가 있어 12.2년이 된다.
+#
+# **이음매를 안 만든다.** 두 출처를 붙이면 그 자리에서 수준이 튀고, 그 튐이
+# 신호로 잡힌다. 겹치는 1,633일에서 상관 0.9996~1.0000 · 중앙 차이 0.00~0.10bp
+# 로 같은 계열임을 확인했으므로(`_overlap_check`), **전 기간을 새 출처 하나로**
+# 쓴다. 화면(`mr.series_points`)은 건드리지 않는다 — 보드의 z 와 순위가 통째로
+# 바뀌는 일이라 별도 결정이다.
+
+LONG_KTB = {'6M': '6월이하(당일)', '9M': '9월이하(당일)', '1Y': '1년이하(당일)',
+            '1.5Y': '1.5년이하(당일)', '2Y': '2년이하(당일)', '3Y': '3년이하(당일)',
+            '5Y': '5년이하(당일)', '7Y': '7년이하(당일)', '10Y': '10년이하(당일)'}
+LONG_IRS = {'6M': '6개월', '9M': '9개월', '1Y': '1년', '1.5Y': '18개월', '2Y': '2년',
+            '3Y': '3년', '5Y': '5년', '7Y': '7년', '10Y': '10년'}
+CAT_KTB, CAT_IRS, CAT_CD = '국고채커브', '스왑-IRS(종합ALL)', '단기금리'
+
+
+def _pull(cat: str, item: str) -> dict[str, float]:
+    with engine().connect() as conn:
+        rows = conn.execute(text(
+            "SELECT trade_date, value FROM imx_data.timeseries "
+            "WHERE category = :c AND item = :i ORDER BY trade_date"
+        ), {"c": cat, "i": item}).fetchall()
+    return {r[0].isoformat(): float(r[1]) for r in rows if r[1] is not None}
+
+
+def load_long(sid: str) -> dict:
+    """긴 표본판 `load()`. 같은 열쇠를 돌려주므로 아래 기계가 그대로 돈다.
+
+    스프레드는 **두 다리가 같은 날 다 찍힌 날에만** 선다(`universe._align` 의 그
+    규율) — 한쪽을 이월해 채우면 없던 스프레드를 지어내게 된다.
+    """
+    t = mrc._tenor_of(sid)
+    govt, swap = _pull(CAT_KTB, LONG_KTB[t]), _pull(CAT_IRS, LONG_IRS[t])
+    cd = _pull(CAT_CD, 'CD 91일물')
+    dates = sorted(set(govt) & set(swap) & set(cd))
+    vals = [(govt[d] - swap[d]) * 100.0 for d in dates]          # bp
+
+    spec = fnd.FundingSpec(basis=fnd.DEFAULT_BASIS, spread_bp=fnd.DEFAULT_SPREAD_BP)
+    fund = [fnd.rate_on(spec, dt.date.fromisoformat(d)) * 100.0 for d in dates]
+    # 캐리(%/년) = (국고 − 조달) + (CD − 스왑). `mrcarry` 의 그 항등 그대로다.
+    rates = [(govt[d] - fund[i]) + (cd[d] - swap[d]) for i, d in enumerate(dates)]
+    pv = pv01(_now_curve(), TENOR_T[t])
+    carry = mrc.carry_krw(rates, dates, notional_per_bp=NOTIONAL, pv01=pv)
+    return {"sid": sid, "dates": dates, "vals": vals, "carry": carry,
+            "principal": NOTIONAL / (pv * 1e-4),
+            "ktb": [govt[d] for d in dates], "cd": [cd[d] for d in dates],
+            "fund": fund}
+
+
+def overlap_check(sid: str) -> dict:
+    """긴 출처와 화면 출처가 겹치는 구간에서 같은 계열인가 — 이음매 대신 이 검정."""
+    new, old = load_long(sid), load(sid)
+    a = dict(zip(new["dates"], new["vals"]))
+    b = dict(zip(old["dates"], old["vals"]))
+    both = sorted(set(a) & set(b))
+    if len(both) < 50:
+        return {"n": len(both), "rho": None, "medAbs": None, "maxAbs": None}
+    x = [a[d] for d in both]
+    y = [b[d] for d in both]
+    mx, my = sum(x) / len(x), sum(y) / len(y)
+    num = sum((x[i] - mx) * (y[i] - my) for i in range(len(x)))
+    dx = math.sqrt(sum((v - mx) ** 2 for v in x))
+    dy = math.sqrt(sum((v - my) ** 2 for v in y))
+    dif = sorted(abs(x[i] - y[i]) for i in range(len(x)))
+    return {"n": len(both), "rho": num / (dx * dy) if dx and dy else None,
+            "medAbs": dif[len(dif) // 2], "maxAbs": dif[-1],
+            "meanDiff": mx - my}
+
+
 # ── 3 레짐 필터 · 5 동적 비용 ────────────────────────────────────────────────
 #
 # **여기서 다시 만들지 않는다.** 화면과 이 스크립트가 같은 필터를 써야 하고,
