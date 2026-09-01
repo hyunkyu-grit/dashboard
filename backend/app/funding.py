@@ -186,15 +186,31 @@ def series_for(basis: str) -> list[tuple[dt.date, float]]:
     return _series_cache[basis]
 
 
+#: 이분 탐색이 쓸 날짜 열 — 계열과 **같은 캐시 수명**이다.
+#:
+#: 종전에는 `rate_on` 이 부를 때마다 `[x for x, _ in s]` 로 다시 만들었다.
+#: 콜금리 계열은 **일별**이라 그 목록이 수천 점이고, 호출은 봉마다 한 번이다
+#: — MR 통합 장부(아홉 만기 × 3,016봉)에서 27,129번 불러 **5.0초**를 썼다
+#: (프로파일 2026-09-01). 값은 하나도 안 바뀐다: 같은 목록을 한 번만 만든다.
+_dates_cache: dict[str, list[dt.date]] = {}
+
+
+def _dates_for(basis: str) -> list[dt.date]:
+    if basis not in _dates_cache:
+        _dates_cache[basis] = [x for x, _ in series_for(basis)]
+    return _dates_cache[basis]
+
+
 def reset_cache() -> None:
     _series_cache.clear()
     _ladder_cache.clear()
+    _dates_cache.clear()
 
 
 def rate_on(spec: FundingSpec, d: dt.date) -> float:
     """그날의 조달금리(decimal). 커버리지 밖은 가장 가까운 끝값."""
     s = series_for(spec.basis)
-    i = bisect_right([x for x, _ in s], d) - 1
+    i = bisect_right(_dates_for(spec.basis), d) - 1
     base = s[0][1] if i < 0 else s[i][1]
     return base + spec.spread_bp / 10000.0
 

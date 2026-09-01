@@ -1,12 +1,16 @@
-/* Mean Reversion 측정면의 서버 계약 — `/api/mr/board` · `/api/mr/history/{id}`.
+/* Mean Reversion 측정면의 서버 계약 — `/api/mr/board` · `/api/mr/history/{id}` ·
+ * `/api/mr/strategy` · `/api/mr/book`.
  *
  * 숫자는 전부 서버가 끝낸다(§16, `backend/app/mr.py`): 밴드·z·%B·상태 판정·
- * 정렬·순위까지. 이 파일은 타입과 두 페처뿐이다. 라이브 전용이다 — BSS 가
+ * 정렬·순위까지. 이 파일은 타입과 페처뿐이다. 라이브 전용이다 — BSS 가
  * SQL 에만 있어 미리 구울 수 없다(Credit RV 와 같은 사정).
+ *
+ * 네 번째(`/api/mr/book`)는 2026-09-01 에 붙은 **BSS 테너 통합 장부**다. 낱개
+ * 계열이 아니라 아홉 만기를 한 장부로 더한 것이고, 노브는 낱개 창과 같다.
  */
 
 import { BacktestUnavailable } from '@/lib/api';
-import { mrBoardUrl, mrHistoryUrl, mrStrategyUrl } from '@/lib/staticPaths';
+import { mrBoardUrl, mrBookUrl, mrHistoryUrl, mrStrategyUrl } from '@/lib/staticPaths';
 
 /** 밴드 상태 — 판정이지 행동이 아니다. 검증 레인(bollinger-mr)과 같은 어휘. */
 export type MrStateKind = 'below' | 'above' | 'reentry-low' | 'reentry-high' | 'inside';
@@ -45,12 +49,57 @@ export interface MrRow {
   state: MrState;
 }
 
+/** 통합 줄의 다리 하나 — 만기 순으로 늘어선다(랭킹 순이 아니다). */
+export interface MrWatchLeg {
+  id: string;
+  label: string;
+  tenor: string;
+  v: number;
+  d1: number;
+  z: number | null;
+  pctB: number | null;
+  state: MrState;
+  asof: string;
+}
+
+/** BSS 통합 한 줄 [OWNER 2026-09-01] — 랭킹 **아래**에 따로 선다.
+ *
+ * **레벨이 없다.** 만기가 다른 아홉 스프레드의 평균은 거래할 수 있는 값이
+ * 아니라서 「값」·「전일」 칸을 안 만든다. 단위 없는 둘(|z|·%B)만 평균이고
+ * 나머지는 개수다 — 밴드 워치가 답해야 하는 질문이 「지금 몇 개가 나가
+ * 있나」이기 때문이다. 산술은 서버(`backend/app/mrbook.py::watch`).
+ */
+export interface MrWatch {
+  id: string;
+  label: string;
+  kind: 'book';
+  defn: string;
+  /** 묶음에 든 만기 수. */
+  n: number;
+  outLow: number;
+  outHigh: number;
+  reentry: number;
+  inside: number;
+  meanAbsZ: number | null;
+  meanPctB: number | null;
+  /** 가장 늘어난 다리 — 개수만 남으면 「어디가」를 못 읽는다. */
+  peak: { id: string; label: string; z: number } | null;
+  asof: string | null;
+  /** 가장 뒤처진 다리의 종가일. `asof` 와 같으면 아홉이 다 같은 날이다. */
+  asofMin: string | null;
+  /** 최신 종가일보다 뒤처진 다리 수 — 0 이 아니면 화면이 그 사실을 말한다. */
+  stale: number;
+  legs: MrWatchLeg[];
+}
+
 export interface MrBoard {
   /** 소스별 as-of — BSS(민평×IRS)와 선물(선물표×IRS)이 갈라질 수 있고,
    * 갈라진 날은 화면이 그렇다고 말한다(rv 의 B-2). */
   asof: { bss: string | null; fut: string | null };
   params: { window: number; k: number; recentN: number };
   rows: MrRow[];
+  /** BSS 통합 줄. BSS 행이 하나도 안 서면 null 이다. */
+  watch: MrWatch | null;
   /** 못 읽은 테너 — 조용히 빼지 않는다(rv 의 exclusions 문법, 사유는 서버 것). */
   excluded: { id: string; label: string; reason: string }[];
 }
@@ -415,9 +464,137 @@ export interface MrStrategyRun {
   };
 }
 
-export function fetchMrStrategy(id: string, p: MrStrategyParams): Promise<MrStrategyRun> {
-  const q = new URLSearchParams({
-    id,
+/* ── BSS 테너 통합 장부 [OWNER 2026-09-01 — "BSS 테너 통합 밴드 워치를 하나
+ * 만들어서 승률 및 세부사항들을 확인할 수 있게"] ─────────────────────────────
+ *
+ * 같은 규칙을 아홉 만기에 **동시에** 걸었을 때의 한 장부다. 노브는 낱개 창과
+ * 완전히 같고(`MrStrategyParams`) 종목만 없다 — 두 창이 다른 기본값에서 열리면
+ * 「낱개로는 벌고 통합으로는 잃는다」가 규칙 탓인지 기본값 탓인지 화면이
+ * 구분해 주지 못한다.
+ *
+ * 산술은 서버(`backend/app/mrbook.py`)가 끝낸다. 계열 하나의 준비·시뮬은 낱개
+ * 창과 **같은 함수**(`main._mr_leg`)라, 통합의 수는 낱개 아홉의 합과 갈릴 수
+ * 없다. */
+
+/** 다리 하나의 성적 — 만기 순으로 늘어선다. */
+export interface MrBookLeg {
+  id: string;
+  label: string;
+  tenor: string;
+  totalPnl: number;
+  maxDrawdown: number;
+  sharpe: number | null;
+  winRate: number | null;
+  numTrades: number;
+  /** 평균 보유 봉 수. 거래가 없으면 null. */
+  avgBars: number | null;
+  openPnl: number | null;
+  /** 총손익에서 이 다리의 몫. 총합이 0 이하거나 이 다리가 음수면 null 이다 —
+   *  120% 같은 수를 안 적는다. */
+  share: number | null;
+  blocked: { spells: number; days: number };
+  gated: { spells: number; days: number };
+  /** 이 만기의 마지막 종가일 — 만기마다 다를 수 있다(민평×IRS 교집합). */
+  asof: string | null;
+}
+
+export interface MrBookPoint {
+  t: string;
+  /** 그날 아홉을 합친 손익(₩). */
+  pnl: number;
+  cum: number;
+  /** 그 봉에 포지션이 서 있던 다리 수 — 걸린 명목이 이 수 × 명목이다. */
+  legs: number;
+}
+
+/** 한 통에 모은 거래 — 낱개 창의 거래 줄에 «어느 만기» 셋이 붙은 모양이다. */
+export interface MrBookTrade extends MrStrategyTrade {
+  sid: string;
+  label: string;
+  tenor: string;
+}
+
+export interface MrBookOpen {
+  sid: string;
+  label: string;
+  tenor: string;
+  entryT: string;
+  dir: number;
+  entryZ: number;
+  entryV: number;
+  pnl: number;
+  bars: number;
+}
+
+export interface MrBookRun {
+  id: string;
+  label: string;
+  defn: string;
+  unit: string;
+  asof: string | null;
+  from: string | null;
+  to: string | null;
+  bars: number;
+  params: MrStrategyParams;
+  legs: MrBookLeg[];
+  points: MrBookPoint[];
+  trades: MrBookTrade[];
+  open: MrBookOpen[];
+  dirs: MrStrategyDirs;
+  carry: { on: boolean; defn?: string | null; funding?: string };
+  cost:
+    | { model: 'flat'; bp: number }
+    | { model: 'dynamic'; lo: number; hi: number; mid: number };
+  gated: { spells: number; days: number };
+  /** 못 선 만기 — 조용히 빠지지 않는다(보드의 exclusions 문법). */
+  excluded: { id: string; label: string; reason: string }[];
+  diag: {
+    exits: MrStrategyRun['diag']['exits'];
+    payoff: MrStrategyRun['diag']['payoff'];
+    periods: MrStrategyRun['diag']['periods'];
+    /** 통합의 값어치 — 쌍상관이 낮을수록 아홉이 진짜 아홉으로 센다. */
+    diversification: {
+      meanPairCorr: number | null;
+      /** N / (1 + (N−1)·ρ̄). 상관이 0 이면 N, 1 이면 1 이다. */
+      effectiveN: number | null;
+      n: number;
+    };
+    /** 개별 다리의 SR — 통합 SR 옆에 있어야 «묶어서 나아졌나» 가 판정된다. */
+    legSharpe: {
+      median: number | null;
+      min: number | null;
+      max: number | null;
+      positive: number;
+      n: number;
+    };
+  };
+  summary: {
+    totalPnl: number;
+    maxDrawdown: number;
+    winRate: number | null;
+    sharpe: number | null;
+    numTrades: number;
+    /** 표본 끝에 열려 있는 다리 수. 승률에는 안 들어간다(원본 규약). */
+    openLegs: number;
+    openPnl: number | null;
+    breakevenCostBp: number | null;
+    breakevenCostMult: number | null;
+  };
+  /** 걸린 돈 — 동일가중 합의 대가다. 안 적으면 화면의 「명목」이 실제로 움직인
+   *  돈을 최대 아홉 배 작게 말한다. */
+  book: {
+    maxLegs: number;
+    meanLegs: number | null;
+    /** 다리가 하나도 없던 날의 비율. */
+    idleShare: number | null;
+    peakT: string | null;
+    peakNotional: number;
+  };
+}
+
+/** 노브 → 쿼리. 낱개 창과 **한 곳**에서 만든다 — 두 벌이면 한쪽만 늙는다. */
+function strategyQuery(p: MrStrategyParams): URLSearchParams {
+  return new URLSearchParams({
     lookback: String(p.lookback),
     entryZ: String(p.entryZ),
     warnZ: String(p.warnZ),
@@ -432,7 +609,16 @@ export function fetchMrStrategy(id: string, p: MrStrategyParams): Promise<MrStra
     reverseExit: String(p.reverseExit),
     countOpen: String(p.countOpen),
   });
+}
+
+export function fetchMrStrategy(id: string, p: MrStrategyParams): Promise<MrStrategyRun> {
+  const q = strategyQuery(p);
+  q.set('id', id);
   return get<MrStrategyRun>(mrStrategyUrl(q.toString()), 'mr strategy');
+}
+
+export function fetchMrBook(p: MrStrategyParams): Promise<MrBookRun> {
+  return get<MrBookRun>(mrBookUrl(strategyQuery(p).toString()), 'mr book');
 }
 
 async function get<T>(url: string, what: string): Promise<T> {

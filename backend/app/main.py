@@ -70,6 +70,7 @@ from . import calendar_cache
 from . import df_cache
 from . import mr as mr_mod
 from . import mrbacktest as mrbt
+from . import mrbook
 from . import mrcarry as mrc
 from . import mrdiag as mrd
 from . import mrregime as mrg
@@ -981,33 +982,13 @@ def _mr_neighbors(dates: list[str], vals: list[float], base: dict,
     return rows
 
 
-@router.get("/api/mr/strategy")
-def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
-                warnZ: float = 1.5, exitZ: float = 0.5, stopZ: float = 3.5,
-                # 편도 비용 기본값 0.05 → 0.5 [OWNER 2026-08-28]. 0.05 은 첫 PMS 의
-                # 값이고 이 데스크의 실측이 아니다 — 국고3Y·IRS3Y 패키지 실제 편도가
-                # ≤0.5bp 라는 오너 답이 있으므로 **보수적인 쪽을 기본**으로 둔다.
-                # 싸게 잡은 비용은 결론을 통째로 뒤집는다(볼린저 레인의 그 자리).
-                costBp: float = 0.5, notional: float = 1_000_000.0,
-                carry: bool = True, entryMode: str = "level",
-                timeStop: int = 0, costModel: str = "flat",
-                regime: str = "none", reverseExit: bool = False,
-                countOpen: bool = False,
-                fundingBasis: str = funding.DEFAULT_BASIS,
-                fundingSpreadBp: float = funding.DEFAULT_SPREAD_BP) -> dict:
-    """전략 실험 창 — 첫 PMS entry-signals 의 z-스코어 백테스트 재현(§16).
-
-    산술은 `mrbacktest.py`(PMS 원본 이식·적합성 벡터로 잠금), 기본값도 그쪽
-    기본(s16) 그대로다. warnZ 는 엔진엔 안 들어가고 오실레이터 가이드가 쓴다.
-    캐시 없음 — 파라미터가 자유값이고 계산이 밀리초라 태울 이유가 없다.
-
-    방향은 계열이 정한다(`mr.dirs_for`) — BSS 는 국고 매수 쪽 한 방향뿐이다.
-    파라미터가 아니라 이 데스크의 사실이라 쿼리로 열지 않는다.
-    """
-    labels = {s: l for s, l, _ in mr_mod.SERIES}
-    kinds = {s: kd for s, _, kd in mr_mod.SERIES}
-    if id not in labels:
-        raise HTTPException(status_code=404, detail=f"unknown mr series {id}")
+def _mr_check_knobs(lookback: int, entryZ: float, warnZ: float, exitZ: float,
+                    stopZ: float, costBp: float, notional: float,
+                    entryMode: str, timeStop: int, costModel: str,
+                    regime: str) -> None:
+    """노브의 범위·허용값 — `/api/mr/strategy` 와 `/api/mr/book` 이 **같은 문**을
+    쓴다. 두 벌이면 한쪽만 통과하는 조합이 생기고, 그때 통합의 수와 낱개의 수가
+    다른 규칙에서 나온 것이 된다."""
     if not 2 <= lookback <= 600:
         raise HTTPException(status_code=422, detail=f"룩백이 범위를 벗어나요: {lookback}일 (2~600)")
     for name, v in (("entry", entryZ), ("watch", warnZ), ("exit", exitZ), ("stop", stopZ)):
@@ -1032,7 +1013,23 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
         raise HTTPException(status_code=422,
                             detail=f"레짐 필터가 이상해요: {regime} ({'|'.join(mrg.REGIMES)})")
 
+
+def _mr_leg(id: str, *, lookback: int, entryZ: float, exitZ: float, stopZ: float,
+            costBp: float, notional: float, carry: bool, entryMode: str,
+            timeStop: int, costModel: str, regime: str, reverseExit: bool,
+            countOpen: bool, spec: funding.FundingSpec) -> dict:
+    """한 계열의 **준비 + 시뮬** — 낱개 창과 통합 장부가 같은 것을 쓴다.
+
+    2026-09-01 에 통합 밴드 워치(`/api/mr/book`)가 생기면서 갈라 냈다. 아홉
+    만기를 한 장부로 더하는 화면에서 **통합의 수가 낱개 아홉의 합과 갈리면**
+    그 화면은 아무 말도 못 하게 되므로, 계열 하나를 준비하는 자리는 하나여야
+    한다: 단위 환산(%→bp)·방향·캐리·레짐 게이트·비용 경로·엔진 호출까지.
+
+    반환은 화면 모양이 아니라 **재료**다 — 라우트가 각자의 페이로드로 썬다.
+    """
     # 보드와 같은 유도 창구 — 선물·퓨처스왑도 여기서 같은 환산을 지난다.
+    kinds = {s: kd for s, _, kd in mr_mod.SERIES}
+    labels = {s: l for s, l, _ in mr_mod.SERIES}
     body = mr_mod.series_points(id)
     pts = [p for p in body["points"] if p.get("v") is not None]
     dates = [p["t"] for p in pts]
@@ -1062,7 +1059,6 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     # ── 캐리 [OWNER 2026-08-27 — "중간에 CF는 상쇄되는건가?"] ──────────────────
     # 안 상쇄된다(`app/mrcarry.py` 머리에 다리별 산술). 원본 PMS 산술에는 이 항이
     # 없으므로 **끌 수 있게** 둔다 — `carry=false` 면 예전 수 그대로다.
-    spec = _funding_spec(fundingBasis, fundingSpreadBp)
     carry_krw: list[float] | None = None
     carry_defn: str | None = None
     if carry:
@@ -1095,6 +1091,53 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
                       cost_bp_series=cost_series,
                       reverse_exit=reverseExit,
                       close_open_at_end=countOpen)
+    return {"id": id, "label": labels[id], "kind": kinds[id], "unit": unit,
+            "dates": dates, "vals": vals, "disp": disp, "dirs": dirs,
+            "carryKrw": carry_krw, "carryDefn": carry_defn,
+            "gate": gate, "costSeries": cost_series, "r": r}
+
+
+@router.get("/api/mr/strategy")
+def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
+                warnZ: float = 1.5, exitZ: float = 0.5, stopZ: float = 3.5,
+                # 편도 비용 기본값 0.05 → 0.5 [OWNER 2026-08-28]. 0.05 은 첫 PMS 의
+                # 값이고 이 데스크의 실측이 아니다 — 국고3Y·IRS3Y 패키지 실제 편도가
+                # ≤0.5bp 라는 오너 답이 있으므로 **보수적인 쪽을 기본**으로 둔다.
+                # 싸게 잡은 비용은 결론을 통째로 뒤집는다(볼린저 레인의 그 자리).
+                costBp: float = 0.5, notional: float = 1_000_000.0,
+                carry: bool = True, entryMode: str = "level",
+                timeStop: int = 0, costModel: str = "flat",
+                regime: str = "none", reverseExit: bool = False,
+                countOpen: bool = False,
+                fundingBasis: str = funding.DEFAULT_BASIS,
+                fundingSpreadBp: float = funding.DEFAULT_SPREAD_BP) -> dict:
+    """전략 실험 창 — 첫 PMS entry-signals 의 z-스코어 백테스트 재현(§16).
+
+    산술은 `mrbacktest.py`(PMS 원본 이식·적합성 벡터로 잠금), 기본값도 그쪽
+    기본(s16) 그대로다. warnZ 는 엔진엔 안 들어가고 오실레이터 가이드가 쓴다.
+    캐시 없음 — 파라미터가 자유값이고 계산이 밀리초라 태울 이유가 없다.
+
+    방향은 계열이 정한다(`mr.dirs_for`) — BSS 는 국고 매수 쪽 한 방향뿐이다.
+    파라미터가 아니라 이 데스크의 사실이라 쿼리로 열지 않는다.
+    """
+    labels = {s: l for s, l, _ in mr_mod.SERIES}
+    if id not in labels:
+        raise HTTPException(status_code=404, detail=f"unknown mr series {id}")
+    _mr_check_knobs(lookback, entryZ, warnZ, exitZ, stopZ, costBp, notional,
+                    entryMode, timeStop, costModel, regime)
+
+    # 준비·시뮬은 **공용 자리**가 한다(`_mr_leg`) — 통합 장부(`/api/mr/book`)가
+    # 같은 함수를 아홉 번 부르므로, 통합의 수가 낱개 아홉의 합과 갈릴 수 없다.
+    spec = _funding_spec(fundingBasis, fundingSpreadBp)
+    leg = _mr_leg(id, lookback=lookback, entryZ=entryZ, exitZ=exitZ, stopZ=stopZ,
+                  costBp=costBp, notional=notional, carry=carry,
+                  entryMode=entryMode, timeStop=timeStop, costModel=costModel,
+                  regime=regime, reverseExit=reverseExit, countOpen=countOpen,
+                  spec=spec)
+    dates, vals, disp = leg["dates"], leg["vals"], leg["disp"]
+    dirs, carry_defn = leg["dirs"], leg["carryDefn"]
+    carry_krw, gate, cost_series = leg["carryKrw"], leg["gate"], leg["costSeries"]
+    r = leg["r"]
     roll = r["roll"]
     points = [
         {
@@ -1155,7 +1198,7 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     ]
     s = r["summary"]
     return {
-        "id": id, "label": labels[id], "unit": body["unit"],
+        "id": id, "label": labels[id], "unit": leg["unit"],
         "asof": dates[-1] if dates else None,
         "params": {"lookback": lookback, "entryZ": entryZ, "warnZ": warnZ,
                    "exitZ": exitZ, "stopZ": stopZ, "costBp": costBp,
@@ -1237,6 +1280,97 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
             "breakevenCostMult": (round(s["breakevenCostMult"], 3)
                                   if s.get("breakevenCostMult") is not None else None),
         },
+    }
+
+
+def _mr_cost_span(legs: list[dict]) -> dict | None:
+    """아홉 다리가 **실제로 문** 비용의 범위와 중앙값 — 동적 비용일 때만.
+
+    첫 다리의 경로만 적으면 안 된다: 동적 비용은 그 만기의 변동성 백분위에
+    연동하므로 만기마다 다른 경로다. 화면이 「편도 0.15~0.25bp」라고 적을 때
+    그건 장부 전체가 문 비용이어야 한다.
+    """
+    paths = [c for leg in legs if leg["costSeries"] is not None for c in leg["costSeries"]]
+    if not paths:
+        return None
+    return {"model": "dynamic", "lo": round(min(paths), 3), "hi": round(max(paths), 3),
+            "mid": round(sorted(paths)[len(paths) // 2], 3)}
+
+
+@router.get("/api/mr/book")
+def mr_book(lookback: int = 60, entryZ: float = 2.0,
+            warnZ: float = 1.5, exitZ: float = 0.5, stopZ: float = 3.5,
+            costBp: float = 0.5, notional: float = 1_000_000.0,
+            carry: bool = True, entryMode: str = "level",
+            timeStop: int = 0, costModel: str = "flat",
+            regime: str = "none", reverseExit: bool = False,
+            countOpen: bool = False,
+            fundingBasis: str = funding.DEFAULT_BASIS,
+            fundingSpreadBp: float = funding.DEFAULT_SPREAD_BP) -> dict:
+    """BSS 테너 **통합** 밴드 워치 [OWNER 2026-09-01 — "BSS 테너 통합 밴드 워치를
+    하나 만들어서 승률 및 세부사항들을 확인할 수 있게"].
+
+    같은 규칙을 아홉 만기에 **동시에** 걸었을 때의 한 장부다. 계열 하나의 준비·
+    시뮬은 낱개 창과 **같은 함수**(`_mr_leg`)가 하고, 이 라우트는 그 아홉을
+    `mrbook.aggregate` 로 더하기만 한다 — 통합의 수와 낱개 아홉의 합이 갈릴 수
+    있는 자리를 아예 안 만든다.
+
+    노브는 `/api/mr/strategy` 와 **완전히 같다**(`id` 만 없다). 두 창이 다른
+    기본값에서 열리면 「낱개로는 벌고 통합으로는 잃는다」가 규칙 탓인지 기본값
+    탓인지 화면이 구분해 주지 못한다.
+
+    캐시 없음 — 파라미터가 자유값이고 아홉 번 돌아도 초 단위다.
+    """
+    _mr_check_knobs(lookback, entryZ, warnZ, exitZ, stopZ, costBp, notional,
+                    entryMode, timeStop, costModel, regime)
+    spec = _funding_spec(fundingBasis, fundingSpreadBp)
+
+    legs: list[dict] = []
+    excluded: list[dict] = []
+    for sid, label in mrbook.bss_series():
+        try:
+            legs.append(_mr_leg(
+                sid, lookback=lookback, entryZ=entryZ, exitZ=exitZ, stopZ=stopZ,
+                costBp=costBp, notional=notional, carry=carry,
+                entryMode=entryMode, timeStop=timeStop, costModel=costModel,
+                regime=regime, reverseExit=reverseExit, countOpen=countOpen,
+                spec=spec))
+        except (HTTPException, KeyError, ValueError) as exc:
+            # 못 선 만기는 **조용히 빠지지 않는다**(보드의 exclusions 문법).
+            # 여덟 만기의 합을 「BSS 통합」이라 부르면서 그 사실을 안 적으면
+            # 화면이 거짓말을 한다.
+            detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+            excluded.append({"id": sid, "label": label, "reason": str(detail)})
+    if not legs:
+        raise HTTPException(status_code=422,
+                            detail="통합할 수 있는 만기가 하나도 없어요 — "
+                                   + (excluded[0]["reason"] if excluded else "이력이 없어요"))
+
+    span = _mr_cost_span(legs)
+    out = mrbook.aggregate(legs, notional=notional, cost_bp=costBp,
+                           dynamic_cost=span is not None)
+    first = legs[0]
+    # 막힌 진입은 방향 사전 안으로 들어간다(낱개 라우트와 같은 자리) — 집계에서
+    # 꺼내 두고 나머지를 펼친다. 딕셔너리 안에서 pop 하면 평가 순서에 기대게 된다.
+    blocked = out.pop("blocked")
+    return {
+        "id": mrbook.BOOK_ID, "label": mrbook.BOOK_LABEL, "defn": mrbook.BOOK_DEFN,
+        # 값 단위는 아홉이 다 bp 다(국고 − IRS). 손익 단위와 헷갈리지 않게 적어 둔다.
+        "unit": first["unit"],
+        "params": {"lookback": lookback, "entryZ": entryZ, "warnZ": warnZ,
+                   "exitZ": exitZ, "stopZ": stopZ, "costBp": costBp,
+                   "notional": notional, "entryMode": entryMode,
+                   "timeStop": timeStop, "costModel": costModel,
+                   "regime": regime, "reverseExit": reverseExit,
+                   "countOpen": countOpen},
+        # 방향은 아홉이 같다(전부 BSS) — 낱개 창과 같은 사전을 쓰고, 막힌 진입
+        # 수만 아홉을 더한 것이다.
+        "dirs": {**first["dirs"], "blocked": blocked},
+        "cost": span if span is not None else {"model": "flat", "bp": costBp},
+        "carry": ({"on": True, "defn": first["carryDefn"], "funding": spec.label}
+                  if carry else {"on": False}),
+        "excluded": excluded,
+        **out,
     }
 
 

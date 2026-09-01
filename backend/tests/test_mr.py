@@ -151,7 +151,8 @@ def test_build_mr_universe_shape_rank_and_exclusion():
         return _synthetic("bp", seed=abs(hash(sid)) % 1000)
 
     p = mr.build_mr(None, fetch_uni=fake_uni, fetch_fut=_fake_fut)
-    assert set(p.keys()) == {"asof", "params", "rows", "excluded", "history"}
+    # `watch` = BSS 통합 한 줄 [OWNER 2026-09-01] — 랭킹 아래에 따로 선다.
+    assert set(p.keys()) == {"asof", "params", "rows", "watch", "excluded", "history"}
     assert p["params"] == {"window": mr.WINDOW, "k": mr.K, "recentN": mr.RECENT_N}
     # 파라미터가 페이로드를 관통한다 — 다른 창은 다른 밴드·다른 파라미터 응답.
     p60 = mr.build_mr(None, window=60, k=1.5, fetch_uni=fake_uni, fetch_fut=_fake_fut)

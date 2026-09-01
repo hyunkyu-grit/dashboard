@@ -65,7 +65,10 @@ export type WindowKey =
   | "matrix"
   | "rv"
   | "rvlanes"
-  | "mrstrategy";
+  | "mrstrategy"
+  /* BSS 테너 통합 장부 [2026-09-01]. 낱개 창(`mrstrategy`)과 **다른 열쇠**다 —
+     둘이 같이 열릴 수 있고, 그때 한쪽을 옮기면 다른 쪽이 따라가면 안 된다. */
+  | "mrbook";
 
 const remembered = new Map<WindowKey, WinPos>();
 

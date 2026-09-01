@@ -33,6 +33,7 @@ z·밴드·상태는 전부 **트레일링 창**이라 마지막 점의 값은 �
 from __future__ import annotations
 
 import datetime as dt
+import time
 from functools import lru_cache
 from typing import Any
 
@@ -57,10 +58,25 @@ IRS_ITEM = {
 }
 
 
+#: 워터마크의 짧은 기억 — (잰 시각, 값). 적재는 하루 한 번인데 이 질의는
+#: **호출마다** SSL 왕복이라 0.09초가 든다. 보드 한 번(계열 아홉 × 값·캐리
+#: 두 길)이면 열여덟 번이라 1.6초였고, 통합 장부는 같은 자리를 또 지난다
+#: (프로파일 2026-09-01). 창이 짧아 «갈아 끼는 열쇠» 라는 설계는 그대로다 —
+#: 적재가 돌면 늦어도 이 초만큼 뒤에 새 번들이 선다.
+_WATERMARK_TTL_S = 60.0
+_watermark_memo: tuple[float, str] | None = None
+
+
 def _watermark() -> str:
+    global _watermark_memo
+    now = time.monotonic()
+    if _watermark_memo is not None and now - _watermark_memo[0] < _WATERMARK_TTL_S:
+        return _watermark_memo[1]
     with engine().connect() as conn:
         row = conn.execute(text("SELECT MAX(trade_date) FROM imx_data.timeseries")).fetchone()
-    return "" if row is None or row[0] is None else str(row[0])
+    mark = "" if row is None or row[0] is None else str(row[0])
+    _watermark_memo = (now, mark)
+    return mark
 
 
 @lru_cache(maxsize=2)
@@ -95,6 +111,8 @@ def bundle() -> dict[str, Any]:
 
 def reset_cache() -> None:
     """시험이 부른다 — 라이브 경로는 워터마크가 알아서 갈아 낀다."""
+    global _watermark_memo
+    _watermark_memo = None
     _bundle.cache_clear()
 
 

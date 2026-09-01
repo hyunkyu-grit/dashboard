@@ -48,8 +48,10 @@ import {
   type MrParams,
   type MrRow,
   type MrState,
+  type MrWatch,
 } from './api';
 import { BandChart } from './BandChart';
+import { BookWindow } from './BookWindow';
 import { StrategyWindow } from './StrategyWindow';
 
 /** 조건 바 한 칸 — rv 의 Cond 와 같은 문법(새 코드라 shorthand 대신 Text). */
@@ -104,6 +106,19 @@ function stateText(s: MrState): string {
 
 const MINUS = '−';
 
+/** 통합 줄의 상태 — **개수**다. 「밖 3 · 재진입 1 · 안 5」.
+ *  0 인 것은 안 적는다(없는 일을 0 으로 적으면 줄만 길어진다 — `exitTally` 의
+ *  그 규율). 전부 안이면 그 사실을 한 낱말로 말한다. */
+function watchText(w: MrWatch): string {
+  const out = w.outLow + w.outHigh;
+  const parts = [
+    out ? `밖 ${out}` : null,
+    w.reentry ? `재진입 ${w.reentry}` : null,
+    w.inside ? `밴드 안 ${w.inside}` : null,
+  ].filter((x): x is string => x !== null);
+  return parts.join(' · ') || '—';
+}
+
 /** z 표기 — 부호 명시, 반올림 후 0 은 부호 없이(rv fmt 의 규칙 그대로). */
 function fmtZ(z: number | null): string {
   if (z == null) return '—';
@@ -143,6 +158,82 @@ function BandTrack({ pctB }: { pctB: number | null }) {
         <span className="sr-track-mark" style={{ left: `${pos}%` }} />
       </span>
     </Box>
+  );
+}
+
+/** BSS 통합 상세 — **만기 순** 밴드 위치 스트립.
+ *
+ * 랭킹 표와 같은 자료를 다른 순서로 세운 것이고, 그 순서가 이 카드의 전부다:
+ * 랭킹(|z| 순)은 「지금 어디가 제일 늘어났나」를 답하고 이 스트립(6M→10Y)은
+ * 「커브의 어느 구간이 늘어났나」를 답한다. 둘은 다른 질문이라 한 표로는 못
+ * 한다 — 순위로 늘어놓으면 만기 축이 흩어져 모양이 사라진다.
+ *
+ * **표가 아니라 그림이다** [의도한 캐논 이탈, 실측 2026-09-01]. 처음에는 CDS
+ * `Table` 로 세웠는데 행이 44px 이라 아홉 줄이 436px 이고 카드가 준 자리는
+ * 292px 이었다 — 여섯 줄만 보이고 나머지는 스크롤 뒤였다. 한눈에 보려고 만든
+ * 그림을 굴려서 보게 하면 그 그림은 아무 일도 안 한다. 부품은 캐논 그대로다
+ * (`.sr-track`/`.sr-track-mark` — Main 52주 「위치」 열의 그것).
+ *
+ * 줄은 **누를 수 없다**. 아홉 만기는 바로 위 랭킹 표에 이미 다 있고, 거기서
+ * 고르면 된다 — 같은 행동을 두 곳에 두면 탭 정지만 아홉 개 늘어난다.
+ */
+function BookDetail({ watch }: { watch: MrWatch }) {
+  return (
+    <VStack gap={0} width="100%">
+      {/* 머리는 한 줄 — 아래 아홉 줄의 칸 폭과 자로 맞춘다. */}
+      <HStack gap={1} alignItems="center" height={22} width="100%">
+        <Box width={44}>
+          <Text font="caption" as="span" color="fgMuted" noWrap>만기</Text>
+        </Box>
+        <Box width={64} display="flex" justifyContent="flex-end">
+          <Text font="caption" as="span" color="fgMuted" noWrap>현재</Text>
+        </Box>
+        {/* 트랙 열의 머리는 **가운데**다 — 왼쪽에 붙이면 바로 앞의 「현재」와
+            8px 만 떨어져 「현재 위치」 한 낱말로 읽힌다(실측 2026-09-01). */}
+        <Box flexGrow={1} minWidth={0} display="flex" justifyContent="center">
+          <Text font="caption" as="span" color="fgMuted" noWrap>위치</Text>
+        </Box>
+        <Box width={68} display="flex" justifyContent="flex-end">
+          <Text font="caption" as="span" color="fgMuted" noWrap>늘어남</Text>
+        </Box>
+      </HStack>
+      {watch.legs.map((g) => (
+        <HStack key={g.id} gap={1} alignItems="center" height={26} width="100%">
+          <Box width={44}>
+            <Text font="label2" as="span" noWrap>{g.tenor}</Text>
+          </Box>
+          <Box width={64} display="flex" justifyContent="flex-end">
+            <Text font="label2" as="span" tabularNumbers noWrap>
+              {fmtLevel(g.v, 'bp' as Unit)}
+            </Text>
+          </Box>
+          {/* 트랙은 남는 폭을 다 받는다 — 아홉 줄이 같은 자로 그려져야 커브의
+              모양이 읽힌다(폭이 줄마다 다르면 그건 그림이 아니다). */}
+          {/* `display="block"` 이 있어야 트랙이 폭을 받는다 — CDS `Box` 는
+              기본이 flex 라, 그 안의 `.sr-track`(내용 없는 블록)이 flex 아이템이
+              되어 **폭 0** 으로 접힌다(실측 2026-09-01: 상자 808px · 트랙 0px).
+              `BandTrack` 이 같은 이유로 `display="block"` 을 적어 두었다. */}
+          <Box flexGrow={1} minWidth={0} display="block">
+            <span
+              className="sr-track"
+              title={`${g.label} · 밴드 하단↔상단의 ${
+                g.pctB == null ? '—' : Math.round(g.pctB)
+              }% 지점 (%B) · ${stateText(g.state)}`}
+            >
+              {g.pctB == null ? null : (
+                <span
+                  className="sr-track-mark"
+                  style={{ left: `${Math.max(0, Math.min(100, g.pctB))}%` }}
+                />
+              )}
+            </span>
+          </Box>
+          <Box width={68} display="flex" justifyContent="flex-end">
+            <Text font="label2" as="span" tabularNumbers noWrap>{fmtZ(g.z)}</Text>
+          </Box>
+        </HStack>
+      ))}
+    </VStack>
   );
 }
 
@@ -214,6 +305,10 @@ export function MrPage() {
   const rows = board?.rows ?? [];
   const sel: MrRow | undefined = rows.find((r) => r.id === selId) ?? rows[0];
   const selHist = sel ? histories[sel.id] : undefined;
+  /* 통합 줄이 골라져 있는가 — 이 줄은 계열이 아니라 집계라 `rows` 에 없고,
+     그래서 선택 판정이 따로 선다. 오른쪽 카드와 창이 이 하나로 갈린다. */
+  const watch = board?.watch ?? null;
+  const isBook = watch != null && selId === watch.id;
 
   useEffect(() => {
     const id = sel?.id;
@@ -486,6 +581,90 @@ export function MrPage() {
                         </TableCell>
                       </TableRow>
                     ))}
+                    {/* ── BSS 통합 한 줄 [OWNER 2026-09-01 — "밴드워치 랭킹
+                        순위, 계열 밑에 따로 하나 빼주면 되겠다"] ──────────────
+                        같은 표 안에 두되 헤어라인으로 가른다(`.sr-mr-book`):
+                        열 격자를 나눠 쓰지 않으면 두 줄을 나란히 못 읽고, 그렇다고
+                        랭킹의 일부로 보이면 「순위 14위」로 읽힌다.
+
+                        **값·전일 칸이 없다.** 만기가 다른 아홉 스프레드의 평균은
+                        거래할 수 있는 값이 아니다 — 단위 없는 둘(|z|·%B)만 평균이고
+                        나머지는 개수다. 그 사실을 서브라인이 말한다. */}
+                    {watch ? (
+                      <TableRow
+                        className="sr-mr-book"
+                        tabIndex={0}
+                        aria-current={isBook ? 'true' : undefined}
+                        style={{ height: ROW_H, cursor: 'pointer' }}
+                        onClick={() => setSelId(watch.id)}
+                        onKeyDown={(e: React.KeyboardEvent) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelId(watch.id);
+                          }
+                        }}
+                      >
+                        {/* 순위 칸은 비운다 — 이 줄은 |z| 로 매긴 순위에 낄 수
+                            있는 물건이 아니다(집계이지 계열이 아니다). */}
+                        <TableCell className="sr-num" justifyContent="flex-end">
+                          <Text font="label2" as="span" color="fgMuted" noWrap>
+                            {MINUS}
+                          </Text>
+                        </TableCell>
+                        <TableCell>
+                          <VStack as="span" className="sr-name-stack">
+                            <Text font="label1" as="span" noWrap>
+                              {watch.label}
+                            </Text>
+                            {/* 「9만기」를 안 적는다 — 이 줄이 `noWrap` 이라
+                                네 글자가 계열 열을 40px 넓히고, 그만큼 표가
+                                카드를 넘어 마지막 열(상태)이 잘린다(실측
+                                2026-09-01: scrollWidth 843 → 803). 만기 수는
+                                상세 카드의 「만기」 칸이 진다. */}
+                            <Text font="legal" as="span" color="fgMuted" noWrap>
+                              {watch.defn} · 아래 수는 평균이에요
+                            </Text>
+                          </VStack>
+                        </TableCell>
+                        <TableCell className="sr-num" justifyContent="flex-end">
+                          <Text
+                            font="label2"
+                            as="span"
+                            color="fgMuted"
+                            noWrap
+                            title="만기가 다른 아홉 스프레드의 평균은 거래할 수 있는 값이 아니라서 레벨을 안 적어요."
+                          >
+                            {MINUS}
+                          </Text>
+                        </TableCell>
+                        <TableCell className="sr-num" justifyContent="flex-end">
+                          <Text font="label2" as="span" color="fgMuted" noWrap>
+                            {MINUS}
+                          </Text>
+                        </TableCell>
+                        <TableCell className="sr-num" justifyContent="flex-end">
+                          {/* 평균 |z| — 부호가 없다(서로 반대로 늘어난 만기가
+                              섞이면 평균이 상쇄돼 「안 늘어났다」가 된다). */}
+                          <Text
+                            font="label2"
+                            as="span"
+                            tabularNumbers
+                            noWrap
+                            title={`${watch.n}만기 |z| 의 평균이에요`}
+                          >
+                            {watch.meanAbsZ == null ? '—' : `${watch.meanAbsZ.toFixed(2)}σ`}
+                          </Text>
+                        </TableCell>
+                        <TableCell className="sr-num" justifyContent="flex-end">
+                          <BandTrack pctB={watch.meanPctB} />
+                        </TableCell>
+                        <TableCell>
+                          <Text font="label2" as="span" color="fgMuted" noWrap>
+                            {watchText(watch)}
+                          </Text>
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
                   </TableBody>
                 </Table>
               </div>
@@ -505,17 +684,20 @@ export function MrPage() {
           >
             <HStack gap={1} alignItems="baseline">
               <Text font="label1" as="h2" noWrap>
-                {sel.label}
+                {isBook && watch ? watch.label : sel.label}
               </Text>
               <Text font="caption" as="span" color="fgMuted" noWrap>
-                {sel.defn}
+                {isBook && watch ? watch.defn : sel.defn}
               </Text>
             </HStack>
             <HStack gap={1} alignItems="center">
               <Text font="caption" as="span" color="fgMuted" noWrap>
-                {sel.asof}
+                {isBook && watch ? (watch.asof ?? '—') : sel.asof}
               </Text>
-              {/* rv 「상세 분석」 자리의 문법 — 세부(전략 재현)는 버튼 뒤 창. */}
+              {/* rv 「상세 분석」 자리의 문법 — 세부(전략 재현)는 버튼 뒤 창.
+                  통합 줄에서는 **다른 창**이 열린다(아홉을 한 장부로 돌린다) —
+                  그래서 버튼의 이름도 다르다. 같은 이름으로 두 창을 열면 어느
+                  숫자를 보고 있는지 화면이 안 말한다. */}
               <button
                 type="button"
                 className="sr-pillbtn"
@@ -523,11 +705,59 @@ export function MrPage() {
                 aria-pressed={stratOpen}
                 onClick={() => setStratOpen((v) => !v)}
               >
-                전략 실험
+                {isBook ? '통합 장부' : '전략 실험'}
               </button>
             </HStack>
           </HStack>
           <VStack gap={1.5} paddingX={2} paddingBottom={2} width="100%" flexGrow={1} minHeight={0}>
+            {isBook && watch ? (
+              <>
+                {/* 큰 건 제목이 아니라 숫자다(공간문법). 통합 줄의 그 숫자는
+                    레벨이 아니라 **평균 |z|** 다 — 거래할 수 있는 값이 아니라서
+                    레벨 자리를 비워 두는 대신, 밴드 워치가 답해야 하는 수를
+                    히어로로 올린다. */}
+                <HStack gap={2} alignItems="baseline" flexWrap="wrap">
+                  <Text font="display3" as="span" tabularNumbers>
+                    {watch.meanAbsZ == null ? '—' : `${watch.meanAbsZ.toFixed(2)}σ`}
+                  </Text>
+                  <Text font="body" as="span" color="fgMuted">
+                    {watchText(watch)}
+                  </Text>
+                </HStack>
+                <BookDetail watch={watch} />
+                <HStack className="sr-stats" alignItems="stretch" width="100%">
+                  <StatColumn title="묶음">
+                    <Stat label="만기" value={`${watch.n}개`} />
+                    <Stat label="밴드 밖" value={`${watch.outLow + watch.outHigh}개`}
+                      note={`아래 ${watch.outLow} · 위 ${watch.outHigh}`} />
+                    <Stat label="재진입" value={`${watch.reentry}개`} />
+                    <Stat label="밴드 안" value={`${watch.inside}개`} />
+                  </StatColumn>
+                  <StatColumn title="지금">
+                    <Stat label="평균 |z|"
+                      value={watch.meanAbsZ == null ? '—' : `${watch.meanAbsZ.toFixed(2)}σ`} />
+                    <Stat
+                      label="가장 늘어난 곳"
+                      value={watch.peak == null ? '—' : watch.peak.label}
+                      note={watch.peak == null ? undefined : fmtZ(watch.peak.z)}
+                    />
+                    {/* 종가가 만기마다 갈릴 수 있다 — 민평×IRS 교집합이라 한
+                        만기가 하루 안 찍히면 그 다리만 뒤처진다. 최신 날짜만
+                        적으면 화면이 아홉 다 최신인 척한다(rv 의 B-2 판단). */}
+                    <Stat
+                      label="종가"
+                      value={watch.asof ?? '—'}
+                      note={
+                        watch.stale > 0
+                          ? `${watch.stale}만기는 ${watch.asofMin}`
+                          : `${watch.n}만기 모두`
+                      }
+                    />
+                  </StatColumn>
+                </HStack>
+              </>
+            ) : (
+              <>
             {/* 큰 건 제목이 아니라 숫자다(공간문법). */}
             <HStack gap={2} alignItems="baseline" flexWrap="wrap">
               <Text font="display3" as="span" tabularNumbers>
@@ -572,11 +802,18 @@ export function MrPage() {
                 <Stat label="종가" value={sel.asof} />
               </StatColumn>
             </HStack>
+              </>
+            )}
           </VStack>
         </VStack>
       </HStack>
 
-      {stratOpen ? (
+      {/* 창은 고른 줄이 정한다 — 통합이면 아홉을 한 장부로, 아니면 그 계열
+          하나를 재현한다. 만기 줄을 누르면 보드의 선택이 그 만기로 옮겨 가고
+          창도 따라 바뀐다(통합에서 낱개로 내려가는 문). */}
+      {stratOpen && isBook ? (
+        <BookWindow onClose={() => setStratOpen(false)} onPickLeg={setSelId} />
+      ) : stratOpen ? (
         <StrategyWindow id={sel.id} label={sel.label} onClose={() => setStratOpen(false)} />
       ) : null}
     </VStack>

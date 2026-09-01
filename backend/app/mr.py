@@ -385,10 +385,18 @@ def build_mr(dataset=None, *, window: int = WINDOW, k: float = K,
     rows.sort(key=lambda r: (-abs(r["z"]) if r["z"] is not None else math.inf))
     for i, r in enumerate(rows, start=1):
         r["rank"] = i
+    # BSS 통합 한 줄 [OWNER 2026-09-01] — 랭킹 **아래**에 따로 선다. 순위는 |z|
+    # 로 매기는데 이 줄은 값이 아니라 집계라 그 정렬에 낄 수 없다.
+    #
+    # 임포트가 함수 안인 이유: `mrbook` 이 계열 목록·만기 순서를 여기서 읽으므로
+    # (`mr_mod.SERIES`) 모듈 머리에 두면 순환이다. 이쪽만 늦추면 방향이 하나로
+    # 선다 — 통합은 계열 목록을 알아야 하고, 계열 목록은 통합을 몰라도 된다.
+    from . import mrbook
     return {
         "asof": asof,
         "params": {"window": window, "k": k, "recentN": RECENT_N},
         "rows": rows,
+        "watch": mrbook.watch(rows),
         "excluded": excluded,
         "history": histories,
     }
