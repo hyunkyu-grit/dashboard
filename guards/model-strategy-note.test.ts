@@ -34,7 +34,13 @@ import {
   headlineGap,
   type StrategyAnchors,
 } from '@/lab/model/strategy/trades';
-import { CONDITIONAL_NOTE, NO_DELTA_ITEMS, STALENESS_LABEL, effectGroups } from '@/lab/model/strategy/assumptions';
+import {
+  CONDITIONAL_NOTE,
+  ENGINE_STATUS,
+  NO_DELTA_ITEMS,
+  STALENESS_LABEL,
+  effectGroups,
+} from '@/lab/model/strategy/assumptions';
 
 const ANCHORS: StrategyAnchors = {
   asof: '2026-08-19',
@@ -138,7 +144,13 @@ describe('시간축', () => {
     const n = note(Array<number>(PINNED_Q).fill(-25), null);
     expect(n.implication).toBe(mpcDecision(Array<number>(PINNED_Q).fill(-25)));
     expect(n.implication).toContain('−25bp');
-    expect(n.implication).toContain('2026-08-27');
+    /* 날짜를 박지 않는다. 이 칸이 말하는 날은 구운 아티팩트의
+       `next_event.date` 이고, 그 회의가 지나면 다음 회의로 넘어간다 —
+       2026-08-27 을 박아 뒀다가 그날이 지나며 깨졌다(2026-09-01, 화면은
+       옳게 2026-10-22 을 말하고 있었다). 재는 것은 날짜가 아니라 «찍은 첫
+       점을 그 회의에 붙여 말한다» 는 성질이므로 출처를 그대로 본다. */
+    expect(ENGINE_STATUS.next_event.date).toBeTruthy();
+    expect(n.implication).toContain(ENGINE_STATUS.next_event.date);
     expect(MPC_NO_CURVE).toContain('한 분기');
     /* 그래도 뷰와 리스크는 선다 — 그 셋은 구운 기저만으로 나온다. */
     expect(n.view).toBeTruthy();
