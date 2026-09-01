@@ -16,6 +16,8 @@ from app.policy import (
     PolicyFileError,
     decisions,
     load_base_rate,
+    load_base_rate_auto,
+    load_base_rate_ecos,
     mpc_dates_from_calendar,
     policy_step,
 )
@@ -83,7 +85,10 @@ def test_step_stops_short_of_an_unverified_meeting(base):
     assert p["through"] == base.asof.isoformat() == "2026-07-16"
     assert len(p["warnings"]) == 1
     assert "2026-08-27" in p["warnings"][0]
-    assert "bokbaserate.xlsx" in p["warnings"][0]
+    # 경고는 «무엇을 갱신하라» 를 말해야 하는데, 출처가 둘이 됐다(ECOS 가 기본,
+    # 이 워크북은 폴백 — 2026-09-01). 파일 이름을 박으면 ECOS 로 물러선 날
+    # 읽는 사람에게 안 읽히는 파일을 갱신하라고 말하게 된다.
+    assert base.source in p["warnings"][0]
     # and nothing is emitted beyond the bound
     assert all(s["date"] <= p["through"] for s in p["steps"])
 
@@ -139,3 +144,77 @@ def test_the_wrong_workbook_is_refused(tmp_path):
 def test_empty_history_has_no_step():
     with pytest.raises(IndexError):
         BaseRate(dates=[], values=[]).asof
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# 출처가 ECOS 로 옮겨간 뒤 [OWNER, 2026-09-01]. 워크북은 폴백으로 남는다.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def ecos_base():
+    """ECOS 를 못 타는 PC(키 없음·망 없음·캐시 없음)에서는 건너뛴다."""
+    try:
+        return load_base_rate_ecos()
+    except Exception as exc:                      # noqa: BLE001 — 이유를 그대로 보인다
+        pytest.skip(f"ECOS 를 못 읽는 환경: {exc}")
+
+
+def test_ecos_is_percent_not_decimal(ecos_base):
+    """단위 핀. `ecos.base_rate_series()` 는 **소수**(0.03)를 주고 이 모듈은
+    **%**(3.00)를 쓴다. 100 을 빠뜨리면 예외가 아니라 그럴듯한 숫자가 나오고,
+    그 실수는 이 리포에서 이미 한 번 캐리 항에 났다.
+
+    `RATE_MIN_PCT` 대역 검사가 로더 안에서 그것을 막지만, 대역이 넓어지는 날을
+    대비해 여기서 한 번 더 못 박는다 — 0.03 은 정책금리가 아니다.
+    """
+    assert 0.25 <= ecos_base.latest <= 10.0
+    assert all(0.0 <= v <= 10.0 for v in ecos_base.values)
+
+
+def test_ecos_agrees_with_the_workbook_where_they_overlap(base, ecos_base):
+    """출처를 바꾼 근거. 겹치는 구간에서 **한 날도 안 갈린다.**
+
+    2026-09-01 실측 — 워크북 2016-01-01~2026-07-16 의 3,850 영업일이 ECOS 에
+    전부 있고, 정확한 같음으로 불일치 0. 그래서 이 교체는 값을 바꾸는 것이
+    아니라 꼬리를 잇는 것이다. 갈리는 날이 생기면 그건 둘 중 하나가 틀린
+    것이므로 여기서 멈춰야 한다.
+
+    (`round(..., 6)` 이 로더에 있는 이유도 여기다 — 없으면 x100 왕복 잡티로
+    1.75 가 1.7500000000000002 이 되어 이 대조가 정확한 같음으로 안 선다.)
+    """
+    ecos_at = dict(zip(ecos_base.dates, ecos_base.values))
+    missing = [d for d in base.dates if d not in ecos_at]
+    assert not missing, f"ECOS 에 없는 워크북 날짜 {len(missing)}개: {missing[:3]}"
+    differing = [(d, v, ecos_at[d]) for d, v in zip(base.dates, base.values)
+                 if v != ecos_at[d]]
+    assert not differing, f"겹친 구간에서 갈린 날 {len(differing)}개: {differing[:3]}"
+
+
+def test_ecos_reaches_further_on_both_ends(base, ecos_base):
+    """더 길고 더 신선하다 — 손 export 를 대체하는 이유 그 자체다."""
+    assert ecos_base.dates[0] < base.dates[0]     # 1999 대 2016
+    assert ecos_base.asof >= base.asof
+
+
+def test_the_workbook_catches_us_when_ecos_cannot_answer(monkeypatch):
+    """폴백은 조용하면 안 된다.
+
+    ECOS 가 못 답하면 화면은 손 스냅샷 위에 서는데, 그건 발표기관의 계열 위에
+    선 것과 **다른 사실**이다. 그래서 `warnings` 에 그 사실이 남고, 캐리 가드의
+    경고도 워크북 이름을 부르게 된다.
+    """
+    import app.policy as pol
+
+    def boom():
+        raise RuntimeError("키가 없어요")
+
+    monkeypatch.setattr(pol, "load_base_rate_ecos", boom)
+    got = pol.load_base_rate_auto(DATA)
+    assert got.source == DATA.name
+    assert len(got.warnings) == 1
+    assert "bokbaserate.xlsx" in got.warnings[0]
+    assert "키가 없어요" in got.warnings[0]
+    # 그 사실이 페이로드까지 간다
+    p = policy_step(got, dt.date(2026, 9, 1))
+    assert any("bokbaserate.xlsx" in w for w in p["warnings"])

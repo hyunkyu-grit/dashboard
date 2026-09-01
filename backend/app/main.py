@@ -98,7 +98,7 @@ from .forwards import forwards_payload
 from .issuance import IssuanceUnavailable, build as build_issuance, day_detail as issuance_day, months_from
 from .labmacro import MacroUnavailable, build as build_macro
 from .labscenario import build_anchors
-from .policy import load_base_rate, policy_step, MPC_DATES
+from .policy import load_base_rate_auto, policy_step, MPC_DATES
 from .staleness import dataset_freshness
 from .surface import surface_payload
 from .surface3d import build_surface3d, surface3d_watermark
@@ -110,8 +110,9 @@ from .volatility import volatility_payload
 # 읽지만, **서버는 더 이상 열지 않는다**. 상수를 지운 이유는 남겨 두면 다음
 # 사람이 "여기가 출처" 라고 읽기 때문이다.
 #
-# 기준금리는 아직 워크북이다. 이 테이블에 없는 데이터이고, 옮기는 것은 별개의
-# 결정이다.
+# 기준금리는 2026-09-01 부터 ECOS 다 [OWNER — "굳이 엑셀을 참고하는게 아니라
+# ECOS API에서 참조해오는게 편하잖아"]. 이 경로는 이제 폴백이다: 키·망·캐시가
+# 전부 없을 때만 읽히고, 그때는 `policy_step` 의 warnings 가 그 사실을 말한다.
 POLICY_PATH = Path(__file__).resolve().parents[2] / "data" / "bokbaserate.xlsx"
 
 
@@ -335,7 +336,7 @@ _bases = basis_dates(_dataset)
 # its docstring). Two dozen corners; it rides in the summary rather than
 # earning an endpoint, because every %-unit chart needs it and the summary is
 # already the first thing fetched.
-_policy = policy_step(load_base_rate(POLICY_PATH), _dataset.asof)
+_policy = policy_step(load_base_rate_auto(POLICY_PATH), _dataset.asof)
 _curves = build_basis_curves(_dataset)
 _events = detect_event_clusters(_dataset)
 _volatility = volatility_payload(_dataset, _bases)

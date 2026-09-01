@@ -783,6 +783,14 @@ class TestReconTiesOutOnLiveData:
 
     SPEC = fd.FundingSpec("base", 10.0)
 
+    #: 진입일을 행렬의 끝에서 세는 칸 수. 대사 창은 `cb.RECON_MAX_DAYS` (250)
+    #: **행**이지 달력 날짜가 아니므로, 진입일도 같은 자로 잰다. 날짜를 박아 두면
+    #: 하루가 갈 때마다 창이 한 행씩 길어지다 어느 날 `truncated` 가 True 로
+    #: 뒤집히고, 그러면 이 시험이 재려던 것(행 합 = 백테스트 총액)을 못 잰다 —
+    #: 2026-09-01 에 넷 다 그렇게 깨져 있었다(박혀 있던 값 2025-08-13).
+    #: 50행은 여유다.
+    ENTRY_ROWS_BACK = 200
+
     @pytest.fixture(scope="class")
     def live(self):
         from app.dataset import load_dataset_merged
@@ -794,10 +802,12 @@ class TestReconTiesOutOnLiveData:
     )
     def test_the_daily_rows_sum_to_the_backtest_total(self, live, kind, tenor):
         m, ds = live
-        pos = cb.BondPosition(kind, "KTB", tenor, 1, N, dt.date(2025, 8, 13))
+        entry = m.dates[-self.ENTRY_ROWS_BACK]
+        pos = cb.BondPosition(kind, "KTB", tenor, 1, N, entry)
         bt = cb.run_backtest(m, ds, [pos], self.SPEC)["positions"][0]
         rc = cb.book_recon(m, ds, [pos], self.SPEC)
         rows = [r for r in rc["rows"] if r["actual"] is not None]
+        # 잘리면 행이 백테스트보다 짧아 합을 견줄 수 없다 — 주제가 아니라 전제다.
         assert rc["truncated"] is False
         total = sum(r["actual"] for r in rows)
         # 행마다 원 단위로 반올림하므로 행 수만큼의 오차는 정상이다

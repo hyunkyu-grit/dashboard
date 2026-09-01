@@ -305,9 +305,15 @@ def test_the_meeting_is_the_first_thing_the_cell_says():
 
 @needs_data
 def test_a_meeting_without_a_decision_has_no_direction_yet():
-    """열린 회의와 안 열린 회의는 다른 사실이다. 방향도 그렇다."""
+    """열린 회의와 안 열린 회의는 다른 사실이다. 방향도 그렇다.
+
+    안 열린 쪽은 날짜를 박지 않는다 — 박아 두면 그날이 오는 순간 결정이 생겨
+    전제가 만료된다(2026-08-27 이 그렇게 깨졌다). 달력에만 있는 미래 회의로
+    상태를 만든다. 열린 쪽은 2026-07-16 인상이 앵커다.
+    """
     assert day_detail("2026-07-16", MPC)["mpc"]["bias"]["dir"] == "약세"  # 인상
-    assert day_detail("2026-08-27", MPC)["mpc"]["bias"] is None
+    pending = (dt.date.today() + dt.timedelta(days=180)).isoformat()
+    assert day_detail(pending, MPC + [pending])["mpc"]["bias"] is None
 
 
 @needs_data

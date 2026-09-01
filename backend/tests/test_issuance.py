@@ -26,7 +26,7 @@ MPC = [d.isoformat() for d in MPC_DATES]
 
 #: 원본. 없으면 사본 대조만 건너뛴다 — 이 리포 밖의 파일이다.
 ORIGINAL = pathlib.Path(
-    r"C:\Users\infomax\Desktop\Codex\rawData\src\strength.py"
+    r"C:\Users\infomax\Projects\apps\rawdata\src\strength.py"
 )
 
 
@@ -130,15 +130,24 @@ def test_the_horizon_is_reported():
 
 @needs_data
 def test_a_scheduled_meeting_without_a_decision_is_not_the_same_as_no_meeting():
-    """8/27 은 달력에 있고 결과표에는 아직 없다.
+    """달력에는 있고 결과표에는 아직 없는 날.
 
     한 필드에 접으면 «회의가 없는 날» 과 «회의는 있는데 아직 안 열린 날» 이
     구분되지 않는다 — 화면이 «오늘 금통위예요, 결과는 아직» 을 말할 수 있어야 한다.
+
+    **날짜를 박지 않는다.** 예전에는 «다음 회의» 였던 2026-08-27 을 박아 뒀는데,
+    그날이 오고 금통위가 인상하면서 전제가 만료돼 시험이 깨졌다(2026-09-01).
+    `mpc.csv` 는 `rawDataWatch` 가 5분마다 갱신하므로 다음 회의 날짜로 바꾸는
+    것은 폭탄을 재장전하는 것이다. 재는 것은 날짜가 아니라 **상태**이므로,
+    결과표가 영원히 가질 수 없는 미래 회의를 달력에만 넣어 그 상태를 만든다.
     """
-    upcoming = day_detail("2026-08-27", MPC)["mpc"]
+    pending = (dt.date.today() + dt.timedelta(days=180)).isoformat()
+    upcoming = day_detail(pending, MPC + [pending])["mpc"]
     # `bias` 가 2026-08-21 에 늘었다. 결정이 아직이면 방향도 아직이다 —
     # 그 성질은 `test_issuance_mp.py` 가 따로 잠근다.
     assert upcoming == {"scheduled": True, "decision": None, "bias": None}
+    # 같은 날이라도 달력에 없으면 «회의가 없는 날» 이다 — 갈리는 것은 그 한 칸뿐.
+    assert day_detail(pending, MPC)["mpc"] is None
     assert day_detail("2026-08-10", MPC)["mpc"] is None
 
 

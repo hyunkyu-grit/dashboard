@@ -11,15 +11,26 @@ Two things make this file more than a second `dataset.py`:
 Board decision and holds flat in between, so it is drawn with square corners
 and read as a level that was *in force* on a date, never interpolated.
 
-**Carrying it forward is a claim.** `data/bokbaserate.xlsx` is a static
-snapshot like the IRS workbook, and the two are refreshed by hand, separately.
-Holding the last observed rate out to the IRS as-of date is correct exactly
-when no Board meeting fell in the gap — and silently wrong when one did, in
-the one direction that matters: it would draw the OLD rate through the day it
-changed, on every chart at once, with nothing on screen to say so.
+**Carrying it forward is a claim.** Holding the last observed rate out to the
+IRS as-of date is correct exactly when no Board meeting fell in the gap — and
+silently wrong when one did, in the one direction that matters: it would draw
+the OLD rate through the day it changed, on every chart at once, with nothing
+on screen to say so.
+
+**The source is ECOS, the publisher itself** [OWNER, 2026-09-01]. It used to be
+`data/bokbaserate.xlsx`, an Infomax export refreshed by hand — which meant the
+guard below fired every time a meeting landed between two exports, and the step
+stopped short until somebody re-exported. `app/funding.py` had already moved to
+ECOS for the same reason on 2026-08-20 (see `app/ecos.py`); this module was the
+half that stayed behind, and the 2026-08-27 hike is what surfaced it.
+
+The workbook is kept as a FALLBACK — no key, no network and no cache means the
+charts still stand on the last hand snapshot, and `warnings` says so. The guard
+below is unchanged: ECOS can be stale too (it publishes on a lag), and a fresh
+source is not the same fact as a source that has seen the meeting.
 
 So the carry is bounded by the meeting calendar. If a meeting sits between the
-workbook's last date and the dataset's as-of date, the step **ends at the last
+source's last date and the dataset's as-of date, the step **ends at the last
 date it can vouch for** and a warning is recorded. The line visibly stops
 short rather than asserting a rate nobody checked; a missing tail is a
 question the reader can see, a fabricated one is not.
@@ -97,6 +108,11 @@ class BaseRate:
     dates: list[dt.date]          # ascending, one per observation in the file
     values: list[float]           # percent, aligned to `dates`
     warnings: list[str] = field(default_factory=list)
+    #: Where these numbers came from, in words the warning can print. There are
+    #: two sources now (ECOS, and the hand workbook as fallback) and the carry
+    #: guard has to name the one it is actually bounded by — otherwise it tells
+    #: the reader to refresh a file that is not being read.
+    source: str = "?"
 
     @property
     def asof(self) -> dt.date:
@@ -151,7 +167,56 @@ def load_base_rate(xlsx_path: Path) -> BaseRate:
     return BaseRate(
         dates=[d for d, _v in pairs],
         values=[v for _d, v in pairs],
+        source=xlsx_path.name,
     )
+
+
+def load_base_rate_ecos() -> BaseRate:
+    """The same step, from 722Y001/D/0101000 (1999-05-06 ~).
+
+    ⚠ UNITS. `ecos.base_rate_series()` returns DECIMALS (0.03) because that is
+    what `funding` wants; `BaseRate.values` is PERCENT (3.00) because that is
+    what the charts draw. The x100 below is the whole difference, and getting
+    it wrong produces a plausible-looking number rather than an exception —
+    this repo has already paid for that once, on the carry term. The band check
+    is what catches it: 0.03 is not a policy rate in percent.
+    """
+    from . import ecos
+
+    # `round` 는 표시용 반올림이 아니라 **왕복 잡티 제거**다. ECOS 는 연% 를
+    # 소수로 나눠 두었으므로 x100 이 1.75 를 1.7500000000000002 로 만들고,
+    # `decisions()` 가 코너를 정확한 같음(`!=`)으로 가리는 이상 그 잡티는
+    # 화면까지 그대로 간다. 정책금리는 0.25 배수라 6자리 반올림이 정확하다.
+    pairs = [(d, round(v * 100.0, 6)) for d, v in ecos.base_rate_series()]
+    if not pairs:
+        raise PolicyFileError("ECOS: no observations")
+    for d, v in pairs:
+        if not RATE_MIN_PCT <= v <= RATE_MAX_PCT:
+            raise PolicyFileError(f"ECOS {d}: {v} is not a policy rate in percent")
+    return BaseRate(
+        dates=[d for d, _v in pairs],
+        values=[v for _d, v in pairs],
+        source=f"ECOS {ecos.BASE_RATE_STAT}",
+    )
+
+
+def load_base_rate_auto(xlsx_path: Path) -> BaseRate:
+    """ECOS first, the hand workbook if ECOS cannot answer at all.
+
+    The fallback is not silent — it lands in `warnings`, which `policy_step`
+    passes through to the payload, because a chart drawn on a hand snapshot is
+    a different fact from one drawn on the publisher's own series.
+    """
+    try:
+        return load_base_rate_ecos()
+    except Exception as exc:                     # EcosError, key missing, parse
+        log.warning("[policy] ECOS 를 못 읽어 워크북으로 물러섭니다 — %s", exc)
+        base = load_base_rate(xlsx_path)
+        base.warnings.append(
+            f"[policy] base rate came from {xlsx_path.name} (hand export, "
+            f"last {base.asof}) because ECOS could not answer: {exc}"
+        )
+        return base
 
 
 def decisions(base: BaseRate) -> list[tuple[dt.date, float]]:
@@ -175,7 +240,7 @@ def policy_step(base: BaseRate, asof: dt.date) -> dict:
     level flat out to `through` and STOP; they must not extend to their own
     axis end, which is the mistake this field exists to prevent.
     """
-    warnings: list[str] = []
+    warnings: list[str] = list(base.warnings)   # 출처가 워크북이면 그 사실부터
     through = asof
     if base.asof < asof:
         missed = [d for d in MPC_DATES if base.asof < d <= asof]
@@ -185,7 +250,7 @@ def policy_step(base: BaseRate, asof: dt.date) -> dict:
                 f"[policy] base rate is stale to {base.asof} and the Board met "
                 f"{', '.join(d.isoformat() for d in missed)} — the step ends at "
                 f"{base.asof} rather than carrying an unverified rate to {asof}. "
-                f"Refresh data/bokbaserate.xlsx."
+                f"Refresh the source ({base.source})."
             )
     for w in warnings:
         log.warning(w)

@@ -27,6 +27,7 @@ import pytest
 
 from app import creditmatrix as cm
 from app import rv
+from app.policy import MPC_DATES
 
 # Appendix B 의 기준 커브(2026-08-13 KDB 민평 — 스프레드시트와 소수 셋째 자리
 # 일치가 rv1 C7 의 세 번째 증거였다)와 기대값.
@@ -846,9 +847,21 @@ class TestRoute:
         ).status_code == 422
 
     def test_mpc_override_moves_carry_the_right_way(self, client):
-        """인하(−25bp) 오버라이드는 조달을 낮춰 캐리를 **키운다** — 방향 핀."""
+        """인하(−25bp) 오버라이드는 조달을 낮춰 캐리를 **키운다** — 방향 핀.
+
+        회의 날짜는 **달력에서 계산한다.** 지나간 회의는 캐리 지평 밖이라
+        오버라이드가 아무것도 안 움직이고, 그러면 이 핀이 방향이 아니라 날짜가
+        지났다는 사실을 시험하게 된다 — 박아 뒀던 2026-08-27 이 그날이 지나며
+        정확히 그렇게 깨졌다(2026-09-01, `35.04 > 35.04`).
+        """
         base = client.get("/api/rv/analysis").json()
-        cut = client.get("/api/rv/analysis", params={"mpc": "2026-08-27:-25"}).json()
+        asof = dt.date.fromisoformat(base["asof"]["creditMatrix"])
+        nxt = next((d for d in MPC_DATES if d > asof), None)
+        # 달력이 말라도 StopIteration 으로 죽지 않게 — 고칠 곳을 말한다.
+        assert nxt, f"{asof} 이후 회의가 달력에 없어요 — app.policy.MPC_DATES 를 늘리세요"
+        cut = client.get(
+            "/api/rv/analysis", params={"mpc": f"{nxt.isoformat()}:-25"}
+        ).json()
         ktb0 = next(s for s in base["sectors"] if s["id"] == "KTB")
         ktb1 = next(s for s in cut["sectors"] if s["id"] == "KTB")
         r0 = next(c for c in ktb0["candidates"] if c["tenor"] == "3Y")

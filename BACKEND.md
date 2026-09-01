@@ -5,7 +5,7 @@ do not reach here. Divergence is expected; record it.**
 
 | | |
 |---|---|
-| Source repo | `C:\Users\infomax\Desktop\Assistant\Projects_AS\braveworld` |
+| Source repo | `C:\Users\infomax\Projects\apps\braveworld` |
 | Source commit | `f5de1fa74de475d801128b113c0a8060f434129f` |
 | Source subject | 선 · 주봉 · 월봉 — 캔들을 팝업 밖으로, 전역 모드 하나로 |
 | Copy date | 2026-08-13 |
@@ -24,7 +24,8 @@ give v2 the same data v1 sees.
 |---|---|
 | **MySQL** `sim_portfolio.mkt_irs_close` @ `miraebond2.kro.kr:4004` | **primary** source of IRS closes since 2026-08-07 |
 | `data/irsdata.xlsx` | fallback workbook (copied, 776,519 B at copy time) |
-| `data/bokbaserate.xlsx` | BOK base rate (copied, 640,795 B) |
+| **ECOS** `722Y001/D/0101000` via `app/ecos.py` (`ECOS_API_KEY`) | **primary** source of the BOK base rate — funding since 2026-08-20, the policy step since 2026-09-01 |
+| `data/bokbaserate.xlsx` | base-rate **fallback** only (copied, 640,795 B) — read when ECOS has no key, no network and no cache; `policy_step` says so in `warnings` |
 | `data/` incl. `AS_data.zip`, `reference/` | the simulation's `DATA_DIR` |
 
 The MySQL database is a **shared external dependency, read-only**, reached through
