@@ -1138,6 +1138,18 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     dirs, carry_defn = leg["dirs"], leg["carryDefn"]
     carry_krw, gate, cost_series = leg["carryKrw"], leg["gate"], leg["costSeries"]
     r = leg["r"]
+
+    # ── 액면 환산 [OWNER 2026-09-02 — "진입 레벨과 기준 노셔널과 같은 것들이
+    # 전부 나올 수 있게 해야 이게 직접 대사가 가능하므로"] ────────────────────
+    # 명목 노브는 DV01(₩/bp)인데 데스크의 주문 단위는 액면(억원)이다. 환산은
+    # 캐리의 그 식(`mrcarry.carry_krw`: 원금 = 명목 / (pv01 × 1e-4))이고, 같은
+    # 한계도 그대로다 — **지금 커브의 pv01 하나**를 전 기간에 쓰는 근사라
+    # (위 «pv01 근사» 주석·`docs/MR_LANE_STATE.md` §6 ⑤) 화면이 「근사」를 같이
+    # 적는다. 선물은 원금이 없다(증거금·일일정산) — 지어내지 않고 null 로 보낸다.
+    principal = None
+    if leg["kind"] != "fut":
+        pv = pv01(_curves["now"], TENOR_T[mrc._tenor_of(id)])
+        principal = {"krw": round(notional / (pv * 1e-4)), "pv01": round(pv, 4)}
     roll = r["roll"]
     points = [
         {
@@ -1206,6 +1218,9 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
                    "timeStop": timeStop, "costModel": costModel,
                    "regime": regime, "reverseExit": reverseExit,
                    "countOpen": countOpen},
+        # 명목(₩/bp)의 액면 환산 — 위 주석의 근사. 거래 표·대사표가 「이 손익을
+        # 내려면 실제로 몇 억을 걸어야 했나」를 적을 수 있게 낸다.
+        "principal": principal,
         # 비용이 봉마다 다르면 「편도 몇 bp」가 한 숫자로 안 나온다 — 실제로 쓴
         # 범위와 중앙값을 화면이 적을 수 있게 낸다.
         "cost": ({"model": "flat", "bp": costBp} if cost_series is None else {

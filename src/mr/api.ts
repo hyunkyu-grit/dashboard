@@ -391,6 +391,10 @@ export interface MrStrategyRun {
   points: MrStrategyPoint[];
   trades: MrStrategyTrade[];
   dirs: MrStrategyDirs;
+  /** 명목(₩/bp)의 액면 환산 [OWNER 2026-09-02 — "기준 노셔널이 다 나올 수
+   *  있게"]. **지금 커브의 pv01 하나**로 나눈 근사다(서버 주석 — 커브가 6년
+   *  내내 하나라 크기만 좌우한다). 선물은 원금이 없어(증거금·일일정산) null. */
+  principal: { krw: number; pv01: number } | null;
   /** 미청산이 없으면 null. */
   open: MrStrategyOpen | null;
   neighbors: MrNeighborRow[];
