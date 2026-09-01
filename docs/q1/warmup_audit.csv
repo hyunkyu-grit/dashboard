@@ -1,0 +1,8 @@
+site,statistic,floor,guarded,note
+app/mrbacktest.py:64 rolling_series,SMA / population sigma / z,lookback,True,emits None until index lookback-1; floor IS the window
+app/mrregime.py:43 realized_vol,realised vol of diffs,win,True,requires len(w) == win exactly
+app/mrregime.py:59 vol_percentile,expanding percentile,1 prior obs,True,"past-only, None while empty"
+app/derive.py:57 (moving average),moving average,window,True,"documents 'window not full -> None, not 0'"
+app/rv.py:578 vol_3m,3M realised spread vol,26 changes,True,explicit: 'sigma invented from thin data is noise'
+app/volatility.py relative ATR,short/long vol ratio,60 obs,True,null until the full long window exists
+app/rv.py:735 z_score,z-score,2,False,"ONLY n<2 is rejected; window_vals() drops Nones AFTER slicing, so a '52-week' window can carry 2 points and still emit a z"

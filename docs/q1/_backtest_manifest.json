@@ -1,0 +1,33 @@
+{
+  "series_id": "BSS-3Y",
+  "unit": "bp",
+  "params": {
+    "lookback": 120,
+    "entryZ": 2.0,
+    "exitZ": 0.5,
+    "stopZ": 4.0,
+    "costBp": 0.5,
+    "notional": 100000000.0,
+    "allow_dirs": [
+      -1
+    ],
+    "close_open_at_end": true
+  },
+  "first_date": "2014-06-03",
+  "last_date": "2026-08-28",
+  "n_bars": 3015,
+  "n_trades": 30,
+  "engine_cumulative_pnl": 5885000000.0,
+  "engine_sum_daily_pnl": 5885000000.0,
+  "engine_sum_trade_pnl": 5885000000.0,
+  "engine_summary": {
+    "totalPnl": 5885000000.0,
+    "maxDrawdown": 1730000000.0000002,
+    "winRate": 0.7666666666666667,
+    "sharpe": 0.650124027207415,
+    "numTrades": 30,
+    "openPnl": -150000000.0,
+    "breakevenCostBp": 1.497457627118644,
+    "breakevenCostMult": null
+  }
+}
