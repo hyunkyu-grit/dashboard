@@ -175,6 +175,55 @@ because it is a *trading* calendar — it closes at year end when banks are open
 which would push a fixing off the last banking day of the year. QuantLib is
 rejected because nothing imports it and it misses every 임시공휴일 in the sample.
 
+### The fix was attempted, measured, and reverted [2026-09-01]
+
+The owner said it could simply be fixed, so it was — and then reverted, because
+"simply" turned out to be wrong and the measurement is worth more than the patch.
+
+**What was written.** A `_KRBankHolidays(SouthKorea)` subclass overriding
+`_populate` to add May 1, placed in `app/engine_port.py`'s **holidays init
+block** — the same block that already carries the port's two approved
+deviations, so no ported function body was edited and
+`_is_kr_business_day` stayed byte-identical. `_populate` was overridden rather
+than a date list appended, because `holidays` auto-expands to years outside the
+constructed range on lookup and an appended list would silently not cover them.
+Verified: 20 years → 20 dates added, all May 1, **0 removed**, 제헌절 and the
+임시공휴일 preserved, and the overlay still applied in auto-expanded year 2045.
+The patch is kept at `Projects\research\q1-probe\may1_patch_engine_port.py`.
+
+**What it broke.** Full suite: **6 failed, 1,179 passed** (was 1,185 / 0).
+
+| Failing test | Why |
+|---|---|
+| `test_backtest_characterization.py::test_payload_is_unchanged` | the payload's **key set** changed — valuation dates moved, not just values |
+| `…::test_raw_valuation_floats_are_unchanged` | same |
+| `test_rebake.py` × 4 | the bake pipeline produced a transiently partial `engine_status.json` (`KeyError: 'basis_as_of'`, `'staleness'`) |
+
+**A misreading, caught.** The scorecard assertion moved from `(9, 13)` to
+`(12, 13)`, which first looked like the fix improving agreement with the paper
+anchors. It is the opposite: `test_rebake.py:105-107` records that **12/13 was a
+discarded overfit** — "Table 8 값의 순열을 그 밴드에 맞춰 고른 과적합이라
+기준선이 아니다" — and 9/13 is the deliberate baseline. Reading the test's own
+docstring reversed the conclusion.
+
+**Why it was reverted rather than blessed.**
+
+1. The characterization tests exist precisely to catch valuations moving. They
+   did their job. Re-blessing them (`python -m tests.regen_characterization`)
+   accepts that every historical backtest number near a May 1 changes, which is
+   an owner decision, not a research lane's.
+2. The knock-on reached the **bake pipeline**, which belongs to another lane
+   that was actively working in this repo throughout this session.
+3. Leaving a repo red for three concurrent sessions to trip over is worse than
+   leaving a correct finding with a measured blast radius.
+
+**Handover.** The fix is right, the patch is written and verified in isolation,
+and the cost is now known rather than guessed: **2 characterization fixtures to
+re-bless and 4 bake tests to re-green**, plus whatever the four other
+`holidays.KR` sites need (`irs_pricer/core/errors.py`,
+`irs_pricer/engine/quant_engine.py`, `kr_calendar.py` ×2 — none touched here).
+That is a scoped pass with a known shape, which it was not before today.
+
 **Upgrade guard:** `research/tests/test_calendar_canonical.py`, **39 tests**,
 pins behaviour on all 27 divergent dates. Two of them assert the *current*
 disagreement explicitly, so the day someone fixes `app/engine_port.py` those
