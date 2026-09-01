@@ -338,6 +338,16 @@ function monthsBefore(iso: string, months: number): string {
  *  명목에 쓰면 「+35억 7,000만원」이 된다 — 명목은 방향이 없는 양이다. */
 const fmtEok = (krw: number): string => `${(krw / 1e8).toFixed(1)}억`;
 
+/** 대사 열의 레벨 — bp 계열은 **2자리**다(캐논 `fmtLevel` 의 1자리에서 일부러
+ *  이탈). 이 표들은 「청산 레벨 − 진입 레벨 = Δ」를 주장하는데 Δ 가 2자리
+ *  (`fmtBp(v, 2)`)라, 레벨을 1자리로 적으면 실측 3.50→1.75 가 «3.5→1.8 인데
+ *  Δ −1.75» 로 서서 표시 정밀도에서 항등이 깨진다 — 각자 반올림한 항이 표시된
+ *  합과 모순되는 그 사고다(`lib/krw.ts` 머리의 1만원 판례). %·가격 계열은
+ *  `fmtLevel` 그대로 — Δ 는 늘 bp 라 어차피 단위가 달라 눈으로 못 닫고, 그
+ *  사실은 거래 표 머리 주석이 진다. */
+const fmtReconLevel = (v: number | null, unit: Unit): string =>
+  v == null ? '—' : unit === 'bp' ? v.toFixed(2) : fmtLevel(v, unit);
+
 /* ── 사건 어휘 ──────────────────────────────────────────────────────────────
  * 거래 하나를 가리키는 열쇠는 «진입-청산» 이다 — 실행이 바뀌면 자연히 안 맞고,
  * 그때 화면은 목록으로 돌아간다(펴 놓은 대사가 딴 실행의 숫자를 이고 있는
@@ -445,7 +455,7 @@ function ReconNum({
     v == null ? '—'
     : kind === 'sigma' ? `${v.toFixed(2)}σ`
     : kind === 'bp' ? fmtBp(v, 2)
-    : kind === 'level' ? fmtLevel(v, unit ?? ('bp' as Unit))
+    : kind === 'level' ? fmtReconLevel(v, unit ?? ('bp' as Unit))
     : v === 0 ? '—'
     : fmtKrw(v);
   return (
@@ -1170,7 +1180,7 @@ export function StrategyWindow({
                               머리의 주석이 진다). */}
                           <TableCell className="sr-num" justifyContent="flex-end">
                             <Text font="label1" as="span" tabularNumbers noWrap>
-                              {`${fmtLevel(sel.entryV, unit)}→${fmtLevel(sel.exitV, unit)}`}
+                              {`${fmtReconLevel(sel.entryV, unit)}→${fmtReconLevel(sel.exitV, unit)}`}
                             </Text>
                           </TableCell>
                           <TableCell className="sr-num" justifyContent="flex-end">
@@ -1295,10 +1305,10 @@ export function StrategyWindow({
                           {/* 레벨은 계열의 자기 단위(각주의 「기준」), Δ 는 bp —
                               머리의 그 주석. 색은 손익에만(한 셀 한 채널). */}
                           <TableCell className="sr-num" justifyContent="flex-end">
-                            <Text font="label2" as="span" tabularNumbers noWrap>{fmtLevel(t.entryV, unit)}</Text>
+                            <Text font="label2" as="span" tabularNumbers noWrap>{fmtReconLevel(t.entryV, unit)}</Text>
                           </TableCell>
                           <TableCell className="sr-num" justifyContent="flex-end">
-                            <Text font="label2" as="span" tabularNumbers noWrap>{fmtLevel(t.exitV, unit)}</Text>
+                            <Text font="label2" as="span" tabularNumbers noWrap>{fmtReconLevel(t.exitV, unit)}</Text>
                           </TableCell>
                           <TableCell className="sr-num" justifyContent="flex-end">
                             <Text font="label2" as="span" tabularNumbers noWrap>{fmtBp(t.dv, 2)}</Text>

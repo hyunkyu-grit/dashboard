@@ -88,8 +88,11 @@ describe('거래 한 줄이 스스로 검산이 된다', () => {
   it('레벨·Δ 열이 거래 표에 선다 — 청산 레벨 − 진입 레벨 ≈ Δ 가 한 줄에서 닫힌다', () => {
     expect(code).toMatch(/진입 레벨/);
     expect(code).toMatch(/청산 레벨/);
-    expect(code).toMatch(/fmtLevel\(t\.entryV, unit\)/);
-    expect(code).toMatch(/fmtLevel\(t\.exitV, unit\)/);
+    /* bp 계열 레벨은 **2자리**다(fmtReconLevel) — Δ 가 2자리라 1자리 레벨로는
+       「청산 − 진입 = Δ」가 표시 정밀도에서 깨진다(실측 3.5→1.8 대 Δ −1.75). */
+    expect(code).toMatch(/fmtReconLevel\(t\.entryV, unit\)/);
+    expect(code).toMatch(/fmtReconLevel\(t\.exitV, unit\)/);
+    expect(code).toMatch(/unit === 'bp' \? v\.toFixed\(2\)/);
     expect(code).toMatch(/fmtBp\(t\.dv, 2\)/);
   });
 
