@@ -96,6 +96,25 @@ describe('② `Cond`/`ThHelp` 는 한 벌이다', () => {
     expect(bodyOf.get('src/mr/MrPage.tsx')).toMatch(/import \{ ThHelp \} from '@\/ui\/ThHelp'/);
   });
 
+  it('`ThHelp` 는 **숙주마다** 한 굵기로 선다 — 승격이 rv 를 갈라 놓았던 자리', () => {
+    /* 2026-09-02 회귀: 승격하며 앵커를 `Text font="caption"`(13/600)으로 감쌌더니
+       **rv 머리가 「600 넷 · 700 넷」으로 갈렸다**(실측). rv 는 손 표라 머리에
+       `Text` 가 없어 `thead th { font-weight: 700 }` 을 그대로 받는데, 이 부품만
+       토큰 굵기를 얹었기 때문이다. MR 은 CDS 표라 형제가 전부 600 이라 반대다.
+       → 숙주가 둘이면 답도 둘이다: `font` prop 이 그것을 가른다.
+       **부품이 숙주의 활자를 통째로 상속하면 숙주마다 다른 부품이 되고, 통째로
+       못 박으면 어느 한 숙주를 깬다** — 크기만 못 박고 굵기는 고르게 한다. */
+    const th = bodyOf.get('src/ui/ThHelp.tsx')!;
+    expect(th).toMatch(/font\?: 'caption' \| 'inherit'/);
+    /* 크기는 어느 판에서도 13px 로 못 박힌다(승격이 고친 진짜 결함 — MR 의 셋이
+       headline 16/24 였다). inherit 판의 13px 은 `.sr-thhelp-host` 가 진다. */
+    const css = fs.readFileSync(path.join(ROOT, 'src/theme/type.css'), 'utf8');
+    expect(css).toMatch(/\.sr-thhelp-host \{\s*font-size: 13px;/);
+    /* rv(손 표)는 숙주 추종, MR(CDS 표)은 기본값 — 호출부가 그 사실을 말한다. */
+    expect(bodyOf.get('src/rv/RankingTable.tsx')).toMatch(/font="inherit"/);
+    expect(bodyOf.get('src/mr/MrPage.tsx')).not.toMatch(/font="inherit"/);
+  });
+
   it('공용 두 벌은 새 타이포 문법이다 — deprecated shorthand 가 없다', () => {
     /* rv 판이 `TextCaption`/`TextLegal` 을 쓰고 있었다 — 승격하며 `Text font=…`
        로 옮겼고(시각 동일 — shorthand 는 CDS 소스가 `Text font` 위임), 여기로
