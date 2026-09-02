@@ -306,7 +306,10 @@ export interface MrStrategyTrade {
   /** 엔진 부호 — 이름은 `run.dirs` 가 진다(계열마다 다른 다리다). */
   dir: number;
   entryZ: number;
-  exitZ: number;
+  /** **null 일 수 있다** — 타임스탑은 z 를 안 보므로 time 청산이 σ=0(z=null)
+   *  봉에 앉을 수 있다(countOpen 의사거래의 마지막 봉도 같다). 화면은 '—' 로
+   *  적는다 — 무가드 toFixed 가 서버의 그 500 을 화면에서 재연하면 안 된다. */
+  exitZ: number | null;
   entryV: number;
   exitV: number;
   pnl: number;

@@ -76,7 +76,12 @@ DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache"
 # 화면은 통합 줄을 **아예 안 그리면서** 아무 에러도 안 낸다(이 파일 머리가 적어
 # 둔 그 함정 그대로다. 실측 2026-09-01: 라우트를 고치고 백엔드를 재기동했는데도
 # `watch` 가 응답에 없었다).
-SCHEMA_VERSION = 13
+# v14 (2026-09-02): `mr` 행의 fut `defn` 문장을 정정했다 — 「선물 종가의
+# 내재수익률 (5% 합성)」은 2026-08-25 이후 파이프라인(벤더 내재 직독)에서
+# 거짓이고 KTB3 는 역사 구간에서 5% 합성 역산과 중앙 58bp 어긋난다(적대 대사
+# 실측). 같은 SQL 이 다른 문장을 만든다 — 안 올리면 v13 캐시가 옛 문장을 계속
+# 내준다.
+SCHEMA_VERSION = 14
 
 
 def data_hash(path: Path, asof: "object | None" = None) -> str:

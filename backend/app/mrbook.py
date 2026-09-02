@@ -241,7 +241,10 @@ def aggregate(legs: list[dict[str, Any]], *, notional: float,
                 "sid": leg["id"], "label": leg["label"], "tenor": tenor_of(leg["id"]),
                 "entryT": t["entryDate"], "exitT": t["exitDate"],
                 "dir": t["direction"],
-                "entryZ": round(t["entryZ"], 2), "exitZ": round(t["exitZ"], 2),
+                # 청산 z 는 None 일 수 있다 — 타임스탑이 σ=0(z=null) 봉에
+                # 앉을 때(main.py 낱개 직렬화의 그 주석·같은 수리 2026-09-02).
+                "entryZ": round(t["entryZ"], 2),
+                "exitZ": round(t["exitZ"], 2) if t["exitZ"] is not None else None,
                 "entryV": show(t["entryValue"]), "exitV": show(t["exitValue"]),
                 "outFrom": t["outFrom"], "outDays": t["outDays"],
                 "peakZ": round(t["peakZ"], 2) if t["peakZ"] is not None else None,

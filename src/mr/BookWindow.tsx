@@ -202,7 +202,8 @@ function TradeTable({ run }: { run: MrBookRun }) {
                 <Text font="label2" as="span" tabularNumbers noWrap>{t.exitT}</Text>
               </TableCell>
               <Num v={`${t.entryZ.toFixed(2)}σ`} />
-              <Num v={`${t.exitZ.toFixed(2)}σ`} />
+              {/* 타임스탑 청산은 z=null 봉에 앉을 수 있다(api.ts `exitZ`). */}
+              <Num v={t.exitZ == null ? '—' : `${t.exitZ.toFixed(2)}σ`} />
               <Num
                 v={fmtKrw(t.pnl)}
                 tone={t.pnl > 0 ? 'up' : t.pnl < 0 ? 'down' : undefined}

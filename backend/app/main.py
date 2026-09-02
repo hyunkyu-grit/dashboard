@@ -1150,11 +1150,12 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     principal = None
     if leg["kind"] != "fut":
         pv = pv01(_curves["now"], TENOR_T[mrc._tenor_of(id)])
-        # pv01 은 8자리 — 4자리로 내보냈더니 받은 쪽이 «원금 × pv01 × 1e-4 =
-        # 명목» 을 되곱할 때 14.66원/bp 어긋났다(2026-09-02 독립 대사가 잡음).
-        # 페이로드가 항등의 양변을 다 내보내면 그 항등은 페이로드 안에서
-        # 닫혀야 한다 — 화면 «약 35.4억» 은 못 보는 차이지만 손 대사는 본다.
-        principal = {"krw": round(notional / (pv * 1e-4)), "pv01": round(pv, 8)}
+        # pv01 은 **무반올림** — 4자리로 내보냈더니 되곱한 명목이 14.66원/bp,
+        # 8자리로도 원금 큰 단기 테너(6M 202억)에서 84원 어긋났다(2026-09-02
+        # 독립 대사 두 판이 차례로 잡음). 페이로드가 항등의 양변(krw·pv01)을
+        # 다 내보내면 그 항등은 페이로드 안에서 원 단위까지 닫혀야 한다 —
+        # 화면 «약 35.4억» 은 못 보는 차이지만 손 대사는 본다.
+        principal = {"krw": round(notional / (pv * 1e-4)), "pv01": pv}
 
     # ── 다리 레벨 [OWNER 2026-09-02 — "델타, 노셔널, 스왑 파 커브 상의 레벨,
     # 채권 커브 상의 레벨, CD금리 레벨이 진입시점에 확인되고 … 대사도 명확하게"]
@@ -1218,7 +1219,14 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
         {
             "entryT": t["entryDate"], "exitT": t["exitDate"],
             "dir": t["direction"],
-            "entryZ": round(t["entryZ"], 2), "exitZ": round(t["exitZ"], 2),
+            "entryZ": round(t["entryZ"], 2),
+            # 청산 z 는 **None 일 수 있다** — 타임스탑은 z 를 안 보므로(엔진
+            # 규약: 지표가 비는 구간에 포지션이 갇히는 것을 막는 문) time 청산이
+            # σ=0(z=null) 봉에 앉을 수 있고, countOpen 의사거래도 마지막 봉이
+            # σ=0 이면 같다. 무가드 round 가 유효 노브 조합(lookback 2~600 ×
+            # timeStop)에서 창을 통째로 500 으로 죽였다(2026-09-02 적대 대사가
+            # 잡음 — 진입 z 는 신호가 z 를 요구하므로 None 이 될 수 없다).
+            "exitZ": round(t["exitZ"], 2) if t["exitZ"] is not None else None,
             "entryV": disp(t["entryValue"]), "exitV": disp(t["exitValue"]),
             # 진입 직전의 밴드 밖 구간 — 「무엇을 보고 들어갔나」. `touch` 에서는
             # 진입 z 가 밴드 선 언저리라 이것 없이는 4σ 까지 갔다 온 것과 2.01σ 를

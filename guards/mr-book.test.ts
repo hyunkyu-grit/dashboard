@@ -186,9 +186,10 @@ describe('서버도 한 자리다', () => {
 
   it('보드 페이로드가 바뀌었으니 캐시 스키마가 올라가 있다', () => {
     /* 안 올리면 옛 캐시가 `watch` 없는 보드를 계속 내주고 화면은 통합 줄을
-       아예 안 그린다 — 실제로 한 번 밟았다(2026-09-01). */
+       아예 안 그린다 — 실제로 한 번 밟았다(2026-09-01). v14 = fut defn 정정
+       (「5% 합성」 오라벨 — 2026-09-02 적대 대사). */
     const cache = fs.readFileSync(path.join(root, 'backend/app/cache.py'), 'utf8');
-    expect(cache).toMatch(/SCHEMA_VERSION = 13/);
-    expect(cache).toMatch(/v13 \(2026-09-01\)/);
+    expect(cache).toMatch(/SCHEMA_VERSION = 14/);
+    expect(cache).toMatch(/v14 \(2026-09-02\)/);
   });
 });

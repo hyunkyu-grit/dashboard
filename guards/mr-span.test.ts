@@ -120,6 +120,18 @@ describe('거래 한 줄이 스스로 검산이 된다', () => {
     expect(strat).toMatch(/mrs\.bundle\(\)\["cd"\]/);
   });
 
+  it('청산 z 는 null 일 수 있다 — 서버는 가드하고 화면은 — 로 적는다', () => {
+    /* 타임스탑은 z 를 안 보므로 time 청산이 σ=0(z=null) 봉에 앉을 수 있다.
+       무가드 round 가 유효 노브(lookback 2~600 × timeStop)에서 창을 통째로
+       500 으로 죽였다(2026-09-02 적대 대사가 잡음). 같은 무가드가 화면의
+       toFixed 로 재연되면 안 된다. */
+    const py = fs.readFileSync(path.join(root, 'backend/app/main.py'), 'utf8');
+    expect(py).toMatch(/round\(t\["exitZ"\], 2\) if t\["exitZ"\] is not None else None/);
+    expect(src('src/mr/api.ts')).toMatch(/exitZ: number \| null/);
+    expect(code).toMatch(/exitZ == null \? '—'/);
+    expect(src('src/mr/BookWindow.tsx')).toMatch(/exitZ == null \? '—'/);
+  });
+
   it('명목·액면이 화면에 선다 — 액면은 근사임을 같이 적는다', () => {
     /* 서버가 환산한다(지금 커브 pv01 하나 — 근사). 계약에 있어야 화면이 적는다. */
     expect(src('src/mr/api.ts')).toMatch(/principal: \{ krw: number; pv01: number \} \| null/);

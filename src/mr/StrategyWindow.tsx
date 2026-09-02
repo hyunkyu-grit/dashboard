@@ -1232,7 +1232,7 @@ export function StrategyWindow({
                           </TableCell>
                           <TableCell className="sr-num" justifyContent="flex-end">
                             <Text font="label1" as="span" tabularNumbers noWrap>
-                              {`${sel.entryZ.toFixed(2)}→${sel.exitZ.toFixed(2)}`}
+                              {`${sel.entryZ.toFixed(2)}→${sel.exitZ == null ? '—' : sel.exitZ.toFixed(2)}`}
                             </Text>
                           </TableCell>
                           <ReconNum v={sel.dv} kind="bp" head />
@@ -1383,7 +1383,10 @@ export function StrategyWindow({
                             <Text font="label2" as="span" tabularNumbers noWrap>{t.entryZ.toFixed(2)}σ</Text>
                           </TableCell>
                           <TableCell className="sr-num" justifyContent="flex-end">
-                            <Text font="label2" as="span" tabularNumbers noWrap>{t.exitZ.toFixed(2)}σ</Text>
+                            <Text font="label2" as="span" tabularNumbers noWrap>
+                              {/* 타임스탑 청산은 z=null 봉에 앉을 수 있다(api.ts). */}
+                              {t.exitZ == null ? '—' : `${t.exitZ.toFixed(2)}σ`}
+                            </Text>
                           </TableCell>
                           {/* 레벨은 계열의 자기 단위(각주의 「기준」), Δ 는 bp —
                               머리의 그 주석. 색은 손익에만(한 셀 한 채널). */}
