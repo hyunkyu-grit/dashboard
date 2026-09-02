@@ -101,6 +101,25 @@ describe('거래 한 줄이 스스로 검산이 된다', () => {
     expect(code).toMatch(/kind="level"/);
   });
 
+  it('다리 레벨(국고·IRS·CD)이 점에 실리고 화면이 조건부로 세운다', () => {
+    /* [OWNER 2026-09-02 — "스왑 파 커브 상의 레벨, 채권 커브 상의 레벨, CD금리
+       레벨이 진입시점에 확인되고"]. 계약은 점에 싣는다(거래에 또 실으면 같은
+       수가 두 자리다) — 화면은 진입일을 찾아 적고, BSS 아닌 계열·구 백엔드에선
+       열이 통째로 접힌다(빈 열은 없는 데이터를 있는 척한다). */
+    const api = src('src/mr/api.ts');
+    expect(api).toMatch(/govt\?: number \| null/);
+    expect(api).toMatch(/irs\?: number \| null/);
+    expect(api).toMatch(/cd\?: number \| null/);
+    expect(code).toMatch(/진입 국고/);
+    expect(code).toMatch(/RECON_LEG_COLS/);
+    expect(code).toMatch(/hasLegs/);
+    /* 서버 조인은 캐리와 같은 출처(mrseries)다 — 낱개 라우트 안에서. */
+    const py = fs.readFileSync(path.join(root, 'backend/app/main.py'), 'utf8');
+    const strat = py.slice(py.indexOf('def mr_strategy('), py.indexOf('def mr_book('));
+    expect(strat).toMatch(/mrs\.legs\(/);
+    expect(strat).toMatch(/mrs\.bundle\(\)\["cd"\]/);
+  });
+
   it('명목·액면이 화면에 선다 — 액면은 근사임을 같이 적는다', () => {
     /* 서버가 환산한다(지금 커브 pv01 하나 — 근사). 계약에 있어야 화면이 적는다. */
     expect(src('src/mr/api.ts')).toMatch(/principal: \{ krw: number; pv01: number \} \| null/);

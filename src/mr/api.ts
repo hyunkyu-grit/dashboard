@@ -289,6 +289,15 @@ export interface MrStrategyPoint {
   out: number;
   /** 연속 며칠째 밖인가. 안이면 0. */
   outRun: number;
+  /** 다리 레벨(**%**) [OWNER 2026-09-02 — "스왑 파 커브 상의 레벨, 채권 커브
+   *  상의 레벨, CD금리 레벨이 진입시점에 확인되고"]. 캐리와 같은 출처
+   *  (`mrseries` — 국고 커브·IRS 파·CD 91일)를 날짜로 조인한 값이고, BSS 는
+   *  (국고 − IRS) × 100 = v 가 정확히 성립한다(서버가 검증한 항등 — 화면은
+   *  그 사실을 보이기만 한다). 선물·퓨처스왑(다리가 다름)과 구 백엔드는
+   *  없다(`undefined`/null) — 화면 열이 조용히 접힌다. */
+  govt?: number | null;
+  irs?: number | null;
+  cd?: number | null;
 }
 
 export interface MrStrategyTrade {

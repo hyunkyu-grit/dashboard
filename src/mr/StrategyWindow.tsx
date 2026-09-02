@@ -428,6 +428,28 @@ const RECON_COLS = [
   { k: '평가' }, { k: '캐리' }, { k: '비용' }, { k: '그날' }, { k: '누적' },
 ] as const;
 
+/* 다리 레벨 세 열 [OWNER 2026-09-02 — "스왑 파 커브 상의 레벨, 채권 커브 상의
+   레벨, CD금리 레벨"] — 레벨(스프레드) **앞**에 서서 «국고 − IRS = 레벨» 이
+   왼쪽에서 오른쪽으로 읽힌다. BSS 에만 있고(캐리와 같은 출처), 선물·퓨처스왑·
+   구 백엔드에는 없어 열이 통째로 접힌다 — 빈 열 셋을 세워 두면 표가 없는
+   데이터를 있는 척한다(「이탈 최대」 열의 그 조건부 문법). */
+const RECON_LEG_COLS = [{ k: '국고' }, { k: 'IRS' }, { k: 'CD' }] as const;
+
+/** 합계 줄의 다리 레벨 — 더할 수 있는 양이 아니라 **진입 → 청산**이다(레벨·z
+ *  의 그 규칙). 한쪽이라도 없으면 지어내지 않고 '—' 다. */
+function LegArrow({ a, b }: { a?: number | null; b?: number | null }) {
+  const t = a == null || b == null
+    ? '—'
+    : `${fmtReconLevel(a, '%' as Unit)}→${fmtReconLevel(b, '%' as Unit)}`;
+  return (
+    <TableCell className="sr-num" justifyContent="flex-end">
+      <Text font="label1" as="span" tabularNumbers noWrap color={t === '—' ? 'fgMuted' : undefined}>
+        {t}
+      </Text>
+    </TableCell>
+  );
+}
+
 /** 대사표의 숫자 한 칸.
  *
  * `tone` 은 **손익 두 열에만** 준다 — 방향색은 「번 돈인가 잃은 돈인가」를
@@ -644,6 +666,13 @@ export function StrategyWindow({
     [sel, run],
   );
   const dirStat = !run ? '—' : only ? only.legs : '양방향';
+
+  /* 다리 레벨 유무 — BSS 만 있다(캐리와 같은 출처 — api.ts `govt` 주석).
+     선물·퓨처스왑·구 백엔드는 없고, 그때 열은 조용히 접힌다. */
+  const hasLegs = useMemo(() => !!run && run.points.some((p) => p.govt != null), [run]);
+  /* 날짜 → 점 — 거래 표가 진입 시점 다리 레벨을 여기서 찾는다(서버가 점마다
+     실었으므로 거래에 또 싣지 않는다 — 같은 수를 두 자리에 두면 갈릴 수 있다). */
+  const pointAt = useMemo(() => new Map((run?.points ?? []).map((p) => [p.t, p])), [run]);
 
   /* 거래 표 머리 — 총 건수·명목·액면 [OWNER 2026-09-02 — "진입 레벨과 기준
      노셔널과 같은 것들이 전부 나와야 직접 대사가 가능"]. 명목·액면은 모든
@@ -1129,7 +1158,7 @@ export function StrategyWindow({
                           <TableCell as="th" scope="col">
                             <Text font="caption" as="span" color="fgMuted">구분</Text>
                           </TableCell>
-                          {RECON_COLS.map((c) => (
+                          {(hasLegs ? [...RECON_LEG_COLS, ...RECON_COLS] : [...RECON_COLS]).map((c) => (
                             <TableCell key={c.k} as="th" scope="col" className="sr-num" justifyContent="flex-end">
                               {/* `caption` 이 아니라 `legal` 이다 — CDS 기본 테마의
                                   `textTransform.caption = 'uppercase'` 가 「z」를 「Z」로,
@@ -1154,6 +1183,15 @@ export function StrategyWindow({
                                 {eventWord(events.get(i), p.hold !== 0)}
                               </Text>
                             </TableCell>
+                            {/* 다리 셋(%) → 스프레드(bp) — (국고 − IRS) × 100
+                                = 레벨이 왼쪽에서 오른쪽으로 닫힌다. */}
+                            {hasLegs ? (
+                              <>
+                                <ReconNum v={p.govt ?? null} kind="level" unit={'%' as Unit} />
+                                <ReconNum v={p.irs ?? null} kind="level" unit={'%' as Unit} />
+                                <ReconNum v={p.cd ?? null} kind="level" unit={'%' as Unit} />
+                              </>
+                            ) : null}
                             <ReconNum v={p.v} kind="level" unit={unit} />
                             <ReconNum v={p.z} kind="sigma" />
                             <ReconNum v={p.dv} kind="bp" />
@@ -1174,6 +1212,15 @@ export function StrategyWindow({
                           <TableCell>
                             <Text font="label1" as="span" color="fgMuted" noWrap>{sel.bars}봉</Text>
                           </TableCell>
+                          {/* 다리 셋도 진입 → 청산 — 값은 대사표 첫/끝 줄이
+                              원천이라 거래에 따로 싣지 않는다. */}
+                          {hasLegs ? (
+                            <>
+                              <LegArrow a={reconRows[0]?.p.govt} b={reconRows.at(-1)?.p.govt} />
+                              <LegArrow a={reconRows[0]?.p.irs} b={reconRows.at(-1)?.p.irs} />
+                              <LegArrow a={reconRows[0]?.p.cd} b={reconRows.at(-1)?.p.cd} />
+                            </>
+                          ) : null}
                           {/* 레벨·z 는 더할 수 있는 양이 아니다 — 진입 → 청산으로
                               적는다. 레벨 두 끝의 차가 곧 Δ 합계 칸이다(bp 계열
                               에서 — 선물은 % 라 100배 갈리고, 그 사실은 거래 표
@@ -1223,6 +1270,23 @@ export function StrategyWindow({
                         <TableCell as="th" scope="col">
                           <Text font="caption" as="span" color="fgMuted">방향</Text>
                         </TableCell>
+                        {/* 진입 시점 다리 레벨 [OWNER 2026-09-02] — 그날 데스크가
+                            봤을 국고 커브·IRS 파·CD 91일(%). 값의 원천은 점
+                            (서버 조인)이고 여기는 진입일을 찾아 적을 뿐이다.
+                            BSS 에만 서는 조건부 열(「이탈 최대」의 그 문법). */}
+                        {hasLegs ? (
+                          <>
+                            <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
+                              <Text font="caption" as="span" color="fgMuted" noWrap>진입 국고</Text>
+                            </TableCell>
+                            <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
+                              <Text font="legal" as="span" color="fgMuted" noWrap>진입 IRS</Text>
+                            </TableCell>
+                            <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
+                              <Text font="legal" as="span" color="fgMuted" noWrap>진입 CD</Text>
+                            </TableCell>
+                          </>
+                        ) : null}
                         {/* 이탈 구간은 **「밴드 복귀」 판에서만** 열이 선다.
                             「이탈 즉시」 판에서는 진입 봉이 곧 이탈 첫 봉이라
                             최대 z 가 진입 z 와 같은 수다 — 같은 수를 두 열에
@@ -1288,6 +1352,25 @@ export function StrategyWindow({
                               {(t.dir > 0 ? run.dirs.plus : run.dirs.minus).short}
                             </Text>
                           </TableCell>
+                          {hasLegs ? (
+                            <>
+                              <TableCell className="sr-num" justifyContent="flex-end">
+                                <Text font="label2" as="span" tabularNumbers noWrap>
+                                  {fmtReconLevel(pointAt.get(t.entryT)?.govt ?? null, '%' as Unit)}
+                                </Text>
+                              </TableCell>
+                              <TableCell className="sr-num" justifyContent="flex-end">
+                                <Text font="label2" as="span" tabularNumbers noWrap>
+                                  {fmtReconLevel(pointAt.get(t.entryT)?.irs ?? null, '%' as Unit)}
+                                </Text>
+                              </TableCell>
+                              <TableCell className="sr-num" justifyContent="flex-end">
+                                <Text font="label2" as="span" tabularNumbers noWrap>
+                                  {fmtReconLevel(pointAt.get(t.entryT)?.cd ?? null, '%' as Unit)}
+                                </Text>
+                              </TableCell>
+                            </>
+                          ) : null}
                           {run.params.entryMode === 'touch' ? (
                             <TableCell className="sr-num" justifyContent="flex-end">
                               <Text font="label2" as="span" tabularNumbers noWrap>
@@ -1363,6 +1446,11 @@ export function StrategyWindow({
                 : ''}
               {run.principal
                 ? ` 액면 환산(약 ${fmtEok(run.principal.krw)})은 지금 커브의 pv01 하나로 나눈 근사예요 — 크기만 좌우하고 부호·시점은 안 건드려요.`
+                : ''}
+              {/* 다리 레벨의 출처와 항등 — 안 적으면 이 세 열이 어디서 온
+                  값인지, 스프레드와 무슨 관계인지 화면만 보고는 알 수 없다. */}
+              {hasLegs
+                ? ' 다리 레벨(국고 커브·IRS 파·CD 91일)은 캐리와 같은 출처예요 — (국고 − IRS) × 100 = 레벨(bp)이 줄마다 그대로 닫혀요.'
                 : ''}
               {' '}국고 다리는 민평(평가사 고시) 기준이에요 — 체결가로 재면 성과가 낮아질 수 있어요.
             </Text>

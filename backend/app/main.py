@@ -74,6 +74,7 @@ from . import mrbook
 from . import mrcarry as mrc
 from . import mrdiag as mrd
 from . import mrregime as mrg
+from . import mrseries as mrs
 from . import payloads
 from . import rv as rv_mod
 from . import schedule_cache
@@ -1150,6 +1151,21 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     if leg["kind"] != "fut":
         pv = pv01(_curves["now"], TENOR_T[mrc._tenor_of(id)])
         principal = {"krw": round(notional / (pv * 1e-4)), "pv01": round(pv, 4)}
+
+    # ── 다리 레벨 [OWNER 2026-09-02 — "델타, 노셔널, 스왑 파 커브 상의 레벨,
+    # 채권 커브 상의 레벨, CD금리 레벨이 진입시점에 확인되고 … 대사도 명확하게"]
+    # 캐리가 읽는 그 출처(`mrseries` — 국고 커브·IRS 파·CD 91일)를 날짜로
+    # 조인해 점마다 싣는다. BSS 의 값은 정확히 (국고 − IRS) × 100 이므로
+    # (`mrseries.points`) 화면에서 «국고 − IRS = 레벨» 이 그대로 닫힌다.
+    # CD 는 값의 전제(교집합)가 아니라 참고라, 없는 날은 null — 지어내지 않는다
+    # (`legs(need_cd=False)` 의 넷째 값은 결측을 0.0 으로 채우므로 안 쓴다).
+    # 선물·퓨처스왑은 다리가 이 셋이 아니라서 null 이다(선물내재 다리는 별도).
+    leg_lv: dict[str, tuple[float, float]] = {}
+    cd_lv: dict[str, float] = {}
+    if leg["kind"] == "bss":
+        ld, lg, ls, _ = mrs.legs(id)
+        leg_lv = {d: (lg[i], ls[i]) for i, d in enumerate(ld)}
+        cd_lv = mrs.bundle()["cd"]
     roll = r["roll"]
     points = [
         {
@@ -1185,6 +1201,15 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
         }
         for i in range(len(vals))
     ]
+    # 다리 레벨을 점에 붙인다(위 주석) — 스프레드(bp)와 달리 **%** 그대로다.
+    # 반올림 4자리 = 이 앱의 % 레벨 문법(fmtLevel)과 같은 자리라, 화면의
+    # (국고 − IRS) × 100 이 레벨 칸(2자리 bp)과 표시 정밀도에서 닫힌다.
+    for p in points:
+        gv = leg_lv.get(p["t"])
+        c = cd_lv.get(p["t"])
+        p["govt"] = round(gv[0], 4) if gv else None
+        p["irs"] = round(gv[1], 4) if gv else None
+        p["cd"] = round(c, 4) if c is not None else None
     trades = [
         {
             "entryT": t["entryDate"], "exitT": t["exitDate"],
