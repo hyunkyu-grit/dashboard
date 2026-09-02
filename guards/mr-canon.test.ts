@@ -155,6 +155,46 @@ describe('일별 대사는 창 바닥 서랍이다', () => {
   });
 });
 
+describe('칸 폭은 실측이고 죽은 폭이 없다', () => {
+  /* 얼라인 7 의 「컨트롤은 제 상자를 채운다」 판. 브라우저 실측(2026-09-02):
+     상자 사이 빈틈은 6px(묶음 안)·24px(묶음 사이)로 Backtest 와 같은 문법인데,
+     상자 안 **죽은 폭**이 0~27.8px 로 흩어져 «보이는» 간격이 제각각이었다.
+     비용 칸은 반대로 −15.3px, 즉 상자보다 내용이 넓어 이웃 칸(명목)을 침범했다.
+     실측값으로 조인 뒤 죽은 폭이 0.7~1.8px 로 수렴했다(σ 셋은 예외 — 아래). */
+  const knob = src('src/mr/KnobBar.tsx');
+  const knobRaw = fs.readFileSync(path.join(root, 'src/mr/KnobBar.tsx'), 'utf8');
+
+  it('실전 규칙 다섯 칸이 세그먼트 실폭에 맞춰져 있다', () => {
+    for (const w of ['192', '182', '114', '90']) {
+      expect(knob, `width ${w}`).toContain(`<Box width={${w}}`);
+    }
+    /* 종전 폭(손 알약 시절)이 되살아나면 죽은 폭이 다시 흩어진다. */
+    for (const w of ['128', '116']) {
+      expect(knob, `옛 width ${w}`).not.toContain(`<Box width={${w}} className="sr-fgroup">`);
+    }
+  });
+
+  it('비용 칸은 알약 셋 + 자유 입력을 담는다 — 종전 196 은 15.3px 모자랐다', () => {
+    expect(knob).toContain('<Box width={212}>');
+    /* 주석이 그 산술을 «정정으로» 적고 있어야 한다 — 종전 값을 지우면 왜
+       212 인지가 다시 근거 없는 수가 된다(이 리포는 정정 이력을 주석에 남긴다). */
+    expect(knobRaw).toMatch(/종전 주석은 「196 = 알약 셋/);
+    expect(knobRaw).toMatch(/211\.3px/);
+  });
+
+  it('σ 칸은 일부러 같은 폭이고, 그 대가(죽은 폭)를 주석이 적는다', () => {
+    /* 「죽은 폭 0」과 「같은 성격 칸은 같은 폭」이 동시에 성립 못 하는 자리다 —
+       한 줄에 나란히 서는 셋이라 후자를 골랐고, 그 판단이 주석에 있어야 한다. */
+    expect(knob).toContain('const SIGMA_W = 128;');
+    expect(knobRaw).toMatch(/동시에 만족될/);
+  });
+
+  it('폭 수치에 실측 근거가 붙어 있다 — 말줄임 금지 §3', () => {
+    expect(knobRaw).toMatch(/실측/);
+    expect(knobRaw).toMatch(/2026-09-02/);
+  });
+});
+
 describe('머리 주석이 화면과 같은 말을 한다', () => {
   it('차트 라이브러리를 CDS CartesianChart 라고 적지 않는다', () => {
     /* 15차트가 lightweight-charts 로 옮겨 간 뒤(CLAUDE.md 규칙 7) 그 문장은
