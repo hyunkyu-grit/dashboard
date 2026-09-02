@@ -1150,7 +1150,11 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     principal = None
     if leg["kind"] != "fut":
         pv = pv01(_curves["now"], TENOR_T[mrc._tenor_of(id)])
-        principal = {"krw": round(notional / (pv * 1e-4)), "pv01": round(pv, 4)}
+        # pv01 은 8자리 — 4자리로 내보냈더니 받은 쪽이 «원금 × pv01 × 1e-4 =
+        # 명목» 을 되곱할 때 14.66원/bp 어긋났다(2026-09-02 독립 대사가 잡음).
+        # 페이로드가 항등의 양변을 다 내보내면 그 항등은 페이로드 안에서
+        # 닫혀야 한다 — 화면 «약 35.4억» 은 못 보는 차이지만 손 대사는 본다.
+        principal = {"krw": round(notional / (pv * 1e-4)), "pv01": round(pv, 8)}
 
     # ── 다리 레벨 [OWNER 2026-09-02 — "델타, 노셔널, 스왑 파 커브 상의 레벨,
     # 채권 커브 상의 레벨, CD금리 레벨이 진입시점에 확인되고 … 대사도 명확하게"]
