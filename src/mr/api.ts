@@ -179,7 +179,6 @@ export const MR_TIME_STOPS = [0, 10, 20, 40] as const;
 export interface MrStrategyParams {
   lookback: number;
   entryZ: number;
-  warnZ: number;
   exitZ: number;
   stopZ: number;
   costBp: number;
@@ -199,7 +198,6 @@ export interface MrStrategyParams {
 export const MR_STRATEGY_DEFAULTS: MrStrategyParams = {
   lookback: 60,
   entryZ: 2.0,
-  warnZ: 1.5,
   exitZ: 0.5,
   stopZ: 3.5,
   costBp: 0.5,
@@ -223,9 +221,14 @@ export const MR_STRATEGY_LOOKBACKS = [20, 60, 120] as const;
  * 가운데가 PMS s16 기본이고 양옆이 문헌·데스크의 통상 변형이다.
  *
  *   진입 1.5 / 2.0 / 2.5 — 볼린저 밴드의 통상 배수(2가 기본, 1.5 민감·2.5 보수)
- *   관찰 1.0 / 1.5 / 2.0 — 경보 문턱. 진입보다 낮아야 뜻이 있다
  *   청산 0 / 0.5 / 1.0   — 0 은 완전 평균회귀(중심선), 0.5 가 PMS 기본
  *   손절 3.0 / 3.5 / 4.0 — z-발산 손절. 진입의 대략 1.5~2배가 통상
+ *
+ * **「관찰 σ」(`warnZ`)는 2026-09-02 에 셋 다에서 빠졌다** [OWNER — "이건 뭔지
+ * 확인하고 필요없으면 치우기"]. 「경보 문턱」이라는 이름이 그 값이 하는 일을
+ * 과장하고 있었다 — 경보하는 곳이 없었고 z 그림에 점선 두 줄만 그었다. 값은
+ * 프리셋·기본값·쿼리·백엔드 검증 네 층에 있었는데 결과를 한 번도 안 바꿨다.
+ * 근거가 「문헌의 통상값」이어도, 그 값을 읽는 결정이 없으면 노브가 아니다.
  *
  * **명목은 프리셋이 없다** — 그건 「보통 쓰는 값」이 아니라 이 데스크의 포지션
  * 크기다. 세 개를 늘어놓으면 근거가 아니라 지어낸 기준이 된다.
@@ -248,7 +251,6 @@ export const MR_COST_PRESETS = [0.05, 0.2, 0.5] as const;
 
 export const MR_STRATEGY_PRESETS = {
   entryZ: [1.5, 2.0, 2.5],
-  warnZ: [1.0, 1.5, 2.0],
   exitZ: [0, 0.5, 1.0],
   stopZ: [3.0, 3.5, 4.0],
 } as const;
@@ -613,7 +615,6 @@ function strategyQuery(p: MrStrategyParams): URLSearchParams {
   return new URLSearchParams({
     lookback: String(p.lookback),
     entryZ: String(p.entryZ),
-    warnZ: String(p.warnZ),
     exitZ: String(p.exitZ),
     stopZ: String(p.stopZ),
     costBp: String(p.costBp),

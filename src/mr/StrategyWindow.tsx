@@ -60,9 +60,7 @@ import { Stat, StatColumn } from '@/ui/Stat';
 import {
   MR_ENTRY_MODES,
   MR_STRATEGY_DEFAULTS,
-  MR_STRATEGY_PRESETS,
   fetchMrStrategy,
-  fmtSigma,
   type MrStrategyParams,
   type MrStrategyRun,
   type MrStrategyTrade,
@@ -79,50 +77,18 @@ import { Panel, WHY_WORD, headFont } from './parts';
    그 공용 것으로 올라갔다 [OWNER 2026-08-25]. */
 
 /* σ 알약·값 고르개·숫자 칸은 **공용 노브 바**로 옮겼다(`KnobBar.tsx`,
- * 2026-09-01) — 통합 장부 창이 같은 노브를 쓰기 때문이다. 이 파일에 남은
- * `InlineSigma` 는 설정 줄의 것이 아니라 **패널 안 손잡이**라 성격이 다르다
- * (그 함수 주석이 왜 일부러 다른 물건인지 적어 둔다). */
-
-
-/** 패널 머리에 눕는 알약 한 줄 — 라벨이 옆에 붙는 납작한 형태다.
+ * 2026-09-01) — 통합 장부 창이 같은 노브를 쓰기 때문이다.
  *
- *  설정 줄의 `SigmaPick`(라벨 위·32px 등고·상자 폭 고정)과 **일부러 다른 물건**
- *  이다. 저기는 「실행」을 기다리는 노브들의 격자고, 여기는 지금 이 그림에만
- *  듣는 손잡이다. 같은 모양으로 만들면 둘이 같은 규율을 따른다고 거짓말을 한다. */
-function InlineSigma({
-  label,
-  value,
-  options,
-  onPick,
-}: {
-  label: string;
-  value: number;
-  options: readonly number[];
-  onPick: (v: number) => void;
-}) {
-  return (
-    <HStack gap={0.5} alignItems="center">
-      <Text font="legal" as="span" color="fgMuted" noWrap>
-        {label}
-      </Text>
-      {options.map((o) => (
-        <button
-          key={o}
-          type="button"
-          className="sr-pillbtn"
-          data-on={value === o || undefined}
-          aria-pressed={value === o}
-          aria-label={`${label} ${fmtSigma(o)}`}
-          onClick={() => onPick(o)}
-        >
-          {Number(o.toFixed(1))}
-        </button>
-      ))}
-    </HStack>
-  );
-}
-
-
+ * **`InlineSigma` 도 2026-09-02 에 내렸다** [OWNER — "이건 뭔지 확인하고
+ * 필요없으면 치우기"]. 그 부품이 잡고 있던 값은 `warnZ`(「관찰 σ」) 하나뿐이고,
+ * 그 값은 z 오실레이터에 점선 두 줄을 긋는 것 말고 아무 일도 안 했다 — 이름은
+ * 「경보 문턱」인데 **경보하는 곳이 화면에 없었다**(그 값을 읽는 마커·집계·
+ * 상태 문장이 하나도 없었다). 통합 장부 창에는 애초에 없었으니 두 창이 갈려
+ * 있기도 했다(캐논 얼라인 8). 그림에는 이미 0선과 진입 문턱 ±entryZ 가
+ * 굵게 서 있어서, 세 번째 점선 쌍은 잉크만 늘리고 결정은 안 붙어 있었다.
+ *
+ * 노브 하나를 내리는 값은 화면 밖에도 있었다: `warnZ` 는 쿼리·백엔드 검증·
+ * 응답 `params` 세 층에 실려 다니면서 **결과를 한 번도 안 바꿨다**. */
 
 /* ── 진단 절과 이웃 칸은 **화면에서 내렸다** [OWNER 2026-09-02 — 몸통에서
  * 내릴 절을 고른 그 선택] ────────────────────────────────────────────────────
@@ -159,7 +125,7 @@ const TABLE_H = CHART_H + CHART_H_SUB;
 /* ── 표시 구간 [OWNER 2026-09-02 — "백테스트 기간을 항상 전체로 설정하다보니
  * 시인성과 목적의식이 불분명"] ─────────────────────────────────────────────
  * 백테스트는 **늘 전체 기간**이고 이 손잡이는 차트와 거래 표의 «표시»만
- * 자른다 — warnZ 와 같은 성격이라 stale 을 안 세우고 성과 카드도 안 바꾼다
+ * 자른다 — stale 을 안 세우고 성과 카드도 안 바꾼다
  * [OWNER 2026-09-02 — 재실행이 아니라 표시 창]. 누적 손익은 구간 시작을 0 으로
  * 다시 그어 「이 구간에서 얼마를 벌었나」가 바로 보이게 하고, 구간 순손익과
  * 걸친 거래 수를 패널 머리에 병기한다 — 전체와 딴 수가 아니라 같은 곡선의 한
@@ -420,13 +386,6 @@ export function StrategyWindow({
       .finally(() => setRunning(false));
   }, [id, knobs]);
 
-  /* pinned 규율 — 실행 시점 파라미터와 지금 노브가 갈리면 stale.
-   *
-   * **`warnZ` 는 여기 없다** [2026-08-26]. 그 값은 엔진에 안 들어간다
-   * (`main.py::mr_strategy` 가 시뮬에 안 넘긴다 — 오실레이터 가이드선 전용).
-   * 그런데도 stale 을 세우고 있었으므로, 결과를 바꾸지 못하는 노브가 결과를
-   * 무효로 만들고 재실행을 요구했다. 이제 가이드선은 `knobs.warnZ` 를 바로
-   * 읽고(핀 안 걸림), 성과 숫자는 그 값과 무관하다는 사실이 화면에서 참이 된다. */
   /* pinned 규율 — 실행 시점 파라미터와 지금 노브가 갈리면 stale. 판정은
      **공용**이다(`KnobBar.mrKnobsStale`) — 통합 장부 창과 같은 조건을 써야
      같은 노브를 돌렸을 때 한 창만 낡은 숫자를 들고 있는 일이 없다. */
@@ -612,14 +571,13 @@ export function StrategyWindow({
     },
   ];
 
-  /* 0선·진입 문턱·경고 문턱. 경고는 **핀이 아니라 지금 값**이다 — 이 선은
-     실행과 무관하다. */
+  /* 0선과 진입 문턱 — 그림이 긋는 선은 **결정이 붙어 있는 것**뿐이다.
+     ±1.5σ 점선 쌍(「관찰 σ」)이 2026-09-02 에 여기서 빠졌다 — 근거는 파일 머리
+     주석. 결정이 안 붙은 선은 눈금이 아니라 잡음이다. */
   const zBands: ScalePriceLine[] = !run ? [] : [
     { value: 0, color: (pa) => pa.line },
     { value: run.params.entryZ, color: (pa) => pa.lineHeavy },
     { value: -run.params.entryZ, color: (pa) => pa.lineHeavy },
-    { value: knobs.warnZ, color: (pa) => pa.line, dash: true },
-    { value: -knobs.warnZ, color: (pa) => pa.line, dash: true },
   ];
 
   /* 손익 곡선은 부호가 색을 정한다 — LinkedCharts 누적 손익의 그 문법. 표시
@@ -1031,19 +989,6 @@ export function StrategyWindow({
                     ? `진입 ±${run.params.entryZ}σ · 마커 숨김`
                     : `진입 ±${run.params.entryZ}σ · ${entryWord(run.params.entryMode)}` +
                       ` · 진입 ${entryCount(run)} · ${exitTally(run)}`
-                }
-                /* 관찰 σ 는 설정 줄에서 여기로 내려왔다 [OWNER 2026-08-26]. 이
-                   값은 엔진에 안 들어가고 이 패널의 가이드선만 옮긴다 — 성과
-                   숫자를 못 바꾸는 노브가 성과 카드 옆에 서 있으면 화면이
-                   «이것도 결과를 바꾼다» 고 거짓말한다. 노브의 자리가 곧 그
-                   노브가 무엇인지에 대한 주장이다. */
-                aside={
-                  <InlineSigma
-                    label="관찰"
-                    value={knobs.warnZ}
-                    options={MR_STRATEGY_PRESETS.warnZ}
-                    onPick={(v) => set({ warnZ: v })}
-                  />
                 }
               >
                 <Box

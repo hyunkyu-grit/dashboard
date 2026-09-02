@@ -983,7 +983,7 @@ def _mr_neighbors(dates: list[str], vals: list[float], base: dict,
     return rows
 
 
-def _mr_check_knobs(lookback: int, entryZ: float, warnZ: float, exitZ: float,
+def _mr_check_knobs(lookback: int, entryZ: float, exitZ: float,
                     stopZ: float, costBp: float, notional: float,
                     entryMode: str, timeStop: int, costModel: str,
                     regime: str) -> None:
@@ -992,7 +992,10 @@ def _mr_check_knobs(lookback: int, entryZ: float, warnZ: float, exitZ: float,
     다른 규칙에서 나온 것이 된다."""
     if not 2 <= lookback <= 600:
         raise HTTPException(status_code=422, detail=f"룩백이 범위를 벗어나요: {lookback}일 (2~600)")
-    for name, v in (("entry", entryZ), ("watch", warnZ), ("exit", exitZ), ("stop", stopZ)):
+    # 「관찰 σ」(warnZ)가 2026-09-02 에 여기서 빠졌다 [OWNER — "이건 뭔지 확인하고
+    # 필요없으면 치우기"]. 엔진에 안 들어가고 화면에 점선만 긋던 값이라 문을
+    # 지킬 것이 없었다 — 검증은 **결과를 바꾸는 값**에만 값이 있다.
+    for name, v in (("entry", entryZ), ("exit", exitZ), ("stop", stopZ)):
         if not 0.0 <= v <= 20.0:
             raise HTTPException(status_code=422, detail=f"{name} σ가 범위를 벗어나요: {v} (0~20)")
     if not 0.0 <= costBp <= 10.0:
@@ -1100,7 +1103,7 @@ def _mr_leg(id: str, *, lookback: int, entryZ: float, exitZ: float, stopZ: float
 
 @router.get("/api/mr/strategy")
 def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
-                warnZ: float = 1.5, exitZ: float = 0.5, stopZ: float = 3.5,
+                exitZ: float = 0.5, stopZ: float = 3.5,
                 # 편도 비용 기본값 0.05 → 0.5 [OWNER 2026-08-28]. 0.05 은 첫 PMS 의
                 # 값이고 이 데스크의 실측이 아니다 — 국고3Y·IRS3Y 패키지 실제 편도가
                 # ≤0.5bp 라는 오너 답이 있으므로 **보수적인 쪽을 기본**으로 둔다.
@@ -1115,8 +1118,7 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     """전략 실험 창 — 첫 PMS entry-signals 의 z-스코어 백테스트 재현(§16).
 
     산술은 `mrbacktest.py`(PMS 원본 이식·적합성 벡터로 잠금), 기본값도 그쪽
-    기본(s16) 그대로다. warnZ 는 엔진엔 안 들어가고 오실레이터 가이드가 쓴다.
-    캐시 없음 — 파라미터가 자유값이고 계산이 밀리초라 태울 이유가 없다.
+    기본(s16) 그대로다. 캐시 없음 — 파라미터가 자유값이고 계산이 밀리초라 태울 이유가 없다.
 
     방향은 계열이 정한다(`mr.dirs_for`) — BSS 는 국고 매수 쪽 한 방향뿐이다.
     파라미터가 아니라 이 데스크의 사실이라 쿼리로 열지 않는다.
@@ -1124,7 +1126,7 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     labels = {s: l for s, l, _ in mr_mod.SERIES}
     if id not in labels:
         raise HTTPException(status_code=404, detail=f"unknown mr series {id}")
-    _mr_check_knobs(lookback, entryZ, warnZ, exitZ, stopZ, costBp, notional,
+    _mr_check_knobs(lookback, entryZ, exitZ, stopZ, costBp, notional,
                     entryMode, timeStop, costModel, regime)
 
     # 준비·시뮬은 **공용 자리**가 한다(`_mr_leg`) — 통합 장부(`/api/mr/book`)가
@@ -1249,7 +1251,7 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     return {
         "id": id, "label": labels[id], "unit": leg["unit"],
         "asof": dates[-1] if dates else None,
-        "params": {"lookback": lookback, "entryZ": entryZ, "warnZ": warnZ,
+        "params": {"lookback": lookback, "entryZ": entryZ,
                    "exitZ": exitZ, "stopZ": stopZ, "costBp": costBp,
                    "notional": notional, "entryMode": entryMode,
                    "timeStop": timeStop, "costModel": costModel,
@@ -1351,7 +1353,7 @@ def _mr_cost_span(legs: list[dict]) -> dict | None:
 
 @router.get("/api/mr/book")
 def mr_book(lookback: int = 60, entryZ: float = 2.0,
-            warnZ: float = 1.5, exitZ: float = 0.5, stopZ: float = 3.5,
+            exitZ: float = 0.5, stopZ: float = 3.5,
             costBp: float = 0.5, notional: float = 1_000_000.0,
             carry: bool = True, entryMode: str = "level",
             timeStop: int = 0, costModel: str = "flat",
@@ -1373,7 +1375,7 @@ def mr_book(lookback: int = 60, entryZ: float = 2.0,
 
     캐시 없음 — 파라미터가 자유값이고 아홉 번 돌아도 초 단위다.
     """
-    _mr_check_knobs(lookback, entryZ, warnZ, exitZ, stopZ, costBp, notional,
+    _mr_check_knobs(lookback, entryZ, exitZ, stopZ, costBp, notional,
                     entryMode, timeStop, costModel, regime)
     spec = _funding_spec(fundingBasis, fundingSpreadBp)
 
@@ -1409,7 +1411,7 @@ def mr_book(lookback: int = 60, entryZ: float = 2.0,
         "id": mrbook.BOOK_ID, "label": mrbook.BOOK_LABEL, "defn": mrbook.BOOK_DEFN,
         # 값 단위는 아홉이 다 bp 다(국고 − IRS). 손익 단위와 헷갈리지 않게 적어 둔다.
         "unit": first["unit"],
-        "params": {"lookback": lookback, "entryZ": entryZ, "warnZ": warnZ,
+        "params": {"lookback": lookback, "entryZ": entryZ,
                    "exitZ": exitZ, "stopZ": stopZ, "costBp": costBp,
                    "notional": notional, "entryMode": entryMode,
                    "timeStop": timeStop, "costModel": costModel,

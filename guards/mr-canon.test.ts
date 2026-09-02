@@ -322,10 +322,17 @@ describe('서랍은 남는 높이를 받고, 몸통이 양보한다', () => {
     expect(css).toMatch(/\.sr-mr-drawertable > div \{\s*max-height: 100%;/);
   });
 
-  it('서랍은 안 줄어든다 — 창이 상한에 닿으면 몸통이 준다', () => {
+  it('먼저 주는 쪽은 몸통이다 — 비율로 가르고, 서랍도 0 은 아니다', () => {
+    /* 2026-09-02 감사가 잡은 자리다. 종전엔 서랍이 `flex-shrink: 0` 이라
+       **아무도 안 무는 부족분**이 생겼다: 창을 화면 아래로 끌면 상한이
+       서랍(38vh)+머리+탭 보다 작아지고, 몸통이 0 이 된 뒤에는 물 쪽이 없어
+       창이 화면 밖으로 자랐다(실측: 창 하단 948 · 화면 911 — 37px 밖).
+       그래서 0 이 아니라 **비율**이다 — 몸통 12 대 서랍 1. */
     const css = fs.readFileSync(path.join(root, 'src/theme/type.css'), 'utf8');
-    const block = css.slice(css.indexOf('.sr-drawer {'), css.indexOf('.sr-drawer-tabs'));
-    expect(block).toMatch(/flex-shrink: 0;/);
+    const drawer = css.slice(css.indexOf('.sr-drawer {'), css.indexOf('.sr-drawer-tabs'));
+    expect(drawer).toMatch(/flex-shrink: 1;/);
+    const body = css.slice(css.indexOf('.sr-window-body {'), css.indexOf('.sr-drawer {'));
+    expect(body).toMatch(/flex: 0 12 auto;/);
   });
 });
 
@@ -376,5 +383,49 @@ describe('머리 주석이 화면과 같은 말을 한다', () => {
       expect(raw, f).not.toMatch(/2×2 패널 — 원본 결과 그리드의 배치/);
       expect(raw, f).not.toMatch(/flexBasis: 50%` 인데, 간격까지 더하면/);
     }
+  });
+});
+
+describe('결과를 못 바꾸는 노브는 화면에 안 선다 — 「관찰 σ」 은퇴', () => {
+  /* [OWNER 2026-09-02 — "이건 뭔지 확인하고 필요없으면 치우기"]. `warnZ` 는
+     이름이 「경보 문턱」이었는데 **경보하는 곳이 없었다**: z 그림에 점선 두
+     줄을 긋는 것 말고 읽는 데가 없었고(마커·집계·상태 문장 어디에도 안 들어감),
+     통합 장부 창에는 애초에 없어서 두 창이 갈려 있었다. 그런데도 쿼리·백엔드
+     검증·응답 params 세 층을 타고 다녔다. 결정이 안 붙은 선은 눈금이 아니다. */
+  const files = [
+    'src/mr/api.ts',
+    'src/mr/StrategyWindow.tsx',
+    'src/mr/KnobBar.tsx',
+    'src/mr/BookWindow.tsx',
+  ];
+
+  it('화면·계약 어디에도 warnZ 를 쓰는 코드가 없다', () => {
+    for (const f of files) {
+      const raw = fs.readFileSync(path.join(root, f), 'utf8');
+      /* 주석의 은퇴 기록은 남긴다 — 코드에서만 없으면 된다. */
+      const code = raw
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+      expect(code, f).not.toMatch(/warnZ/);
+    }
+  });
+
+  it('백엔드 두 라우트도 그 값을 안 받는다', () => {
+    const py = fs.readFileSync(path.join(root, 'backend/app/main.py'), 'utf8');
+    const code = py.replace(/^\s*#.*$/gm, '');
+    expect(code).not.toMatch(/warnZ/);
+  });
+
+  it('z 그림의 가로선은 0선과 진입 문턱뿐이다', () => {
+    const raw = fs.readFileSync(path.join(root, 'src/mr/StrategyWindow.tsx'), 'utf8');
+    const block = raw.slice(raw.indexOf('const zBands'), raw.indexOf('const eqHue'));
+    expect(block).toContain('value: 0');
+    expect(block).toContain('run.params.entryZ');
+    expect(block).not.toContain('dash: true');
+  });
+
+  it('내린 이유가 주석에 남아 있다', () => {
+    const raw = fs.readFileSync(path.join(root, 'src/mr/api.ts'), 'utf8');
+    expect(raw).toMatch(/경보하는 곳이 없었고/);
   });
 });
