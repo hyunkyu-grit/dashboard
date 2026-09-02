@@ -30,15 +30,9 @@ import {
   type MrStrategyParams,
 } from './api';
 
-/** σ 알약 칸의 공통 폭. 가장 넓은 것(진입 σ = 1.5·2·2.5)의 실측 127.4 를 담고
- * 한 칸 여유 — **같아야 σ 칸들이 한 줄에서 같은 리듬으로 선다.**
- *
- * 셋을 같은 폭으로 두는 대가로 죽은 폭이 남는다(실측 2026-09-02: 진입 0.6·
- * 청산 11.7·손절 9.2 — 알약 라벨의 자릿수가 「1.5」와 「0」으로 달라서다).
- * 「죽은 폭 0」(얼라인 7)과 「같은 성격 칸은 같은 폭」은 여기서 동시에 만족될
- * 수 없고, 한 줄에 나란히 서는 셋이라 후자를 골랐다 — 폭이 제각각이면 σ 셋이
- * 세 가지 크기의 칸으로 읽힌다. 그 대신 상자를 실측 최댓값까지 조였다(132→128). */
-const SIGMA_W = 128;
+/* σ 칸의 공통 폭 상수(`SIGMA_W`)는 은퇴했다 [OWNER 2026-09-02 — "칸안에서 빈
+ * 부분 축약"]. 셋의 자연폭이 127.4·116.3·118.8 로 달라 공통 폭은 필연적으로
+ * 죽은 폭을 낳았다 — 이제 칸마다 제 폭이고 그 수는 호출부에 실측과 함께 있다. */
 
 /* 배타 선택이던 손 알약 `Choice` 는 없다 [OWNER 2026-09-02 — "디자인 구성을
  * Main·Backtest 와 통일"]. 앱의 배타 선택 정본은 `ui/ControlCard` 의
@@ -64,21 +58,24 @@ function SigmaPick({
   value,
   options,
   onPick,
-  group,
+  width,
 }: {
   label: string;
   help: string;
   value: number;
   options: readonly number[];
   onPick: (v: number) => void;
-  /** 새 묶음이 여기서 시작한다 — `.sr-fgroup`(`theme/type.css` 의 그 규칙). */
-  group?: boolean;
+  /** 이 칸의 폭 — **알약 셋의 실측 잉크**다(호출부가 준다). */
+  width: number;
 }) {
-  /* 넷이 같은 폭이어야 눈이 격자로 읽는다 — 자연폭은 113~127 로 제각각이었고
-     (실측 2026-08-25) 그만큼 알약 열이 칸마다 어긋나 있었다. 상자를 두르는 것은
-     형제 화면의 규약이기도 하다(`<Box width={N}><Field>` — 백테스트·시뮬). */
+  /* 종전에는 셋이 `SIGMA_W` 하나를 공유했다. 「같은 성격 칸은 같은 폭」이라는
+     규율이었는데, 알약 라벨의 자릿수가 「1.5」와 「0」으로 달라 자연폭이
+     127.4·116.3·118.8 로 갈리고 그 차가 그대로 **죽은 폭**(11.7·9.2)이 됐다.
+     [OWNER 2026-09-02 — "칸안에서 빈 부분 축약해서 깔끔하게"]로 칸마다 제
+     내용 폭을 준다 — 상자를 두르는 것 자체는 형제 화면의 규약 그대로다
+     (`<Box width={N}><Field>` — 백테스트·시뮬). */
   return (
-    <Box width={SIGMA_W} className={group ? 'sr-fgroup' : undefined}>
+    <Box width={width}>
       <Field label={label} help={help}>
       <HStack gap={0.5} alignItems="center" height={CONTROL_H}>
         {options.map((o) => (
@@ -168,15 +165,12 @@ export function MrKnobBar({
           바닥 정렬 행: 블록 높이가 곧 라벨 높이(2026-08-19 얼라인 레인),
           한 행의 컨트롤은 전부 32px 등고(control-parity 의 그 등고)라
           실행도 알약이다(rv 「상세 분석」 자리의 그 컨트롤). */}
-      {/* 묶음 안은 좁게, 묶음 사이는 넓게 — 백테스트 설정 줄과 **같은 리듬**
-          이다(`theme/type.css` 의 `.sr-fgroup` 주석에 근거). 종전에는 노브
-          여덟이 전부 12px 등간격이라 σ 셋이 한 가족인지 각자인지 화면이 말하지
-          않았다(실측 2026-08-27). 읽히는 묶음은 **다섯**이다 —
-          [종목·룩백] · [진입 규칙] · [진입σ·청산σ·손절σ] · [비용·명목] · [실행].
-          진입 규칙이 σ 셋과 따로 서는 근거는 그 칸 주석에 있다(문턱은 「얼마나」,
-          이것은 「언제」). ⚠ 종전 주석은 「넷」이라 적어 진입 규칙을 빠뜨렸다
-          (2026-09-02 간격 감사). */}
-      <HStack gap={1} alignItems="flex-end" flexWrap="wrap">
+      {/* **칸 사이는 어디서나 12px 한 값이다** [OWNER 2026-09-02 — "가로 근접성
+          리듬 폐기하고 그냥 동간격으로 배치하기"]. 종전에는 묶음 안 6 · 묶음
+          사이 24(`.sr-fgroup`)로 덩어리를 만들었는데, 그 문법이 앱에서 은퇴했다
+          (그 클래스 자리의 주석에 근거). 무엇이 한 가족인지는 이제 **라벨**이
+          말한다 — 간격은 균일하고, 대신 칸마다 죽은 폭을 0 으로 조인다. */}
+      <HStack gap={1.5} alignItems="flex-end" flexWrap="wrap">
         {/* 폭은 감싸는 `Box` 가 준다 — `Field` 규약(`ui/ControlCard` 머리
             주석). 상자 없이 행에 바로 놓으면 그 칸만 자기 내용 폭이 되어
             형제와 어긋난다. **96 = 최장 계열명 「KTB10 내재금리」 92.31px
@@ -238,7 +232,7 @@ export function MrKnobBar({
             (12+12) 기준이라 세그먼트에는 모자란다 — 말줄임 금지 §3.
             상자는 실측 잉크 167.5 에 한 칸 여유를 더한 169 다(종전 172 는 4.5px
             이 죽어 있었다 — 2026-09-02 얼라인 7 감사). */}
-        <Box width={169} className="sr-fgroup">
+        <Box width={169}>
           <Field
             label="진입 규칙"
             help="이탈 즉시는 밴드를 뚫는 봉에, 밴드 복귀는 밖에 있다가 돌아오는 봉에 들어가요. 방향은 둘 다 나갔던 쪽이 정해요."
@@ -252,8 +246,13 @@ export function MrKnobBar({
             />
           </Field>
         </Box>
+        {/* 폭은 알약 셋의 실측 잉크 + 1 (Pretendard 14px/600 · `.sr-pillbtn`
+            좌우 패딩 12+12 · 알약 사이 4px, 실측 2026-09-02):
+              진입 σ  1.5·2·2.5 → 127.4 → 128
+              청산 σ  0·0.5·1   → 116.3 → 117
+              손절 σ  3·3.5·4   → 118.8 → 120  */}
         <SigmaPick
-          group
+          width={128}
           label="진입 σ"
           help="볼린저 밴드의 통상 배수예요 — 2σ가 기본, 1.5σ는 민감하게, 2.5σ는 보수적으로 잡아요."
           value={knobs.entryZ}
@@ -261,6 +260,7 @@ export function MrKnobBar({
           onPick={(v) => set({ entryZ: v })}
         />
         <SigmaPick
+          width={117}
           label="청산 σ"
           help="0은 중심선까지 완전히 되돌아올 때 청산이고, 0.5σ가 첫 PMS 기본이에요."
           value={knobs.exitZ}
@@ -268,20 +268,19 @@ export function MrKnobBar({
           onPick={(v) => set({ exitZ: v })}
         />
         <SigmaPick
+          width={120}
           label="손절 σ"
           help="z가 더 벌어지면 접는 발산 손절이에요. 진입의 1.5~2배가 통상이고 3.5σ가 첫 PMS 기본이에요."
           value={knobs.stopZ}
           options={MR_STRATEGY_PRESETS.stopZ}
           onPick={(v) => set({ stopZ: v })}
         />
-        {/* ── 마지막 묶음은 **제 상자에 담는다** [2026-08-28 실측] ─────────
-            진입 규칙 칸이 들어오면서 줄이 넘쳐 감쌈이 생겼는데, 형제로
-            늘어놓으면 감쌈이 묶음을 아무 데서나 자른다 — 실측에서 비용(x
-            1409~1473)만 첫 줄에 남고 명목·실행이 둘째 줄로 갔다. 이 파일의
-            머리가 «읽히는 묶음은 넷» 이라고 적어 놓고 화면은 그 묶음을
-            쪼개고 있었던 셈이다. 셋을 한 상자에 담으면 **묶음째** 넘어간다.
-            (묶음 사이 여백 `.sr-fgroup` 은 이제 상자가 진다.) */}
-        <HStack gap={1} alignItems="flex-end" className="sr-fgroup">
+        {/* ── 비용·명목·실행은 **한 상자에 담는다** [2026-08-28 실측] ──────
+            묶음을 만들려는 게 아니라 **감쌈(wrap)을 제어**하는 장치다: 형제로
+            늘어놓으면 줄이 넘칠 때 감쌈이 아무 데서나 잘라 비용만 첫 줄에 남고
+            명목·실행이 둘째 줄로 갔다(실측 x 1409~1473). 셋을 한 상자에 담으면
+            **셋째** 넘어간다. 안쪽 간격도 바깥과 같은 12px 다. */}
+        <HStack gap={1.5} alignItems="flex-end">
         {/* 비용에 프리셋이 생겼다 [OWNER 2026-08-28]. 종전에는 「근거 없는
             값을 늘어놓지 않는다」는 이유로 자유 입력만 뒀는데, 그 사이에 근거가
             생겼다 — 국고3Y·IRS3Y 패키지 실제 편도가 ≤0.5bp 라는 오너 답이다.
@@ -350,7 +349,7 @@ export function MrKnobBar({
             안 보인다(실측). */}
         <button
           type="button"
-          className="sr-pillbtn sr-fgroup"
+          className="sr-pillbtn"
           data-fill
           disabled={running}
           onClick={onRun}

@@ -607,15 +607,15 @@ export function BacktestWindow({
             const maxDate = bond ? cashbondAsOf : asOf;
             return (
               <VStack key={r.key} gap={0.5} width="100%">
-                {/* 묶음 안은 좁게, 묶음 사이는 넓게 [OWNER 2026-08-27 — "진입레벨과 진입일
-                    청산일 이런거도 너무 따닥따닥 붙어있어서 … 자연스러움을 추구할
-                    수는 없을까"]. 종전에는 칸 일곱이 **전부 12px 등간격**이라
-                    어디까지가 한 덩어리인지 화면이 말하지 않았다. 행의 기본 간격을
-                    묶음 **안**의 값(8)으로 내리고, 새 묶음이 시작되는 칸만
-                    `.sr-fgroup` 으로 한 칸 더 벌린다(합 24). 읽히는 묶음은 넷이다 —
+                {/* **칸 사이는 12px 한 값이다** [OWNER 2026-09-02 — "가로 근접성
+                    리듬 폐기하고 그냥 동간격으로 배치하기"]. 2026-08-27 에는 그
+                    반대였다 — 「따닥따닥 붙어있어서 자연스러움을…」이라는 지적에
+                    묶음 안 6 · 묶음 사이 24(`.sr-fgroup`)로 덩어리를 만들었고,
                     무엇을(종류·종목·만기) · 얼마나(규모) · 언제(진입일·청산일) ·
-                    그래서 얼마(진입 레벨). */}
-                <HStack gap={1} alignItems="flex-end" flexWrap="wrap">
+                    그래서 얼마(진입 레벨) 넷이 읽혔다. 그 문법이 앱에서 은퇴한
+                    이유는 `theme/type.css` 의 그 자리에 있다(리듬이 두 벌로
+                    갈렸고, 상자 안 죽은 폭에 흔들려 선언과 화면이 달랐다). */}
+                <HStack gap={1.5} alignItems="flex-end" flexWrap="wrap">
                   {/* 종류 140 — 가장 긴 라벨 "현금채권" 이 13px legal 로 ~52px 이고
                       CDS 컨트롤의 크롬(좌우 패딩 + 셰브론)이 82px 을 먹는다(이 창의
                       다른 칸들과 같은 실측 산술). 132 이던 시절 그 합(134)이 상자보다
@@ -686,7 +686,7 @@ export function BacktestWindow({
                       </Field>
                     </Box>
                   ) : null}
-                  <Box width={88} className="sr-fgroup">
+                  <Box width={88}>
                     <Field label="규모 (억)">
                       {/* fontSize legal(13) — 컨트롤 값 13px 통일(popup.ts 의 근거).
                           height 32 — 이 행의 등고. 13px 패스가 `Select` 는
@@ -708,7 +708,7 @@ export function BacktestWindow({
                       종전 근거였던 «네이티브가 ISO 로 보인다» 는 **로케일
                       의존**이라 en-US 에서는 08/24/2026 이 된다. 라벨은
                       컨트롤이 지므로 `Field` 를 벗었다. */}
-                  <Box width={150} className="sr-fgroup">
+                  <Box width={150}>
                     <IsoDateField
                       label="진입일"
                       value={r.entry}
@@ -734,7 +734,7 @@ export function BacktestWindow({
                       꽂히는지**가 실행을 누르기 전에 읽혀야 한다. 그 날짜에 관측이
                       없으면(휴일·데이터 끝 이후) 서버가 스냅할 그 날의 값을 그대로
                       보여준다 — 규칙이 하나여야 두 개의 진입 레벨이 안 생긴다. */}
-                  <Box width={96} className="sr-fgroup">
+                  <Box width={96}>
                     <Field label="진입 레벨">
                       {/* 컨트롤이 아닌 값도 컨트롤과 같은 32px 상자에 담는다.
                           이 행은 `alignItems="flex-end"` 라 바닥이 정렬되는데, 그

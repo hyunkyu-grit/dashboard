@@ -523,7 +523,7 @@ export function SimulationPage({
             const rowKind = kindOf(r.seriesId);
             return (
               <VStack key={r.key} gap={0.5} width="100%">
-                <HStack gap={1} alignItems="flex-end" flexWrap="wrap">
+                <HStack gap={1.5} alignItems="flex-end" flexWrap="wrap">
                   {/* 폭 = 최장 라벨 실측 + 컨트롤 크롬 82px(백테스트 종류 칸의
                       실측) — 말줄임 금지 [OWNER 2026-08-25, CLAUDE.md]. 종류의
                       최장 «아웃라이트/버터플라이» 5자 ≈ 65px → 82+65=147, 여유
@@ -770,7 +770,7 @@ export function SimulationPage({
               onChange={(v) => setScenario({ ...scenario, anchorTenor: v })}
             />
           </Field>
-          <HStack gap={1} alignItems="flex-end">
+          <HStack gap={1.5} alignItems="flex-end">
             <Field label={`국고 ${scenario.anchorTenor} 목표 변동`}>
               <NumField
                 label="목표 변동(bp)"
@@ -890,7 +890,7 @@ export function SimulationPage({
           <TextLegal as="span" color="fgMuted">
             3Y 대비 얼마나 더(덜) 움직이는지예요. 둘 다 0이면 3Y 위쪽이 나란히 움직여요.
           </TextLegal>
-          <HStack gap={1} alignItems="flex-end">
+          <HStack gap={1.5} alignItems="flex-end">
             <Field label="1Y (bp)">
               <NumField
                 label="1Y 스프레드(bp)"

@@ -314,7 +314,7 @@ export function MrPage() {
     <VStack gap={1.5} width="100%" flexGrow={1} minHeight={0}>
       {/* ── 조건 바 — 어떤 밴드에서 나온 숫자인지가 카드보다 먼저 읽힌다 ──── */}
       <VStack className="sr-rv-bar" flexShrink={0} gap={0.5} width="100%">
-        <HStack gap={2} alignItems="center" flexWrap="wrap">
+        <HStack gap={1.5} alignItems="center" flexWrap="wrap">
           {/* 순서는 언제 → 무엇으로(rv 의 판단). 소스가 둘이라 as-of 도 둘이고,
               갈라진 날은 굵기+밑줄이 그 사실을 말한다(rv B-2). 계열 정의는
               행의 서브라인이 진다 — 혼합 유니버스에서 바 한 칸으로는 거짓말이

@@ -205,16 +205,49 @@ describe('칸 폭은 실측이고 죽은 폭이 없다', () => {
     expect(knobRaw).toMatch(/219\.3px/);
   });
 
-  it('σ 칸은 일부러 같은 폭이고, 그 대가(죽은 폭)를 주석이 적는다', () => {
-    /* 「죽은 폭 0」과 「같은 성격 칸은 같은 폭」이 동시에 성립 못 하는 자리다 —
-       한 줄에 나란히 서는 셋이라 후자를 골랐고, 그 판단이 주석에 있어야 한다. */
-    expect(knob).toContain('const SIGMA_W = 128;');
-    expect(knobRaw).toMatch(/동시에 만족될/);
+  it('σ 칸은 **각자 제 내용 폭**이다 — 공통 폭 상수는 은퇴했다', () => {
+    /* [OWNER 2026-09-02 — "칸안에서 빈 부분 축약해서 깔끔하게"]. 종전에는 셋이
+       `SIGMA_W` 하나를 공유해 죽은 폭 11.7·9.2px 를 남겼다(알약 라벨의 자릿수가
+       「1.5」와 「0」으로 달라서다). 실측 잉크 127.4·116.3·118.8 → 128·117·120. */
+    expect(knob).not.toContain('SIGMA_W');
+    for (const w of ['128', '117', '120']) {
+      expect(knob, `σ width ${w}`).toContain(`width={${w}}`);
+    }
   });
 
   it('폭 수치에 실측 근거가 붙어 있다 — 말줄임 금지 §3', () => {
     expect(knobRaw).toMatch(/실측/);
     expect(knobRaw).toMatch(/2026-09-02/);
+  });
+});
+
+describe('가로 간격은 앱에 한 값이다 — 12px 동간격', () => {
+  /* [OWNER 2026-09-02 — "가로 근접성 리듬 폐기하고 그냥 동간격으로 배치하기"].
+     종전에는 묶음 안 6 · 묶음 사이 24(`.sr-fgroup`)로 덩어리를 만들었고, 조건
+     바는 또 4/16 이라 리듬이 두 벌이었다. 어느 것이 정본인지 어느 파일도 말하지
+     않았고, 상자 안 죽은 폭에 흔들려 선언(6/24)과 화면(여덟 가지)이 달랐다. */
+  it('`.sr-fgroup` 은 앱 어디에도 안 쓰인다', () => {
+    const files = ['src/backtest/BacktestWindow.tsx', 'src/mr/KnobBar.tsx', 'src/mr/MrPage.tsx',
+      'src/rv/RvPage.tsx', 'src/sim/SimulationPage.tsx'];
+    for (const f of files) {
+      expect(src(f), f).not.toContain("className=\"sr-fgroup\"");
+      expect(src(f), f).not.toContain("'sr-fgroup'");
+    }
+    /* CSS 규칙도 없다 — 은퇴 근거만 주석으로 남는다. */
+    const css = fs.readFileSync(path.join(root, 'src/theme/type.css'), 'utf8');
+    expect(css).not.toMatch(/^\.sr-fgroup \{/m);
+    expect(css).toMatch(/`\.sr-fgroup` 은퇴/);
+  });
+
+  it('컨트롤 행은 어디서나 gap 1.5(12px)다', () => {
+    const rows: [string, RegExp][] = [
+      ['src/backtest/BacktestWindow.tsx', /<HStack gap=\{1\.5\} alignItems="flex-end" flexWrap="wrap">/],
+      ['src/mr/KnobBar.tsx', /<HStack gap=\{1\.5\} alignItems="flex-end" flexWrap="wrap">/],
+      ['src/mr/MrPage.tsx', /<HStack gap=\{1\.5\} alignItems="center" flexWrap="wrap">/],
+      ['src/rv/RvPage.tsx', /<HStack gap=\{1\.5\} alignItems="center" flexWrap="wrap">/],
+      ['src/sim/SimulationPage.tsx', /<HStack gap=\{1\.5\} alignItems="flex-end"/],
+    ];
+    for (const [f, re] of rows) expect(src(f), f).toMatch(re);
   });
 });
 

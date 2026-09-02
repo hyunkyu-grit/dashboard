@@ -523,7 +523,7 @@ export function RvPage() {
           — 2차 크리틱 실측: 각주까지 sticky 면 바가 107~250px 이 되어 행 20~74
           를 읽는 자세에서 랭킹 열 머리를 통째로 덮었다. */}
       <VStack className="sr-rv-bar" flexShrink={0} gap={0.5} width="100%">
-        <HStack gap={2} alignItems="center" flexWrap="wrap">
+        <HStack gap={1.5} alignItems="center" flexWrap="wrap">
           {/* 첫 화면은 필요한 정보만 [OWNER 2026-08-19] — 후보·H·조달·as-of
               다섯 사실만 상시이고, 조작(이력 창·금통위)과 세부(가중)는 우측 끝
               **설정** 하나로 접힌다.
