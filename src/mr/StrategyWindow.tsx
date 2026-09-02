@@ -69,7 +69,7 @@ import {
   type MrStrategyTrade,
 } from './api';
 import { MrKnobBar, mrKnobsStale } from './KnobBar';
-import { Panel, WHY_WORD, headFont, ym } from './parts';
+import { Panel, WHY_WORD, headFont } from './parts';
 
 /* 얼라인 규칙 [OWNER 2026-08-25 — CLAUDE.md «얼라인» 절]. 첫 판은 라벨을
  * 컨트롤 **옆**에 붙였고, 라벨 폭이 제각각이라 컨트롤 시작점이 계단이 졌다
@@ -125,193 +125,29 @@ function InlineSigma({
 
 
 
-/** 진단 — 성과가 **어디서 왔는지**를 화면이 스스로 말한다
- *  [OWNER 2026-08-28 — "저렇게 단순한 전략이 승률이 이렇게 높을 수 있다는게
- *  이해가 잘 안간다" · "과거에 Overfitting 된거 아닌가"].
+/* ── 진단 절과 이웃 칸은 **화면에서 내렸다** [OWNER 2026-09-02 — 몸통에서
+ * 내릴 절을 고른 그 선택] ────────────────────────────────────────────────────
  *
- * 종전에는 성과 카드가 승률 93% 를 내걸고 그것으로 끝이었다. 그 숫자가 진입의
- * 공로인지 청산 규칙의 산물인지, 최근에도 유지되는지를 화면이 말하지 않아서
- * 두 의심 다 화면 밖에서만 답할 수 있었다. 세 칸이 그 답이다.
+ * 내린 둘과 그 이유:
  *
- *   신호가 한 일  청산 규칙을 **떼고** 신호일의 고정 보유 수익을 잰다. 승률이
- *                 청산이 만든 것이라면 신호일과 비신호일이 안 갈린다.
- *   승률의 출처   사유별로 쪼갠다. 익절만 세면 90%대가 나오고 손절·타임스탑을
- *                 같이 세면 내려간다. 손익비가 없으면 승률은 거짓말을 한다.
- *   구간별        과거적합이면 최근이 무너지고, 엣지 소멸이면 크기만 단조로
- *                 줄어든다 — **모양이 다르다**.
- */
-/** 신호일의 조건을 **정확히** 적는다.
+ *   **진단**(135px) — 「신호가 한 일 · 승률의 출처 · 구간별」 세 칸. 2026-08-28
+ *   오너 질문 둘(「저렇게 단순한 전략이 승률이 이렇게 높을 수 있나」·「과거에
+ *   Overfitting 된 것 아닌가」)에 답하려고 세운 절이고, **그 답은 이미 나왔다** —
+ *   승률은 청산 구조의 산물이 아니라 신호의 공로이고(신호일 10일 앞 +1.84bp·
+ *   적중 72% 대 비신호일 −0.08bp·49%), 과거적합의 증거는 못 찾았으며 대신 국면
+ *   의존이 보였다(−0.08 → 1.21 → 0.62). 근거와 수치는 `docs/MR_LANE_STATE.md`
+ *   §승률·과거적합 의심에 대한 답 에 있다. 답이 끝난 질문을 매번 화면에 세울
+ *   이유는 없다.
  *
- * `|z| ≥ 2σ` 라고 쓰면 안 된다 — 이 데스크는 한 방향만 실행할 수 있어서 반대쪽
- * 문턱 돌파는 신호가 아니고, 서버도 실행 가능한 쪽만 센다. 방향을 빼먹고 절대값으로
- * 읽으면 못 하는 거래의 수익이 섞여 답이 뒤집힌다(실측 2026-08-28: 절대값으로
- * 세면 신호일 −0.37bp·적중 47%, 방향을 넣으면 +1.84bp·적중 72%였다). */
-function signalCond(run: MrStrategyRun): string {
-  const z = run.params.entryZ;
-  if (run.params.entryMode === 'touch') return `밴드 복귀 · ±${z}σ`;
-  const a = run.dirs.allowed;
-  if (a.length !== 1) return `|z| ≥ ${z}σ`;
-  /* 엔진 부호 −1 = 값이 내리면 버는 쪽 → z 가 **위로** 벌어졌을 때 신호다. */
-  return a[0]! < 0 ? `z ≥ +${z}σ` : `z ≤ −${z}σ`;
-}
-
-function Diagnostics({ run }: { run: MrStrategyRun }) {
-  const { exits, payoff, forward, periods } = run.diag;
-  const on = forward.onSignal;
-  const off = forward.offSignal;
-  const pct = (v: number) => `${Math.round(v * 100)}%`;
-  const bp = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(2)}bp`;
-  return (
-    <VStack gap={0.5} width="100%">
-      <HStack gap={1} alignItems="baseline" justifyContent="space-between">
-        <Text font="label2" as="h3" noWrap>
-          진단
-        </Text>
-        <Text font="legal" as="span" color="fgMuted">
-          승률이 어디서 왔는지 · 최근에도 유지되는지 — 노브를 바꾸면 같이 바뀌어요
-        </Text>
-      </HStack>
-      <HStack className="sr-stats" width="100%" flexWrap="wrap">
-        <StatColumn title="신호가 한 일">
-          {on ? (
-            <>
-              <Stat label="신호일" value={`${on.n}일`} note={signalCond(run)} />
-              <Stat
-                label={`${forward.bars}일 앞 평균`}
-                value={bp(on.meanBp)}
-                tone={on.meanBp > 0 ? 'up' : on.meanBp < 0 ? 'down' : undefined}
-                note={`적중 ${pct(on.hitRate)}`}
-              />
-            </>
-          ) : (
-            <Stat label="신호일" value="—" note="신호가 없어요" />
-          )}
-          {/* 대조군이 옆에 없으면 「적중 71%」가 높은 건지 알 수 없다. */}
-          {off ? (
-            <Stat label="비신호일" value={bp(off.meanBp)} note={`적중 ${pct(off.hitRate)} · ${off.n}일`} />
-          ) : null}
-        </StatColumn>
-
-        <StatColumn title="승률의 출처">
-          {exits.map((e) => (
-            <Stat
-              key={e.why}
-              label={WHY_WORD[e.why]}
-              value={`${e.n}건 · ${pct(e.winRate)}`}
-              note={`평균 ${bp(e.avgBp)} · ${e.avgBars.toFixed(1)}일`}
-            />
-          ))}
-          {payoff ? (
-            <Stat
-              label="손익비"
-              value={payoff.payoff == null ? '—' : payoff.payoff.toFixed(2)}
-              /* 프로핏팩터가 1 아래면 승률이 아무리 높아도 돈을 잃는다. */
-              tone={payoff.profitFactor != null && payoff.profitFactor < 1 ? 'down' : undefined}
-              note={payoff.profitFactor == null
-                ? `이긴 ${payoff.wins} / 진 ${payoff.losses}`
-                : `프로핏팩터 ${payoff.profitFactor.toFixed(2)}`}
-            />
-          ) : null}
-        </StatColumn>
-
-        {periods.length ? (
-          <StatColumn title="구간별">
-            {periods.map((p) => (
-              <Stat
-                key={p.from}
-                label={`${ym(p.from)}~${ym(p.to)}`}
-                value={p.sharpe == null ? '—' : `SR ${p.sharpe.toFixed(2)}`}
-                note={fmtKrw(p.totalPnl)}
-              />
-            ))}
-          </StatColumn>
-        ) : null}
-      </HStack>
-    </VStack>
-  );
-}
-
-/** 이웃 칸 — 노브를 프리셋 안에서 옮겼을 때 결과가 얼마나 달라지는가.
+ *   **이웃 칸**(260px) — 노브 넷 × 각 3칸 격자. 이 창에서 제일 큰 비차트
+ *   블록이었고, 자기 주석이 「견고성 보기이지 **고르는 도구가 아니다**」라고
+ *   적어 두고 있었다. 레인 실측도 같은 방향이다 — 전진분석은 파라미터 선택에
+ *   값을 못 더했다(§Ⅱ). 한 칸 옆이 궁금하면 노브를 직접 옮기고 실행한다.
  *
- * ## 왜 이게 성과 카드 바로 밑에 서는가 [OWNER 2026-08-26]
- *
- * 창은 고른 칸 하나만 보여 줬다. 그래서 손절 3.5 의 **+2,605만·승률 80%** 는
- * 보이고 손절 3.0 의 **+1,120만·승률 57%** 는 노브를 눌러 보기 전까지 안
- * 보였다. 한 칸 차이가 결과를 절반으로 만드는데 화면은 그 사실을 감췄고, 감춘
- * 채로 보여 준 80% 는 발견처럼 읽혔다.
- *
- * 실측으로 그 차이는 2022-12 거래 **한 짝**이었다: 손절 3.0 이면 z 3.22 에
- * 들어간 다리가 다음 봉에 −139만으로 잘리고, 3.5 면 살아남아 +1,005만 = 표본
- * 최대 승리가 된다. 「어느 칸이 옳은가」 를 화면이 답할 수는 없다. 답할 수 있는
- * 것은 **이 결과가 칸 하나에 얼마나 매달려 있는가** 뿐이고, 재현 도구가 그것을
- * 감추면 재현이 아니라 주장이 된다.
- *
- * ## 부품
- *
- * 바로 위 성과 스트립과 **같은 것**을 쓴다(`ui/Stat` 의 StatColumn·Stat, 칸
- * 사이는 여백이 아니라 헤어라인). 이 창이 제 표를 또 만들면 두 벌이 되고 한쪽만
- * 낡는다 — 형제의 부품을 임포트하는 것이 이 리포의 규칙이다. 칸을 누르면 그
- * 노브가 옮겨 가되 숫자는 안 바뀐다(pinned 규율: 핀은 「실행」이 옮긴다). */
-function Sensitivity({
-  run,
-  onPick,
-}: {
-  run: MrStrategyRun;
-  onPick: (patch: Partial<MrStrategyParams>) => void;
-}) {
-  if (run.neighbors.length === 0) return null;
-  return (
-    <VStack gap={0.5} width="100%">
-      <HStack gap={1} alignItems="baseline" justifyContent="space-between">
-        <Text font="label2" as="h3" noWrap>
-          이웃 칸
-        </Text>
-        {/* 이 줄이 늘어난 이유 [OWNER 2026-08-28 — "전체 기간 Grid Search(이웃 칸
-            최적화)를 폐기하십시오"]. 이 표는 **견고성 보기**이지 파라미터를
-            고르는 도구가 아니다. 전진분석으로 실측했더니(BSS-3Y·훈련 3년 →
-            시험 1년 · 27칸) 훈련 창 Sharpe 순위와 다음 해 순위의 상관이
-            +0.85 / −0.10 / −0.21 / +0.17 로 **넷 중 셋이 0 근처거나 음수**였고,
-            규칙대로 고른 칸의 다음 해 순위는 4/15 · 16/21 · 13/21 · **24/24**
-            였다. 즉 「제일 좋은 칸」을 고르는 행위 자체가 값을 안 더한다 —
-            화면이 그 사실을 말하지 않으면 이 표가 최적화를 권하는 것으로 읽힌다.
-            근거와 재현: `backend/scripts/mr_live_report.py`. */}
-        <Text font="legal" as="span" color="fgMuted">
-          노브 하나만 옮기고 나머지는 지금 값 고정 · 누르면 그 값으로 바뀌어요(숫자는 실행해야 바뀌어요) ·
-          견고성을 보는 표예요 — 제일 좋은 칸을 고르는 데는 쓰지 마세요(전진분석에서 그 선택은 다음 해를 못 맞혔어요)
-        </Text>
-      </HStack>
-      <HStack className="sr-stats" width="100%" flexWrap="wrap">
-        {run.neighbors.map((row) => (
-          <StatColumn key={row.knob} title={row.label}>
-            {row.cells.map((c) => (
-              <button
-                key={c.v}
-                type="button"
-                /* 알약(`.sr-pillbtn`)이 아니다 — 그건 32px 단행이고 선택 시 잉크
-                   반전이라 방향색 손익이 그 위에서 안 읽힌다. 여기서 필요한 것은
-                   누를 수 있는 «Stat 한 칸» 뿐이라 버튼의 기본 껍데기만 벗긴다. */
-                style={{ background: 'none', border: 0, padding: 0, font: 'inherit', textAlign: 'left', cursor: 'pointer' }}
-                aria-label={`${row.label} ${c.v}${row.suffix} — 총손익 ${fmtKrw(c.totalPnl)}`}
-                aria-pressed={c.current}
-                onClick={() => onPick({ [row.knob]: c.v } as Partial<MrStrategyParams>)}
-              >
-                <Stat
-                  /* 단위는 열 제목이 진다 — 여기 붙이면 caption 의 대문자 변환이
-                     σ 를 Σ 로 만든다(실측). 칸에는 숫자와 「지금」만 남는다. */
-                  label={`${Number(c.v.toFixed(1))}${c.current ? ' · 지금' : ''}`}
-                  value={fmtKrw(c.totalPnl)}
-                  tone={c.totalPnl > 0 ? 'up' : c.totalPnl < 0 ? 'down' : undefined}
-                  note={`SR ${c.sharpe == null ? '—' : c.sharpe.toFixed(2)} · ${c.numTrades}거래`}
-                />
-              </button>
-            ))}
-          </StatColumn>
-        ))}
-      </HStack>
-    </VStack>
-  );
-}
-
+ * **서버는 그대로다** — `/api/mr/strategy` 는 `diag` 와 `neighbors` 를 계속
+ * 내고 계약(`MrStrategyRun`)에도 남아 있다. 되살리려면 이 자리에 컴포넌트를
+ * 다시 세우면 된다(git 이력: 이 주석을 넣은 커밋 하나). 화면에서 내린 것이지
+ * 측정을 끈 것이 아니다 — 실전 규칙 다섯을 내릴 때와 같은 규율이다. */
 /* 차트 높이 두 급 — Backtest 의 LINKED PAIR 치수 그대로다(`LinkedCharts.tsx`:
    위 종목 200 · 아래 누적손익 140). 주선이 사는 차트가 크고 파생(z·누적)이
    작다 — 세로로 쌓았을 때 «무엇이 주인공인가»를 높이가 말한다. */
@@ -827,15 +663,20 @@ export function StrategyWindow({
      물건을 같은 자리에 둔다. 종전에는 거래 패널의 «내용이 바뀌는» 판이라
      목록과 대사를 같이 볼 수 없었다. */
   const reconPane = sel && run ? (
-    <VStack gap={0.5} width="100%">
+    /* 서랍의 **남는 높이를 받는다** — `.sr-drawer-body` 가 열 flex 라
+       (`flex: 1 · min-height: 0`) 창이 눌리면 이 패널도 같이 줄어야 한다. */
+    <VStack gap={0.5} width="100%" flexGrow={1} minHeight={0}>
       {/* 무엇을 펴 놓았는지 — 서랍은 제목이 없으므로 이 줄이 그 일을 한다. */}
       <Text font="caption" as="span" color="fgMuted">
         {reconSub(sel, run)}
       </Text>
-      {/* 서랍 안이라 높이 상한은 **30vh**(`ReconStack` 기본과 같은 값 —
-          백테스트 서랍이 표 하나일 때 쓰는 그것). `position: relative` 는
-          sticky 머리의 기준이고 `overflow` 는 Box prop 이 없어 style 에 남는다. */}
-      <Box style={{ position: 'relative', maxHeight: '30vh', overflow: 'auto' }} width="100%">
+      {/* 높이를 **박지 않는다** — 서랍이 준 남는 높이를 받고, 스크롤(가로·세로)은
+          CDS 가 표에 두른 컨테이너 하나가 진다. 종전에는 여기 `maxHeight: 30vh`
+          가 박혀 있어 서랍이 눌린 판(실측 173px)에서 상자 바닥이 창 밖으로
+          나갔고, **가로 스크롤바가 그 바닥에 달려 있어 같이 사라졌다**
+          [OWNER 2026-09-02 — "왜 밑에 좌우로 드래그 할 수 있는 홀더 같은게
+          없어?"]. 규칙과 근거는 `.sr-mr-drawertable`(theme/type.css). */}
+      <Box className="sr-mr-drawertable" width="100%">
                 <Table bordered={false}>
                   <TableHeader sticky>
                     <TableRow>
@@ -1119,16 +960,6 @@ export function StrategyWindow({
                 ) : null}
               </StatColumn>
             </HStack>
-
-            {/* 성과를 읽은 **직후**가 「그게 진짜냐」가 나오는 자리다. 진단이
-                먼저 서고 이웃 칸(노브 견고성)이 그다음이다 — 둘 다 같은 질문의
-                다른 축이지만, 「승률이 어디서 왔는가」가 「한 칸 옆은 어떤가」보다
-                앞선 질문이다. */}
-            <Diagnostics run={run} />
-
-            {/* 견고성은 고른 칸이 아니라 이웃과의 차이다 — 성과 숫자를 읽은
-                바로 그 자리에서 말한다. */}
-            <Sensitivity run={run} onPick={set} />
 
             {/* ── 표시 구간 [OWNER 2026-09-02 — "지난 한달, 지난 한분기, 지난
                 1년칸을 신설"] — 네 패널(값·z·누적·거래 표)을 같이 자른다. 한

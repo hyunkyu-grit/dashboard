@@ -251,6 +251,59 @@ describe('가로 간격은 앱에 한 값이다 — 12px 동간격', () => {
   });
 });
 
+describe('서랍은 남는 높이를 받고, 몸통이 양보한다', () => {
+  /* [OWNER 2026-09-02 — "일별대사에서 왜 밑에 좌우로 드래그 할 수 있는 홀더
+     같은게 없어?"]. 바는 있었고 **화면 밖에 있었다** — 표 상자에 박아 둔
+     `maxHeight: 30vh`(256px)가 서랍이 실제로 준 높이(173px)보다 커서, 가로 바가
+     달린 바닥 모서리가 창 밖으로 나갔다. `.sr-drawer-body` 의 주석이 그 실패를
+     이미 경고하고 있었다(«안 줄면 스크롤러가 둘이 되고…»). */
+  it('대사 상자는 높이를 박지 않고 받는다', () => {
+    const code = src('src/mr/StrategyWindow.tsx');
+    expect(code).toContain('className="sr-mr-drawertable"');
+    expect(code).not.toMatch(/maxHeight: '30vh'/);
+    const css = fs.readFileSync(path.join(root, 'src/theme/type.css'), 'utf8');
+    expect(css).toMatch(/\.sr-mr-drawertable \{[^}]*flex: 1 1 auto/s);
+    /* 스크롤은 CDS 가 두른 컨테이너 하나가 진다(자식 선택자 — 해시 클래스는
+       빌드마다 바뀐다). */
+    expect(css).toMatch(/\.sr-mr-drawertable > div \{\s*max-height: 100%;/);
+  });
+
+  it('서랍은 안 줄어든다 — 창이 상한에 닿으면 몸통이 준다', () => {
+    const css = fs.readFileSync(path.join(root, 'src/theme/type.css'), 'utf8');
+    const block = css.slice(css.indexOf('.sr-drawer {'), css.indexOf('.sr-drawer-tabs'));
+    expect(block).toMatch(/flex-shrink: 0;/);
+  });
+});
+
+describe('몸통에서 내린 절 — 답이 끝난 질문은 화면에 안 세운다', () => {
+  /* [OWNER 2026-09-02 — 몸통 1,940px 에서 내릴 절을 고른 그 선택: 진단 135px ·
+     이웃 칸 260px]. 실전 규칙 다섯과 같은 규율이다 — 화면에서만 내리고 서버·
+     계약은 그대로 둔다. */
+  const code = src('src/mr/StrategyWindow.tsx');
+
+  it('진단·이웃 칸 컴포넌트가 없다', () => {
+    expect(code).not.toContain('function Diagnostics');
+    expect(code).not.toContain('function Sensitivity');
+    expect(code).not.toContain('<Diagnostics');
+    expect(code).not.toContain('<Sensitivity');
+  });
+
+  it('서버 계약은 살아 있다 — 측정을 끈 것이 아니다', () => {
+    const api = src('src/mr/api.ts');
+    expect(api).toMatch(/diag:/);
+    expect(api).toMatch(/neighbors:/);
+    const py = fs.readFileSync(path.join(root, 'backend/app/main.py'), 'utf8');
+    expect(py).toMatch(/"diag":/);
+    expect(py).toMatch(/"neighbors":/);
+  });
+
+  it('내린 이유가 주석에 남아 있다', () => {
+    const raw = fs.readFileSync(path.join(root, 'src/mr/StrategyWindow.tsx'), 'utf8');
+    expect(raw).toMatch(/화면에서 내렸다/);
+    expect(raw).toMatch(/서버는 그대로다/);
+  });
+});
+
 describe('머리 주석이 화면과 같은 말을 한다', () => {
   it('차트 라이브러리를 CDS CartesianChart 라고 적지 않는다', () => {
     /* 15차트가 lightweight-charts 로 옮겨 간 뒤(CLAUDE.md 규칙 7) 그 문장은
