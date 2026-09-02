@@ -694,7 +694,7 @@ export function MrPage() {
                   </Text>
                 </HStack>
                 <BookDetail watch={watch} />
-                <HStack className="sr-stats" alignItems="stretch" width="100%">
+                <HStack className="sr-stats" width="100%" flexWrap="wrap">
                   <StatColumn title="묶음">
                     <Stat label="만기" value={`${watch.n}개`} />
                     <Stat label="밴드 밖" value={`${watch.outLow + watch.outHigh}개`}
@@ -753,7 +753,7 @@ export function MrPage() {
                 종목 머리 실측을 적어 두었다). Main 미리보기의 「이 구간 · 변화 ·
                 52주」와 같은 자리·같은 부품. 방향색은 안 쓴다 — z 는 방향이
                 아니라 자리다. */}
-            <HStack className="sr-stats" alignItems="stretch" width="100%">
+            <HStack className="sr-stats" width="100%" flexWrap="wrap">
               <StatColumn title="밴드">
                 <Stat label="늘어남" value={fmtZ(sel.z)} />
                 <Stat label="%B" value={sel.pctB == null ? '—' : sel.pctB.toFixed(0)} />

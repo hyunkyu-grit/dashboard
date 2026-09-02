@@ -25,6 +25,20 @@ export const WHY_WORD: Record<MrStrategyTrade['why'], string> = {
   open: '미청산',
 };
 
+/** 표 머리의 활자를 고른다 — **소문자가 들어 있으면 `legal`, 아니면 `caption`**.
+ *
+ *  이 리포가 이미 정해 둔 기준이다(`StrategyWindow` 대사표 머리 주석·
+ *  `BookWindow` 만기별 표 주석): CDS 기본 테마의 `textTransform.caption =
+ *  'uppercase'` 가 「z」를 「Z」로, 「bp」를 「BP」로 만든다. 둘은 크기가 같고
+ *  (0.8125rem) 중량·대문자화만 다르므로, **기호와 단위가 든 머리**만 `legal` 이다.
+ *
+ *  기준이 사람의 눈대중에 걸리지 않게 함수로 둔다 — 2026-09-02 감사에서 거래 표
+ *  머리 넷(`#`·`진입 IRS`·`진입 CD`·`이탈 최대`)이 소문자가 없는데도 `legal` 로
+ *  서 있었다. 대문자화가 망칠 글자가 없으니 화면은 안 틀렸지만, 같은 행의 머리가
+ *  두 중량으로 갈렸다. */
+export const headFont = (label: string): 'caption' | 'legal' =>
+  /[a-z]/.test(label) ? 'legal' : 'caption';
+
 /** 짧은 날짜 — 구간 라벨용. `2020-01-02` → `20-01`. 칸이 좁아 연·월만 남긴다. */
 export const ym = (iso: string): string => `${iso.slice(2, 4)}-${iso.slice(5, 7)}`;
 

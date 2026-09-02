@@ -50,6 +50,7 @@ import { TimeChart, useStackedScales, type TimeLine } from '@/chart/TimeChart';
 import type { ScalePriceLine } from '@/chart/ScaleChart';
 import { BacktestUnavailable } from '@/lib/api';
 import { fmtKrw } from '@/lib/krw';
+import { Segmented } from '@/ui/ControlCard';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { ReadoutCard, ReadoutFact, ReadoutMoney, placeReadout } from '@/ui/ReadoutCard';
 import { Stat, StatColumn } from '@/ui/Stat';
@@ -377,7 +378,7 @@ export function BookWindow({
           </Text>
         ) : (
           <>
-            <HStack className="sr-stats" alignItems="stretch" width="100%">
+            <HStack className="sr-stats" width="100%" flexWrap="wrap">
               <StatColumn title="성과">
                 <Stat
                   label="총손익"
@@ -497,7 +498,7 @@ export function BookWindow({
                   분산 효과는 쌍상관이 정해요 — 아홉이 같이 움직이면 아홉이 아니에요
                 </Text>
               </HStack>
-              <HStack className="sr-stats" alignItems="stretch" width="100%">
+              <HStack className="sr-stats" width="100%" flexWrap="wrap">
                 <StatColumn title="통합 대 개별">
                   <Stat
                     label="통합 SR"
@@ -665,27 +666,24 @@ export function BookWindow({
                       : '만기 순이에요 — 커브의 어디가 벌었는지가 순위로는 안 보여요'
                     : `${run.summary.numTrades}건을 한 통에${only ? ` · ${only.legs}` : ''}`
                 }
+                /* 둘 중 하나를 고르는 **배타 선택**이라 캐논 `Segmented` 다
+                   [2026-09-02 간격 감사 — 노브 여섯이 그리로 갔는데 이 자리만
+                   손 알약으로 남아 있었다]. 폭은 감싸는 상자가 지고(`fill`),
+                   132 = 「만기별」·「거래」가 세그먼트 패딩(16+16)과 함께 서는
+                   자연폭에 여유 — 라벨이 길어지면 다시 잰다. */
                 aside={
-                  <HStack gap={0.5} alignItems="center">
-                    <button
-                      type="button"
-                      className="sr-pillbtn"
-                      data-on={tab === 'legs' || undefined}
-                      aria-pressed={tab === 'legs'}
-                      onClick={() => setTab('legs')}
-                    >
-                      만기별
-                    </button>
-                    <button
-                      type="button"
-                      className="sr-pillbtn"
-                      data-on={tab === 'trades' || undefined}
-                      aria-pressed={tab === 'trades'}
-                      onClick={() => setTab('trades')}
-                    >
-                      거래
-                    </button>
-                  </HStack>
+                  <Box width={132}>
+                    <Segmented
+                      fill
+                      label="보기"
+                      value={tab}
+                      options={[
+                        { value: 'legs' as const, label: '만기별' },
+                        { value: 'trades' as const, label: '거래' },
+                      ]}
+                      onChange={(v) => setTab(v)}
+                    />
+                  </Box>
                 }
               >
                 {tab === 'legs' ? <LegTable run={run} onPick={onPickLeg} /> : <TradeTable run={run} />}

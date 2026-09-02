@@ -164,6 +164,19 @@ describe('칸 폭은 실측이고 죽은 폭이 없다', () => {
   const knob = src('src/mr/KnobBar.tsx');
   const knobRaw = fs.readFileSync(path.join(root, 'src/mr/KnobBar.tsx'), 'utf8');
 
+  it('세그먼트는 제 상자를 채운다 — 폭을 손으로 맞추는 대신 구조로', () => {
+    /* CDS Tabs 기본은 fit-content 라 상자와 컨트롤 사이에 죽은 폭이 남는다.
+       `fill`(→ equalWidth)이 그것을 0 으로 만든다 — 얼라인 7 이 Select 에
+       DROPDOWN_STYLES 로 막아 둔 그 실패의 세그먼트 판(실측 2026-09-02:
+       5.1~27.8px → 0). Backtest 방향 칸은 고정폭 상자가 아니라 켜지 않는다. */
+    const cc = src('src/ui/ControlCard.tsx');
+    expect(cc).toContain('equalWidth={fill}');
+    /* MR 의 세그먼트 여섯 자리가 전부 켠다. */
+    expect((knob.match(/<Segmented\s+fill/g) || []).length).toBe(6);
+    /* Backtest 방향 칸은 자기 줄에 살아서 켜면 줄 전체로 늘어난다 — 안 켠다. */
+    expect(src('src/backtest/BacktestWindow.tsx')).not.toMatch(/<Segmented\s+fill/);
+  });
+
   it('실전 규칙 다섯 칸이 세그먼트 실폭에 맞춰져 있다', () => {
     for (const w of ['192', '182', '114', '90']) {
       expect(knob, `width ${w}`).toContain(`<Box width={${w}}`);
@@ -175,11 +188,13 @@ describe('칸 폭은 실측이고 죽은 폭이 없다', () => {
   });
 
   it('비용 칸은 알약 셋 + 자유 입력을 담는다 — 종전 196 은 15.3px 모자랐다', () => {
-    expect(knob).toContain('<Box width={212}>');
+    /* 220 = 211.3 + 자유 입력이 56→64 로 커진 8. 자유 입력 폭의 근거는 그 칸
+       주석에 있다(글자 자리 22px 로는 자기 화면의 프리셋 0.05 가 안 들어갔다). */
+    expect(knob).toContain('<Box width={220}>');
     /* 주석이 그 산술을 «정정으로» 적고 있어야 한다 — 종전 값을 지우면 왜
        212 인지가 다시 근거 없는 수가 된다(이 리포는 정정 이력을 주석에 남긴다). */
     expect(knobRaw).toMatch(/종전 주석은 「196 = 알약 셋/);
-    expect(knobRaw).toMatch(/211\.3px/);
+    expect(knobRaw).toMatch(/219\.3px/);
   });
 
   it('σ 칸은 일부러 같은 폭이고, 그 대가(죽은 폭)를 주석이 적는다', () => {

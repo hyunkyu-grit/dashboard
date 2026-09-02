@@ -170,6 +170,7 @@ export function Segmented<T extends string>({
   options,
   onChange,
   label,
+  fill,
 }: {
   value: T;
   /** `title` 은 선택지 하나의 뜻풀이 — native title 로 붙는다. MR 노브의 손
@@ -179,12 +180,24 @@ export function Segmented<T extends string>({
   options: { value: T; label: string; title?: string }[];
   onChange: (v: T) => void;
   label: string;
+  /** **제 상자를 채운다** [2026-09-02 간격 감사]. CDS `Tabs` 기본은
+   *  `width: 'fit-content'` 라 세그먼트가 자연폭으로 서고, 감싸는
+   *  `<Box width={N}>` 과의 차이가 «죽은 폭»으로 남는다 — 얼라인 7 이 `Select`
+   *  에 대해 `DROPDOWN_STYLES`(root·control 100%)로 막아 둔 바로 그 실패다.
+   *  `equalWidth` 가 `alignSelf: stretch` + `width: 100%` + 탭 `flex: 1` 을
+   *  붙여 폭을 상자가 지게 한다(CDS `SegmentedTabs.js:24-26`).
+   *
+   *  **기본값이 아닌 이유**: Backtest 방향 칸은 고정폭 상자가 아니라 «자기 줄»에
+   *  살아서(그 파일 :792 주석), 채우게 하면 세그먼트가 줄 전체로 늘어난다.
+   *  상자가 폭을 선언하는 자리(MR 설정 줄)에서만 켠다. */
+  fill?: boolean;
 }) {
   const tabs = options.map((o) => ({ id: o.value, label: o.label, title: o.title }));
   return (
     <SegmentedTabs
       accessibilityLabel={label}
       className="sr-ctlfont"
+      equalWidth={fill}
       styles={{ tab: { height: CONTROL_H }, tabContainer: { height: CONTROL_H } }}
       tabs={tabs}
       activeTab={tabs.find((t) => t.id === value) ?? null}

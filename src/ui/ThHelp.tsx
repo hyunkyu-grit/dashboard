@@ -35,9 +35,16 @@ export function ThHelp({ label, help }: { label: string; help: string }) {
       maxWidth={280}
       placement="bottom"
     >
-      <span className="sr-rv-thhelp" tabIndex={0}>
+      {/* **자기 활자를 진다** [2026-09-02 간격 감사]. 종전에는 맨 `<span>` 이라
+          숙주의 활자를 상속했는데, CDS `TableCell` 은 children 을
+          `<Text font={thead ? 'headline' : 'body'}>` 로 감싼다 — 그래서 rv(손
+          표, 13px)와 MR(CDS 표) 두 화면에서 같은 부품이 다른 크기로 섰다.
+          실측: MR 랭킹 표 머리 일곱 칸 중 셋이 headline 16/24, 넷이 caption
+          13/16 이라 한 행에 두 활자가 섞였다. 부품이 숙주의 글꼴을 상속하면
+          숙주마다 다른 활자가 된다 — 머리 활자는 `caption`(열 머리의 그것). */}
+      <Text font="caption" as="span" color="fgMuted" className="sr-rv-thhelp" tabIndex={0}>
         {label}
-      </span>
+      </Text>
     </Tooltip>
   );
 }

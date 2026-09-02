@@ -19,6 +19,7 @@ import { Box } from '@coinbase/cds-web/layout';
 
 import { TimeChart, type TimeLine } from '@/chart/TimeChart';
 import type { Unit } from '@/lib/api';
+import { fmtLevel } from '@/lib/format';
 import { ReadoutCard, ReadoutLevel, placeReadout } from '@/ui/ReadoutCard';
 
 import type { MrHistory } from './api';
@@ -60,12 +61,21 @@ export function BandChart({ history }: { history: MrHistory }) {
       onMouseLeave={() => setIdx(null)}
     >
       <TimeChart
+        /* 240 — 이 앱의 차트 높이 급(320 미리보기 · 200/140 LINKED PAIR ·
+           180 rv 소형) 중 어느 것도 아니다. **밴드 셋이 겹쳐 서기 때문**이다:
+           주선 + 중심선 + 상·하단이 한 그림에 들어가 180 에서는 상단선과
+           중심선이 붙어 읽히고, 200(LINKED PAIR 위 차트)은 x축을 자기가 지는
+           차트의 높이라 여기(축 있음 + 밴드 넷)와는 조건이 다르다. 카드가 준
+           자리(상세 카드 몸통)가 그 이상을 허용한다 — 2026-09-02 간격 감사가
+           「근거 없는 다섯 번째 수」로 지적해 근거를 적는다. */
         height={240}
         accessibilityLabel={`${history.label} 값과 밴드 이력`}
         dates={dates}
         lines={lines}
         onHoverIndex={setIdx}
-        hoverLabel={() => `${history.label} 이력 짚기`}
+        /* 짚은 봉을 문장으로 — 상수 문장은 «무엇을 짚었는지»를 안 말한다
+           (CLAUDE.md 규칙 7 · Main 미리보기 `scrubLabel` 의 그 자리). */
+        hoverLabel={(i) => `${history.label} ${dates[i]} ${fmtLevel(history.points[i]?.v ?? null, unit)}`}
       />
       {cur ? (
         <ReadoutCard title={cur.t}>

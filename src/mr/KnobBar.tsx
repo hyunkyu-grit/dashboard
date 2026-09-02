@@ -108,7 +108,8 @@ function SigmaPick({
 /* 숫자 칸이던 `NumInput` 은 공용 `NumField`(`ui/ControlCard`)가 됐다
  * [OWNER 2026-09-02 — "공용 부품은 한 벌로 승격"] — 같은 blur/Enter 커밋
  * 기계가 시뮬·rv 에 두 벌 더 있었다. 여기 있던 «음수 거부»(n >= 0)는 공용의
- * `min={0}` 이 지고, 폭은 종전대로 호출부의 `<Box width={56}>` 이 진다.
+ * `min={0}` 이 지고, 폭은 호출부의 `<Box width={64}>` 이 진다(그 폭의 산술은
+ * 각 호출부 주석에 — 56 이던 시절 자기 화면의 프리셋이 안 들어갔다).
  * 라벨은 Field 가 진다 — NumField 의 label 은 접근성 이름이다. */
 
 
@@ -160,7 +161,12 @@ export function MrKnobBar({
 }) {
   const set = onChange;
   return (
-    <>
+    /* 두 줄의 seam 을 **부품이 진다**(gap 1 = 6px). Fragment 로 두면 이 간격을
+       창 몸통의 gap 2(16px)가 지고, 그러면 「설정 줄 ↔ 실전 규칙 줄」이
+       「노브 바 ↔ 성과 스트립」과 같은 거리로 서서 두 줄이 한 묶음으로 안
+       읽힌다 — Backtest 는 북의 줄들을 `VStack gap={1}` 에 담는다(그 파일
+       :591). 2026-09-02 간격 감사. */
+    <VStack gap={1} width="100%">
       {/* ── 설정 줄 — 원본 노브 일곱 + 실행. 실행은 사람이 누른다.
           바닥 정렬 행: 블록 높이가 곧 라벨 높이(2026-08-19 얼라인 레인),
           한 행의 컨트롤은 전부 32px 등고(control-parity 의 그 등고)라
@@ -168,14 +174,22 @@ export function MrKnobBar({
       {/* 묶음 안은 좁게, 묶음 사이는 넓게 — 백테스트 설정 줄과 **같은 리듬**
           이다(`theme/type.css` 의 `.sr-fgroup` 주석에 근거). 종전에는 노브
           여덟이 전부 12px 등간격이라 σ 셋이 한 가족인지 각자인지 화면이 말하지
-          않았다(실측 2026-08-27). 읽히는 묶음은 넷이다 —
-          [종목·룩백] · [진입σ·청산σ·손절σ] · [비용·명목] · [실행]. */}
+          않았다(실측 2026-08-27). 읽히는 묶음은 **다섯**이다 —
+          [종목·룩백] · [진입 규칙] · [진입σ·청산σ·손절σ] · [비용·명목] · [실행].
+          진입 규칙이 σ 셋과 따로 서는 근거는 그 칸 주석에 있다(문턱은 「얼마나」,
+          이것은 「언제」). ⚠ 종전 주석은 「넷」이라 적어 진입 규칙을 빠뜨렸다
+          (2026-09-02 간격 감사). */}
       <HStack gap={1} alignItems="flex-end" flexWrap="wrap">
         {/* 폭은 감싸는 `Box` 가 준다 — `Field` 규약(`ui/ControlCard` 머리
             주석). 상자 없이 행에 바로 놓으면 그 칸만 자기 내용 폭이 되어
-            형제와 어긋난다. 160 은 최장 계열명(「KTB10 내재금리」)이 안 잘리는
-            폭이다 — 말줄임 금지. 통합 장부의 「BSS 통합 · 9만기」도 들어간다. */}
-        <Box width={160}>
+            형제와 어긋난다. **96 = 최장 계열명 「KTB10 내재금리」 92.31px
+            (Pretendard 14px/400 어드밴스 합, 실측 2026-09-02) + 여유 4** — 값이
+            바뀌어도 뒤 칸이 안 밀리게 최장값으로 잡는다(말줄임 금지). 통합 장부가
+            넘기는 실제 문자열은 「BSS 만기 9개」 77.59px 이라 함께 들어간다
+            (종전 주석은 코드에 없는 「BSS 통합 · 9만기」를 인용하고 있었다).
+            ⚠ 종전 160 은 죽은 폭이 67.7~107.5px 라 이 줄 첫 빈틈이 73.7px 로
+            벌어졌다 — 묶음 안(6)이 묶음 사이(24)보다 넓어 근접성이 뒤집혔다. */}
+        <Box width={96}>
           <Field label={leadLabel}>
             {/* 컨트롤이 아닌 값도 같은 32px 상자에 담는다 — 백테스트 「진입
                 레벨」 칸의 판례(안 담으면 이 블록만 바닥에서 어긋난다). */}
@@ -186,9 +200,12 @@ export function MrKnobBar({
             </HStack>
           </Field>
         </Box>
-        {/* 200 = 알약 넷(20·60·120·252) + 자유 입력 56 + 간격 — 실측 잉크 199
-            (2026-09-02)에 한 칸 여유. 종전 208 은 9px 이 죽어 있었다. */}
-        <Box width={200}>
+        {/* 208 = 알약 **셋**(20·60·120) + 간격 + 자유 입력 64 = 실측 잉크 207 에
+            한 칸 여유. ⚠ 종전 주석은 「알약 **넷**(20·60·120·252)」이라고 적었는데
+            이 줄이 그리는 프리셋은 `MR_STRATEGY_LOOKBACKS` **셋**이다 — 넷짜리
+            목록은 보드의 `MR_WINDOWS` 다(2026-09-02 감사가 잡았다: 폭은 맞고
+            근거 문장만 틀렸었다). */}
+        <Box width={208}>
           <Field label="룩백 (일)">
             <HStack gap={0.5} alignItems="center">
               {MR_STRATEGY_LOOKBACKS.map((w) => (
@@ -203,7 +220,10 @@ export function MrKnobBar({
                   {w}
                 </button>
               ))}
-              <Box width={56}>
+              {/* 64 — 비용 칸과 같은 성격이라 같은 폭이다. 최장 값은 보드의
+                  정식 룩백 「252」 23.03px(실측)이라 종전 56(글자 자리 22px)에서
+                  잘렸다. */}
+              <Box width={64}>
                 <NumField label="룩백(일)" value={knobs.lookback} min={0}
                   onCommit={(v) => set({ lookback: Math.max(2, Math.round(v)) })} />
               </Box>
@@ -227,6 +247,7 @@ export function MrKnobBar({
             help="이탈 즉시는 밴드를 뚫는 봉에, 밴드 복귀는 밖에 있다가 돌아오는 봉에 들어가요. 방향은 둘 다 나갔던 쪽이 정해요."
           >
             <Segmented
+                fill
               label="진입 규칙"
               value={knobs.entryMode}
               options={MR_ENTRY_MODES.map((m) => ({ value: m.v, label: m.label, title: m.help }))}
@@ -271,11 +292,11 @@ export function MrKnobBar({
             아니고, 싸게 잡은 비용은 결론을 통째로 뒤집는다. 자유 입력은 남긴다 —
             그날 그 종목의 호가폭이 셋 중 어느 것도 아닐 수 있다.
             **폭 212 = 실측**(2026-09-02): 알약 셋 0.05/0.2/0.5 + 간격 + 자유
-            입력 56 의 실제 잉크가 211.3px 다. 종전 주석은 「196 = 알약 셋 +
+            입력 64 의 실제 잉크가 219.3px 다. 종전 주석은 「196 = 알약 셋 +
             자유 입력 56 + 간격」이라고 적었는데 그 산술이 15.3px 모자라, 상자
             선언이 거짓이 되고 내용이 이웃 칸(명목)을 침범했다 — 상자 사이
             간격은 6px 인데 잉크 사이는 −9.3px 이었다(얼라인 7 감사). */}
-        <Box width={212}>
+        <Box width={220}>
           <Field
             label="비용 (bp)"
             help="왕복이 아니라 편도예요. 0.5는 오너 실측(국고3Y·IRS3Y 패키지)이고 0.05는 첫 PMS 값이에요."
@@ -294,12 +315,22 @@ export function MrKnobBar({
                   {v}
                 </button>
               ))}
-              <Box width={56}>
+              {/* 64 = 최장 값 「0.05」 25.91px + CDS TextInput 좌우 패딩 16+16 +
+                  테두리 2 = 59.9 에 여유(실측 2026-09-02). 종전 56 은 글자 자리가
+                  22px 뿐이라 **자기 화면의 프리셋 0.05(25.9)와 도움말이 말하는
+                  동적 비용 0.15(23.1)가 안 들어갔다** — 입력 칸은 말줄임 대신
+                  잘라서 스크롤하므로 포커스가 없으면 끝자리가 조용히 사라진다
+                  (말줄임 금지 §3 의 잘림과 같은 등급). */}
+              <Box width={64}>
                 <NumField label="비용(bp)" value={knobs.costBp} min={0} onCommit={(v) => set({ costBp: v })} />
               </Box>
             </HStack>
           </Field>
         </Box>
+        {/* 96 — 글자 자리 62px(96 − CDS 좌우 패딩 32 − 테두리 2)이고, 이 데스크가
+            넣는 최대 명목 「10000000」(1천만원/bp)이 59.92px 다(13px/500 실측
+            2026-09-02). 그 위(1억)는 70.02 라 안 들어간다 — 그때는 폭을 108 로
+            올리거나 `NumField` 의 `format` 으로 천 단위를 넣고 다시 잰다. */}
         <Box width={96}>
           {/* 「원」은 한글이다 [OWNER 2026-08-28 — "이게 표기가 왜 이런식으로
               되는거지?"]. 종전에는 `₩`(U+20A9)를 썼는데, 이 앱의 본문 폰트
@@ -369,6 +400,7 @@ export function MrKnobBar({
             >
               {/* 숫자 값은 Backtest 방향 칸의 판례대로 String 으로 오간다. */}
               <Segmented
+                fill
                 label="타임스탑 (일)"
                 value={String(knobs.timeStop)}
                 options={MR_TIME_STOPS.map((v) => ({
@@ -385,6 +417,7 @@ export function MrKnobBar({
               help="진입만 막아요. 청산·손절은 필터를 안 봐요 — 나가는 문까지 조건을 달면 조건이 꺼진 동안 포지션이 갇혀요."
             >
               <Segmented
+                fill
                 label="레짐 필터"
                 value={knobs.regime}
                 options={MR_REGIMES.map((m) => ({ value: m.v, label: m.label, title: m.help }))}
@@ -398,6 +431,7 @@ export function MrKnobBar({
               help="동적은 변동성 백분위에 연동해 편도 0.15~0.25bp를 물려요. 유일하게 성과를 깎는 항이에요."
             >
               <Segmented
+                fill
                 label="비용 모델"
                 value={knobs.costModel}
                 options={MR_COST_MODELS.map((m) => ({ value: m.v, label: m.label, title: m.help }))}
@@ -412,6 +446,7 @@ export function MrKnobBar({
             >
               {/* 불리언 값도 String 으로 오간다(위 타임스탑과 같은 판례). */}
               <Segmented
+                fill
                 label="역신호 청산"
                 value={String(knobs.reverseExit) as 'false' | 'true'}
                 options={[
@@ -428,6 +463,7 @@ export function MrKnobBar({
               help="표본 끝의 열린 다리를 거래로 세요. 총손익·MDD는 원래부터 이걸 지고 있어서 안 바뀌고, 승률·거래 수·보유기간만 바뀌어요."
             >
               <Segmented
+                fill
                 label="미청산 계상"
                 value={String(knobs.countOpen) as 'false' | 'true'}
                 options={[
@@ -440,6 +476,6 @@ export function MrKnobBar({
           </Box>
         </HStack>
       </VStack>
-    </>
+    </VStack>
   );
 }

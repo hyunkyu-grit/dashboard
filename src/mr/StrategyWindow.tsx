@@ -69,7 +69,7 @@ import {
   type MrStrategyTrade,
 } from './api';
 import { MrKnobBar, mrKnobsStale } from './KnobBar';
-import { Panel, WHY_WORD, ym } from './parts';
+import { Panel, WHY_WORD, headFont, ym } from './parts';
 
 /* 얼라인 규칙 [OWNER 2026-08-25 — CLAUDE.md «얼라인» 절]. 첫 판은 라벨을
  * 컨트롤 **옆**에 붙였고, 라벨 폭이 제각각이라 컨트롤 시작점이 계단이 졌다
@@ -171,7 +171,7 @@ function Diagnostics({ run }: { run: MrStrategyRun }) {
           승률이 어디서 왔는지 · 최근에도 유지되는지 — 노브를 바꾸면 같이 바뀌어요
         </Text>
       </HStack>
-      <HStack className="sr-stats" alignItems="stretch" width="100%">
+      <HStack className="sr-stats" width="100%" flexWrap="wrap">
         <StatColumn title="신호가 한 일">
           {on ? (
             <>
@@ -280,7 +280,7 @@ function Sensitivity({
           견고성을 보는 표예요 — 제일 좋은 칸을 고르는 데는 쓰지 마세요(전진분석에서 그 선택은 다음 해를 못 맞혔어요)
         </Text>
       </HStack>
-      <HStack className="sr-stats" alignItems="stretch" width="100%">
+      <HStack className="sr-stats" width="100%" flexWrap="wrap">
         {run.neighbors.map((row) => (
           <StatColumn key={row.knob} title={row.label}>
             {row.cells.map((c) => (
@@ -854,7 +854,7 @@ export function StrategyWindow({
                               단위가 든 머리**는 `legal` 이 맞다 — `rv/SectorLane`
                               이 같은 근거로 정한 판례다. 이 표는 단위가 곧 검산의
                               전제라(감도 ₩/bp × Δbp) 대문자 BP 는 오식이다. */}
-                          <Text font="legal" as="span" color="fgMuted" noWrap>{c.k}</Text>
+                          <Text font={headFont(c.k)} as="span" color="fgMuted" noWrap>{c.k}</Text>
                         </TableCell>
                       ))}
                     </TableRow>
@@ -1004,7 +1004,7 @@ export function StrategyWindow({
                    첫 판은 같은 모양을 손으로 다시 만들었다(중복). 표기는 이 리포
                    문법(억/만), 방향색은 손익에만 — 낙폭은 늘 음수라 색이 정보를
                    더하지 않는다. */}
-            <HStack className="sr-stats" alignItems="stretch" width="100%">
+            <HStack className="sr-stats" width="100%" flexWrap="wrap">
               <StatColumn title="성과">
                 <Stat
                   label="총손익"
@@ -1327,7 +1327,7 @@ export function StrategyWindow({
                             **전체 실행 기준**이라 표시 구간을 잘라도 안 바뀐다 —
                             같은 거래가 구간마다 딴 번호면 번호가 아니다. */}
                         <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
-                          <Text font="legal" as="span" color="fgMuted">#</Text>
+                          <Text font={headFont('#')} as="span" color="fgMuted">#</Text>
                         </TableCell>
                         <TableCell as="th" scope="col">
                           <Text font="caption" as="span" color="fgMuted">진입</Text>
@@ -1348,10 +1348,10 @@ export function StrategyWindow({
                               <Text font="caption" as="span" color="fgMuted" noWrap>진입 국고</Text>
                             </TableCell>
                             <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
-                              <Text font="legal" as="span" color="fgMuted" noWrap>진입 IRS</Text>
+                              <Text font={headFont('진입 IRS')} as="span" color="fgMuted" noWrap>진입 IRS</Text>
                             </TableCell>
                             <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
-                              <Text font="legal" as="span" color="fgMuted" noWrap>진입 CD</Text>
+                              <Text font={headFont('진입 CD')} as="span" color="fgMuted" noWrap>진입 CD</Text>
                             </TableCell>
                           </>
                         ) : null}
@@ -1361,15 +1361,15 @@ export function StrategyWindow({
                             적으면 표가 없는 정보를 있는 척한다. */}
                         {run.params.entryMode === 'touch' ? (
                           <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
-                            <Text font="legal" as="span" color="fgMuted" noWrap>이탈 최대</Text>
+                            <Text font={headFont('이탈 최대')} as="span" color="fgMuted" noWrap>이탈 최대</Text>
                           </TableCell>
                         ) : null}
                         {/* z 는 소문자다 — `caption` 은 대문자로 세운다(위 판례). */}
                         <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
-                          <Text font="legal" as="span" color="fgMuted">진입 z</Text>
+                          <Text font={headFont('진입 z')} as="span" color="fgMuted">진입 z</Text>
                         </TableCell>
                         <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
-                          <Text font="legal" as="span" color="fgMuted">청산 z</Text>
+                          <Text font={headFont('청산 z')} as="span" color="fgMuted">청산 z</Text>
                         </TableCell>
                         {/* 레벨·Δ [OWNER 2026-09-02 — "진입 레벨과 기준 노셔널과
                             같은 것들이 전부 나올 수 있게"] — 한 줄이 스스로
@@ -1384,7 +1384,7 @@ export function StrategyWindow({
                           <Text font="caption" as="span" color="fgMuted" noWrap>청산 레벨</Text>
                         </TableCell>
                         <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
-                          <Text font="legal" as="span" color="fgMuted" noWrap>Δ (bp)</Text>
+                          <Text font={headFont('Δ (bp)')} as="span" color="fgMuted" noWrap>Δ (bp)</Text>
                         </TableCell>
                         <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
                           <Text font="caption" as="span" color="fgMuted">손익</Text>
