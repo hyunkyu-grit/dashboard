@@ -22,9 +22,11 @@
  * ── 없는 것도 적어 둔다(디자인 감사 2026-09-02: «의도인지 미완인지 화면이 못
  * 말한다» 는 지적) ────────────────────────────────────────────────────────────
  *
- * · **이웃 칸(노브 민감도)이 없다.** 노브 하나를 옮길 때마다 아홉 계열을 다시
- *   돌아야 해서 열두 칸이면 백여덟 번이다. 견고성은 낱개 창에서 계열별로 본다 —
- *   여기서 반쯤 흉내 내면 두 화면이 다른 격자를 말하게 된다.
+ * · **이웃 칸(노브 민감도)이 두 창 다 없다.** 여기서는 한 칸마다 아홉 계열을
+ *   다시 돌아야 해서 열두 칸이면 백여덟 번이고, 낱개 창의 것도 2026-09-02 에
+ *   내렸다(사유는 `StrategyWindow` 그 자리 주석 — 견고성 보기이지 고르는
+ *   도구가 아니고, 전진분석이 파라미터 선택에 값을 못 더했다). 한 칸 옆이
+ *   궁금하면 노브를 옮기고 실행한다.
  * · **표시 구간 탭이 없다.** 낱개 창의 그것은 «한 계열의 곡선을 잘라 본다» 인데,
  *   여기 곡선은 아홉을 더한 장부라 자르면 «구간 순손익» 이 아홉 다리의 진입
  *   시점과 어긋난 조각이 된다(걸쳐 들어온 다리를 어느 구간에 셀지가 정의되지
@@ -56,7 +58,6 @@ import { ReadoutCard, ReadoutFact, ReadoutMoney, placeReadout } from '@/ui/Reado
 import { Stat, StatColumn } from '@/ui/Stat';
 
 import {
-  MR_REGIMES,
   MR_STRATEGY_DEFAULTS,
   fetchMrBook,
   type MrBookLeg,
@@ -286,15 +287,9 @@ export function BookWindow({
     ? (run.dirs.allowed[0]! > 0 ? run.dirs.plus : run.dirs.minus)
     : null;
 
-  /* 켜져 있는 실전 규칙 — 낱개 창과 같은 문장을 쓴다. */
-  const liveOn = !run ? [] : [
-    run.params.timeStop ? `타임스탑 ${run.params.timeStop}일` : null,
-    run.params.regime !== 'none'
-      ? `레짐필터(${MR_REGIMES.find((r) => r.v === run.params.regime)?.label})` : null,
-    run.params.costModel === 'dynamic' ? '동적비용' : null,
-    run.params.reverseExit ? '역신호청산' : null,
-    run.params.countOpen ? '미청산 계상' : null,
-  ].filter((x): x is string => x !== null);
+  /* 「실전 규칙이 켜져 있어요」 각주는 **없앴다** [2026-09-02 검사] — 낱개 창과
+     같은 이유다(노브를 화면에서 내린 뒤로 기본값 밖으로 갈 경로가 없어 도달
+     불가였고, 「끄면」이라고 말하면서 끌 컨트롤이 없는 화면이 된다). */
 
   /* 손익 곡선은 부호가 색을 정한다 — LinkedCharts 누적 손익의 그 문법. */
   const eqHue = (run?.summary.totalPnl ?? 0) >= 0 ? 'var(--sr-up)' : 'var(--sr-down)';
@@ -701,11 +696,9 @@ export function BookWindow({
               {run.carry.on && run.carry.defn
                 ? `캐리는 ${run.carry.defn}이고 조달은 ${run.carry.funding} 이에요. `
                 : ''}
-              {liveOn.length
-                ? `실전 규칙 ${liveOn.join(' · ')}이 켜져 있어요 — 끄면 원본 PMS 재현 그대로예요. `
-                : ''}
-              노브 민감도(이웃 칸)는 여기 없어요 — 한 칸마다 만기 {run.legs.length}개를 다시
-              돌아야 해서, 견고성은 낱개 계열 창에서 봐요. 국고 다리는 민평(평가사 고시) 기준이고 당일
+              노브 민감도(이웃 칸)는 두 창 다 없어요 — 여기서는 한 칸마다 만기{' '}
+              {run.legs.length}개를 다시 돌아야 하고, 전진분석이 파라미터 선택에 값을 못 더한다는
+              실측이 있어요. 한 칸 옆이 궁금하면 노브를 옮기고 실행하세요. 국고 다리는 민평(평가사 고시) 기준이고 당일
               종가 체결 규약이에요.
             </Text>
           </>

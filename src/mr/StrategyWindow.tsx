@@ -59,7 +59,6 @@ import { Stat, StatColumn } from '@/ui/Stat';
 
 import {
   MR_ENTRY_MODES,
-  MR_REGIMES,
   MR_STRATEGY_DEFAULTS,
   MR_STRATEGY_PRESETS,
   fetchMrStrategy,
@@ -545,15 +544,11 @@ export function StrategyWindow({
         run.principal ? `액면 약 ${fmtEok(run.principal.krw)}(pv01 근사)` : null,
       ].filter((x): x is string => x != null).join(' · ');
 
-  /* 켜져 있는 실전 규칙의 이름들 — 바닥 각주가 읽는다. */
-  const liveOn = !run ? [] : [
-    run.params.timeStop ? `타임스탑 ${run.params.timeStop}일` : null,
-    run.params.regime !== 'none'
-      ? `레짐필터(${MR_REGIMES.find((r) => r.v === run.params.regime)?.label})` : null,
-    run.params.costModel === 'dynamic' ? '동적비용' : null,
-    run.params.reverseExit ? '역신호청산' : null,
-    run.params.countOpen ? '미청산 계상' : null,
-  ].filter((x): x is string => x !== null);
+  /* 「실전 규칙이 켜져 있어요」 각주는 **없앴다** [2026-09-02 검사]. 그 다섯을
+     화면에서 내린 뒤로 노브가 기본값 밖으로 갈 경로가 없어(딥링크도 없다) 이
+     각주는 증명 가능하게 도달 불가였고, 도달 불가한 가지는 「끄면 원본 재현」
+     이라고 말하면서 **끌 컨트롤이 없는** 화면을 만든다. 노브를 되살리는 날
+     `KnobBar.tsx` 그 자리 주석과 함께 이것도 되살린다. */
 
   /* 가격 주선 색 = 구간 순변화 방향(Main 미리보기의 규칙) — 「구간」은 **보이는
      구간**이다. 표시 창을 잘랐는데 색이 12년 순변화를 말하면 색과 그림이
@@ -978,7 +973,7 @@ export function StrategyWindow({
               </Box>
               {span !== 'all' && winPoints[0] ? (
                 <Text font="legal" as="span" color="fgMuted" noWrap>
-                  {winPoints[0]!.t} 부터 표시만 잘라요 — 성과·진단은 전체 기간 그대로예요.
+                  {winPoints[0]!.t} 부터 표시만 잘라요 — 성과는 전체 기간 그대로예요.
                 </Text>
               ) : null}
             </HStack>
@@ -1342,11 +1337,6 @@ export function StrategyWindow({
                   항이 없었다는 사실도 같이 적는다(재현 도구의 명구 의무). */}
               {run.carry.on && run.carry.defn
                 ? ` 캐리는 ${run.carry.defn}이고 조달은 ${run.carry.funding} 이에요 — 원본 PMS 산술에는 없던 항이에요.`
-                : ''}
-              {/* 실전 규칙이 켜져 있으면 화면이 그것을 말한다 — 안 적으면 같은
-                  종목의 두 숫자가 왜 다른지 화면만 보고는 알 수 없다. */}
-              {liveOn.length
-                ? ` 실전 규칙 ${liveOn.join(' · ')}이 켜져 있어요 — 끄면 원본 PMS 재현 그대로예요.`
                 : ''}
               {run.principal
                 ? ` 액면 환산(약 ${fmtEok(run.principal.krw)})은 지금 커브의 pv01 하나로 나눈 근사예요 — 크기만 좌우하고 부호·시점은 안 건드려요.`

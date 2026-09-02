@@ -32,6 +32,29 @@ import { stripComments } from './_source';
 const root = path.resolve(import.meta.dirname, '..');
 const src = (rel: string) => stripComments(fs.readFileSync(path.join(root, rel), 'utf8'));
 
+/** 여는 태그를 **순서대로** 뽑는다 — 개수만 세면 「맨 위」 같은 순서 명제를 못
+ *  지킨다(2026-09-02 검사가 그 구멍을 잡았다: hideTimeAxis 를 첫 차트로 옮겨도
+ *  개수는 같아서 초록이었다). 중괄호 깊이를 세는 방식은 `control-parity` 의
+ *  `openingTags` 판례 그대로다(속성 안의 `>` 를 넘기려면 그래야 한다). */
+function openingTags(body: string, tag: string): string[] {
+  const out: string[] = [];
+  /* 낱말 경계는 문자열로 만든다 — 템플릿 리터럴 안의 `\b` 는 정규식 메타가
+     아니라 **백스페이스 문자**(U+0008)가 되어 아무것도 안 잡는다(실측: 태그
+     0개). 이 함수를 옮겨 심을 때 가장 밟기 쉬운 자리다. */
+  const rx = new RegExp('<' + tag + String.fromCharCode(92) + 'b', 'g');
+  let m: RegExpExecArray | null;
+  while ((m = rx.exec(body))) {
+    let depth = 0;
+    for (let i = m.index; i < body.length; i++) {
+      const c = body[i];
+      if (c === '{') depth++;
+      else if (c === '}') depth--;
+      else if (c === '>' && depth === 0) { out.push(body.slice(m.index, i + 1)); break; }
+    }
+  }
+  return out;
+}
+
 const WINDOWS = ['src/mr/StrategyWindow.tsx', 'src/mr/BookWindow.tsx'] as const;
 
 describe('떠 있는 창의 리듬은 Backtest 와 한 값이다', () => {
@@ -90,14 +113,18 @@ describe('차트는 LINKED PAIR 의 결로 쌓인다', () => {
     expect(parts).toMatch(/<VStack gap=\{0\.5\} width="100%" minWidth=\{0\}>/);
   });
 
-  it('x 라벨은 맨 위 차트만 진다 — 나머지는 hideTimeAxis', () => {
+  it('x 라벨은 **맨 위** 차트만 진다 — 순서로 잰다', () => {
+    /* 종전에는 `hideTimeAxis` **개수**만 셌다. 그러면 축이 스택 한가운데나 맨
+       아래로 내려가도 초록이라, 「같은 눈금을 다른 축인 줄 읽는」 바로 그 실패를
+       못 잡는다(2026-09-02 검사가 변형으로 확인). 이제 여는 태그를 순서대로
+       잘라 첫 블록에는 없고 나머지에는 각각 있는지를 본다. */
     for (const f of WINDOWS) {
-      const code = src(f);
-      const charts = code.split('<TimeChart').length - 1;
-      const hidden = code.split('hideTimeAxis').length - 1;
-      /* 차트가 둘 이상이면 정확히 «맨 위 하나»만 축을 진다. */
-      expect(charts, f).toBeGreaterThan(1);
-      expect(hidden, f).toBe(charts - 1);
+      const tags = openingTags(src(f), 'TimeChart');
+      expect(tags.length, f).toBeGreaterThan(1);
+      expect(tags[0]!.includes('hideTimeAxis'), `${f} 첫 차트가 x축을 진다`).toBe(false);
+      tags.slice(1).forEach((t, i) => {
+        expect(t.includes('hideTimeAxis'), `${f} 차트 ${i + 2} 는 축을 숨긴다`).toBe(true);
+      });
     }
   });
 
@@ -160,7 +187,8 @@ describe('칸 폭은 실측이고 죽은 폭이 없다', () => {
      상자 사이 빈틈은 6px(묶음 안)·24px(묶음 사이)로 Backtest 와 같은 문법인데,
      상자 안 **죽은 폭**이 0~27.8px 로 흩어져 «보이는» 간격이 제각각이었다.
      비용 칸은 반대로 −15.3px, 즉 상자보다 내용이 넓어 이웃 칸(명목)을 침범했다.
-     실측값으로 조인 뒤 죽은 폭이 0.7~1.8px 로 수렴했다(σ 셋은 예외 — 아래). */
+     실측값으로 조인 뒤 죽은 폭이 0~1.2px 로 수렴했다 — σ 셋도 `SIGMA_W` 은퇴로
+     예외가 아니게 됐다(아래 그 시험). */
   const knob = src('src/mr/KnobBar.tsx');
   const knobRaw = fs.readFileSync(path.join(root, 'src/mr/KnobBar.tsx'), 'utf8');
 
@@ -215,9 +243,34 @@ describe('칸 폭은 실측이고 죽은 폭이 없다', () => {
     }
   });
 
-  it('폭 수치에 실측 근거가 붙어 있다 — 말줄임 금지 §3', () => {
-    expect(knobRaw).toMatch(/실측/);
-    expect(knobRaw).toMatch(/2026-09-02/);
+  it('폭 선언 **하나하나**에 근거가 붙어 있다 — 말줄임 금지 §3', () => {
+    /* 종전에는 파일 전체에서 「실측」·날짜를 찾았다 — 그 낱말이 머리 주석에만
+       있어도 통과라, 근거 없이 폭을 바꿔도 영원히 초록이었다(2026-09-02 검사).
+       이제 선언마다 **바로 앞 40줄** 안에 그 수나 「실측」이 든 주석이 있는지 본다. */
+    const lines = knobRaw.split(String.fromCharCode(10));
+    const offenders: string[] = [];
+    lines.forEach((ln, i) => {
+      const m = /<Box width=\{(\d+)\}/.exec(ln);
+      if (!m) return;
+      const before = lines.slice(Math.max(0, i - 40), i).join(String.fromCharCode(10));
+      if (!before.includes(m[1]!) && !before.includes('실측')) offenders.push(`${i + 1}: width ${m[1]}`);
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it('주석이 적은 폭과 코드의 폭이 같다 — 선언이 거짓이면 되돌릴 때 재발한다', () => {
+    /* 실제로 한 번 갈렸다: 주석 「폭 212 = 실측」 대 코드 `<Box width={220}>`
+       (2026-09-02 검사). 212 는 실측 잉크 219.3 을 못 담아, 그 수를 믿고
+       되돌리면 이웃 칸 침범이 그대로 재발한다. */
+    const rx = /폭 (\d+) = 실측/g;
+    let m: RegExpExecArray | null;
+    const bad: string[] = [];
+    while ((m = rx.exec(knobRaw))) {
+      const after = knobRaw.slice(m.index, m.index + 900);
+      const box = /<Box width=\{(\d+)\}/.exec(after);
+      if (!box || box[1] !== m[1]) bad.push(`주석 ${m[1]} vs 코드 ${box ? box[1] : '없음'}`);
+    }
+    expect(bad).toEqual([]);
   });
 });
 
