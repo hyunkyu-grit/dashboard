@@ -262,7 +262,8 @@ describe('서랍은 남는 높이를 받고, 몸통이 양보한다', () => {
     expect(code).toContain('className="sr-mr-drawertable"');
     expect(code).not.toMatch(/maxHeight: '30vh'/);
     const css = fs.readFileSync(path.join(root, 'src/theme/type.css'), 'utf8');
-    expect(css).toMatch(/\.sr-mr-drawertable \{[^}]*flex: 1 1 auto/s);
+    const block = css.slice(css.indexOf('.sr-mr-drawertable {'), css.indexOf('.sr-mr-drawertable >'));
+    expect(block).toContain('flex: 1 1 auto');
     /* 스크롤은 CDS 가 두른 컨테이너 하나가 진다(자식 선택자 — 해시 클래스는
        빌드마다 바뀐다). */
     expect(css).toMatch(/\.sr-mr-drawertable > div \{\s*max-height: 100%;/);

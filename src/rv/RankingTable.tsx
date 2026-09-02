@@ -136,24 +136,28 @@ export function RankingTable({
               <th className="sr-rv-th">
                 {/* 문장은 짧게 — 두 문장까지 [OWNER 2026-08-19 "간결하게"]. */}
                 <ThHelp
+                  font="inherit"
                   label="한 달 수익"
                   help="캐리와 롤로 한 달에 버는 돈이에요. 금리가 안 움직인다고 볼 때예요."
                 />
               </th>
               <th className="sr-rv-th">
                 <ThHelp
+                  font="inherit"
                   label="지난주 백분위"
                   help={`지난주 스프레드가 ${window === '52w' ? '과거 52주' : '전체 이력'} 중 몇 %쯤 넓었는지예요. 종목마다 무엇 대비인지는 이름 아래에 적혀 있어요.`}
                 />
               </th>
               <th className="sr-rv-th">
                 <ThHelp
+                  font="inherit"
                   label="버퍼"
                   help={`금리가 몇 bp 올라도 본전인지예요. ${hMonths}개월 캐리와 롤을 파는 시점의 듀레이션으로 나눈 값이에요.`}
                 />
               </th>
               <th className="sr-rv-th">
                 <ThHelp
+                  font="inherit"
                   label="상대 RV"
                   help="평소 대비 이탈을 σ로 잰 값이에요. +면 평소보다 넓은 쪽이에요."
                 />

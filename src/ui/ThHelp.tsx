@@ -12,7 +12,25 @@
 import { Tooltip } from '@coinbase/cds-web/overlays';
 import { Text } from '@coinbase/cds-web/typography';
 
-export function ThHelp({ label, help }: { label: string; help: string }) {
+export function ThHelp({
+  label,
+  help,
+  font = 'caption',
+}: {
+  label: string;
+  help: string;
+  /** 앵커의 활자 [2026-09-02 회귀 수리]. 기본 `caption`(13/600)은 이 앱이
+   *  **실제로 그리는** 머리 활자다 — Main `InstrumentTable` 실측이 13px/600 이고
+   *  MR 의 CDS 표도 그 값이다(`thead th { font-weight: 700 }` 규칙은 CDS `Text`
+   *  의 토큰 굵기에 덮여 사실상 안 듣는다. 그 사실이 여기 적혀 있어야 다음
+   *  사람이 그 규칙을 믿고 700 을 기대하지 않는다).
+   *
+   *  **`inherit` 는 rv 의 손 표를 위한 것**이다: 거기 머리는 `Text` 없이 글자를
+   *  직접 넣어 `thead th` 의 700 을 그대로 받는다. 그 표에서 이 부품만 600 이면
+   *  한 행에 두 굵기가 선다(실측 2026-09-02 — 승격 직후 실제로 그랬다). 부품이
+   *  숙주의 굵기를 따라야 하는 자리다. */
+  font?: 'caption' | 'inherit';
+}) {
   return (
     <Tooltip
       content={
@@ -35,16 +53,21 @@ export function ThHelp({ label, help }: { label: string; help: string }) {
       maxWidth={280}
       placement="bottom"
     >
-      {/* **자기 활자를 진다** [2026-09-02 간격 감사]. 종전에는 맨 `<span>` 이라
-          숙주의 활자를 상속했는데, CDS `TableCell` 은 children 을
-          `<Text font={thead ? 'headline' : 'body'}>` 로 감싼다 — 그래서 rv(손
-          표, 13px)와 MR(CDS 표) 두 화면에서 같은 부품이 다른 크기로 섰다.
-          실측: MR 랭킹 표 머리 일곱 칸 중 셋이 headline 16/24, 넷이 caption
-          13/16 이라 한 행에 두 활자가 섞였다. 부품이 숙주의 글꼴을 상속하면
-          숙주마다 다른 활자가 된다 — 머리 활자는 `caption`(열 머리의 그것). */}
-      <Text font="caption" as="span" color="fgMuted" className="sr-rv-thhelp" tabIndex={0}>
-        {label}
-      </Text>
+      {/* **크기는 자기가 지고, 굵기는 숙주를 따를 수 있다** [2026-09-02].
+          종전에는 맨 `<span>` 이라 숙주의 활자를 통째로 상속했는데, CDS
+          `TableCell` 은 children 을 `<Text font={thead ? 'headline' : 'body'}>`
+          로 감싼다 — 그래서 MR 랭킹 표 머리 일곱 칸 중 셋이 headline 16/24 로
+          서서 한 행에 두 크기가 섞였다(실측). 크기는 그래서 여기서 못 박고,
+          굵기만 `font` prop 이 가른다(그 prop 주석에 두 숙주의 사정). */}
+      {font === 'inherit' ? (
+        <span className="sr-rv-thhelp sr-thhelp-host" tabIndex={0}>
+          {label}
+        </span>
+      ) : (
+        <Text font="caption" as="span" color="fgMuted" className="sr-rv-thhelp" tabIndex={0}>
+          {label}
+        </Text>
+      )}
     </Tooltip>
   );
 }

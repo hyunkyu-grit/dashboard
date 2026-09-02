@@ -1806,6 +1806,13 @@ thead th {
   cursor: default;
 }
 
+/* `ThHelp` 의 **숙주 추종 판**(rv 손 표) — 크기만 못 박고 굵기·색은 물려받는다.
+ * 그 표의 머리는 `Text` 없이 글자를 직접 넣어 `thead th` 의 700 을 받으므로,
+ * 이 부품만 600 이면 한 행에 두 굵기가 선다(실측 2026-09-02). */
+.sr-thhelp-host {
+  font-size: 13px;
+}
+
 .sr-rv-thhelp:focus-visible {
   outline: 2px solid var(--color-fg);
   outline-offset: 2px;
