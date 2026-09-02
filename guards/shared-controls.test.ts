@@ -117,11 +117,11 @@ describe('③ MR 의 배타 선택은 캐논 `Segmented` 다', () => {
     expect(definers(/function Choice\b/)).toEqual([]);
   });
 
-  it('KnobBar 는 `Segmented` 를 임포트하고 여섯 자리에 세운다', () => {
+  it('KnobBar 는 `Segmented` 를 임포트하고 남은 한 자리(진입 규칙)에 세운다', () => {
     /* 여섯 = 진입 규칙 + 실전 규칙 다섯(타임스탑·레짐·비용 모델·역신호·미청산).
        수가 줄면 어느 칸이 손 알약으로 되돌아갔다는 뜻이다. */
     expect(knob).toMatch(/import \{[^}]*\bSegmented\b[^}]*\} from '@\/ui\/ControlCard'/);
-    expect(knob.match(/<Segmented\b/g)?.length).toBe(6);
+    expect(knob.match(/<Segmented\b/g)?.length).toBe(1);
   });
 
   it('배타 선택 자리에 `data-on` 알약이 되살아나지 않았다', () => {

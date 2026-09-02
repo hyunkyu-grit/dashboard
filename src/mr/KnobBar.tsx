@@ -22,13 +22,10 @@ import { Field, NumField, Segmented } from '@/ui/ControlCard';
 import { CONTROL_H } from '@/ui/controlHeight';
 
 import {
-  MR_COST_MODELS,
   MR_COST_PRESETS,
   MR_ENTRY_MODES,
-  MR_REGIMES,
   MR_STRATEGY_LOOKBACKS,
   MR_STRATEGY_PRESETS,
-  MR_TIME_STOPS,
   fmtSigma,
   type MrStrategyParams,
 } from './api';
@@ -363,119 +360,21 @@ export function MrKnobBar({
         </HStack>
       </HStack>
 
-      {/* ── 실전 운용 규칙 [OWNER 2026-08-28 — "일단 민평 기준으로"] ───────────
-          윗줄과 **다른 줄**에 세운다. 윗줄은 원본 PMS 재현의 노브이고 이 줄은
-          그 위에 얹는 실전 규칙이라, 한 줄에 섞으면 화면이 「둘이 같은 종류」
-          라고 말하는 셈이 된다. 전부 끄면 윗줄만의 수와 정확히 같다.
+      {/* ── 실전 운용 규칙 다섯은 **화면에서 내렸다** [OWNER 2026-09-02 —
+          "실전 규칙 다섯은 일단 없애서 기억만 해두는 걸로"] ──────────────────
+          내린 것: 타임스탑 · 레짐 필터(변동성/추세) · 비용 모델(고정/동적) ·
+          역신호 청산 · 미청산 계상. 다섯 다 2026-08-28 에 노브로 세웠던 것이고,
+          그날 저녁 긴 표본(2014-06~, OOS 8.9년 · 9계열)에서 **기각**됐다 —
+          타임스탑 2/9 개선, 동적비용 0/9, 레짐(변동성) 1/9, 역신호는 8/9 에서
+          아무 것도 안 걸렸고, 다섯 전부 켠 포트폴리오는 SR 1.60 → 1.01 로 모든
+          축에서 나빠졌다(`docs/MR_LANE_STATE.md` §긴 표본 판정 ①).
 
-          기여가 균등하지 않다는 사실을 라벨의 help 가 진다 — 표본외 실측에서
-          타임스탑이 단독 최대(SR 0.63→0.95)이고, 동적 비용은 유일하게 깎는
-          항이며, 변동성 필터는 검증 창에서 한 건도 안 막았다. */}
-      <VStack gap={0.5} width="100%">
-        <Text font="legal" as="span" color="fgMuted">
-          실전 운용 규칙 — 전부 끄면 위 줄만의 수예요(원본 PMS 재현).
-          근거는 전진분석 리포트에 있어요.
-        </Text>
-        {/* ── 다섯 칸의 고정폭 산술 [실측 2026-09-02 — 말줄임 금지 §3] ────────
-            자는 하나다: 탭 폭 = 라벨(Pretendard 14px/600 어드밴스 합) + 좌우
-            패딩 16+16(SegmentedTab paddingX={2} = space['2'] 16px), 칸 폭 =
-            탭 폭 합 + 여유. Field 라벨(13px legal)은 전부 그보다 좁다(최장
-            「타임스탑 (일)」 69).
-              타임스탑  끔12·10 15·20 17·40 18 → 62+128=191  → 192
-              레짐 필터  없음24·변동성36·추세24  → 84+96=181   → 182
-              비용 모델  고정24·동적24          → 48+64=112   → 114
-              역신호     끔12·켬12              → 24+64=88    →  90
-              미청산     제외24·포함24          → 48+64=112   → 114
-            **폭은 브라우저 실측으로 다시 잡았다**(2026-09-02, 얼라인 7 의
-            「죽은 폭」 감사): 세그먼트 실폭 190.9·180.7·112.4·88.2·112.4 이고
-            상자는 그보다 1~2px 크다. 종전 값(196·186·128·116·132)은 손 알약
-            시절 폭이라 죽은 폭이 5.1~27.8px 로 흩어졌고, 그만큼 칸 사이 **보이는**
-            빈틈이 제각각이 됐다 — 상자 사이 간격 자체는 6/24(Backtest 와 같은
-            문법)인데도 그렇다. 라벨이 더 넓은 칸은 없다(최장 「타임스탑 (일)」 69). */}
-        <HStack gap={1} alignItems="flex-end" flexWrap="wrap">
-          <Box width={192}>
-            <Field
-              label="타임스탑 (일)"
-              help="진입 후 이 영업일이 지나면 손익 불문 청산해요. 표본외 실측에서 단독 기여가 가장 컸어요(SR 0.63→0.95)."
-            >
-              {/* 숫자 값은 Backtest 방향 칸의 판례대로 String 으로 오간다. */}
-              <Segmented
-                fill
-                label="타임스탑 (일)"
-                value={String(knobs.timeStop)}
-                options={MR_TIME_STOPS.map((v) => ({
-                  value: String(v),
-                  label: v === 0 ? '끔' : String(v),
-                }))}
-                onChange={(v) => set({ timeStop: Number(v) })}
-              />
-            </Field>
-          </Box>
-          <Box width={182} className="sr-fgroup">
-            <Field
-              label="레짐 필터"
-              help="진입만 막아요. 청산·손절은 필터를 안 봐요 — 나가는 문까지 조건을 달면 조건이 꺼진 동안 포지션이 갇혀요."
-            >
-              <Segmented
-                fill
-                label="레짐 필터"
-                value={knobs.regime}
-                options={MR_REGIMES.map((m) => ({ value: m.v, label: m.label, title: m.help }))}
-                onChange={(v) => set({ regime: v })}
-              />
-            </Field>
-          </Box>
-          <Box width={114} className="sr-fgroup">
-            <Field
-              label="비용 모델"
-              help="동적은 변동성 백분위에 연동해 편도 0.15~0.25bp를 물려요. 유일하게 성과를 깎는 항이에요."
-            >
-              <Segmented
-                fill
-                label="비용 모델"
-                value={knobs.costModel}
-                options={MR_COST_MODELS.map((m) => ({ value: m.v, label: m.label, title: m.help }))}
-                onChange={(v) => set({ costModel: v })}
-              />
-            </Field>
-          </Box>
-          <Box width={90} className="sr-fgroup">
-            <Field
-              label="역신호 청산"
-              help="반대 방향 진입 신호를 나가는 문으로 써요. 그 방향으로 들어가지는 않아요(현물 대차매도 불가)."
-            >
-              {/* 불리언 값도 String 으로 오간다(위 타임스탑과 같은 판례). */}
-              <Segmented
-                fill
-                label="역신호 청산"
-                value={String(knobs.reverseExit) as 'false' | 'true'}
-                options={[
-                  { value: 'false', label: '끔' },
-                  { value: 'true', label: '켬' },
-                ]}
-                onChange={(v) => set({ reverseExit: v === 'true' })}
-              />
-            </Field>
-          </Box>
-          <Box width={114} className="sr-fgroup">
-            <Field
-              label="미청산 계상"
-              help="표본 끝의 열린 다리를 거래로 세요. 총손익·MDD는 원래부터 이걸 지고 있어서 안 바뀌고, 승률·거래 수·보유기간만 바뀌어요."
-            >
-              <Segmented
-                fill
-                label="미청산 계상"
-                value={String(knobs.countOpen) as 'false' | 'true'}
-                options={[
-                  { value: 'false', label: '제외' },
-                  { value: 'true', label: '포함' },
-                ]}
-                onChange={(v) => set({ countOpen: v === 'true' })}
-              />
-            </Field>
-          </Box>
-        </HStack>
-      </VStack>
+          **엔진은 그대로다** — 서버 파라미터(`timeStop`·`regime`·`costModel`·
+          `reverseExit`·`countOpen`)도, 그 계약(`MrStrategyParams`)도, 기본값
+          (전부 꺼짐)도 안 건드렸다. 화면에서 고르는 손잡이만 없앤 것이라
+          되살리려면 이 주석 자리에 줄을 다시 세우면 된다(git 이력: 이 줄을
+          지운 커밋 하나). 기각된 노브를 화면에 두면 «이걸 켜 보면 좋아질까»
+          라는 질문을 화면이 계속 부른다 — 답은 이미 측정돼 있다. */}
     </VStack>
   );
 }

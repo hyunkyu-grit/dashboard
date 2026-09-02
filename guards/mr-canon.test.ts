@@ -171,19 +171,27 @@ describe('칸 폭은 실측이고 죽은 폭이 없다', () => {
        5.1~27.8px → 0). Backtest 방향 칸은 고정폭 상자가 아니라 켜지 않는다. */
     const cc = src('src/ui/ControlCard.tsx');
     expect(cc).toContain('equalWidth={fill}');
-    /* MR 의 세그먼트 여섯 자리가 전부 켠다. */
-    expect((knob.match(/<Segmented\s+fill/g) || []).length).toBe(6);
+    /* MR 에 남은 세그먼트는 **진입 규칙 하나**다 — 실전 규칙 다섯은
+       2026-09-02 에 화면에서 내렸다(아래 시험). 남은 것은 채운다. */
+    expect((knob.match(/<Segmented\s+fill/g) || []).length).toBe(1);
     /* Backtest 방향 칸은 자기 줄에 살아서 켜면 줄 전체로 늘어난다 — 안 켠다. */
     expect(src('src/backtest/BacktestWindow.tsx')).not.toMatch(/<Segmented\s+fill/);
   });
 
-  it('실전 규칙 다섯 칸이 세그먼트 실폭에 맞춰져 있다', () => {
-    for (const w of ['192', '182', '114', '90']) {
-      expect(knob, `width ${w}`).toContain(`<Box width={${w}}`);
+  it('실전 규칙 다섯은 화면에 없다 — 내린 근거가 주석에 남아 있다', () => {
+    /* [OWNER 2026-09-02 — "실전 규칙 다섯은 일단 없애서 기억만 해두는 걸로"].
+       긴 표본에서 기각된 노브다(§긴 표본 판정 ①). **엔진은 그대로**이므로
+       계약과 기본값은 살아 있어야 하고, 화면에서 고르는 손잡이만 없다. */
+    for (const label of ['타임스탑 (일)', '레짐 필터', '비용 모델', '역신호 청산', '미청산 계상']) {
+      expect(knob, label).not.toContain(`label="${label}"`);
     }
-    /* 종전 폭(손 알약 시절)이 되살아나면 죽은 폭이 다시 흩어진다. */
-    for (const w of ['128', '116']) {
-      expect(knob, `옛 width ${w}`).not.toContain(`<Box width={${w}} className="sr-fgroup">`);
+    /* 되살릴 자리와 이유가 주석에 있다. */
+    expect(knobRaw).toMatch(/화면에서 내렸다/);
+    expect(knobRaw).toMatch(/엔진은 그대로다/);
+    /* 계약·기본값은 안 건드렸다 — 서버가 받는 노브는 그대로다. */
+    const api = src('src/mr/api.ts');
+    for (const k of ['timeStop', 'regime', 'costModel', 'reverseExit', 'countOpen']) {
+      expect(api, k).toMatch(new RegExp(`${k}:`));
     }
   });
 
