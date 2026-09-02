@@ -72,17 +72,18 @@ describe('CDS 오버레이 포털', () => {
 describe('툴팁 폭은 prop 이 진다 — CSS 우회가 아니라', () => {
   it('`.sr-rv-tiptext` 우회가 되살아나지 않았다', () => {
     /* 그 클래스의 `max-width: 236px` 는 같은 컴포넌트의 `maxWidth={280}` prop 을
-       덮고 있었다 — 두 곳이 같은 것을 말하면 한쪽만 고쳐지는 날이 온다. */
+       덮고 있었다 — 두 곳이 같은 것을 말하면 한쪽만 고쳐지는 날이 온다.
+       `ThHelp` 는 2026-09-02 에 `ui/ThHelp` 로 승격됐다 — 새 집도 같이 잰다. */
     const css = read('src/theme/type.css');
     expect(css).not.toMatch(/\.sr-rv-tiptext\s*\{/);
-    for (const f of ['src/rv/RankingTable.tsx', 'src/mr/MrPage.tsx']) {
+    for (const f of ['src/ui/ThHelp.tsx', 'src/rv/RankingTable.tsx', 'src/mr/MrPage.tsx']) {
       expect(read(f)).not.toMatch(/className="sr-rv-tiptext"/);
     }
   });
 
-  it('두 `ThHelp` 가 여전히 `maxWidth` prop 으로 폭을 말한다', () => {
-    for (const f of ['src/rv/RankingTable.tsx', 'src/mr/MrPage.tsx']) {
-      expect(read(f)).toMatch(/maxWidth=\{\d+\}/);
-    }
+  it('`ThHelp` 가 여전히 `maxWidth` prop 으로 폭을 말한다', () => {
+    /* 재는 자리가 옮겨졌을 뿐 명제는 그대로다 — 종전에는 rv·MR 두 벌을 각각
+       쟀고, 지금은 공용 한 벌(`ui/ThHelp`)이 그 prop 을 진다. */
+    expect(read('src/ui/ThHelp.tsx')).toMatch(/maxWidth=\{\d+\}/);
   });
 });

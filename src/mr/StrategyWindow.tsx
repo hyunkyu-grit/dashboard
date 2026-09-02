@@ -14,16 +14,24 @@
  *   당일 종가 체결·편도 비용) — 산술은 서버가 끝낸다(§16, mrbacktest.py 가
  *   원본과 적합성 벡터로 잠금).
  * · 패널 넷: 가격+SMA+밴드 / z 오실레이터(가이드 5줄 + 진입 마커) / 에쿼티
- *   커브 / KPI 타일+거래 표.
+ *   커브 / KPI 타일+거래 표. **원본은 2×2 격자였고 이 창은 세로 스택**이다
+ *   [OWNER 2026-09-02] — 12년 시계열이 반폭에서 안 읽히고, Backtest 창의
+ *   세로 결과 같아진다.
  * · «실행 시점 고정(pinned)» 규율: 노브를 실행 없이 바꾸면 숫자를 조용히
  *   재계산하지 않는다 — stale 문구가 서고 오실레이터 마커가 숨는다.
  * · 실행은 사람이 누른다 — v2 백테스트 창과 원본 staged flow 가 같은 규칙이다.
  *
  * ── v2 로 옮기며 바꾼 것(문법 충돌 자리) ────────────────────────────────────
- * · 차트는 lightweight-charts 가 아니라 CDS CartesianChart — 리드아웃·스크러버
- *   는 이 리포 공용 기구(ReadoutCard)를 쓴다.
- * · 진입/청산 마커는 원형/사각 심볼 대신 ReferenceLine 세로선 — LinkedCharts 의
- *   마커 문법이다. 거래별 정밀값은 거래 표가 진다.
+ * · 차트는 공용 `TimeChart`(lightweight-charts) 다 — 원본의 그 라이브러리가
+ *   아니고, 이 리포의 15차트가 전부 그것이다(CLAUDE.md 규칙 7). 리드아웃은
+ *   공용 기구(`ReadoutCard`)를 쓴다. ⚠ 종전 주석은 「CDS CartesianChart」라고
+ *   적혀 있었다 — 2026-08-26 이관 뒤로 거짓이었고 2026-09-02 감사가 잡았다.
+ * · 진입/청산은 **점(markers)과 세로선(markLines)을 같이** 쓴다 — 점이 방향색
+ *   으로 «무엇을 샀나»를 말하고 세로선이 «언제»를 말한다. 거래별 정밀값은
+ *   거래 표가 진다.
+ * · 배치는 **세로 스택**이고 차트 셋이 Backtest LINKED PAIR 의 문법을 쓴다
+ *   (같은 dates·`useStackedScales`·x 라벨은 맨 위만·십자선 `syncIndex` 동기).
+ *   일별 대사는 창 바닥 **서랍**이 진다(Backtest 의 그 자리).
  * · Jade/Berry 방향색 대신 이 리포의 방향색(--sr-up/--sr-down) — 색은 방향만
  *   나른다는 규칙 그대로.
  *
@@ -304,7 +312,14 @@ function Sensitivity({
   );
 }
 
+/* 차트 높이 두 급 — Backtest 의 LINKED PAIR 치수 그대로다(`LinkedCharts.tsx`:
+   위 종목 200 · 아래 누적손익 140). 주선이 사는 차트가 크고 파생(z·누적)이
+   작다 — 세로로 쌓았을 때 «무엇이 주인공인가»를 높이가 말한다. */
 const CHART_H = 200;
+const CHART_H_SUB = 140;
+/* 거래 표 상자 — 차트 둘을 합친 높이. 표는 스크롤이라 높이가 곧 «한 번에 몇
+   줄 보이나»이고, 풀폭이 된 뒤에도 200 이면 38거래에서 세 줄만 보인다. */
+const TABLE_H = CHART_H + CHART_H_SUB;
 
 /* ── 표시 구간 [OWNER 2026-09-02 — "백테스트 기간을 항상 전체로 설정하다보니
  * 시인성과 목적의식이 불분명"] ─────────────────────────────────────────────
@@ -544,6 +559,10 @@ export function StrategyWindow({
   /* 표시 구간 — 실행·종목이 바뀌어도 남는다(보기 취향이지 실행의 일부가
      아니다). 판정 규율은 MR_SPANS 머리 주석에. */
   const [span, setSpan] = useState<MrSpan>('all');
+  /* 서랍 펼침을 창이 쥔다 — 거래 줄을 누르면 그 자리에서 대사가 펴져야 한다
+     (안 쥐면 「눌렀는데 아무 일도 안 일어난」 화면이 된다). 접는 손잡이는
+     여전히 서랍 탭이다. */
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   /* 종목이 바뀌면 지난 실행은 딴 종목의 숫자다 — 남겨 두지 않는다. */
   useEffect(() => {
@@ -554,6 +573,7 @@ export function StrategyWindow({
   const exec = useCallback(() => {
     /* 다른 실행의 거래를 펴 놓고 있으면 그 대사가 거짓이 된다. */
     setOpenTrade(null);
+    setDrawerOpen(false);
     setError(undefined);
     setRunning(true);
     fetchMrStrategy(id, knobs)
@@ -789,36 +809,189 @@ export function StrategyWindow({
   ];
   const zeroLine: ScalePriceLine[] = [{ value: 0, color: (pa) => pa.line }];
 
+  /* 캔버스가 못 하는 말 — 짚은 봉의 한 문장 [CLAUDE.md 규칙 7: «읽을 DOM 이
+     없다 → hoverLabel → .sr-a11y-only 의 aria-live 줄이 진다»]. 차트마다
+     주인공이 다르므로 문장도 다르다(값·z·누적) — Main 미리보기 `scrubLabel`
+     이 날짜+값을 읽는 그 자리다. */
+  const scrubWord = (i: number, chart: 'price' | 'z' | 'eq'): string => {
+    const p = winPoints[i];
+    if (!p) return '';
+    if (chart === 'price') return `${p.t} ${fmtLevel(p.v, unit)}${unitSuffix(unit)}`;
+    if (chart === 'z') return `${p.t} z ${p.z == null ? '—' : `${p.z.toFixed(2)}σ`}`;
+    return `${p.t} 누적 ${fmtKrw(p.cum - baseCum)}`;
+  };
+
+  /* 일별 대사는 **창 바닥 서랍**이 진다 [2026-09-02, Backtest 창의 그 문법].
+     백테스트가 대사를 서랍에 둔 근거가 트레이더 피드백 5(«팝업창 하단에
+     열었다 닫았다 하는 탭» — `WindowDrawer.tsx` 머리)이고, 이 창도 같은
+     물건을 같은 자리에 둔다. 종전에는 거래 패널의 «내용이 바뀌는» 판이라
+     목록과 대사를 같이 볼 수 없었다. */
+  const reconPane = sel && run ? (
+    <VStack gap={0.5} width="100%">
+      {/* 무엇을 펴 놓았는지 — 서랍은 제목이 없으므로 이 줄이 그 일을 한다. */}
+      <Text font="caption" as="span" color="fgMuted">
+        {reconSub(sel, run)}
+      </Text>
+      {/* 서랍 안이라 높이 상한은 **30vh**(`ReconStack` 기본과 같은 값 —
+          백테스트 서랍이 표 하나일 때 쓰는 그것). `position: relative` 는
+          sticky 머리의 기준이고 `overflow` 는 Box prop 이 없어 style 에 남는다. */}
+      <Box style={{ position: 'relative', maxHeight: '30vh', overflow: 'auto' }} width="100%">
+                <Table bordered={false}>
+                  <TableHeader sticky>
+                    <TableRow>
+                      <TableCell as="th" scope="col">
+                        <Text font="caption" as="span" color="fgMuted">날짜</Text>
+                      </TableCell>
+                      <TableCell as="th" scope="col">
+                        <Text font="caption" as="span" color="fgMuted">구분</Text>
+                      </TableCell>
+                      {(hasLegs ? [...RECON_LEG_COLS, ...RECON_COLS] : [...RECON_COLS]).map((c) => (
+                        <TableCell key={c.k} as="th" scope="col" className="sr-num" justifyContent="flex-end">
+                          {/* `caption` 이 아니라 `legal` 이다 — CDS 기본 테마의
+                              `textTransform.caption = 'uppercase'` 가 「z」를 「Z」로,
+                              「bp」를 「BP」로 만든다(실측 2026-08-28). 둘은 크기가
+                              같고(0.8125rem) 중량·대문자화만 다르므로, **기호와
+                              단위가 든 머리**는 `legal` 이 맞다 — `rv/SectorLane`
+                              이 같은 근거로 정한 판례다. 이 표는 단위가 곧 검산의
+                              전제라(감도 ₩/bp × Δbp) 대문자 BP 는 오식이다. */}
+                          <Text font="legal" as="span" color="fgMuted" noWrap>{c.k}</Text>
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {reconRows.map(({ p, i }) => (
+                      <TableRow key={p.t}>
+                        <TableCell>
+                          <Text font="label2" as="span" tabularNumbers noWrap>{p.t}</Text>
+                        </TableCell>
+                        <TableCell>
+                          <Text font="label2" as="span" color="fgMuted" noWrap>
+                            {eventWord(events.get(i), p.hold !== 0)}
+                          </Text>
+                        </TableCell>
+                        {/* 다리 셋(%) → 스프레드(bp) — (국고 − IRS) × 100
+                            = 레벨이 왼쪽에서 오른쪽으로 닫힌다. */}
+                        {hasLegs ? (
+                          <>
+                            <ReconNum v={p.govt ?? null} kind="level" unit={'%' as Unit} />
+                            <ReconNum v={p.irs ?? null} kind="level" unit={'%' as Unit} />
+                            <ReconNum v={p.cd ?? null} kind="level" unit={'%' as Unit} />
+                          </>
+                        ) : null}
+                        <ReconNum v={p.v} kind="level" unit={unit} />
+                        <ReconNum v={p.z} kind="sigma" />
+                        <ReconNum v={p.dv} kind="bp" />
+                        {/* 감도 — 이 줄의 곱셈이 곱한 바로 그 수. 무포지션
+                            봉(진입일)은 0 이라 평가도 0 이다. */}
+                        <ReconNum v={p.hold * run.params.notional} kind="won" />
+                        <ReconNum v={p.mtm} kind="won" />
+                        <ReconNum v={p.carry} kind="won" />
+                        <ReconNum v={p.cost} kind="won" />
+                        <ReconNum v={p.pnl} kind="won" tone />
+                        <ReconNum v={p.tradePnl} kind="won" tone />
+                      </TableRow>
+                    ))}
+                    <TableRow>
+                      <TableCell>
+                        <Text font="label1" as="span" noWrap>합계</Text>
+                      </TableCell>
+                      <TableCell>
+                        <Text font="label1" as="span" color="fgMuted" noWrap>{sel.bars}봉</Text>
+                      </TableCell>
+                      {/* 다리 셋도 진입 → 청산 — 값은 대사표 첫/끝 줄이
+                          원천이라 거래에 따로 싣지 않는다. */}
+                      {hasLegs ? (
+                        <>
+                          <LegArrow a={reconRows[0]?.p.govt} b={reconRows.at(-1)?.p.govt} />
+                          <LegArrow a={reconRows[0]?.p.irs} b={reconRows.at(-1)?.p.irs} />
+                          <LegArrow a={reconRows[0]?.p.cd} b={reconRows.at(-1)?.p.cd} />
+                        </>
+                      ) : null}
+                      {/* 레벨·z 는 더할 수 있는 양이 아니다 — 진입 → 청산으로
+                          적는다. 레벨 두 끝의 차가 곧 Δ 합계 칸이다(bp 계열
+                          에서 — 선물은 % 라 100배 갈리고, 그 사실은 거래 표
+                          머리의 주석이 진다). */}
+                      <TableCell className="sr-num" justifyContent="flex-end">
+                        <Text font="label1" as="span" tabularNumbers noWrap>
+                          {`${fmtReconLevel(sel.entryV, unit)}→${fmtReconLevel(sel.exitV, unit)}`}
+                        </Text>
+                      </TableCell>
+                      <TableCell className="sr-num" justifyContent="flex-end">
+                        <Text font="label1" as="span" tabularNumbers noWrap>
+                          {`${sel.entryZ.toFixed(2)}→${sel.exitZ == null ? '—' : sel.exitZ.toFixed(2)}`}
+                        </Text>
+                      </TableCell>
+                      <ReconNum v={sel.dv} kind="bp" head />
+                      <ReconNum v={null} kind="won" head />
+                      <ReconNum v={sel.mtm} kind="won" head />
+                      <ReconNum v={sel.carry} kind="won" head />
+                      <ReconNum v={sel.cost} kind="won" head />
+                      <ReconNum v={sel.pnl} kind="won" tone head />
+                      <ReconNum v={sel.pnl} kind="won" tone head />
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </Box>
+    </VStack>
+  ) : null;
+
+
   return (
     <FloatingWindow
       windowKey="mrstrategy"
       title="전략 실험"
       width={1120}
+      /* 창 머리 부제는 **caption**(Backtest 창의 「{asOf} 종가까지」와 같은 급).
+         종전 `legal` 은 크기는 같고 중량만 낮아, 두 창을 나란히 놓으면 같은
+         자리의 같은 성격 문장이 다른 굵기로 섰다. */
       aside={
-        <Text font="legal" as="span" color="fgMuted" noWrap>
+        <Text font="caption" as="span" color="fgMuted" noWrap>
           첫 PMS 의 z-스코어 규칙 재현이에요 — 투자판단이 아니에요.
         </Text>
       }
       onClose={onClose}
+      drawerOpen={drawerOpen}
+      onDrawerOpenChange={setDrawerOpen}
+      drawer={[
+        {
+          id: 'recon',
+          label: '일별 대사',
+          content: reconPane,
+          /* 왜 비었는지를 그 자리에서 말한다(서랍의 규율) — 그리고 여는
+             방법까지 적는다: 이 창에서 대사는 «거래 하나»의 것이라 고르는
+             동작이 먼저다. */
+          unavailable: run
+            ? '거래 줄을 누르면 하루씩 대사가 서요 — 감도 × Δ = 평가예요.'
+            : '실행하면 거래가 서고, 거래 줄을 누르면 하루씩 대사가 열려요.',
+        },
+      ]}
     >
-      <VStack gap={1.5} paddingX={2} paddingY={1.5} width="100%">
+      {/* 창 몸통 리듬은 **Backtest 창과 한 값**이다(`BacktestWindow.tsx`
+          `<VStack gap={2} padding={2}>`) — 떠 있는 창 둘이 같은 위계인데 안쪽
+          여백이 다르면 나란히 놓았을 때 그 사실이 먼저 보인다(얼라인 5). */}
+      <VStack gap={2} padding={2} width="100%">
         {/* 노브 두 줄은 **공용**이다(`KnobBar.tsx`) — 통합 장부 창과 같은 것을
             쓴다. 갈라 낸 근거는 그 파일 머리에 있다. */}
         <MrKnobBar lead={label} knobs={knobs} onChange={set} onRun={exec} running={running} />
+        {/* 상태 문구의 활자는 **Backtest 와 한 벌**이다 — 안내·빈 상태는
+            `body` 뮤트, 오류는 `body` + `.sr-up`(앱 공통 오류 문법: 백테스트·
+            Main 미리보기가 같은 것을 쓴다). 종전에는 셋 다 `legal` 맨 잉크라
+            «실행하지 못했어요» 가 각주처럼 조용히 서 있었다. */}
         {stale ? (
           /* 조용한 재계산 금지 — 원본의 stale 배너 + 마커 숨김 규율 그대로. */
-          <Text font="legal" as="span" color="fgMuted">
+          <Text font="body" as="p" color="fgMuted">
             설정이 실행과 달라요 — 실행을 눌러야 아래 숫자에 반영돼요. 진입 마커는 숨겼어요.
           </Text>
         ) : null}
         {error ? (
-          <Text font="legal" as="span">
+          <Text font="body" as="p" className="sr-up">
             실행하지 못했어요 — {error}
           </Text>
         ) : null}
 
         {!run ? (
-          <Text font="legal" as="span" color="fgMuted">
+          <Text font="body" as="p" color="fgMuted">
             {/* 표본 구간을 **박아 두지 않는다** — 2026-08-28 에 출처를 옮기며
                 2020~ 이 2014~ 가 됐고, 그때 이 문장만 옛 구간을 말하고 있었다.
                 구간은 실행 결과가 진다(아래 「종가」·차트 축). */}
@@ -979,8 +1152,13 @@ export function StrategyWindow({
               ) : null}
             </HStack>
 
-            {/* ── 2×2 패널 — 원본 결과 그리드의 배치. ───────────────────── */}
-            <HStack gap={2} width="100%" alignItems="stretch" flexWrap="wrap">
+            {/* ── 차트 셋 = **LINKED PAIR 의 세로 결**(Backtest `LinkedCharts`).
+                   같은 `dates` 배열과 `useStackedScales`(값축 폭이 형제 최광폭
+                   으로 수렴)로 픽셀이 맞고, **x 라벨은 맨 위가 지고 나머지는
+                   숨긴다** — 같은 눈금을 세 번 그리면 그게 다른 축인 줄 읽힌다.
+                   십자선은 `syncIndex` 로 반대쪽 차트에 건네, 한 차트를 짚으면
+                   나머지 둘의 같은 날에 선이 선다(Backtest 의 그 문법). */}
+            <VStack gap={2} width="100%">
               <Panel title="가격 · SMA · 밴드" sub={`밴드 = 평균 ±${run.params.entryZ}σ`}>
                 <Box
                   className="sr-plot"
@@ -995,6 +1173,12 @@ export function StrategyWindow({
                     lines={priceLines}
                     markLines={evLines}
                     onHoverIndex={(i) => setIdx(i == null ? null : { chart: 'price', i })}
+                    /* 캔버스에는 읽을 DOM 이 없다 — 짚은 봉을 문장으로 만들어
+                       `.sr-a11y-only` 의 aria-live 줄에 보낸다(CLAUDE.md 규칙 7·
+                       Main 미리보기 `scrubLabel` 의 그 자리). 종전에는 세 차트
+                       전부 이 문장이 없어 스크린리더에 아무 말도 안 했다. */
+                    hoverLabel={(i) => scrubWord(i, 'price')}
+                    syncIndex={idx && idx.chart !== 'price' ? idx.i : null}
                     {...stack}
                   />
                   {idx?.chart === 'price' && winPoints[idx.i] ? (
@@ -1043,7 +1227,7 @@ export function StrategyWindow({
                   onMouseLeave={() => setIdx(null)}
                 >
                   <TimeChart
-                    height={CHART_H}
+                    height={CHART_H_SUB}
                     accessibilityLabel={`${label} z-스코어`}
                     dates={winDates}
                     lines={zLines}
@@ -1051,6 +1235,9 @@ export function StrategyWindow({
                     markers={evMarkers}
                     markLines={evLines}
                     onHoverIndex={(i) => setIdx(i == null ? null : { chart: 'z', i })}
+                    hoverLabel={(i) => scrubWord(i, 'z')}
+                    syncIndex={idx && idx.chart !== 'z' ? idx.i : null}
+                    hideTimeAxis
                     {...stack}
                   />
                   {idx?.chart === 'z' && winPoints[idx.i] ? (
@@ -1070,9 +1257,7 @@ export function StrategyWindow({
                   ) : null}
                 </Box>
               </Panel>
-            </HStack>
 
-            <HStack gap={2} width="100%" alignItems="stretch" flexWrap="wrap">
               <Panel
                 title="누적 손익"
                 /* 구간 표시면 머리도 구간을 말한다 — 곡선이 구간 시작 0 재기준
@@ -1091,7 +1276,7 @@ export function StrategyWindow({
                   onMouseLeave={() => setIdx(null)}
                 >
                   <TimeChart
-                    height={CHART_H}
+                    height={CHART_H_SUB}
                     accessibilityLabel={`${label} 누적 손익`}
                     dates={winDates}
                     lines={eqLines}
@@ -1099,6 +1284,9 @@ export function StrategyWindow({
                     markers={evMarkers}
                     markLines={evLines}
                     onHoverIndex={(i) => setIdx(i == null ? null : { chart: 'eq', i })}
+                    hoverLabel={(i) => scrubWord(i, 'eq')}
+                    syncIndex={idx && idx.chart !== 'eq' ? idx.i : null}
+                    hideTimeAxis
                     {...stack}
                   />
                   {idx?.chart === 'eq' && winPoints[idx.i] ? (
@@ -1120,136 +1308,16 @@ export function StrategyWindow({
                 </Box>
               </Panel>
 
-              {/* 거래 하나의 **일별 대사** — 백테스트 창의 그 문법이다.
-
-                  ── 2026-08-28 다시 세움 [OWNER — "대사가 너무 허술하게"] ──
-                  종전 표는 평가·캐리·비용·그날 넉 줄이었다. 가로합은 닫혔지만
-                  **평가가 어디서 왔는지**를 표가 말하지 않았다 — 그래서 그
-                  숫자가 옳은지 아닌지 화면만 보고는 알 수 없었다. 백테스트
-                  대사표가 「전일 KRD × Δbp = 추정」을 한 줄 안에 두는 이유가
-                  정확히 그것이다(`ui/window/ReconStack.tsx` 머리).
-
-                  여기의 그 곱셈은 **감도 × Δ = 평가** 다. 감도는 그 봉을
-                  통과해서 들고 있던 포지션 × 명목(`hold` — 봉이 끝난 뒤의
-                  포지션이 아니다: 진입 봉은 0, 청산 봉은 ±1). 그 열을 세우자
-                  선물 계열의 단위 오류가 **첫 줄에서** 드러났다(Δ 0.157 을
-                  ₩/bp 명목에 곱하고 있었다 — 서버 주석에 경위).
-
-                  가로합 = 그날 · 세로합 = 거래 손익. 「누적」 열이 세로합을
-                  줄마다 적으므로 마지막 줄이 합계 줄과 같아야 하고, 표는
-                  «맞다» 고 주장하는 대신 **맞는지 보인다**. */}
-              <Panel
-                title={sel ? '일별 대사' : '거래'}
-                sub={sel ? reconSub(sel, run) : tradeSub}
-                aside={sel ? (
-                  <button type="button" className="sr-pillbtn" onClick={() => setOpenTrade(null)}>
-                    거래 목록
-                  </button>
-                ) : undefined}
-              >
-                {sel ? (
-                  <Box style={{ position: 'relative', height: CHART_H, overflow: 'auto' }} width="100%">
-                    <Table bordered={false}>
-                      <TableHeader sticky>
-                        <TableRow>
-                          <TableCell as="th" scope="col">
-                            <Text font="caption" as="span" color="fgMuted">날짜</Text>
-                          </TableCell>
-                          <TableCell as="th" scope="col">
-                            <Text font="caption" as="span" color="fgMuted">구분</Text>
-                          </TableCell>
-                          {(hasLegs ? [...RECON_LEG_COLS, ...RECON_COLS] : [...RECON_COLS]).map((c) => (
-                            <TableCell key={c.k} as="th" scope="col" className="sr-num" justifyContent="flex-end">
-                              {/* `caption` 이 아니라 `legal` 이다 — CDS 기본 테마의
-                                  `textTransform.caption = 'uppercase'` 가 「z」를 「Z」로,
-                                  「bp」를 「BP」로 만든다(실측 2026-08-28). 둘은 크기가
-                                  같고(0.8125rem) 중량·대문자화만 다르므로, **기호와
-                                  단위가 든 머리**는 `legal` 이 맞다 — `rv/SectorLane`
-                                  이 같은 근거로 정한 판례다. 이 표는 단위가 곧 검산의
-                                  전제라(감도 ₩/bp × Δbp) 대문자 BP 는 오식이다. */}
-                              <Text font="legal" as="span" color="fgMuted" noWrap>{c.k}</Text>
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {reconRows.map(({ p, i }) => (
-                          <TableRow key={p.t}>
-                            <TableCell>
-                              <Text font="label2" as="span" tabularNumbers noWrap>{p.t}</Text>
-                            </TableCell>
-                            <TableCell>
-                              <Text font="label2" as="span" color="fgMuted" noWrap>
-                                {eventWord(events.get(i), p.hold !== 0)}
-                              </Text>
-                            </TableCell>
-                            {/* 다리 셋(%) → 스프레드(bp) — (국고 − IRS) × 100
-                                = 레벨이 왼쪽에서 오른쪽으로 닫힌다. */}
-                            {hasLegs ? (
-                              <>
-                                <ReconNum v={p.govt ?? null} kind="level" unit={'%' as Unit} />
-                                <ReconNum v={p.irs ?? null} kind="level" unit={'%' as Unit} />
-                                <ReconNum v={p.cd ?? null} kind="level" unit={'%' as Unit} />
-                              </>
-                            ) : null}
-                            <ReconNum v={p.v} kind="level" unit={unit} />
-                            <ReconNum v={p.z} kind="sigma" />
-                            <ReconNum v={p.dv} kind="bp" />
-                            {/* 감도 — 이 줄의 곱셈이 곱한 바로 그 수. 무포지션
-                                봉(진입일)은 0 이라 평가도 0 이다. */}
-                            <ReconNum v={p.hold * run.params.notional} kind="won" />
-                            <ReconNum v={p.mtm} kind="won" />
-                            <ReconNum v={p.carry} kind="won" />
-                            <ReconNum v={p.cost} kind="won" />
-                            <ReconNum v={p.pnl} kind="won" tone />
-                            <ReconNum v={p.tradePnl} kind="won" tone />
-                          </TableRow>
-                        ))}
-                        <TableRow>
-                          <TableCell>
-                            <Text font="label1" as="span" noWrap>합계</Text>
-                          </TableCell>
-                          <TableCell>
-                            <Text font="label1" as="span" color="fgMuted" noWrap>{sel.bars}봉</Text>
-                          </TableCell>
-                          {/* 다리 셋도 진입 → 청산 — 값은 대사표 첫/끝 줄이
-                              원천이라 거래에 따로 싣지 않는다. */}
-                          {hasLegs ? (
-                            <>
-                              <LegArrow a={reconRows[0]?.p.govt} b={reconRows.at(-1)?.p.govt} />
-                              <LegArrow a={reconRows[0]?.p.irs} b={reconRows.at(-1)?.p.irs} />
-                              <LegArrow a={reconRows[0]?.p.cd} b={reconRows.at(-1)?.p.cd} />
-                            </>
-                          ) : null}
-                          {/* 레벨·z 는 더할 수 있는 양이 아니다 — 진입 → 청산으로
-                              적는다. 레벨 두 끝의 차가 곧 Δ 합계 칸이다(bp 계열
-                              에서 — 선물은 % 라 100배 갈리고, 그 사실은 거래 표
-                              머리의 주석이 진다). */}
-                          <TableCell className="sr-num" justifyContent="flex-end">
-                            <Text font="label1" as="span" tabularNumbers noWrap>
-                              {`${fmtReconLevel(sel.entryV, unit)}→${fmtReconLevel(sel.exitV, unit)}`}
-                            </Text>
-                          </TableCell>
-                          <TableCell className="sr-num" justifyContent="flex-end">
-                            <Text font="label1" as="span" tabularNumbers noWrap>
-                              {`${sel.entryZ.toFixed(2)}→${sel.exitZ == null ? '—' : sel.exitZ.toFixed(2)}`}
-                            </Text>
-                          </TableCell>
-                          <ReconNum v={sel.dv} kind="bp" head />
-                          <ReconNum v={null} kind="won" head />
-                          <ReconNum v={sel.mtm} kind="won" head />
-                          <ReconNum v={sel.carry} kind="won" head />
-                          <ReconNum v={sel.cost} kind="won" head />
-                          <ReconNum v={sel.pnl} kind="won" tone head />
-                          <ReconNum v={sel.pnl} kind="won" tone head />
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </Box>
-                ) : (
-                /* 표는 Main/Backtest 방언 — CDS Table, 숫자는 label2 tabular
-                   우측, 손익만 방향색 글자 [OWNER 2026-08-25 «기준을 Backtest 에»]. */
-                <Box style={{ position: 'relative', height: CHART_H, overflow: 'auto' }} width="100%">
+              {/* 거래 표 — Main/Backtest 방언(CDS Table, 숫자는 label2 tabular
+                  우측, 손익만 방향색 글자 [OWNER 2026-08-25 «기준을 Backtest 에»]).
+                  **일별 대사는 이 패널이 아니라 창 바닥 서랍이 진다**(아래
+                  `drawer` — Backtest 창의 그 문법). 종전에는 거래 줄을 누르면
+                  이 패널의 내용이 대사표로 «바뀌었고», 그래서 목록과 대사를
+                  동시에 볼 수 없었다. */}
+              <Panel title="거래" sub={tradeSub}>
+                {/* 표 높이는 차트 둘을 합친 값 — 풀폭이 된 뒤에도 200 이면 38거래에서
+                    세 줄만 보인다. `overflow`·`position` 은 Box prop 이 없어 style 에 남는다. */}
+                <Box style={{ position: 'relative', height: TABLE_H, overflow: 'auto' }} width="100%">
                   <Table bordered={false}>
                     {/* 거래가 수십 줄이라 머리가 따라와야 한다(Main 규칙). */}
                     <TableHeader sticky>
@@ -1332,7 +1400,10 @@ export function StrategyWindow({
                            그 문법(«줄을 누르면 이력이 열려요»)이다. */
                         <TableRow
                           key={tradeKey(t)}
-                          onClick={() => setOpenTrade(tradeKey(t))}
+                          onClick={() => {
+                            setOpenTrade(tradeKey(t));
+                            setDrawerOpen(true);
+                          }}
                           style={{ cursor: 'pointer' }}>
                           <TableCell className="sr-num" justifyContent="flex-end">
                             <Text font="label2" as="span" tabularNumbers color="fgMuted" noWrap>{n}</Text>
@@ -1420,9 +1491,8 @@ export function StrategyWindow({
                     </TableBody>
                   </Table>
                 </Box>
-                )}
               </Panel>
-            </HStack>
+            </VStack>
 
             <Text font="legal" as="span" color="fgMuted">
               {fmtLevel(run.points.at(-1)?.v ?? null, unit)}

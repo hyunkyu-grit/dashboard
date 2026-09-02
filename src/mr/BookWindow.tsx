@@ -19,9 +19,22 @@
  * ③ **묶어서 나아졌는지를 답한다.** 통합 SR 옆에 개별 SR 중앙값·쌍상관·유효
  *    독립 계열 수가 선다. 그게 없으면 통합은 그냥 큰 숫자일 뿐이다.
  *
- * 없는 것도 적어 둔다: **이웃 칸(노브 민감도)이 없다.** 노브 하나를 옮길 때마다
- * 아홉 계열을 다시 돌아야 해서 열두 칸이면 백여덟 번이다. 견고성은 낱개 창에서
- * 계열별로 본다 — 여기서 반쯤 흉내 내면 두 화면이 다른 격자를 말하게 된다.
+ * ── 없는 것도 적어 둔다(디자인 감사 2026-09-02: «의도인지 미완인지 화면이 못
+ * 말한다» 는 지적) ────────────────────────────────────────────────────────────
+ *
+ * · **이웃 칸(노브 민감도)이 없다.** 노브 하나를 옮길 때마다 아홉 계열을 다시
+ *   돌아야 해서 열두 칸이면 백여덟 번이다. 견고성은 낱개 창에서 계열별로 본다 —
+ *   여기서 반쯤 흉내 내면 두 화면이 다른 격자를 말하게 된다.
+ * · **표시 구간 탭이 없다.** 낱개 창의 그것은 «한 계열의 곡선을 잘라 본다» 인데,
+ *   여기 곡선은 아홉을 더한 장부라 자르면 «구간 순손익» 이 아홉 다리의 진입
+ *   시점과 어긋난 조각이 된다(걸쳐 들어온 다리를 어느 구간에 셀지가 정의되지
+ *   않는다). 필요해지면 그 정의부터 정하고 붙인다.
+ * · **거래 표에 레벨·Δ·다리 레벨 열이 없다.** 낱개 창은 한 만기라 레벨이 한
+ *   축이지만 여기 거래는 만기가 섞여 있어, 같은 열에 6M 과 10Y 의 레벨이 세로로
+ *   서면 그 열은 더할 수도 비교할 수도 없는 수의 목록이다(§레벨을 만들지 마라).
+ *   대사는 만기를 골라 낱개 창에서 한다 — 만기 줄을 누르면 그 창으로 간다.
+ * · **일별 대사 서랍이 없다.** 위와 같은 이유로 대사는 «한 다리»의 것이고, 그
+ *   자리는 낱개 창의 서랍이다.
  *
  * 명구 의무는 낱개 창과 같다: 재현 도구이고 당일 종가 체결 규약이며 국고 다리는
  * 민평이다.
@@ -52,7 +65,12 @@ import {
 import { MrKnobBar, mrKnobsStale } from './KnobBar';
 import { Panel, WHY_WORD, ym } from './parts';
 
+/* 차트 높이 두 급·표 높이 — **낱개 창과 같은 값**(`StrategyWindow` 그 상수:
+   Backtest LINKED PAIR 의 200/140). 주인공(누적 곡선)이 크고 파생(동시 다리
+   수)이 작다. */
 const CHART_H = 200;
+const CHART_H_SUB = 140;
+const TABLE_H = CHART_H + CHART_H_SUB;
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 const bp = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(2)}bp`;
@@ -82,7 +100,7 @@ function Num({ v, tone }: { v: string; tone?: 'up' | 'down' }) {
  */
 function LegTable({ run, onPick }: { run: MrBookRun; onPick?: (id: string) => void }) {
   return (
-    <Box style={{ position: 'relative', height: CHART_H, overflow: 'auto' }} width="100%">
+    <Box style={{ position: 'relative', height: TABLE_H, overflow: 'auto' }} width="100%">
       <Table bordered={false}>
         <TableHeader sticky>
           <TableRow>
@@ -160,7 +178,7 @@ function LegTable({ run, onPick }: { run: MrBookRun; onPick?: (id: string) => vo
 /** 한 통에 모은 거래 — 첫 칸이 **어느 만기**다. */
 function TradeTable({ run }: { run: MrBookRun }) {
   return (
-    <Box style={{ position: 'relative', height: CHART_H, overflow: 'auto' }} width="100%">
+    <Box style={{ position: 'relative', height: TABLE_H, overflow: 'auto' }} width="100%">
       <Table bordered={false}>
         <TableHeader sticky>
           <TableRow>
@@ -314,14 +332,17 @@ export function BookWindow({
       windowKey="mrbook"
       title="BSS 통합 장부"
       width={1120}
+      /* 창 머리 부제는 caption — Backtest 「{asOf} 종가까지」와 같은 급이다. */
       aside={
-        <Text font="legal" as="span" color="fgMuted" noWrap>
+        <Text font="caption" as="span" color="fgMuted" noWrap>
           아홉 만기를 같은 규칙으로 동시에 — 재현 도구예요, 투자판단이 아니에요.
         </Text>
       }
       onClose={onClose}
     >
-      <VStack gap={1.5} paddingX={2} paddingY={1.5} width="100%">
+      {/* 창 몸통 리듬은 **Backtest 창과 한 값**(padding 2 · gap 2) — 낱개 창도
+          같다. 떠 있는 창들이 같은 위계면 안쪽 여백도 같아야 한다(얼라인 5). */}
+      <VStack gap={2} padding={2} width="100%">
         <MrKnobBar
           lead={run ? `BSS 만기 ${run.legs.length}개` : 'BSS 전 만기'}
           leadLabel="장부"
@@ -330,13 +351,15 @@ export function BookWindow({
           onRun={exec}
           running={running}
         />
+        {/* 상태 문구의 활자는 Backtest 와 한 벌 — 안내는 `body` 뮤트, 오류는
+            `body` + `.sr-up`(앱 공통 오류 문법). 낱개 창도 같다. */}
         {stale ? (
-          <Text font="legal" as="span" color="fgMuted">
+          <Text font="body" as="p" color="fgMuted">
             설정이 실행과 달라요 — 실행을 눌러야 아래 숫자에 반영돼요.
           </Text>
         ) : null}
         {error ? (
-          <Text font="legal" as="span">
+          <Text font="body" as="p" className="sr-up">
             실행하지 못했어요 — {error}
           </Text>
         ) : null}
@@ -349,7 +372,7 @@ export function BookWindow({
         ) : null}
 
         {!run ? (
-          <Text font="legal" as="span" color="fgMuted">
+          <Text font="body" as="p" color="fgMuted">
             {running ? '아홉 만기를 돌리는 중이에요…' : '실행을 누르면 아홉 만기를 같은 규칙으로 동시에 재현해요.'}
           </Text>
         ) : (
@@ -557,12 +580,12 @@ export function BookWindow({
               </HStack>
             </VStack>
 
-            {/* ── 곡선 둘, 표 하나 ─────────────────────────────────────────────
-                `Panel` 은 낱개 창과 공용이고 `flexBasis: 50%` 인데, 간격까지 더하면
-                한 줄에 둘이 안 들어가 실제로는 **한 줄에 하나씩** 선다(실측
-                2026-09-01 — 낱개 창도 같다). 여기서 고치면 두 창의 배치가 갈리므로
-                그대로 둔다: 이 장부의 주인공은 누적 곡선이라 폭이 넓은 쪽이 낫다. */}
-            <HStack gap={2} width="100%" alignItems="stretch" flexWrap="wrap">
+            {/* ── 곡선 둘, 표 하나 = **LINKED PAIR 의 세로 결**(Backtest
+                `LinkedCharts`). `Panel` 은 이제 풀폭이 정본이고(2026-09-02,
+                낱개 창과 공용), x 라벨은 **위 곡선만** 지고 아래는 숨긴다 —
+                같은 눈금을 두 번 그리면 다른 축으로 읽힌다. 십자선은
+                `syncIndex` 로 반대쪽에 건넨다. */}
+            <VStack gap={2} width="100%">
               <Panel
                 title="누적 손익"
                 sub={`${run.summary.numTrades} 거래 · 순 ${fmtKrw(run.summary.totalPnl)}`}
@@ -576,6 +599,8 @@ export function BookWindow({
                   <TimeChart
                     height={CHART_H}
                     accessibilityLabel="BSS 통합 누적 손익"
+                    hoverLabel={(i) => `${dates[i]} 누적 ${fmtKrw(run.points[i]!.cum)}`}
+                    syncIndex={idx && idx.chart !== 'eq' ? idx.i : null}
                     dates={dates}
                     lines={eqLines}
                     priceLines={zeroLine}
@@ -605,8 +630,11 @@ export function BookWindow({
                   onMouseLeave={() => setIdx(null)}
                 >
                   <TimeChart
-                    height={CHART_H}
+                    height={CHART_H_SUB}
                     accessibilityLabel="BSS 통합 동시 보유 다리 수"
+                    hoverLabel={(i) => `${dates[i]} 다리 ${run.points[i]!.legs}개`}
+                    syncIndex={idx && idx.chart !== 'legs' ? idx.i : null}
+                    hideTimeAxis
                     dates={dates}
                     lines={legLines}
                     priceLines={capLine}
@@ -625,9 +653,7 @@ export function BookWindow({
                   ) : null}
                 </Box>
               </Panel>
-            </HStack>
 
-            <HStack gap={2} width="100%" alignItems="stretch">
               <Panel
                 title={tab === 'legs' ? '만기별 성적' : '거래'}
                 sub={
@@ -664,7 +690,7 @@ export function BookWindow({
               >
                 {tab === 'legs' ? <LegTable run={run} onPick={onPickLeg} /> : <TradeTable run={run} />}
               </Panel>
-            </HStack>
+            </VStack>
 
             <Text font="legal" as="span" color="fgMuted">
               만기 {run.legs.length}개에 각각 명목 {run.params.notional.toLocaleString()}원/bp 를

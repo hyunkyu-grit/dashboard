@@ -722,21 +722,28 @@ describe('다리별 par 덮어쓰기 [v1 트레이더 피드백 3, 2026-08-07]',
 });
 
 describe('숫자 칸은 타이핑을 막지 않는다 `[검증됨]` 2026-08-14', () => {
+  /* 명제는 그대로, 사는 곳이 옮겨졌다: `NumField` 는 2026-09-02 에 공용
+   * (`ui/ControlCard`)으로 승격됐고 시뮬은 그것을 임포트한다. 기계의 규율은
+   * 공용의 소스에서 재고, 시뮬 쪽에서는 «즉시 파싱 관용구가 되살아나지
+   * 않았다» 와 «공용을 임포트한다» 를 잰다. */
   it('타이핑 중에는 파싱하지 않는다 — 커밋은 blur/Enter', () => {
     /* 실측 결함: `onChange` 에서 바로 `Number()` 로 파싱하면 `"-"` 는 NaN → 0 이
      * 되고 `"4."` 는 4 가 되어 되쓰인다. **음수 목표를 칠 수 없었다.** 부호를 갖는
-     * 칸이 이 화면의 절반이다. */
-    const s = body('src/sim/SimulationPage.tsx');
+     * 칸이 시뮬 화면의 절반이다. */
+    const s = body('src/ui/ControlCard.tsx');
     expect(s).toMatch(/function NumField/);
     expect(s).toMatch(/onBlur=\{commit\}/);
     expect(s).toMatch(/if \(e\.key === 'Enter'\) commit\(\)/);
-    // 숫자 칸에서 즉시 파싱하던 관용구가 남아 있지 않다
+    // 숫자 칸에서 즉시 파싱하던 관용구가 남아 있지 않다 — 공용에도 시뮬에도
     expect(s).not.toMatch(/Number\(e\.target\.value\) \|\| 0/);
+    const sim = body('src/sim/SimulationPage.tsx');
+    expect(sim).not.toMatch(/Number\(e\.target\.value\) \|\| 0/);
+    expect(sim).toMatch(/import \{ Field, NumField, Segmented \} from '@\/ui\/ControlCard'/);
   });
 
   it('못 읽는 글자는 **되돌린다** — 0 으로 바꾸지 않는다', () => {
     // 0 으로 바꾸면 사람이 친 적 없는 값을 화면이 주장하게 된다.
-    const s = body('src/sim/SimulationPage.tsx');
+    const s = body('src/ui/ControlCard.tsx');
     expect(s).toMatch(/else setText\(shown\)/);
   });
 });

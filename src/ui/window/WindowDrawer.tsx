@@ -36,8 +36,28 @@ export interface DrawerTab {
   unavailable?: string;
 }
 
-export function WindowDrawer({ tabs }: { tabs: DrawerTab[] }) {
-  const [open, setOpen] = useState(false);
+export function WindowDrawer({
+  tabs,
+  open: openProp,
+  onOpenChange,
+}: {
+  tabs: DrawerTab[];
+  /** 펼침을 **밖에서** 쥘 때만 준다(제어 컴포넌트). 안 주면 종전대로 서랍이
+   *  자기 상태를 쥔다 — 백테스트 창이 그 판이다.
+   *
+   *  MR 전략 실험 창이 이것을 쓴다 [2026-09-02]: 거래 줄을 누르면 그 거래의
+   *  일별 대사가 서랍에 서야 하는데, 서랍이 접혀 있으면 «눌렀는데 아무 일도
+   *  안 일어난» 화면이 된다. 여닫는 손잡이는 그대로 서랍의 것이고(탭 클릭),
+   *  밖은 «지금 펼쳐라» 를 말할 수 있을 뿐이다. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const [openSelf, setOpenSelf] = useState(false);
+  const open = openProp ?? openSelf;
+  const setOpen = (v: boolean) => {
+    setOpenSelf(v);
+    onOpenChange?.(v);
+  };
   const [active, setActive] = useState(tabs[0]?.id ?? '');
   const tab = tabs.find((t) => t.id === active) ?? tabs[0];
 

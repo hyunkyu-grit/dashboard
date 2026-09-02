@@ -2,11 +2,13 @@
 
 /* 값 + 밴드(중심선·상단·하단) 이력 차트 — Mean Reversion 상세 카드.
  *
- * RvPage 의 소형 차트와 같은 기계다: CDS `CartesianChart` + `Scrubber`,
+ * RvPage 의 소형 차트와 같은 기계다: 공용 `TimeChart`(lightweight-charts —
+ * CLAUDE.md 규칙 7 로 15차트가 캔버스로 옮겨 갔다. 종전 주석은 CDS
+ * `CartesianChart` + `Scrubber` 를 말했는데 2026-08-26 이후 거짓이다),
  * 커서 리드아웃은 공용 `ReadoutCard`. 밴드가 상수가 아니라 **구르는 선**이라
- * `ReferenceLine`(dataY 상수) 대신 시리즈 셋으로 선다. 밴드 선은 값보다
- * 흐리게(strokeWidth·strokeOpacity) — 색을 더 시키지 않는다(LinkedCharts 의
- * 기준선 판단: 같은 지각적 무게 문제).
+ * 가격선(dataY 상수) 대신 시리즈 셋으로 선다. 밴드 선은 값보다 흐리다 —
+ * 캔버스에는 불투명도 손잡이가 없어 색 자체를 흐리게 만든다(`palette.dim`).
+ * 색을 더 시키지 않는 판단은 LinkedCharts 의 기준선과 같다(지각적 무게).
  *
  * 숫자는 서버 것 그대로(§16) — 여기서 밴드를 다시 내지 않는다.
  */

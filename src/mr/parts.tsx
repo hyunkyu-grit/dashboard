@@ -42,8 +42,14 @@ export function Panel({
   aside?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  /* **한 줄에 하나** [OWNER 2026-09-02 — 「세로 스택 정본화」]. 종전 값은
+     `flexBasis: 50%` 였는데 gap 을 더하면 한 줄에 둘이 안 들어가 실제로는
+     세로로 섰다 — 화면은 세로였고 주석만 「2×2 격자」라고 말하고 있었다
+     (2026-09-02 디자인 감사가 그 어긋남을 잡았다). 정본을 화면 쪽으로
+     맞춘다: Backtest 창의 세로 결(북 → 답 → 차트 쌍 → 서랍)과 같은 흐름이고,
+     12년 시계열은 풀폭이 아니면 못 읽는다. */
   return (
-    <VStack gap={0.5} flexBasis="50%" flexGrow={1} minWidth={0}>
+    <VStack gap={0.5} width="100%" minWidth={0}>
       <HStack gap={1} alignItems="center" justifyContent="space-between" minHeight={24}>
         <Text font="label2" as="h3" noWrap>
           {title}

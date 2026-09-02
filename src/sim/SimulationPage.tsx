@@ -26,7 +26,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Select } from '@coinbase/cds-web/alpha/select';
 import { Button } from '@coinbase/cds-web/buttons';
 import { Collapsible as CdsCollapsible } from '@coinbase/cds-web/collapsible';
-import { TextInput } from '@coinbase/cds-web/controls';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Pressable } from '@coinbase/cds-web/system';
 /* 새 코드는 `Text font=…` 를 쓴다 — CLAUDE.md 5. 남은 shorthand 는 시각 무변이라
@@ -37,7 +36,7 @@ import { directionLabel } from '@/backtest/book';
 import { runErrorMessage, type WallSummary } from '@/lib/api';
 import { fmtLevel } from '@/lib/format';
 import { fmtKrw } from '@/lib/krw';
-import { Field, Segmented } from '@/ui/ControlCard';
+import { Field, NumField, Segmented } from '@/ui/ControlCard';
 import { CONTROL_H } from '@/ui/controlHeight';
 import { useFillHeight } from '@/ui/useFillHeight';
 import { IsoDateField } from '@/ui/IsoDateField';
@@ -212,72 +211,11 @@ function Collapsible({
   );
 }
 
-/**
- * 숫자 칸 — **타이핑 중에는 글자 그대로 두고, 떠날 때 커밋한다.**
- *
- * 실측으로 걸린 결함(2026-08-14): `onChange` 에서 바로 `Number()` 로 파싱해 상태에
- * 넣으면 `"-"` 는 NaN → 0 이 되고 `"4."` 는 4 가 되어 되쓰인다. 그래서 **음수 목표를
- * 칠 수 없었고**(`-` 를 누르는 순간 0), 소수도 못 쳤다. 부호를 갖는 칸(목표 변동·
- * 경유지·스프레드·기준금리)이 이 화면의 절반이라 사실상 못 쓰는 상태였다.
- *
- * 커밋은 blur 와 Enter. 밖에서 값이 바뀌면(케이스 전환·격자 재구성) 따라가되, 그
- * 자리를 편집 중일 때는 안 건드린다. 못 읽는 글자는 **되돌린다** — 0 으로 바꾸면
- * 사람이 친 적 없는 값을 주장하게 된다.
- */
-function NumField({
-  label,
-  value,
-  onCommit,
-  width = 96,
-  format,
-}: {
-  label: string;
-  value: number;
-  onCommit: (v: number) => void;
-  width?: number;
-  /** 안 만지고 있을 때 보여줄 모양. 금리는 네 자리로 보여야 par 와 대조된다. */
-  format?: (v: number) => string;
-}) {
-  const shown = format ? format(value) : String(value);
-  const [text, setText] = useState(shown);
-  const [editing, setEditing] = useState(false);
-  if (!editing && text !== shown) setText(shown);
-
-  const commit = () => {
-    setEditing(false);
-    const n = Number(text);
-    if (text.trim() !== '' && Number.isFinite(n)) onCommit(n);
-    else setText(shown);
-  };
-
-  return (
-    <Box width={width}>
-      {/* fontSize legal(13) — 컨트롤 값 13px 규칙(popup.ts 의 근거).
-          height 32 — `NumField` 는 Select 와 나란히 서는 자리(포지션 줄·목표
-          금리)에 쓰이고, `size="s"` 만으로는 38 이라 그 행에서 이 칸만 6px 높고
-          중심선이 3px 어긋났다(실측). 폰트를 되돌리면 13px 규칙이 깨지므로
-          상자를 직접 적는다. */}
-      <TextInput
-        size="s"
-        fontSize="legal"
-        height={CONTROL_H}
-        accessibilityLabel={label}
-        value={text}
-        onChange={(e) => {
-          setEditing(true);
-          setText(e.target.value);
-        }}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') commit();
-        }}
-      />
-    </Box>
-  );
-}
-
-/* `Field` 는 여기서 정의하지 않는다 — 앱에 하나뿐인 것을 임포트한다
-   (`ui/ControlCard`). 네 곳에 복제돼 있던 것의 정리 [OWNER 2026-08-25]. */
+/* `Field`·`NumField` 는 여기서 정의하지 않는다 — 앱에 하나뿐인 것을 임포트한다
+   (`ui/ControlCard`). `Field` 는 네 곳 복제의 정리 [OWNER 2026-08-25],
+   `NumField` 는 세 곳(시뮬·rv·mr) 복제의 정리 [OWNER 2026-09-02 — "공용 부품은
+   한 벌로 승격"] — blur/Enter 커밋 규율의 원산지가 이 화면이었다(2026-08-14
+   실측 결함). 호출부는 종전 기본값(width 96 등)을 명시로 넘긴다. */
 
 /** 배타 선택은 **CDS `SegmentedTabs`** 다 [OWNER 2026-08-13 §5.4 — "CDS 컴포넌트가
  * 존재하면 항상 그것을 우선한다"].

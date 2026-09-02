@@ -143,12 +143,22 @@ describe('노브는 한 벌이다', () => {
     }
   });
 
-  it('σ 알약·값 고르개·숫자 칸은 `KnobBar` 에만 있다', () => {
-    for (const name of ['function SigmaPick', 'function NumInput', 'function Choice']) {
-      const homes = ['src/mr/KnobBar.tsx', 'src/mr/StrategyWindow.tsx', 'src/mr/BookWindow.tsx', 'src/mr/MrPage.tsx']
-        .filter((f) => src(f).includes(name));
-      expect(homes, name).toEqual(['src/mr/KnobBar.tsx']);
+  it('σ 알약은 `KnobBar` 에만 있고, 값 고르개·숫자 칸 손 구현은 없다', () => {
+    /* 2026-09-02 승격의 명제 갱신: 종전에는 `NumInput`·`Choice` 도 KnobBar 의
+       로컬이었는데, 숫자 칸은 공용 `NumField`(ui/ControlCard), 배타 선택은 캐논
+       `Segmented`(같은 파일)가 됐다 — 손 구현이 mr 어디에도 되살아나면 안 된다.
+       `SigmaPick` 만 남는다(프리셋 밖 값이면 무선택이라는 자기 근거가 그 파일
+       주석에 있다). 공용 쪽의 단일성은 `guards/shared-controls.test.ts` 가 진다. */
+    const mrFiles = ['src/mr/KnobBar.tsx', 'src/mr/StrategyWindow.tsx', 'src/mr/BookWindow.tsx', 'src/mr/MrPage.tsx'];
+    const sigmaHomes = mrFiles.filter((f) => src(f).includes('function SigmaPick'));
+    expect(sigmaHomes).toEqual(['src/mr/KnobBar.tsx']);
+    for (const name of ['function NumInput', 'function Choice']) {
+      const homes = mrFiles.filter((f) => src(f).includes(name));
+      expect(homes, `${name} 손 구현은 승격으로 사라졌다`).toEqual([]);
     }
+    expect(src('src/mr/KnobBar.tsx')).toMatch(
+      /import \{ Field, NumField, Segmented \} from '@\/ui\/ControlCard'/,
+    );
   });
 
   it('청산 사유의 우리말은 앱에 한 벌이다 — 두 표가 같은 사건을 같게 부른다', () => {

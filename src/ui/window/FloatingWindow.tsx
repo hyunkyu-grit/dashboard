@@ -37,6 +37,8 @@ export function FloatingWindow({
   onClose,
   width = WINDOW_W,
   drawer,
+  drawerOpen,
+  onDrawerOpenChange,
   children,
 }: {
   /** 자리를 기억할 열쇠. 창마다 자기 자리로 돌아온다. */
@@ -47,6 +49,10 @@ export function FloatingWindow({
   onClose: () => void;
   width?: number;
   drawer?: DrawerTab[];
+  /** 서랍 펼침을 창 밖에서 쥘 때만(제어) — `WindowDrawer` 의 그 prop 을
+   *  그대로 지나 보낸다. 안 주면 서랍이 자기 상태를 쥔다. */
+  drawerOpen?: boolean;
+  onDrawerOpenChange?: (open: boolean) => void;
   children: React.ReactNode;
 }) {
   const { pos, dragHandlers } = useFloatingWindow(windowKey, width);
@@ -124,7 +130,9 @@ export function FloatingWindow({
         {children}
       </VStack>
 
-      {drawer ? <WindowDrawer tabs={drawer} /> : null}
+      {drawer ? (
+        <WindowDrawer tabs={drawer} open={drawerOpen} onOpenChange={onDrawerOpenChange} />
+      ) : null}
     </VStack>
   );
 }

@@ -25,16 +25,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
-import { Tooltip } from '@coinbase/cds-web/overlays';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@coinbase/cds-web/tables';
 import { Text } from '@coinbase/cds-web/typography';
 
 import type { Unit } from '@/lib/api';
 import { BacktestUnavailable } from '@/lib/api';
 import { fmtDelta, fmtLevel, levelHeadText, levelHeadTitle, unitSuffix } from '@/lib/format';
+import { BASIS_LABEL } from '@/table/InstrumentTable';
 import { ROW_H } from '@/table/rowHeight';
 import { directionClass, directionGlyph, tintStyle, unsignedDelta } from '@/table/tint';
+import { Cond } from '@/ui/Cond';
 import { ErrorState, LoadingState } from '@/ui/DataState';
+import { ThHelp } from '@/ui/ThHelp';
 import { Stat, StatColumn } from '@/ui/Stat';
 import { useUrlState } from '@/ui/useUrlState';
 
@@ -54,46 +56,10 @@ import { BandChart } from './BandChart';
 import { BookWindow } from './BookWindow';
 import { StrategyWindow } from './StrategyWindow';
 
-/** 조건 바 한 칸 — rv 의 Cond 와 같은 문법(새 코드라 shorthand 대신 Text). */
-function Cond({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
-  return (
-    <HStack gap={0.5} alignItems="baseline">
-      <Text font="caption" as="span" color="fgMuted" noWrap>
-        {k}
-      </Text>
-      {/* 강조는 굵기+밑줄 — 색이 아니다(rv 의 as-of 대비·겸직 측정 그대로). */}
-      <Text
-        font="legal"
-        as="span"
-        tabularNumbers
-        noWrap
-        className={strong ? 'sr-rv-asof-split' : undefined}
-      >
-        {v}
-      </Text>
-    </HStack>
-  );
-}
-
-/** 열 머리 뜻풀이 — rv 의 ThHelp 와 같은 기계(CDS Tooltip, hover+포커스). */
-function ThHelp({ label, help }: { label: string; help: string }) {
-  return (
-    <Tooltip
-      content={
-        /* 폭은 아래 `maxWidth` prop 이 진다 — 근거는 rv `ThHelp` 의 주석. */
-        <Text font="legal" as="span">
-          {help}
-        </Text>
-      }
-      maxWidth={280}
-      placement="bottom"
-    >
-      <span className="sr-rv-thhelp" tabIndex={0}>
-        {label}
-      </span>
-    </Tooltip>
-  );
-}
+/* `Cond`(조건 바 한 칸)와 `ThHelp`(열 머리 뜻풀이)는 공용이 됐다(`ui/Cond`·
+   `ui/ThHelp`) [OWNER 2026-09-02 — "공용 부품은 한 벌로 승격"] — rv 와 이
+   화면이 같은 기계를 두 벌씩 갖고 있었고, 타이포 문법(shorthand 대 `Text
+   font=…`)까지 갈려 있었다. 이 화면의 새 문법 판이 공용의 본이 됐다. */
 
 /** 상태 문장 — 판정이지 행동이 아니다. */
 function stateText(s: MrState): string {
@@ -407,7 +373,8 @@ export function MrPage() {
               갱신 중…
             </Text>
           ) : null}
-          <Box style={{ marginLeft: 'auto' }}>
+          {/* 논리 속성 — 캐논(`ui/ControlCard`)이 쓰는 그 낱말(marginInlineStart). */}
+          <Box style={{ marginInlineStart: 'auto' }}>
             {/* 명구 의무 — Credit RV 와 같은 문법. */}
             <Text font="legal" as="span" color="fgMuted" noWrap>
               늘어남을 재는 화면이에요 — 투자판단이 아니에요.
@@ -481,9 +448,11 @@ export function MrPage() {
                           {levelHeadText(headAsof)}
                         </Text>
                       </TableCell>
-                      {/* 변화 열 이름도 형제 것이다 — BASIS_LABEL 의 `1D`. */}
+                      {/* 변화 열 이름은 형제 것을 **임포트**한다 — 문자열로 다시
+                          적으면 한쪽만 낡는다(BASIS_LABEL 머리 주석의 그 규칙).
+                          종전에는 '1D' 하드코딩이었다(2026-09-02 수리). */}
                       <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
-                        <Text font="caption" as="span" color="fgMuted">1D</Text>
+                        <Text font="caption" as="span" color="fgMuted">{BASIS_LABEL.d1}</Text>
                       </TableCell>
                       <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
                         {/* 창을 상수로 적으면 컨트롤을 바꾼 날 화면이 거짓말을

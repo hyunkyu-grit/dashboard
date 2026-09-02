@@ -49,7 +49,6 @@ import { Select } from '@coinbase/cds-web/alpha/select';
 import { Collapsible as CdsCollapsible } from '@coinbase/cds-web/collapsible';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Divider } from '@coinbase/cds-web/layout/Divider';
-import { TextInput } from '@coinbase/cds-web/controls';
 import {
   Text,
   TextBody,
@@ -64,7 +63,8 @@ import { TimeChart, type TimeLine } from '@/chart/TimeChart';
 import type { ScalePriceLine } from '@/chart/ScaleChart';
 import { BacktestUnavailable } from '@/lib/api';
 import { useFunding } from '@/state/funding';
-import { CONTROL_H } from '@/ui/controlHeight';
+import { Cond } from '@/ui/Cond';
+import { NumField } from '@/ui/ControlCard';
 import { ErrorState, LoadingState } from '@/ui/DataState';
 import { ReadoutCard, ReadoutLevel, placeReadout } from '@/ui/ReadoutCard';
 import { DROPDOWN_STYLES } from '@/ui/window/popup';
@@ -88,58 +88,11 @@ import { ScoreHeat } from './ScoreHeat';
 import { SectorLane } from './SectorLane';
 import { TenorHeat } from './TenorHeat';
 
-/** 금통위 Δbp 입력 — blur/Enter 커밋(시뮬 NumField 의 규율: onChange 즉시
- * 파싱은 "-" 를 0 으로 만든다). */
-function BpField({
-  value,
-  onCommit,
-  label = '금통위 변동(bp)',
-  suffix = 'bp',
-  width = 76,
-}: {
-  value: number;
-  onCommit: (v: number) => void;
-  /** 접근성 이름 — 같은 모양의 칸이 화면에 열여덟 개 서므로 각자 이름이 있어야
-   * 한다(금통위 3 + 재투자금리 1 + 경로 2×7). */
-  label?: string;
-  suffix?: string;
-  width?: number;
-}) {
-  const shown = String(value);
-  const [text, setText] = useState(shown);
-  const [editing, setEditing] = useState(false);
-  if (!editing && text !== shown) setText(shown);
-  const commit = () => {
-    setEditing(false);
-    const n = Number(text);
-    if (text.trim() !== '' && Number.isFinite(n)) onCommit(n);
-    else setText(shown);
-  };
-  return (
-    <Box width={width}>
-      {/* fontSize legal(13) — 컨트롤 값 13px 규칙(popup.ts 의 근거).
-          height 32 — 앱의 행 컨트롤 등고(`guards/control-parity.test.ts`).
-          이 입력만 있는 줄에서는 지금 어긋난 것이 없지만, CDS `size="s"` 기본값
-          38 을 남겨 두면 옆에 Select 나 알약이 서는 날 그 행만 6px 벌어진다. */}
-      <TextInput
-        size="s"
-        fontSize="legal"
-        height={CONTROL_H}
-        accessibilityLabel={label}
-        suffix={suffix}
-        value={text}
-        onChange={(e) => {
-          setEditing(true);
-          setText(e.target.value);
-        }}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') commit();
-        }}
-      />
-    </Box>
-  );
-}
+/* 금통위 Δbp 입력이던 `BpField` 는 공용 `NumField`(`ui/ControlCard`)가 됐다
+   [OWNER 2026-09-02 — "공용 부품은 한 벌로 승격"] — 같은 blur/Enter 커밋 기계가
+   시뮬·mr 에 두 벌 더 있었다. 종전 기본값(suffix 'bp'·width 76)은 호출부가
+   명시로 넘긴다. 접근성 이름도 호출부 몫이다 — 같은 모양의 칸이 화면에 열여덟
+   개 선다(금통위 3 + 재투자금리 1 + 경로 2×7). */
 
 /* ── 설정 패널의 배치 상수 ────────────────────────────────────────────────
  * 레이블 열이 **고정폭**이어야 컨트롤이 한 줄에 선다. 글자 수만큼 자리를 먹게
@@ -209,19 +162,10 @@ function SetRow({
   );
 }
 
-function Cond({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
-  return (
-    <HStack gap={0.5} alignItems="baseline">
-      <TextCaption as="span" color="fgMuted" noWrap>
-        {k}
-      </TextCaption>
-      {/* 강조는 굵기+밑줄 — 색이 아니다(모듈 주석의 as-of 대비·겸직 측정). */}
-      <TextLegal as="span" tabularNumbers noWrap className={strong ? 'sr-rv-asof-split' : undefined}>
-        {v}
-      </TextLegal>
-    </HStack>
-  );
-}
+/* 조건 바 한 칸 `Cond` 는 공용이 됐다(`ui/Cond`) [OWNER 2026-09-02 — "공용
+   부품은 한 벌로 승격"] — MR 조건 바와 같은 부품이고, 여기 있던 구 shorthand
+   (TextCaption/TextLegal) 판이 새 문법(`Text font=…`)으로 넘어갔다(시각 동일 —
+   shorthand 는 CDS 소스가 `Text font` 위임일 뿐이다). */
 
 /** ±σ 밴드를 두른 소형 차트 하나 — 창 평균과 평균±σ 가 `ReferenceLine`(dataY)
  * 으로 선다. 통계는 서버 것 그대로(§16) — 여기서 평균을 다시 내지 않는다.
@@ -731,10 +675,11 @@ export function RvPage() {
                   </button>
                 ))}
                 {reinvest === 'manual' ? (
-                  <BpField
+                  <NumField
                     value={reinvestRate}
                     label="재투자 금리(연 %)"
                     suffix="%"
+                    width={SET_FIELD_W}
                     onCommit={(v) => setReinvestRate(Math.max(-10, Math.min(30, v)))}
                   />
                 ) : null}
@@ -769,9 +714,11 @@ export function RvPage() {
                     <Text font="caption" as="span" color="fgMuted" noWrap>
                       {m.date.slice(5)}
                     </Text>
-                    <BpField
+                    <NumField
                       value={mpc[m.date] ?? 0}
                       label={`금통위 ${m.date} 변동(bp)`}
+                      suffix="bp"
+                      width={SET_FIELD_W}
                       onCommit={(v) =>
                         setMpc((prev) => ({ ...prev, [m.date]: Math.max(-100, Math.min(100, v)) }))
                       }
@@ -820,9 +767,10 @@ export function RvPage() {
                         </Text>
                       </Box>
                       {tenorList.map((t) => (
-                        <BpField
+                        <NumField
                           key={t}
                           value={row[t] ?? 0}
+                          suffix="bp"
                           width={SET_FIELD_W}
                           label={`경로 ${pi + 1} ${t} 변동(bp)`}
                           onCommit={(v) =>

@@ -22,6 +22,7 @@
 import { useState } from 'react';
 
 import { Collapsible as CdsCollapsible } from '@coinbase/cds-web/collapsible';
+import { TextInput } from '@coinbase/cds-web/controls';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Pressable } from '@coinbase/cds-web/system';
 import { SegmentedTabs } from '@coinbase/cds-web/tabs';
@@ -171,11 +172,15 @@ export function Segmented<T extends string>({
   label,
 }: {
   value: T;
-  options: { value: T; label: string }[];
+  /** `title` 은 선택지 하나의 뜻풀이 — native title 로 붙는다. MR 노브의 손
+   * 알약이 지고 있던 `title={o.help}` 를 캐논으로 승격하며 잃지 않으려고 뒀다
+   * (2026-09-02). CDS `Tabs` 는 tab 객체의 모르는 키를 탭 버튼에 그대로
+   * 흘린다(실측 — `SegmentedTab` 의 `_excluded` 에 title 이 없다). */
+  options: { value: T; label: string; title?: string }[];
   onChange: (v: T) => void;
   label: string;
 }) {
-  const tabs = options.map((o) => ({ id: o.value, label: o.label }));
+  const tabs = options.map((o) => ({ id: o.value, label: o.label, title: o.title }));
   return (
     <SegmentedTabs
       accessibilityLabel={label}
@@ -186,4 +191,91 @@ export function Segmented<T extends string>({
       onChange={(t) => t && onChange(t.id)}
     />
   );
+}
+
+/**
+ * 숫자 칸 — **타이핑 중에는 글자 그대로 두고, 떠날 때 커밋한다.** 앱에 하나뿐인
+ * 그것 [OWNER 2026-09-02 — "공용 부품은 한 벌로 승격"].
+ *
+ * 2026-09-02 까지 이 기계는 **세 번** 따로 정의돼 있었다(`sim/SimulationPage`
+ * `NumField` · `rv/RvPage` `BpField` · `mr/KnobBar` `NumInput`) — `Field` 가
+ * 네 벌이던 것과 같은 내력이다(위 `Field` 주석·얼라인 8). 셋의 차이는 전부
+ * 성질이 아니라 옵션이었다: 단위 접미(rv 만 `suffix`), 표시 포맷(시뮬 금리
+ * 네 자리 `format`), 커밋 하한(mr 만 음수 거부 → `min`), 폭 상자(sim·rv 는
+ * 제 `Box` 를 두르고 mr 은 호출부가 두른다 → `width` 옵셔널). 그래서 옵셔널
+ * prop 넷으로 합쳤고, 호출부가 종전 기본값을 명시로 넘긴다 — 각 화면의 행동은
+ * 그대로다.
+ *
+ * ── 규율의 근거 (시뮬 실측 결함 2026-08-14) ─────────────────────────────────
+ * `onChange` 에서 바로 `Number()` 로 파싱해 상태에 넣으면 `"-"` 는 NaN → 0 이
+ * 되고 `"4."` 는 4 가 되어 되쓰인다 — **음수 목표를 칠 수 없었고** 소수도 못
+ * 쳤다. 커밋은 blur 와 Enter. 밖에서 값이 바뀌면(케이스 전환·격자 재구성)
+ * 따라가되, 그 자리를 편집 중일 때는 안 건드린다. 못 읽는 글자는 **되돌린다**
+ * — 0 으로 바꾸면 사람이 친 적 없는 값을 주장하게 된다.
+ *
+ * ── 합치며 버린 한 가지: mr 의 `onFocus` 에서 editing 세우기 ────────────────
+ * mr 판만 포커스 순간부터 바깥 값 추종을 멈췄다. 차이가 관찰되려면 «포커스 중
+ * 타이핑 전에 바깥 값이 바뀌는» 경로가 있어야 하는데, 이 앱의 노브 변경은 전부
+ * 포인터 클릭·Tab 이동이고 그 전에 이 칸의 blur → commit 이 먼저 온다(프로그램
+ * 적 노브 변경 경로는 없다 — KnobBar 호출부 확인 2026-09-02). 관찰 불가능한
+ * 차이는 성질이 아니라서 시뮬 규약(onChange 에서 세움)으로 통일했다.
+ */
+export function NumField({
+  label,
+  value,
+  onCommit,
+  width,
+  min,
+  suffix,
+  format,
+}: {
+  /** 접근성 이름 — 같은 모양의 칸이 화면에 여럿 서므로 각자 이름이 있어야 한다. */
+  label: string;
+  value: number;
+  onCommit: (v: number) => void;
+  /** 상자 폭. 안 주면 맨몸으로 선다 — 폭은 감싸는 쪽이 준다(mr 의 `<Box width={56}>`). */
+  width?: number;
+  /** 커밋 하한. 이보다 작은 수는 커밋하지 않고 되돌린다(mr 룩백·비용·명목의 음수 거부). */
+  min?: number;
+  /** 단위 접미(rv 의 'bp'·'%'). TextInput 의 suffix 로 붙는다. */
+  suffix?: string;
+  /** 안 만지고 있을 때 보여줄 모양. 금리는 네 자리로 보여야 par 와 대조된다(시뮬). */
+  format?: (v: number) => string;
+}) {
+  const shown = format ? format(value) : String(value);
+  const [text, setText] = useState(shown);
+  const [editing, setEditing] = useState(false);
+  if (!editing && text !== shown) setText(shown);
+
+  const commit = () => {
+    setEditing(false);
+    const n = Number(text);
+    if (text.trim() !== '' && Number.isFinite(n) && (min === undefined || n >= min)) onCommit(n);
+    else setText(shown);
+  };
+
+  const input = (
+    /* fontSize legal(13) — 컨트롤 값 13px 규칙(`ui/window/popup.ts` 의 근거).
+       height 32 — `NumField` 는 Select·알약과 나란히 서는 자리에 쓰이고,
+       `size="s"` 만으로는 38 이라 그 행에서 이 칸만 6px 높고 중심선이 3px
+       어긋났다(시뮬 실측). CDS 기본을 남겨 두면 옆에 컨트롤이 서는 날 그 행만
+       벌어진다(rv 의 같은 기록). */
+    <TextInput
+      size="s"
+      fontSize="legal"
+      height={CONTROL_H}
+      accessibilityLabel={label}
+      suffix={suffix}
+      value={text}
+      onChange={(e) => {
+        setEditing(true);
+        setText(e.target.value);
+      }}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit();
+      }}
+    />
+  );
+  return width === undefined ? input : <Box width={width}>{input}</Box>;
 }

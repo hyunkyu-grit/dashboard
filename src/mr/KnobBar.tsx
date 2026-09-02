@@ -15,13 +15,10 @@
  * 「BSS 통합」과 만기 수).
  */
 
-import { useState } from 'react';
-
-import { TextInput } from '@coinbase/cds-web/controls';
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Text } from '@coinbase/cds-web/typography';
 
-import { Field } from '@/ui/ControlCard';
+import { Field, NumField, Segmented } from '@/ui/ControlCard';
 import { CONTROL_H } from '@/ui/controlHeight';
 
 import {
@@ -40,52 +37,17 @@ import {
  * 담고 한 칸 여유 — 넷이 같아야 알약 열이 세로로 맞는다. */
 const SIGMA_W = 132;
 
-/** 값 몇 개 중 하나 — 라벨 아래 알약 묶음.
+/* 배타 선택이던 손 알약 `Choice` 는 없다 [OWNER 2026-09-02 — "디자인 구성을
+ * Main·Backtest 와 통일"]. 앱의 배타 선택 정본은 `ui/ControlCard` 의
+ * `Segmented`(CDS SegmentedTabs + CONTROL_H + .sr-ctlfont)이고, Backtest 방향
+ * 칸이 그것을 쓴다(`backtest/BacktestWindow.tsx` 방향 세그먼트). 진입 규칙과
+ * 실전 규칙 다섯 칸이 전부 그리로 갔다 — 값이 숫자·불리언인 칸은 Backtest
+ * 방향 칸의 판례대로 `String()` 으로 오간다(`String(r.direction) as '1'|'-1'`).
  *
- * `SigmaPick` 은 σ 전용(숫자 포맷·고정폭)이고 이것은 **아무 값**이나 받는다.
- * 하나로 합치지 않은 이유는 σ 칸 넷이 서로 폭을 맞춰야 하기 때문이다(SIGMA_W).
- * 대신 이 컴포넌트가 생기면서 진입 규칙·레짐·비용모델·타임스탑·스위치 둘이
- * **한 정의**를 쓴다 — CLAUDE.md 얼라인 8(«같은 것은 한 번만 만든다»). */
-function Choice<T extends string | number | boolean>({
-  label,
-  help,
-  width,
-  value,
-  options,
-  onPick,
-  group,
-}: {
-  label: string;
-  help: string;
-  width: number;
-  value: T;
-  options: readonly { v: T; label: string; help?: string }[];
-  onPick: (v: T) => void;
-  group?: boolean;
-}) {
-  return (
-    <Box width={width} className={group ? 'sr-fgroup' : undefined}>
-      <Field label={label} help={help}>
-        <HStack gap={0.5} alignItems="center" height={CONTROL_H}>
-          {options.map((o) => (
-            <button
-              key={String(o.v)}
-              type="button"
-              className="sr-pillbtn"
-              data-on={value === o.v || undefined}
-              aria-pressed={value === o.v}
-              aria-label={`${label} ${o.label}`}
-              title={o.help}
-              onClick={() => onPick(o.v)}
-            >
-              {o.label}
-            </button>
-          ))}
-        </HStack>
-      </Field>
-    </Box>
-  );
-}
+ * `SigmaPick` 은 남는다: σ 전용(숫자 포맷·SIGMA_W 고정폭)이고, **프리셋 밖의
+ * 값이면 무선택**으로 서야 한다는 자기 근거가 있다(아래 주석). 룩백·비용의
+ * 알약 줄도 남는다 — 자유 입력 칸과 한 줄에 서는 «프리셋 + 자유값» 이지
+ * 배타 선택이 아니다(값이 프리셋 밖이면 아무 알약도 안 눌린다). */
 
 /** σ 문턱 하나 — 근거 있는 셋 중 고른다(`MR_STRATEGY_PRESETS`).
  *
@@ -137,44 +99,11 @@ function SigmaPick({
   );
 }
 
-/** 숫자 칸 — blur/Enter 커밋(시뮬 NumField·rv BpField 의 규율: onChange 즉시
- * 파싱은 "-"·"1." 을 삼킨다). 라벨은 Field 가 진다 — 여기는 32px 상자뿐이다. */
-function NumInput({
-  label,
-  value,
-  onCommit,
-}: {
-  /** 접근성 이름 — 같은 모양의 칸이 일곱 개 서므로 각자 이름이 있어야 한다. */
-  label: string;
-  value: number;
-  onCommit: (v: number) => void;
-}) {
-  const shown = String(value);
-  const [text, setText] = useState(shown);
-  const [editing, setEditing] = useState(false);
-  if (!editing && text !== shown) setText(shown);
-  const commit = () => {
-    setEditing(false);
-    const n = Number(text);
-    if (text.trim() !== '' && Number.isFinite(n) && n >= 0) onCommit(n);
-    else setText(shown);
-  };
-  return (
-    <TextInput
-      size="s"
-      fontSize="legal"
-      height={CONTROL_H}
-      accessibilityLabel={label}
-      value={text}
-      onFocus={() => setEditing(true)}
-      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setText(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') commit();
-      }}
-    />
-  );
-}
+/* 숫자 칸이던 `NumInput` 은 공용 `NumField`(`ui/ControlCard`)가 됐다
+ * [OWNER 2026-09-02 — "공용 부품은 한 벌로 승격"] — 같은 blur/Enter 커밋
+ * 기계가 시뮬·rv 에 두 벌 더 있었다. 여기 있던 «음수 거부»(n >= 0)는 공용의
+ * `min={0}` 이 지고, 폭은 종전대로 호출부의 `<Box width={56}>` 이 진다.
+ * 라벨은 Field 가 진다 — NumField 의 label 은 접근성 이름이다. */
 
 
 /** 실행과 노브가 갈렸는가 — **조용한 재계산 금지**의 판정.
@@ -269,7 +198,7 @@ export function MrKnobBar({
                 </button>
               ))}
               <Box width={56}>
-                <NumInput label="룩백(일)" value={knobs.lookback}
+                <NumField label="룩백(일)" value={knobs.lookback} min={0}
                   onCommit={(v) => set({ lookback: Math.max(2, Math.round(v)) })} />
               </Box>
             </HStack>
@@ -279,16 +208,24 @@ export function MrKnobBar({
             이것은 「그때 바로 들어가는가, 돌아올 때까지 기다리는가」라서,
             읽는 순서가 곧 규칙의 순서다. `관찰 σ` 와 달리 **엔진에 들어가고**
             거래 목록을 바꾼다 — 그래서 설정 줄에 있고 stale 을 세운다.
-            156 = 알약 둘(「이탈 즉시」·「밴드 복귀」)의 자연폭 + 한 칸 여유. */}
-        <Choice
-          group
-          label="진입 규칙"
-          help="이탈 즉시는 밴드를 뚫는 봉에, 밴드 복귀는 밖에 있다가 돌아오는 봉에 들어가요. 방향은 둘 다 나갔던 쪽이 정해요."
-          width={156}
-          value={knobs.entryMode}
-          options={MR_ENTRY_MODES.map((m) => ({ v: m.v, label: m.label, help: m.help }))}
-          onPick={(v) => set({ entryMode: v })}
-        />
+            172 = Segmented 자연폭 168 + 여유 4. 탭 하나 = 라벨 + 좌우 패딩
+            16+16(SegmentedTab paddingX={2} = space['2'] 16px)이고, 라벨 「이탈
+            즉시」=「밴드 복귀」= 52(Pretendard 14px/600 어드밴스 합 실측
+            2026-09-02) → (52+32)×2 = 168. 손 알약이던 시절의 156 은 알약 패딩
+            (12+12) 기준이라 세그먼트에는 모자란다 — 말줄임 금지 §3. */}
+        <Box width={172} className="sr-fgroup">
+          <Field
+            label="진입 규칙"
+            help="이탈 즉시는 밴드를 뚫는 봉에, 밴드 복귀는 밖에 있다가 돌아오는 봉에 들어가요. 방향은 둘 다 나갔던 쪽이 정해요."
+          >
+            <Segmented
+              label="진입 규칙"
+              value={knobs.entryMode}
+              options={MR_ENTRY_MODES.map((m) => ({ value: m.v, label: m.label, title: m.help }))}
+              onChange={(v) => set({ entryMode: v })}
+            />
+          </Field>
+        </Box>
         <SigmaPick
           group
           label="진입 σ"
@@ -346,7 +283,7 @@ export function MrKnobBar({
                 </button>
               ))}
               <Box width={56}>
-                <NumInput label="비용(bp)" value={knobs.costBp} onCommit={(v) => set({ costBp: v })} />
+                <NumField label="비용(bp)" value={knobs.costBp} min={0} onCommit={(v) => set({ costBp: v })} />
               </Box>
             </HStack>
           </Field>
@@ -363,7 +300,7 @@ export function MrKnobBar({
               기호를 바꾸는 대신 한글로 적는다: 이 화면의 돈은 전부 `fmtKrw`
               가 「+100만원」으로 쓰고 있어서, 「원」이 오히려 같은 어휘다. */}
           <Field label="명목 (원/bp)" help="1bp 움직일 때의 손익이에요. 포지션 크기라 프리셋이 없어요.">
-            <NumInput label="명목(원/bp)" value={knobs.notional}
+            <NumField label="명목(원/bp)" value={knobs.notional} min={0}
               onCommit={(v) => set({ notional: v })} />
           </Field>
         </Box>
@@ -396,51 +333,96 @@ export function MrKnobBar({
           실전 운용 규칙 — 전부 끄면 위 줄만의 수예요(원본 PMS 재현).
           근거는 전진분석 리포트에 있어요.
         </Text>
+        {/* ── 다섯 칸의 고정폭 산술 [실측 2026-09-02 — 말줄임 금지 §3] ────────
+            자는 하나다: 탭 폭 = 라벨(Pretendard 14px/600 어드밴스 합) + 좌우
+            패딩 16+16(SegmentedTab paddingX={2} = space['2'] 16px), 칸 폭 =
+            탭 폭 합 + 여유. Field 라벨(13px legal)은 전부 그보다 좁다(최장
+            「타임스탑 (일)」 69).
+              타임스탑  끔12·10 15·20 17·40 18 → 62+128=191  → 196
+              레짐 필터  없음24·변동성36·추세24  → 84+96=181   → 186
+              비용 모델  고정24·동적24          → 48+64=112   → 128 유지
+              역신호     끔12·켬12              → 24+64=88    → 116 유지
+              미청산     제외24·포함24          → 48+64=112   → 132 유지
+            타임스탑 172·레짐 168 은 손 알약(패딩 12+12·간격 4) 기준이라
+            세그먼트에는 모자라 늘렸다. 아래 셋은 종전 폭이 자연폭을 이미
+            담아서 그대로 둔다. */}
         <HStack gap={1} alignItems="flex-end" flexWrap="wrap">
-          <Choice
-            label="타임스탑 (일)"
-            help="진입 후 이 영업일이 지나면 손익 불문 청산해요. 표본외 실측에서 단독 기여가 가장 컸어요(SR 0.63→0.95)."
-            width={172}
-            value={knobs.timeStop}
-            options={MR_TIME_STOPS.map((v) => ({ v: v as number, label: v === 0 ? '끔' : String(v) }))}
-            onPick={(v) => set({ timeStop: v })}
-          />
-          <Choice
-            group
-            label="레짐 필터"
-            help="진입만 막아요. 청산·손절은 필터를 안 봐요 — 나가는 문까지 조건을 달면 조건이 꺼진 동안 포지션이 갇혀요."
-            width={168}
-            value={knobs.regime}
-            options={MR_REGIMES}
-            onPick={(v) => set({ regime: v })}
-          />
-          <Choice
-            group
-            label="비용 모델"
-            help="동적은 변동성 백분위에 연동해 편도 0.15~0.25bp를 물려요. 유일하게 성과를 깎는 항이에요."
-            width={128}
-            value={knobs.costModel}
-            options={MR_COST_MODELS}
-            onPick={(v) => set({ costModel: v })}
-          />
-          <Choice
-            group
-            label="역신호 청산"
-            help="반대 방향 진입 신호를 나가는 문으로 써요. 그 방향으로 들어가지는 않아요(현물 대차매도 불가)."
-            width={116}
-            value={knobs.reverseExit}
-            options={[{ v: false, label: '끔' }, { v: true, label: '켬' }]}
-            onPick={(v) => set({ reverseExit: v })}
-          />
-          <Choice
-            group
-            label="미청산 계상"
-            help="표본 끝의 열린 다리를 거래로 세요. 총손익·MDD는 원래부터 이걸 지고 있어서 안 바뀌고, 승률·거래 수·보유기간만 바뀌어요."
-            width={132}
-            value={knobs.countOpen}
-            options={[{ v: false, label: '제외' }, { v: true, label: '포함' }]}
-            onPick={(v) => set({ countOpen: v })}
-          />
+          <Box width={196}>
+            <Field
+              label="타임스탑 (일)"
+              help="진입 후 이 영업일이 지나면 손익 불문 청산해요. 표본외 실측에서 단독 기여가 가장 컸어요(SR 0.63→0.95)."
+            >
+              {/* 숫자 값은 Backtest 방향 칸의 판례대로 String 으로 오간다. */}
+              <Segmented
+                label="타임스탑 (일)"
+                value={String(knobs.timeStop)}
+                options={MR_TIME_STOPS.map((v) => ({
+                  value: String(v),
+                  label: v === 0 ? '끔' : String(v),
+                }))}
+                onChange={(v) => set({ timeStop: Number(v) })}
+              />
+            </Field>
+          </Box>
+          <Box width={186} className="sr-fgroup">
+            <Field
+              label="레짐 필터"
+              help="진입만 막아요. 청산·손절은 필터를 안 봐요 — 나가는 문까지 조건을 달면 조건이 꺼진 동안 포지션이 갇혀요."
+            >
+              <Segmented
+                label="레짐 필터"
+                value={knobs.regime}
+                options={MR_REGIMES.map((m) => ({ value: m.v, label: m.label, title: m.help }))}
+                onChange={(v) => set({ regime: v })}
+              />
+            </Field>
+          </Box>
+          <Box width={128} className="sr-fgroup">
+            <Field
+              label="비용 모델"
+              help="동적은 변동성 백분위에 연동해 편도 0.15~0.25bp를 물려요. 유일하게 성과를 깎는 항이에요."
+            >
+              <Segmented
+                label="비용 모델"
+                value={knobs.costModel}
+                options={MR_COST_MODELS.map((m) => ({ value: m.v, label: m.label, title: m.help }))}
+                onChange={(v) => set({ costModel: v })}
+              />
+            </Field>
+          </Box>
+          <Box width={116} className="sr-fgroup">
+            <Field
+              label="역신호 청산"
+              help="반대 방향 진입 신호를 나가는 문으로 써요. 그 방향으로 들어가지는 않아요(현물 대차매도 불가)."
+            >
+              {/* 불리언 값도 String 으로 오간다(위 타임스탑과 같은 판례). */}
+              <Segmented
+                label="역신호 청산"
+                value={String(knobs.reverseExit) as 'false' | 'true'}
+                options={[
+                  { value: 'false', label: '끔' },
+                  { value: 'true', label: '켬' },
+                ]}
+                onChange={(v) => set({ reverseExit: v === 'true' })}
+              />
+            </Field>
+          </Box>
+          <Box width={132} className="sr-fgroup">
+            <Field
+              label="미청산 계상"
+              help="표본 끝의 열린 다리를 거래로 세요. 총손익·MDD는 원래부터 이걸 지고 있어서 안 바뀌고, 승률·거래 수·보유기간만 바뀌어요."
+            >
+              <Segmented
+                label="미청산 계상"
+                value={String(knobs.countOpen) as 'false' | 'true'}
+                options={[
+                  { value: 'false', label: '제외' },
+                  { value: 'true', label: '포함' },
+                ]}
+                onChange={(v) => set({ countOpen: v === 'true' })}
+              />
+            </Field>
+          </Box>
         </HStack>
       </VStack>
     </>

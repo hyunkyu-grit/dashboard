@@ -32,10 +32,10 @@
 import { useEffect, useRef } from 'react';
 
 import { VStack } from '@coinbase/cds-web/layout';
-import { Tooltip } from '@coinbase/cds-web/overlays';
-import { Text, TextLegal } from '@coinbase/cds-web/typography';
+import { TextLegal } from '@coinbase/cds-web/typography';
 
 import { tintFor } from '@/theme/tint';
+import { ThHelp } from '@/ui/ThHelp';
 
 import type { RvCreditItem, RvWindow } from './api';
 import { bp1, sig } from './fmt';
@@ -44,38 +44,9 @@ import { bp1, sig } from './fmt';
  * ▲▼ 는 잉크다 — 방향색(빨강=수치 상승)과 "순위 개선"은 딴 문법이라 색을
  * 얹으면 두 사전이 충돌한다. `role="img"`+라벨: 스크린리더가 "black
  * up-pointing triangle" 이 아니라 뜻("1계단 올라옴")을 읽게(2차 크리틱 Sam). */
-/** 열 머리의 뜻 풀이 — CDS `Tooltip`(hover 와 **키보드 포커스** 둘 다 연다).
- * 열 머리 셋뿐이라 팝오버 비용 문제가 없다 — 셀 148개에 달지 않던 그 판단의
- * 반대편. 점선 밑줄(cursor: help)이 "설명 있음"의 관례 표식이다. */
-function ThHelp({ label, help }: { label: string; help: string }) {
-  return (
-    <Tooltip
-      content={
-        /* 폭은 **`maxWidth` prop 이 진다** — 여기 클래스로 적지 않는다.
-           2026-08-19 에 이 자리에 `.sr-rv-tiptext`(max-width 236 + white-space
-           normal + keep-all)가 붙어 있었다. 툴팁이 `<th>` 안에 렌더돼 그 칸의
-           nowrap 을 상속했고 긴 문장이 패널 밖으로 흘렀기 때문이다
-           [OWNER — "패널 밖으로 글씨가 빠져나가"]. **그건 증상이었다**: 뿌리는
-           루트에 `PortalProvider` 가 없어 CDS `Portal` 이 포털을 포기하고
-           인라인 Fragment 로 떨어진 것이었다(`app/providers.tsx` 의 주석).
-           프로바이더가 서면서 툴팁은 `#tooltipContainer` 로 나가고, 줄바꿈은
-           body 의 `keep-all` 을 상속한다 — 실측(2026-08-26): inPortal true ·
-           inTh false · white-space normal · word-break keep-all. 남은 것은
-           폭뿐이고 그건 이미 아래 prop 이 말하고 있었다(클래스의 236 이 그
-           prop 의 280 을 덮고 있었다). */
-        <Text font="legal" as="span">
-          {help}
-        </Text>
-      }
-      maxWidth={280}
-      placement="bottom"
-    >
-      <span className="sr-rv-thhelp" tabIndex={0}>
-        {label}
-      </span>
-    </Tooltip>
-  );
-}
+/* 열 머리 뜻풀이 `ThHelp` 는 공용이 됐다(`ui/ThHelp`) [OWNER 2026-09-02 —
+   "공용 부품은 한 벌로 승격"] — MR 이 같은 기계를 한 벌 더 갖고 있었다.
+   `.sr-rv-tiptext` 우회의 내력(폭은 `maxWidth` prop 이 진다)도 그 파일이 진다. */
 
 function Delta({ d }: { d: number | null }) {
   if (d == null) return null;
