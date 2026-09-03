@@ -11,7 +11,7 @@ v1 은 «무슨 일이 있었나» 를 적었다. v2 는 **다음 세션이 첫 
 ## 0. 첫 3분 — 아무것도 고치기 전에 이것부터 친다
 
 ```bash
-cd "C:\Users\infomax\Desktop\Assistant\Projects_AS\sauron-v2"
+cd "C:\Users\infomax\Projects\apps\sauron-v2"
 git log --oneline -6
 git status --porcelain          # 내 것이 아닌 미커밋이 몇 개인지 눈으로 센다
 curl -s localhost:8200/api/health || echo "백엔드 죽음"
@@ -33,7 +33,7 @@ Start-ScheduledTask SauronV2Backend
 
 | | |
 |---|---|
-| 리포 | `C:\Users\infomax\Desktop\Assistant\Projects_AS\sauron-v2` (rateslab) |
+| 리포 | `C:\Users\infomax\Projects\apps\sauron-v2` (rateslab) |
 | 프런트 | dev `:3200` — `npx next dev -p 3200` |
 | 백엔드 | `:8200` — 예약태스크 `SauronV2Backend` |
 | 라이브 | https://rateslab.vercel.app (푸시 = 배포) |

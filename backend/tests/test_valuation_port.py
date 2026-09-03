@@ -31,7 +31,7 @@ from app.valuation_port import (
 
 DATA = Path(__file__).resolve().parents[2] / "data" / "irsdata.xlsx"
 FROZEN = Path(
-    r"C:\Users\infomax\Desktop\Assistant\Projects_AS"
+    r"C:\Users\infomax\Projects\apps"
     r"\Rates Portfolio\krw-fi-pms-backend\irs_pricer\engine"
 )
 

@@ -71,7 +71,7 @@ from .issuance_strength import annotate_omo
 #: CSV 가 사는 곳. 수집기가 쓰는 그 디렉터리를 그대로 읽는다.
 #: 없으면 이 화면만 서지 않고 나머지 앱은 멀쩡히 돈다.
 DATA_DIR = pathlib.Path(
-    os.environ.get("RAWDATA_DIR", r"C:\Users\infomax\Desktop\Codex\rawData\data")
+    os.environ.get("RAWDATA_DIR", r"C:\Users\infomax\Projects\apps\rawdata\data")
 )
 
 #: 달력이 세는 섹터. 앞의 일곱이 금융채, 뒤의 셋이 DART C002 에 같이 올라오는

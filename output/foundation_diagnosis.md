@@ -3,8 +3,8 @@
 CC SESSION 1/3 Part C. 2026-08-21. **아직 아무것도 안 만들었다.** 이 문서가 Part D
 의 입력이고, 세션 2·3 이 읽는 기준이다.
 
-측정 환경: `C:\Users\infomax\Desktop\project_bigfoot` (BIGFOOT, 커밋 `f888201`) ·
-`C:\Users\infomax\Desktop\Assistant\Projects_AS\sauron-v2` (커밋 `3fc2ef2`).
+측정 환경: `C:\Users\infomax\Projects\research\project_bigfoot` (BIGFOOT, 커밋 `f888201`) ·
+`C:\Users\infomax\Projects\apps\sauron-v2` (커밋 `3fc2ef2`).
 
 ---
 

@@ -23,7 +23,7 @@ import pytest
 from app import labmacro
 
 #: BIGFOOT 리포. 없으면 대조를 건너뛴다 — 이 리포 밖의 파일이다.
-BIGFOOT = pathlib.Path(r"C:\Users\infomax\Desktop\project_bigfoot")
+BIGFOOT = pathlib.Path(r"C:\Users\infomax\Projects\research\project_bigfoot")
 GDP_CSV = BIGFOOT / "data" / "raw" / "bigfoot_gdp_real_sa_q.csv"
 CPI_CSV = BIGFOOT / "data" / "raw" / "bigfoot_core_cpi_q.csv"
 
