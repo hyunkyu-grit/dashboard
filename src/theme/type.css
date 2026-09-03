@@ -1047,10 +1047,16 @@ thead th {
     6px 0 8px -6px var(--sr-edge-shadow);
 }
 
-.sr-recon-edge-r {
-  box-shadow:
-    -1px 0 0 var(--color-bgLine),
-    -6px 0 8px -6px var(--sr-edge-shadow);
+/* 테너 격자와 **돈 칸**의 경계 [OWNER 2026-09-03 — "합계랑 평가, 잔차, 캐리,
+   롤다운, 조달, 그날 손익도 다 같이 한 묶음에서 움직여야 하지 않을까"].
+
+   여기 있던 `.sr-recon-edge-r` 은 «여기서부터 덮고 있다» 를 뜻하는 그림자였다 —
+   오른쪽 범례가 불투명하게 고정돼 격자를 소리 없이 가렸기 때문이다. 2026-09-03
+   에 그 고정을 풀어 돈 칸이 테너와 한 덩어리로 흐르게 했으므로, 덮는 것이 없다.
+   그림자를 그대로 두면 화면이 없는 사실을 말하게 된다 — 그래서 **평범한
+   헤어라인**만 남긴다(축 규칙: 수직 경계는 1px 선). */
+.sr-recon-div-l {
+  box-shadow: inset 1px 0 0 var(--color-bgLine);
 }
 
 .sr-recon-center {

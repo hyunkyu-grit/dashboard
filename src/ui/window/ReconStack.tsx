@@ -28,8 +28,17 @@
  *  - 넘치는 폭은 **보이는 스크롤바**가 받는다 [v1 OWNER, 같은 날 2차]. 이 컴포넌트가
  *    양축 스크롤 컨테이너(높이 캡)라서 가로 바가 표 바닥이 아니라 눈앞의 컨테이너
  *    바닥에 선다. 드래그 팬은 v1 이 같은 날 만들었다 걷어냈다.
- *  - **범례는 사방 고정** [v1 OWNER, 같은 날 2차 — "좌우의 범례 … 열과 행 고정"]:
- *    테너 헤더는 위, 날짜·구분은 왼쪽, 합계~그날 손익은 오른쪽. 격자 가운데만 흐른다.
+ *  - **범례는 위·왼쪽만 고정** — 테너 헤더는 위, 날짜·구분은 왼쪽이다.
+ *
+ *    오른쪽(합계~그날 손익)도 고정이었다 [v1 OWNER, 2026-08-12 2차 — "좌우의
+ *    범례 … 열과 행 고정"]. **2026-09-03 에 오너가 뒤집었다** — "테너만 하단에
+ *    있는 슬라이더로 계속 움직이고 있는 거 같아서, 합계랑 평가, 잔차, 캐리,
+ *    롤다운, 조달, 그날 손익도 다 같이 한 묶음에서 움직여야 하지 않을까". 얼어
+ *    붙은 돈 칸 밑으로 숫자가 미끄러져 들어가서 **한 줄이 한 덩어리로 안 읽혔다.**
+ *
+ *    대가는 적어 둔다: 테너가 많은 창(백테스트 16개)에서는 왼쪽 테너를 보는 동안
+ *    「그날 손익」이 화면 밖이다. 그 값어치가 v1 결정의 이유였고, 오너가 그걸 알고
+ *    바꿨다. 날짜·구분은 그대로 왼쪽에 남는다 — 어느 줄인지는 잃으면 안 된다.
  *  - 열 폭은 세 지표의 최장 문자열로 잰다(`ch`) — 줄마다 폭이 다르면 격자가 세로로
  *    안 읽힌다.
  *  - KRD 줄은 히트맵(배경=부호, 농도=크기, 글자는 잉크), Δbp·손익 줄은 방향색 글자 —
@@ -296,10 +305,9 @@ export function ReconStack({
                 ].map(([label, step]) => (
                   <th
                     key={`grp-${label}`}
-                    className={`sr-recon-th sr-recon-right sr-recon-pin${
-                      step === summaryCols.length ? ' sr-recon-edge-r' : ''
+                    className={`sr-recon-th sr-recon-right${
+                      step === summaryCols.length ? ' sr-recon-div-l' : ''
                     }`}
-                    style={{ right: step === 0 ? 0 : headCh(step * TAIL_CH) }}
                   />
                 ))}
               </tr>
@@ -339,8 +347,9 @@ export function ReconStack({
                   {c.label}
                 </th>
               ))}
-              {/* 오른쪽 범례 — 뒤에서부터 11ch 트랙씩 쌓인다. 조달 열이 서면
-                  여섯, 아니면 다섯이다. */}
+              {/* 돈 칸 — **테너와 한 덩어리로 흐른다** [OWNER 2026-09-03 —
+                  "합계랑 평가, 잔차, 캐리, 롤다운, 조달, 그날 손익도 다 같이
+                  한 묶음에서 움직여야 하지 않을까"]. 구분선 하나만 남는다. */}
               {[
                 ['합계', summaryCols.length] as [string, number],
                 ...summaryCols.map(
@@ -349,11 +358,10 @@ export function ReconStack({
               ].map(([label, step]) => (
                 <th
                   key={label}
-                  className={`sr-recon-th sr-recon-right sr-recon-pin${
-                    // 오른쪽 범례의 안쪽 경계 = 가장 왼쪽 칸(합계).
-                    step === summaryCols.length ? ' sr-recon-edge-r' : ''
+                  className={`sr-recon-th sr-recon-right${
+                    // 테너 격자와 돈 칸의 경계 = 가장 왼쪽 칸(합계).
+                    step === summaryCols.length ? ' sr-recon-div-l' : ''
                   }`}
-                  style={{ right: step === 0 ? 0 : headCh(step * TAIL_CH) }}
                 >
                   {label}
                 </th>
@@ -414,13 +422,11 @@ export function ReconStack({
                         </td>
                       );
                     })}
-                    {/* 오른쪽 범례. ⚠ 오프셋을 진 셀에 굵기를 얹으면 안 된다 —
-                        `ch` 는 그 요소 폰트의 '0' 진행폭이고 미디엄의 0 이 살짝
-                        넓어 44ch 가 13px 어긋난다(v1 실측). 굵기는 안쪽 span 이 진다. */}
-                    <td
-                      className="sr-recon-td sr-recon-stick sr-recon-right sr-recon-edge-r"
-                      style={{ right: `${summaryCols.length * TAIL_CH}ch` }}
-                    >
+                    {/* 돈 칸 — 테너와 같이 흐른다(위 헤더의 그 근거).
+                        ⚠ 굵기는 **안쪽 span 이 진다**: `ch` 는 그 요소 폰트의
+                        '0' 진행폭이고 미디엄의 0 이 살짝 넓어, 셀에 굵기를 얹으면
+                        `<colgroup>` 트랙과 어긋난다(v1 실측 44ch 에 13px). */}
+                    <td className="sr-recon-td sr-recon-right sr-recon-div-l">
                       <span className="sr-recon-strong">
                         {total === null ? (
                           <span className="sr-recon-blank">—</span>
@@ -438,8 +444,7 @@ export function ReconStack({
                         return (
                           <td
                             key={c.label}
-                            className="sr-recon-td sr-recon-stick sr-recon-right sr-recon-top"
-                            style={{ right: step === 0 ? 0 : `${step * TAIL_CH}ch` }}
+                            className="sr-recon-td sr-recon-right sr-recon-top"
                             rowSpan={3}
                           >
                             {step === 0 ? (

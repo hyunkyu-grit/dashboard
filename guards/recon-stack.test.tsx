@@ -204,28 +204,58 @@ describe('하루 = 가로줄 셋', () => {
   });
 });
 
-describe('범례는 사방 고정 [v1 OWNER, 2026-08-12 2차]', () => {
-  it('헤더 행은 top, 날짜·구분은 left, 요약 다섯은 right', () => {
+describe('범례는 위·왼쪽만 고정 [OWNER 2026-09-03 — v1 결정을 뒤집음]', () => {
+  /* v1 은 «좌우의 범례 … 열과 행 고정» 이었다(2026-08-12 2차) — 돈 칸(합계~그날
+     손익)이 오른쪽에 불투명하게 얼어붙어 있었다. 2026-09-03 에 오너가 뒤집었다:
+
+       "테너만 하단에 있는 슬라이더로 계속 움직이고 있는 거 같아서, 합계랑 평가,
+        잔차, 캐리, 롤다운, 조달, 그날 손익도 다 같이 한 묶음에서 움직여야 하지
+        않을까"
+
+     얼어붙은 돈 칸 **밑으로** 숫자가 미끄러져 들어가서 한 줄이 한 덩어리로 안
+     읽혔다. 이제 돈 칸은 테너와 같이 흐르고, 날짜·구분만 왼쪽에 남는다 —
+     **어느 줄인지는 잃으면 안 된다.** 이 창 하나가 백테스트·시뮬·전략 셋을 진다. */
+
+  it('날짜·구분만 왼쪽에 고정된다', () => {
     const { container } = render(<ReconStack days={[day(0)]} tenors={TENORS} />);
     const ths = [...container.querySelectorAll('thead th')] as HTMLElement[];
     expect(ths.every((th) => th.className.includes('sr-recon-th'))).toBe(true);
     /* 13px 헤더의 `ch` ≠ 14px 트랙의 `ch` — 헤더 좌표는 전부 환산해서 넘긴다.
-     * jsdom 의 CSSOM 이 `calc(Nch * 14 / 13)` 을 접어 직렬화하므로 환산된 값으로
-     * 단언한다. */
+     * jsdom 의 CSSOM 이 `calc(Nch * 14 / 13)` 을 접어 직렬화한다. */
     expect(ths[0].style.left).toBe('0px'); // 날짜
     expect(ths[1].style.left).toMatch(/calc\(7\.53\d*ch\)/); // 구분 = 7ch·14/13
-    /* 꼬리 트랙 15ch [OWNER 2026-08-25 겹침 금지 — ReconStack.TAIL_CH 머리]. */
-    const tail = ths.slice(-5);
-    expect(tail.map((th) => th.style.right)).toEqual([
-      expect.stringMatching(/calc\(64\.61\d*ch\)/), // 합계   = 60ch·14/13
-      expect.stringMatching(/calc\(48\.46\d*ch\)/), // 평가   = 45ch·14/13
-      expect.stringMatching(/calc\(32\.30\d*ch\)/), // 캐리   = 30ch·14/13
-      expect.stringMatching(/calc\(16\.15\d*ch\)/), // 롤다운 = 15ch·14/13
-      '0px',
-    ]);
-    // 본문의 rowSpan 셀도 고정 + **불투명 배경** — 밑을 지나는 히트맵이 비치면 안 된다.
-    const spanned = [...container.querySelectorAll("tbody td[rowspan='3']")] as HTMLElement[];
-    for (const td of spanned) expect(td.className).toContain('sr-recon-stick');
+  });
+
+  it('돈 칸은 **안 고정된다** — 테너와 한 덩어리로 흐른다', () => {
+    const { container } = render(<ReconStack days={[day(0)]} tenors={TENORS} />);
+    const ths = [...container.querySelectorAll('thead th')] as HTMLElement[];
+    const tail = ths.slice(-5);                       // 합계·평가·캐리·롤다운·그날
+    for (const th of tail) {
+      expect(th.style.right, th.textContent ?? '').toBe('');
+      expect(th.className, th.textContent ?? '').not.toContain('sr-recon-pin');
+    }
+    /* 본문의 돈 칸도 마찬가지다 — 여기에 `sr-recon-stick`(sticky + 불투명
+       배경)이 남아 있으면 그 칸만 얼어붙어 줄이 다시 갈라진다.
+
+       ⚠ `rowspan='3'` 만으로 고르면 **왼쪽 날짜 셀도 걸린다** — 그건 고정이
+       맞다. 돈 칸은 오른쪽 정렬(`sr-recon-right`)이 붙어 있어 그것으로 가른다. */
+    const spanned = [...container.querySelectorAll(
+      "tbody td[rowspan='3'].sr-recon-right")] as HTMLElement[];
+    expect(spanned.length).toBeGreaterThan(0);
+    for (const td of spanned) {
+      expect(td.className).not.toContain('sr-recon-stick');
+      expect(td.style.right).toBe('');
+    }
+  });
+
+  it('테너와 돈 칸 사이에 경계선 하나 — 「덮고 있다」 그림자가 아니다', () => {
+    /* 옛 `sr-recon-edge-r` 은 «여기서부터 덮고 있다» 를 뜻하는 그림자였다
+       [OWNER 2026-08-19]. 덮는 것이 없어졌으므로 그 그림자는 없는 사실을
+       말하게 된다 — 평범한 헤어라인으로 바꿨다. */
+    const { container } = render(<ReconStack days={[day(0)]} tenors={TENORS} />);
+    const div = container.querySelectorAll('.sr-recon-div-l');
+    expect(div.length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('.sr-recon-edge-r')).toHaveLength(0);
   });
 
   it('표 폭 == 트랙 합 — 재분배가 0 이라야 오프셋이 자로 맞는다', () => {
