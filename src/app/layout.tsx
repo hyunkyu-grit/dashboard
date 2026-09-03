@@ -7,6 +7,7 @@ import '@coinbase/cds-web/globalStyles';
 import '@/theme/direction.css';
 import '@/theme/motion.css';
 import '@/theme/type.css';
+import '@/theme/terminal.css';
 
 import { Providers } from './providers';
 

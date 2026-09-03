@@ -1,0 +1,1540 @@
+/* 터미널 목업의 화면 문법 — `/terminal` 한 화면만 쓴다.
+ *
+ * 색은 한 값도 여기 없다. 팔레트는 `direction.css` 의 `--sr-term-*` 블록이
+ * 지고(그 파일 머리에 출처와 실측이 있다), 이 파일은 **기하와 배치**만 적는다.
+ *
+ * ── 이 파일의 수는 대부분 팔란티어에서 재 온 것이다 [OWNER 2026-08-26] ──────
+ * 「팔란티어풍」을 짐작으로 적지 않기 위해 실물을 열어 쟀다. 그렇게 바뀐 것들:
+ *
+ *   · 반경 0 → **프레임 0 / 컨트롤 4.** 처음엔 전부 0 이었는데, Blueprint 는
+ *     `--bp-surface-border-radius: 4px` 를 쓴다(실측). 다만 앱 프레임의 패널은
+ *     서로 맞닿아 있어 반경이 없다. 그래서 둘을 나눈다 — 관측된 구분이지
+ *     절충이 아니다.
+ *   · 행 경계선 → **불투명 회색이 아니라 흰색 20% 알파**, 그리고 `border` 가
+ *     아니라 **`box-shadow: inset`**. Blueprint 의 표 둘이 다 그렇게 그린다
+ *     (HTMLTable: `rgba(255,255,255,.2) 0 1px 0 0 inset`, 스프레드시트 Table:
+ *     같은 자리에 검정 40%). 이 리포도 대사 표 고정열에서 같은 결론에 도달해
+ *     있었다(«border 는 ch 오프셋 깨짐»).
+ *   · 호버 → **`$gray1` 30% 워시**(실측 `rgba(95,107,124,.3)`). 불투명 회색이
+ *     아니라 알파라서 어떤 바탕 위에서도 같은 세기로 읽힌다.
+ *   · 로그 행 20px · `0 8px` 패딩 · 12/20 타입 — Blueprint 스프레드시트 Table 의
+ *     셀 실측값 그대로다.
+ *   · 격자 → 점만이 아니라 **가는 선 + 교점의 점**(palantir.com/titanium 그래픽).
+ *   · 초소형 대문자 자간 라벨과 `{ }` 괄호 — Gotham 페이지의 `{ GOTHAM }`,
+ *     Foundry Quiver 의 `ANALYSIS CONTENTS`·`TIME SERIES SEARCH` 가 같은 문법.
+ *
+ * ── 캐논에서 벗어나는 것과 그 사유 [CLAUDE.md 캐논 규칙 3] ─────────────────
+ * 1. **행 높이가 `ROW_H`(60)가 아니다.** 캐논의 60 은 두 줄 이름 칸의 높이다.
+ *    이 화면은 한 줄이고 요구가 «수백 줄» 이라 20/24 로 간다. 「한 수로
+ *    선언한다」는 규칙은 지킨다 — `terminal/rows.ts` 가 그 자리다.
+ * 2. **CDS 색 토큰을 이 서브트리에서 다시 정의한다**(아래 루트 블록).
+ *    프로바이더를 새로 세우는 대신인데, `app/providers.tsx` 가 «ThemeProvider 는
+ *    한 번만» 을 못 박고 있기 때문이다.
+ */
+
+/* 루트는 **이 앱의 다크 훅을 그대로 단다** — `<div className="sr-term"
+ * data-sr-scheme="dark">`.
+ *
+ * 처음에는 다크 방향 쌍을 별도 이름으로 빼내 여기서 부르려 했고, 그 순간
+ * `guards/contrast.test.ts` 가 빨개졌다. 그 가드는 다크 쌍을
+ * `[data-sr-scheme='dark']` 블록 **안의 hex 리터럴**로 읽어서 계속 재고 있고,
+ * 우회는 값이 아니라 **가드의 눈**을 옮긴 것이었다. 가드를 고치는 대신 접근을
+ * 바꿨다: 이 앱에는 «이 서브트리는 어둡다» 를 말하는 속성이 이미 있고
+ * (`app/providers.tsx` 가 만든 그것), 그것은 프로바이더가 아니라 **CSS 커스텀
+ * 속성의 상속**이라 중첩해도 프로바이더가 안 늘어난다.
+ *
+ * 선택자가 `.sr-term[data-sr-scheme='dark']`(0,2,0)인 이유는 순서 의존을 없애기
+ * 위해서다. `.sr-term`(0,1,0) 만으로도 지금은 이기지만, 그건 이 파일이
+ * `direction.css` **뒤에** 임포트되기 때문이고 — 임포트 순서는 다른 이유로
+ * 언제든 바뀐다. */
+.sr-term[data-sr-scheme='dark'] {
+  /* 팔레트 갈아끼우기. 이 선언들은 «읽기» 가 아니라 «다시 매기기» 라 CDS 인라인
+     토큰이 닿는 자리(= 이 요소)에서 풀린다. */
+  --color-bg: var(--sr-term-bg);
+  --color-bgAlternate: var(--sr-term-panel);
+  --color-bgElevation1: var(--sr-term-panel);
+  --color-bgElevation2: var(--sr-term-panel-hi);
+  --color-bgSecondary: var(--sr-term-panel-hi);
+  --color-bgLine: var(--sr-term-line);
+  --color-bgLineHeavy: var(--sr-term-line);
+  --color-fg: var(--sr-term-fg);
+  --color-fgMuted: var(--sr-term-fg-muted);
+
+  /* 방향 쌍은 여기 없다 — 루트에 단 `data-sr-scheme="dark"` 가 이미 다크 쌍을
+     내려보낸다(`direction.css`). 앱이 라이트일 때 라이트 쌍이 이 면으로 흘러
+     들어오면 문턱 미달이라는 것이 이 결정의 근거다: 실측 상승 3.54 · 하락 3.64. */
+
+  /* 앱의 세 면도 같이 옮긴다 — 캐논 부품(`.sr-num`·표·트랙)을 그대로 임포트해
+     쓰기 위해서다. 부품이 자기 면을 못 찾으면 투명해진다. */
+  --sr-page: var(--sr-term-bg);
+  --sr-card: var(--sr-term-panel);
+  --sr-control: var(--sr-term-panel-hi);
+
+  /* 상속 글자색과 `color-scheme` 은 `direction.css` 의 `[data-sr-scheme]` 두
+     블록이 이미 준다. 바탕만 이 화면의 것이다. */
+  background: var(--sr-term-bg);
+
+  display: grid;
+  /* 20 / 60 / 20 [미션 명세]. `minmax(0, …)` 인 이유는 비율이 아니라 **넘침**
+     이다 — 트랙의 기본 최소 크기는 `auto`(내용 폭)라, 긴 라벨 하나가 20% 를
+     밀어내고 60% 를 갉아먹는다. */
+  grid-template-columns: minmax(0, 20%) minmax(0, 60%) minmax(0, 20%);
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* 한 칸. 칸끼리 맞닿는 자리에만 헤어라인이 서고, 화면 바깥 모서리에는 안 선다. */
+.sr-term-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--sr-term-panel);
+  overflow: hidden;
+}
+
+.sr-term-col + .sr-term-col {
+  border-left: 1px solid var(--sr-term-line);
+}
+
+/* 가운데 칸만 바탕이 한 단 어둡다 — 뷰포트는 «패널» 이 아니라 «내다보는 구멍»
+   이고, 격자가 앉을 면이다. */
+.sr-term-col[data-viewport='true'] {
+  background: var(--sr-term-bg);
+}
+
+/* ── 패널 머리 ─────────────────────────────────────────────────────────────
+ * 32px 등고. 「얼라인」 절의 컨트롤 행 등고와 같은 수다 — 한 화면에 두 개의
+ * 등고를 두지 않는다. */
+.sr-term-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--sr-term-line);
+  background: var(--sr-term-panel-hi);
+}
+
+.sr-term-col[data-viewport='true'] .sr-term-head {
+  background: var(--sr-term-panel);
+}
+
+/* 머리 라벨 — 11/700 대문자 + 자간.
+ *
+ * 이 크기·자간은 팔란티어의 실제 문법이다: Gotham 페이지의 스트립 라벨
+ * (`SOFTWARE` · `{ GOTHAM }` · `GET STARTED`)과 Foundry Quiver 의 패널 머리
+ * (`ANALYSIS CONTENTS` · `TIME SERIES SEARCH`)가 같은 레지스터다. 본문 계단
+ * (12) 아래로 한 칸 내려서 «부품의 이름표» 가 값보다 조용하게 만든다.
+ *
+ * 대문자화는 라틴에만 걸린다(한글은 무동작) — 한글 라벨은 그대로 선다. */
+.sr-term-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sr-term-fg-dim);
+  white-space: nowrap;
+}
+
+/* Gotham 의 `{ GOTHAM }` — 괄호가 라벨을 «이름» 으로 만든다. 글자가 아니라
+   가상 요소인 이유: 선택·복사되는 텍스트에는 괄호가 안 들어가야 한다. */
+.sr-term-eyebrow[data-brace='true']::before {
+  content: '{\00a0';
+}
+
+.sr-term-eyebrow[data-brace='true']::after {
+  content: '\00a0}';
+}
+
+.sr-term-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  /* 크롬은 `scrollbar-width` 가 있으면 `::-webkit-scrollbar` 를 무시한다(실측
+     2026-08-07). 그래서 표준 두 속성만 쓴다. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--sr-term-line) transparent;
+}
+
+.sr-term-sep {
+  border-top: 1px solid var(--sr-term-line);
+}
+
+/* ── 자산 행 (좌측 20%) ─────────────────────────────────────────────────────
+ * 24px. Blueprint 스프레드시트 셀은 20 이지만(아래 로그 행이 그 값), 이 칸의
+ * 라벨은 한글이라 20 에서는 글자 위아래 여백이 1px 씩밖에 안 남는다. 24 는
+ * Quiver 좌측 트리 행의 밀도이기도 하다.
+ *
+ * 경계선은 `border` 가 아니라 `box-shadow: inset` 이다 — 팔란티어가 표 둘에서
+ * 다 그렇게 하고(파일 머리), border 는 행 높이에 1px 을 더해 20/24 를 깨뜨린다. */
+.sr-term-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 24px;
+  padding: 0 8px 0 6px;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sr-term-row + .sr-term-row {
+  box-shadow: inset 0 1px 0 0 var(--sr-term-hairline);
+}
+
+/* 호버 = `$gray1` 30% 워시(실측). 불투명 회색이 아니라 알파다. */
+.sr-term-row:hover {
+  background: var(--sr-term-wash);
+}
+
+.sr-term-row[data-on='true'] {
+  background: var(--sr-term-wash);
+  border-left-color: var(--sr-term-accent);
+}
+
+.sr-term-row:focus-visible {
+  outline: 1px solid var(--sr-term-accent);
+  outline-offset: -1px;
+}
+
+.sr-term-row-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sr-term-row-val {
+  flex: 0 0 auto;
+}
+
+/* 상태 점. 색만으로는 못 읽히므로 라벨이 같이 선다(WCAG 2.2 §1.4.1). */
+.sr-term-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  background: var(--sr-term-cyan);
+}
+
+.sr-term-dot[data-live='false'] {
+  background: var(--sr-term-fg-dim);
+}
+
+/* 리스트 안의 계열 구획. `sticky` 인 이유는 스크롤 중에도 지금 보고 있는 칸이
+   무엇인지가 화면에 남아야 하기 때문이고, 그래서 바탕이 투명이면 안 된다. */
+.sr-term-group {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  background: var(--sr-term-bg);
+  border-top: 1px solid var(--sr-term-line);
+  border-bottom: 1px solid var(--sr-term-line);
+}
+
+.sr-term-group:first-child {
+  border-top: 0;
+}
+
+/* ── 각진 세그먼트 (타임라인 구간) ──────────────────────────────────────────
+ * 앱 공용 `.sr-pillbtn` 을 안 쓰는 이유는 반경이다(알약 999 ↔ 팔란티어의 4).
+ * 높이 32·600 무게·잉크 반전이라는 나머지 문법은 그대로 베낀다. 컨트롤이므로
+ * **반경 4** 다 — 파일 머리의 프레임/컨트롤 구분. */
+.sr-term-seg {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--sr-term-line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.sr-term-seg-btn {
+  flex: 1 1 0;
+  height: 32px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--sr-term-fg-dim);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sr-term-seg-btn + .sr-term-seg-btn {
+  border-left: 1px solid var(--sr-term-line);
+}
+
+.sr-term-seg-btn:hover {
+  background: var(--sr-term-wash);
+  color: var(--sr-term-fg);
+}
+
+.sr-term-seg-btn[data-on='true'] {
+  background: var(--sr-term-accent);
+  /* 채운 강조 위의 글자 — 이 화면에서 가장 어두운 값을 얹는다(#4c90f0 위
+     #111418 = 7.9:1). 흰 글자면 2.0:1 로 미달이다. */
+  color: var(--sr-term-bg);
+}
+
+.sr-term-seg-btn:focus-visible {
+  outline: 1px solid var(--sr-term-cyan);
+  outline-offset: -2px;
+}
+
+/* ── 뷰포트: 격자 · 십자선 · 축 상자 (Phase 2) ─────────────────────────────
+ *
+ * 상자는 `.sr-plot`(캐논)이 아니라 이것이다. `.sr-plot` 은 `position: relative`
+ * 한 줄이고 그 위에 `.sr-readout` 카드가 앉는 문법인데, 이 화면의 리드아웃은
+ * 카드가 아니라 **축 가장자리의 상자 둘**이라 얹는 것이 다르다. 위치 잡는
+ * 기법은 그대로 베낀다. */
+.sr-term-plot {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  /* 커서 자리. **상태가 아니라 CSS 변수**다 — `ui/ReadoutCard.tsx` 의
+     `READOUT_X_VAR` 와 같은 이유이고 같은 기법이다: 픽셀마다 바뀌는데 먹이는
+     것은 CSS 속성 몇 개뿐이라, 상태로 두면 마우스가 움직일 때마다 차트 전체가
+     다시 그려진다. 기본값은 상자 밖. */
+  --sr-term-cx: -1px;
+  --sr-term-cy: -1px;
+  --sr-term-snapy: -1px;
+}
+
+/* 격자 — **가는 선 + 교점의 점**.
+ *
+ * 처음엔 점만 찍었는데, palantir.com/titanium 의 그 그래픽(어두운 지형 위에
+ * 얹힌 와이어프레임)을 실제로 보니 선과 점이 같이 있었다. 선만이면 모눈종이,
+ * 점만이면 질감이고, 둘이 같이 있어야 «계측 격자» 로 읽힌다.
+ *
+ * SVG 패턴이 아니라 CSS 인 이유는 **차트 SVG 와 독립**이어야 하기 때문이다 —
+ * 패턴을 SVG 안에 넣으면 뷰박스가 바뀔 때 격자 간격이 같이 늘어나고, 격자는
+ * 데이터가 아니라 화면의 자다. 24px 은 이 앱의 간격 계단 위 값이다. */
+.sr-term-dotgrid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, var(--sr-term-grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--sr-term-grid-line) 1px, transparent 1px),
+    radial-gradient(circle at 1px 1px, var(--sr-term-grid-dot) 1px, transparent 0);
+  background-size:
+    24px 24px,
+    24px 24px,
+    24px 24px;
+  pointer-events: none;
+}
+
+.sr-term-cross {
+  position: absolute;
+  background: var(--sr-term-cyan);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.sr-term-plot:not([data-on='true']) .sr-term-cross,
+.sr-term-plot:not([data-on='true']) .sr-term-axisbox,
+.sr-term-plot:not([data-on='true']) .sr-term-cursordot {
+  display: none;
+}
+
+.sr-term-cross-x {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  transform: translateX(var(--sr-term-cx));
+}
+
+/* ⚠ `top: 0` 이 **필수**다 (실측 2026-08-26 — 이게 없어서 가로 십자선이 화면
+   밖에 그려지고 있었다).
+
+   절대 배치 요소에 `top` 을 안 주면 브라우저는 그 요소의 **정적 위치**를 쓴다.
+   여기서는 앞 형제가 차트 `<svg>`(높이 775)라 정적 top 이 플롯 바닥이 되고,
+   거기에 `translateY(--sr-term-cy)` 가 더해져 선이 플롯 **아래**로 나갔다
+   (실측: 플롯 32~807, 선 top 906). 세로선은 `top: 0; bottom: 0` 이 둘 다 있어
+   멀쩡했기 때문에 «십자선이 반만 보인다» 로 나타났다. */
+.sr-term-cross-y {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  transform: translateY(var(--sr-term-cy));
+}
+
+/* 커서가 문 표본 위의 점. 선 위에 앉으므로 발광을 같이 준다.
+   `top/left: 0` 은 바로 위 주석의 그 이유 — 이 점도 같은 결함을 앓고 있었다
+   (실측: 점이 플롯 바닥 아래 849 에 있었다). */
+.sr-term-cursordot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 7px;
+  height: 7px;
+  margin: -4px 0 0 -4px;
+  background: var(--sr-term-cyan);
+  color: var(--sr-term-cyan);
+  transform: translate(var(--sr-term-cx), var(--sr-term-snapy));
+  pointer-events: none;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
+/* 축 가장자리의 좌표 상자. **각지고 작다** — 값을 읽는 물건이지 카드가 아니다.
+   컨트롤이 아니라 계기 눈금이라 반경 0 이다(파일 머리의 그 구분). */
+.sr-term-axisbox {
+  position: absolute;
+  padding: 2px 4px;
+  background: var(--sr-term-cyan);
+  color: var(--sr-term-bg);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* 시간 = 아래 가장자리. `translateX(-50%)` 로 커서 밑에 가운데를 맞춘다 —
+   `readoutLeft` 가 카드에 하는 클램프의 CSS 판이다. */
+.sr-term-axisbox-x {
+  bottom: 0;
+  left: 0;
+  transform: translateX(calc(var(--sr-term-cx) - 50%));
+}
+
+.sr-term-axisbox-y {
+  top: 0;
+  right: 0;
+  transform: translateY(calc(var(--sr-term-cy) - 50%));
+}
+
+/* 주선. 색은 인라인이 진다(`directionVar` — 보이는 구간의 순변화 방향색, 캐논
+   차트 문법). 발광은 `currentColor` 를 타므로 이 규칙이 색을 몰라도 된다. */
+.sr-term-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  /* 「**미세한** 네온 발광」 — 2px 이다. 3px 에서는 선이 형광펜처럼 번져서
+     계기가 아니라 장식으로 읽혔다(실측 스크린샷). Blueprint 의 차트에는 발광이
+     아예 없으므로 이 효과 자체는 미션의 요구이고, 세기는 «선이 아직 선으로
+     보이는가» 로 정했다. */
+  filter: drop-shadow(0 0 2px currentColor);
+}
+
+/* 면. 캐논의 `areaType="dotted"` 에 해당하는 자리 — 여기서는 격자가 이미 점을
+   쓰고 있어서 점을 또 쓰면 둘이 싸운다. 그래서 아주 옅은 채움이다. */
+.sr-term-area {
+  fill: currentColor;
+  opacity: 0.1;
+}
+
+.sr-term-tick {
+  fill: var(--sr-term-fg-dim);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-term-gridline {
+  stroke: var(--sr-term-line);
+  stroke-width: 1;
+}
+
+/* ── 사실 스트립 (차트 아래) ────────────────────────────────────────────────
+ * Quiver 의 큰 숫자 타일과 같은 문법: 값이 크고 라벨이 그 아래 작게 선다.
+ * 캐논 `ui/Stat.tsx` 가 하는 일과 같지만 그건 카드 안 두 줄(caption + title3)
+ * 이라 이 높이에 안 들어간다 — 같은 문법의 더 작은 판이다. */
+.sr-term-facts {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0;
+}
+
+.sr-term-fact {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 8px;
+}
+
+.sr-term-fact + .sr-term-fact {
+  border-left: 1px solid var(--sr-term-line);
+}
+
+/* ── 로그 그리드 (우측 20%, Phase 3) ───────────────────────────────────────
+ *
+ * 행 20px · 셀 패딩 `0 8px` · 12/20 타입은 **Blueprint 스프레드시트 Table 의
+ * 셀 실측값 그대로**다(파일 머리). AG Grid 를 설치하는 대신 그 밀도를 그대로
+ * 가져온 것이고, 「고밀도」를 짐작으로 정하지 않은 자리다.
+ *
+ * CDS `Table` 을 쓰므로 시맨틱은 진짜 `<table>/<tr>/<td>` 다 — `role=table` 을
+ * 손으로 붙이는 것보다 낫다(암묵 역할이 이미 그것이고, 보조기술이 표 탐색
+ * 명령을 쓸 수 있다). 대신 CDS 가 셀에 **두 겹의 패딩**을 넣으므로(ROW_H 60 이
+ * 그 산술에서 나온다) 그것을 여기서 걷어낸다. */
+/* ⚠ CDS 의 표 컨테이너에서 **스크롤 권한을 뺏는다** (실측 2026-08-26).
+ *
+ * `Table` 은 `<table>` 을 `overflow: auto` 인 div 로 감싼다. 그 div 가 열 머리의
+ * **가장 가까운 스크롤 조상**이 되는데, 정작 세로로 스크롤하는 것은 바깥의
+ * `.sr-term-body` 다. `position: sticky` 는 «가장 가까운 스크롤 조상» 안에서만
+ * 붙으므로, 스크롤하지 않는 상자에 붙은 머리는 **아무 데도 안 붙는다** — 로그를
+ * 내리면 열 머리가 그냥 위로 사라졌다.
+ *
+ * 그래서 그 div 를 `overflow: visible` 로 만들어 스크롤 조상에서 빼면,
+ * `.sr-term-body` 가 그 자리를 물려받고 머리가 거기에 붙는다. 가로 스크롤을
+ * 잃지 않는 이유는 열 폭 합이 이미 패널 안에 들어가기 때문이다(`COLS` 주석의
+ * 실측) — 넘칠 일이 있으면 그건 폭 계산이 틀린 것이지 스크롤로 덮을 일이 아니다.
+ *
+ * 자식 선택자(`> div`)로 CDS 의 생성 클래스 이름을 안 부른다 — 그 이름은
+ * 빌드마다 바뀌는 해시다. */
+.sr-term-log > div {
+  overflow: visible;
+}
+
+.sr-term-log table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.sr-term-log th,
+.sr-term-log td {
+  height: 20px;
+  padding: 0 8px;
+  border: 0;
+  font-size: 12px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* CDS 가 셀 안에 겹쳐 넣는 상자들을 눌러 준다.
+ *
+ * **`> *` 로는 안 닿는다** (실측 2026-08-26). CDS `TableCell` 은 children 을
+ * **네 겹**의 div 로 감싸고, 무는 것은 깊이 1 이 아니라 그 아래다:
+ *
+ *     깊이 0  td                       padding 0 8px            ← 우리 것
+ *     깊이 1  div.flex                 padding 0
+ *     깊이 2  div.flex.center.row      padding **6px 16px**
+ *                                      margin  **0 -16px**       ← 쌍이다
+ *     깊이 3  div.flex                 padding 0
+ *     깊이 4  div.block                line-height **24px**
+ *
+ * 그래서 행이 20 이 아니라 **36**(세로 패딩 12 + 줄높이 24)이었다.
+ *
+ * ── 그리고 여기서 한 번 더 틀렸다 (실측 2026-08-26) ────────────────────────
+ * 처음 수리는 `padding: 0` 만 했다. 그랬더니 **글자가 칸 왼쪽 밖으로 16px 끌려
+ * 나가** 첫 열의 첫 글자가 패널 가장자리에 잘렸다("Time" → "ime",
+ * "15:29:50" → "5:29:50"). 깊이 2 의 `padding: 0 16px` 은 장식이 아니라
+ * `margin: 0 -16px` 과 **한 쌍**이고, 둘이 가로로 서로를 상쇄하도록 설계돼
+ * 있다(가로 폭은 안 늘리면서 안쪽에 잉크 여백만 주는 관용구). 패딩만 지우면
+ * 상쇄가 깨져 음수 마진만 남는다.
+ *
+ * 그래서 **둘 다** 지운다. 가로 위치는 그대로고(둘이 상쇄하던 것을 둘 다
+ * 없앴으므로), 세로 패딩만 사라진다 — 원래 노리던 것이 그것이다.
+ *
+ * 잡아낸 방법을 적어 둔다: 겹침 검사를 `scrollWidth > clientWidth` 로 했더니
+ * **모든 셀이 정확히 +8** 로 나왔는데, 56px 칸의 "80" 이 넘칠 리가 없어서
+ * 그 균일함 자체가 인공산물의 신호였다. 글리프의 실제 상자를 `Range` 로 재고
+ * 셀 상자와 대조해서야 «넘친 게 아니라 왼쪽으로 밀렸다» 가 보였다.
+ *
+ * `:where()` 로 감싼 이유는 **특정도를 0 으로 유지**하기 위해서다. 이 규칙이
+ * 특정도를 가지면 아래 `.sr-term-tag`·`.sr-term-conf` 의 line-height 를 같이
+ * 덮어써서, 태그와 막대까지 20px 줄에 눌린다. `div` 만 고르는 것도 같은 이유 —
+ * CDS 의 상자는 전부 div 이고, 우리가 넣은 것은 span 이다. */
+.sr-term-log :where(th, td) :where(div) {
+  padding: 0;
+  margin: 0;
+  min-height: 0;
+  gap: 0;
+  line-height: 20px;
+}
+
+/* ── 그리고 **세 번째** 층위: 글자 크기 (실측 2026-08-26) ────────────────────
+ *
+ * 위 두 수리 뒤에도 첫 열이 칸을 넘었다. 폭을 다시 계산해도 안 맞았는데,
+ * 문제가 폭이 아니었기 때문이다 — **글자가 12px 이 아니었다.**
+ *
+ * `td` 의 계산값은 `12px/20px` 로 정확했다. 그런데 CDS 는 깊이 4 의 div 에
+ * 타이포 클래스(`body-…`)를 걸고, 그 클래스가 **자기 `font-size` 를 선언**한다.
+ * 선언된 값은 상속을 이긴다. 그래서 `td` 를 아무리 12 로 만들어도 실제로 그려진
+ * 글자는 CDS `body`(16px)였다:
+ *
+ *     "15:29:50"  프로브 12px → 50.3px      실제 렌더 → 67.1px  (= 16px 판)
+ *
+ * 이 함정의 얼굴은 이 리포가 이미 세 번 본 것이다 — 「변수를 그 값이 사는
+ * 스코프 위에서 정의했다」의 사촌으로, 여기서는 **상속으로 이기려 한 자리에
+ * 선언이 있었다.** 판정법도 같다: 계산값을 요소마다 읽어 내려가면서 어디서
+ * 값이 바뀌는지 본다.
+ *
+ * 열 머리도 같이 처리한다. 안 그러면 대문자·자간·11px 이 `th` 에만 걸리고
+ * 실제 글자는 CDS 의 것으로 나온다. */
+.sr-term-log :where(td) :where(div) {
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.sr-term-log :where(th) :where(div) {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sr-term-log thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 24px;
+  background: var(--sr-term-panel-hi);
+  color: var(--sr-term-fg-dim);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: inset 0 -1px 0 0 var(--sr-term-line);
+}
+
+/* 행 사이 경계 — 흰색 20% 알파를 `box-shadow: inset` 으로. 파일 머리의 그 실측.
+   `border-collapse: collapse` 아래에서 border 를 쓰면 1px 이 두 행에 나뉘어
+   들어가 행 높이가 20.5 가 되고, 가상 스크롤의 스페이서 산술이 그만큼씩
+   어긋난다(`table/rowHeight.ts` 가 적어 둔 그 결함). */
+.sr-term-log tbody tr > td {
+  box-shadow: inset 0 1px 0 0 var(--sr-term-hairline);
+}
+
+.sr-term-log tbody tr:hover > td {
+  background: var(--sr-term-wash);
+}
+
+.sr-term-log tbody tr[aria-current='true'] > td {
+  background: var(--sr-term-wash);
+}
+
+/* ── 숫자 열의 우측 정렬 ────────────────────────────────────────────────────
+ *
+ * `text-align: right` **한 줄로는 안 된다**(실측 2026-08-26: 열 머리 `CONF` 가
+ * 값 위가 아니라 칸 왼쪽에 서 있었다). CDS 의 안쪽 상자가 `display: flex` 라,
+ * 그 안에서 글자를 안는 것은 **flex 아이템**이고 아이템의 가로 위치는
+ * `text-align` 이 아니라 `justify-content` 가 정한다. 기본값 `normal` 은
+ * flex-start 이므로 아무리 오른쪽 정렬을 걸어도 아이템 자체가 왼쪽에 앉는다.
+ *
+ * 이 리포는 같은 함정을 이미 두 번 적어 두었다 — `.sr-num` 이 «`> *` 한 줄로는
+ * 안 닿는다» 고 말하는 그 자리(`theme/type.css`)이고, 9차 감사의
+ * «`justifyContent="flex-end"` 는 CDS 표에서 가로 정렬을 못 한다» 가 같은 것이다.
+ * 캐논 `.sr-num` 을 그대로 안 쓴 이유는 그것이 **패딩이 살아 있는** 60px 표를
+ * 겨냥해 여섯 겹을 뚫도록 쓰여 있어서, 패딩을 걷어낸 이 표에서는 조준점이
+ * 다르기 때문이다. 규칙은 같고 대상만 다르다. */
+.sr-term-log .sr-term-r {
+  text-align: right;
+}
+
+/* ── 그리고 `justify-content` **하나로도 안 됐다** (실측 2026-08-26) ──────────
+ * 위 수리를 넣고 다시 쟀더니 `CONF` 도 `억원` 도 여전히 칸 왼쪽이었다. 값을
+ * 실제로 안는 마지막 겹이 **세로 flex**(`flex-direction: column`)라, 그 축에서
+ * `justify-content` 는 위아래를 다룬다. 가로로 미는 것은 `align-items` 이고
+ * CDS 는 거기에 `flex-start` 를 심어 둔다.
+ *
+ * 이건 이 리포가 **이미 적어 둔** 함정이다 — `theme/type.css` 의 `.sr-num`
+ * 주석이 «209px 칸에 44px 숫자가 왼쪽 끝에 붙어 있는 것을 재고 나서야 보였다»
+ * 라고 쓰고 있고, 9차 감사도 같은 문장을 남겼다. 나는 그 주석을 인용해 놓고도
+ * 틀린 속성을 썼다. 그래서 **둘 다** 건다: 가로 flex 는 `justify-content` 가,
+ * 세로 flex 는 `align-items` 가 민다. 20px 행에 20px 줄높이라 세로 부작용은
+ * 없다(바닥 정렬해도 같은 자리). */
+.sr-term-log :where(th, td).sr-term-r :where(div) {
+  justify-content: flex-end;
+  align-items: flex-end;
+  text-align: right;
+}
+
+/* 매수/매도 태그. **컨트롤이 아니라 라벨**이지만 Blueprint 의 Tag 가 반경 4 라
+   여기서도 4 다 — 알약이 아니라 각진 사각형에 가까운 그 모양. */
+.sr-term-tag {
+  display: inline-block;
+  min-width: 34px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  letter-spacing: 0.04em;
+  text-align: center;
+  color: var(--sr-term-bg);
+}
+
+.sr-term-tag[data-side='BUY'] {
+  background: var(--sr-term-buy);
+}
+
+.sr-term-tag[data-side='SELL'] {
+  background: var(--sr-term-sell);
+}
+
+/* 신뢰도 막대. 숫자와 **같이** 선다 — 막대만이면 값을 못 읽고, 숫자만이면
+   스무 줄을 비교할 때 눈이 자릿수를 세야 한다. */
+/* 신뢰도 칸은 **한 줄**이다: 막대가 왼쪽에서 남는 폭을 먹고, 값이 오른쪽에 선다.
+   두 줄로 쌓았더니 20px 행에서 막대가 아래 행의 경계선에 붙어 어느 행의 것인지가
+   흐려졌고(실측), 무엇보다 시안 막대가 세로로 이어져 **패널에서 제일 긴 잉크**가
+   됐다 — 로그를 훑을 때 눈이 값이 아니라 막대에 먼저 갔다. 한 줄로 눕히면 막대는
+   행 안에 갇히고, 훑기는 막대가·읽기는 숫자가 한다는 원래 의도가 산다. */
+.sr-term-confcell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.sr-term-conf {
+  display: block;
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 3px;
+  background: var(--sr-term-hairline);
+}
+
+.sr-term-confnum {
+  flex: 0 0 auto;
+}
+
+.sr-term-conf-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--sr-term-cyan);
+}
+
+/* 빈 상태. 세로 중앙에 서려면 **높이를 받아야** 하는데, 부모(`.sr-term-body`)는
+   스크롤 상자라 block 이고 `flex: 1` 은 거기서 무동작이다(실측 2026-08-26:
+   문구가 칸 맨 위에 붙어 있었다). */
+.sr-term-empty {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+}
+
+/* ══ 온톨로지 레인 — Gotham 아이디어 [OWNER 2026-08-26] ═══════════════════════
+ *
+ * 아래는 전부 «객체와 링크» 문법의 부품이다. 위쪽 모니터 문법(패널·행·격자)을
+ * 그대로 재사용하고, 새로 만든 것은 **분포 막대·그래프·타임라인·도시에** 넷뿐이다.
+ * 넷 다 CDS 카탈로그에 대응 부품이 없어서 만들었다(CDS `ProgressBar` 는 하나짜리
+ * 진행률이라 목록의 비교 축이 없고, 그래프·타임라인은 아예 없다). */
+
+/* ── 애플리케이션 전환 띠 ───────────────────────────────────────────────────
+ * 축을 고르는 자리. 패널 머리(32px 등고)에 안 넣은 이유는 「얼라인」 1 과
+ * 부딪히기 때문이고, 축을 고르는 것은 패널의 이름표보다 큰 행위라 자기 띠를
+ * 가질 만하다. */
+.sr-term-appbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--sr-term-line);
+}
+
+/* ── 패싯 막대 (Object Explorer) ────────────────────────────────────────────
+ * 막대가 **글자 뒤에** 깔린다. 옆에 두면 20% 칸에서 라벨과 막대가 폭을 나눠
+ * 가져 둘 다 못 읽는다. 행 문법(24px·호버 워시)은 `.sr-term-row` 와 같은 값을
+ * 쓰되, 배경 막대가 있어서 별도 규칙이다. */
+.sr-term-facet {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sr-term-facet + .sr-term-facet {
+  box-shadow: inset 0 1px 0 0 var(--sr-term-hairline);
+}
+
+.sr-term-facet:hover {
+  background: var(--sr-term-wash);
+}
+
+.sr-term-facet:focus-visible {
+  outline: 1px solid var(--sr-term-accent);
+  outline-offset: -1px;
+}
+
+/* 막대. 왼쪽 정렬이고 개수에 비례한다 — 「분포를 본다」가 이 화면의 주장이라
+   막대가 곧 데이터다. 고른 막대는 강조색으로 뒤집는다. */
+.sr-term-facet-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  background: var(--sr-term-panel-hi);
+  pointer-events: none;
+}
+
+.sr-term-facet[data-on='true'] .sr-term-facet-bar {
+  /* 강조색을 그대로 깔면 그 위 흰 글자가 2:1 로 떨어진다. 알파를 섞어 «채워진
+     막대» 로 읽히면서도 글자가 살아 있게 한다(측정: 이 위에서 본문 8.6:1). */
+  background: color-mix(in srgb, var(--sr-term-accent) 34%, transparent);
+}
+
+.sr-term-facet[data-on='true'] {
+  box-shadow: inset 2px 0 0 0 var(--sr-term-accent);
+}
+
+.sr-term-facet-label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sr-term-facet-n {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+/* 종류 글리프 — 색과 모양 **둘 다**로 종류를 말한다(WCAG 2.2 §1.4.1). */
+.sr-term-objglyph {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* 걸린 필터를 말로 다시 적는 띠. */
+.sr-term-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 6px 8px;
+}
+
+.sr-term-clear {
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--sr-term-line);
+  border-radius: 4px;
+}
+
+/* ── 링크 그래프 ────────────────────────────────────────────────────────────
+ * 선은 얇고 조용하다 — 그래프에서 잉크를 갖는 것은 **노드**여야 한다. 선이
+ * 굵으면 스무 개만 모여도 화면이 회색 덩어리가 된다. */
+.sr-term-edge {
+  stroke: var(--sr-term-line);
+  stroke-width: 1;
+}
+
+.sr-term-edge[data-ring='2'] {
+  /* 2촌 선은 점선 — 「한 다리 더」가 선의 모양으로 읽힌다. */
+  stroke-dasharray: 2 3;
+}
+
+.sr-term-edgelabel {
+  fill: var(--sr-term-fg-dim);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+.sr-term-node {
+  cursor: pointer;
+}
+
+.sr-term-node-dot {
+  fill: var(--sr-term-panel);
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+/* 초점 노드만 발광한다. 전부 빛나면 어느 것이 초점인지가 사라진다 — 발광은
+   장식이 아니라 «지금 여기» 라는 정보다. */
+.sr-term-node[data-ring='0'] .sr-term-node-dot {
+  fill: currentColor;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.sr-term-node-glyph {
+  font-size: 8px;
+  fill: currentColor;
+  pointer-events: none;
+}
+
+.sr-term-node[data-ring='0'] .sr-term-node-glyph {
+  fill: var(--sr-term-bg);
+  font-size: 10px;
+}
+
+.sr-term-node-label {
+  fill: var(--sr-term-fg-muted);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.sr-term-node[data-ring='0'] .sr-term-node-label {
+  fill: var(--sr-term-fg);
+  font-weight: 700;
+}
+
+/* 그래프 툴팁. 커서를 따라가고, 자리는 CSS 변수로 — `ReadoutCard` 의 그 기법. */
+.sr-term-tip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(calc(var(--sr-term-cx) + 12px), calc(var(--sr-term-cy) + 12px));
+  max-width: 320px;
+  padding: 4px 6px;
+  background: var(--sr-term-panel-hi);
+  border: 1px solid var(--sr-term-line);
+  border-radius: 4px;
+  color: var(--sr-term-fg);
+  font-size: 11px;
+  line-height: 16px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.sr-term-tip[data-on='false'] {
+  display: none;
+}
+
+/* ── 타임라인 ───────────────────────────────────────────────────────────────*/
+.sr-term-lanelabel {
+  fill: var(--sr-term-fg-dim);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* 체결 레인은 개별 점이 아니라 버킷 막대다 — 점 600개는 선 하나로 뭉친다. */
+.sr-term-tlbar {
+  fill: currentColor;
+  opacity: 0.55;
+}
+
+.sr-term-tlmark {
+  cursor: pointer;
+}
+
+.sr-term-tlstem {
+  stroke: currentColor;
+  stroke-width: 1;
+  opacity: 0.6;
+}
+
+.sr-term-tlglyph {
+  fill: currentColor;
+  font-size: 10px;
+}
+
+.sr-term-tlmark[data-on='true'] .sr-term-tlglyph {
+  filter: drop-shadow(0 0 5px currentColor);
+}
+
+.sr-term-tlmark[data-on='true'] .sr-term-tlstem {
+  opacity: 1;
+}
+
+/* 브러시 — 고른 구간. 채움은 아주 옅고 테두리가 경계를 진다. */
+.sr-term-brush {
+  fill: color-mix(in srgb, var(--sr-term-cyan) 12%, transparent);
+  stroke: var(--sr-term-cyan);
+  stroke-width: 1;
+}
+
+/* ── 도시에 ─────────────────────────────────────────────────────────────────*/
+.sr-term-dossier-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px;
+}
+
+/* 고정폭 라벨 열 — 「얼라인」 2 가 «라벨을 옆에 둬야 하는 설정 패널» 에 허용한
+   그 문법. 값이 짧고 줄이 많아서 라벨을 위에 두면 세로가 두 배가 된다. */
+.sr-term-kv {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 20px;
+  padding: 0 8px;
+}
+
+.sr-term-kv-k {
+  flex: 0 0 auto;
+  width: 72px;
+}
+
+.sr-term-kv-v {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+}
+
+/* 접은 것을 숫자로 말하는 줄. 그냥 자르면 화면이 거짓말을 한다. */
+.sr-term-more,
+.sr-term-source {
+  padding: 6px 8px;
+}
+
+/* 묶음 노드 — 접힌 부채꼴. 링크 종류의 색을 안 쓰고 중립 회색인 이유는, 이것이
+   객체가 아니라 **아직 안 펼친 것**이기 때문이다. 색을 주면 여섯 번째 종류처럼
+   읽힌다. */
+.sr-term-cluster {
+  cursor: pointer;
+  color: var(--sr-term-fg-dim);
+}
+
+.sr-term-cluster-dot {
+  fill: var(--sr-term-panel-hi);
+  stroke: var(--sr-term-fg-dim);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+}
+
+.sr-term-cluster:hover .sr-term-cluster-dot {
+  stroke: var(--sr-term-accent);
+}
+
+.sr-term-cluster-n {
+  fill: var(--sr-term-fg);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* 맥락 띠의 끌기 판. 투명하지만 이벤트는 받는다 — 아래 미니 분포를 가리지
+   않으면서 띠 전체가 손잡이가 된다. */
+.sr-term-ctxhit {
+  fill: transparent;
+  cursor: ew-resize;
+}
+
+/* 부트 화면 — 온톨로지를 읽는 동안. 3분할 격자가 아직 뜻이 없으므로 가운데 한 칸.
+   `.sr-term` 의 grid 를 덮어써야 해서 특정도를 맞춘다. */
+.sr-term.sr-term-boot[data-sr-scheme] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+/* 열 머리의 정렬 버튼. 머리 글자 그대로이고 버튼처럼 안 생겼다 — 표 머리가
+   버튼으로 보이면 그 행이 컨트롤 띠로 읽힌다. */
+.sr-term-sortbtn {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.sr-term-sortbtn:hover {
+  color: var(--sr-term-fg);
+}
+
+/* 출처 원문 링크. */
+.sr-term-srclink {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--sr-term-accent);
+  font-size: 11px;
+}
+
+/* 화면이 말해야 하는 것들 — as-of·못 이은 것·창의 상한·caveat. */
+.sr-term-notes {
+  flex: 0 0 auto;
+  max-height: 96px;
+  overflow: auto;
+  padding: 6px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sr-term-line) transparent;
+}
+
+.sr-term-notelist {
+  margin: 4px 0 0;
+  padding-left: 12px;
+}
+
+.sr-term-notelist li {
+  list-style: disc;
+}
+
+/* 표의 종류 칸 — 글리프와 라벨이 한 덩어리로 눕는다. CDS 셀의 마지막 겹이
+   세로 flex 라, 둘을 따로 두면 위아래로 쌓여 행이 벌어진다. */
+.sr-term-typecell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* ══ 쓰기 편하게 — 외부 리서치 반영 [OWNER 2026-08-26] ══════════════════════
+ *
+ * 근거는 셋이다:
+ *   · Shneiderman 1996, "The Eyes Have It" — 일곱 과업 중 **history · extract**
+ *     가 이 화면에 없었다(빵부스러기·뒤로/앞으로·추출이 그 답).
+ *   · Nielsen Norman Group, 필터 지침 — 적용된 필터는 **칩**으로, 개별 해제 가능.
+ *   · Cambridge Intelligence, 그래프 UX 지침 — 검색은 노드를 빨리 찾는 지름길.
+ */
+
+/* ── 필터 칩 ────────────────────────────────────────────────────────────── */
+.sr-term-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 칩은 컨트롤이라 반경 4 다(파일 머리의 프레임/컨트롤 구분). */
+.sr-term-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 4px;
+  border: 1px solid var(--sr-term-line);
+  border-radius: 4px;
+  background: var(--sr-term-panel-hi);
+  color: var(--sr-term-fg);
+  font: inherit;
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sr-term-chip:hover {
+  border-color: var(--sr-term-accent);
+}
+
+/* 패싯 이름은 조용하고 값이 잉크를 갖는다 — 값만 적으면 「3Y」가 만기인지
+   입찰 연물인지 알 수 없어서 이름을 같이 적되, 읽는 것은 값이다. */
+.sr-term-chip-k {
+  color: var(--sr-term-fg-dim);
+}
+
+.sr-term-chip-x {
+  color: var(--sr-term-fg-dim);
+}
+
+.sr-term-chip:hover .sr-term-chip-x {
+  color: var(--sr-term-accent);
+}
+
+/* ── 빵부스러기 ─────────────────────────────────────────────────────────── */
+.sr-term-trail {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--sr-term-line);
+  overflow: hidden;
+}
+
+.sr-term-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sr-term-crumb-sep {
+  color: var(--sr-term-fg-dim);
+  font-size: 11px;
+}
+
+.sr-term-crumb-btn {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--sr-term-fg-dim);
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sr-term-crumb-btn:hover {
+  color: var(--sr-term-fg);
+}
+
+/* 지금 자리는 잉크를 갖는다 — 부스러기 넷이 같은 무게면 어디에 서 있는지가
+   안 읽힌다. */
+.sr-term-crumb[data-on='true'] .sr-term-crumb-btn {
+  color: var(--sr-term-fg);
+  font-weight: 700;
+}
+
+/* 못 누르는 이력 버튼 — 사라지지 않고 **꺼진 채로 남는다**. 사라지면 버튼
+   자리가 움직여서 다음 버튼을 잘못 누른다. */
+.sr-term-seg-btn:disabled {
+  color: var(--sr-term-line);
+  cursor: default;
+}
+
+.sr-term-seg-btn:disabled:hover {
+  background: transparent;
+  color: var(--sr-term-line);
+}
+
+/* ── 커맨드 팔레트 ──────────────────────────────────────────────────────── */
+.sr-term-palette-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  /* **내용만큼만 높다.** flex 의 기본 `align-items: stretch` 를 그대로 두면 상자가
+     남는 높이를 끝까지 늘어나고, `max-height: 70vh` 가 그것을 «항상 70vh» 로
+     고정한다 — 세 줄짜리 결과 아래로 화면 절반이 빈 상자로 딸려 왔다
+     (실측 2026-08-27, 단축키 목록에서 눈에 띄었지만 팔레트도 같은 상태였다). */
+  align-items: flex-start;
+  /* 위에서 1/6 지점 — 화면 한가운데에 두면 아래 목록이 자랄 때 상자가
+     위아래로 흔들린다. 위를 고정하면 목록만 자란다. */
+  padding-top: 12vh;
+  background: var(--sr-scrim);
+}
+
+.sr-term-palette {
+  display: flex;
+  flex-direction: column;
+  width: 560px;
+  max-width: 92vw;
+  max-height: 70vh;
+  border: 1px solid var(--sr-term-line);
+  border-radius: 4px;
+  background: var(--sr-term-panel);
+  box-shadow: var(--sr-popover-shadow);
+  overflow: hidden;
+}
+
+.sr-term-palette-input {
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-bottom: 1px solid var(--sr-term-line);
+  background: var(--sr-term-panel-hi);
+  color: var(--sr-term-fg);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.sr-term-palette-input::placeholder {
+  color: var(--sr-term-fg-dim);
+}
+
+.sr-term-palette-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sr-term-line) transparent;
+}
+
+.sr-term-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sr-term-palette-item[data-on='true'] {
+  background: var(--sr-term-wash);
+  box-shadow: inset 2px 0 0 0 var(--sr-term-accent);
+}
+
+.sr-term-palette-title {
+  flex: 0 0 auto;
+}
+
+/* 부제는 남는 폭을 먹되 **넘치면 스크롤이지 말줄임이 아니다**(「말줄임 절대
+   금지」). 팔레트 줄은 한 줄이라 넘치는 것은 가려지고, 이름과 종류는 늘 보인다. */
+.sr-term-palette-sub {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--sr-term-fg-dim);
+}
+
+.sr-term-palette-type {
+  flex: 0 0 auto;
+  color: var(--sr-term-fg-dim);
+}
+
+.sr-term-palette-empty {
+  padding: 8px;
+}
+
+.sr-term-palette-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-top: 1px solid var(--sr-term-line);
+  background: var(--sr-term-panel-hi);
+}
+
+/* 막다른 길 안내 — 초점만 남은 그래프 위에 뜬다. 그림을 가리지 않게 아래쪽에.
+   NN/g 필터 지침의 «zero-results dead end 방지». */
+.sr-term-deadend {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.sr-term-deadend button {
+  pointer-events: auto;
+}
+
+/* ══ 키보드와 접근성 [WCAG 2.2 · 2026-08-27] ═══════════════════════════════
+ *
+ * 이 절이 생긴 이유는 하나다: **이 화면의 절반이 마우스에만 있었다.** 그래프의
+ * 노드도, 시간축의 사건도, 차트의 값도 눌러야 열리는데 눌리는 것이 전부
+ * `<g onClick>` 이라 탭이 닿지 않았다. 표는 반대로 행마다 탭 정지를 둬서 348번
+ * 탭이 됐고, 가상 스크롤이라 그중 스물 몇 개만 실제로 닿았다.
+ *
+ * 고친 방법은 축마다 다르지 않다 — **셋 다 roving 문법**이다: 그림 전체가 탭
+ * 정지 한 칸이고, 그 안에서 화살표가 짚고 Enter 가 고른다. 축을 옮길 때마다
+ * 새로 배우지 않게 하려는 것이고, 그래서 확대 키(`+`·`−`·`0`)도 셋이 같다.
+ *
+ * 기준은 넷이다:
+ *   · 2.1.1 Keyboard — 마우스로 되는 것은 키보드로도 된다
+ *   · 2.1.4 Character Key Shortcuts — 한 글자 단축키는 끌 수 있거나(전역인 `/`·`?`)
+ *     초점 안에서만 듣는다(그림 안의 `+`·`−`·`0`)
+ *   · 2.4.1 Bypass Blocks — 패싯 마흔 개를 건너뛰는 링크
+ *   · 2.5.8 Target Size — 눌리는 것은 24px 이상. 그림은 그대로 두고 판정만 넓힌다
+ */
+
+/* ── 건너뛰기 링크 ─────────────────────────────────────────────────────────
+ * 초점을 받기 전에는 화면에 없다. `display: none` 이 아니라 **화면 밖으로
+ * 밀어 두는** 이유는, 안 보이게 감추면 초점 순서에서도 빠지기 때문이다. */
+.sr-term-skip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 20;
+  padding: 4px 8px;
+  border: 1px solid var(--sr-term-accent);
+  border-radius: 4px;
+  background: var(--sr-term-panel-hi);
+  color: var(--sr-term-fg);
+  font-size: 12px;
+  line-height: 24px;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+
+.sr-term-skip:focus-visible {
+  transform: translateY(0);
+  outline: 1px solid var(--sr-term-cyan);
+  outline-offset: -2px;
+}
+
+/* ── 그림 안의 초점 ────────────────────────────────────────────────────────
+ * 그래프·시간축·차트는 초점을 받는 **하나의 위젯**이다(`role="application"`).
+ * 그 테두리가 없으면 탭으로 들어왔을 때 «어디에 있는지» 를 알 수 없다. 안쪽에
+ * 그리는 이유는 상자가 서로 맞닿아 있어 바깥 테두리가 이웃 칸을 침범해서다. */
+.sr-term-plot:focus-visible {
+  outline: 1px solid var(--sr-term-cyan);
+  outline-offset: -2px;
+}
+
+/* 눌리는 것의 **판정 영역**. 보이지 않지만 24px 이다(2.5.8).
+ *
+ * `fill: transparent` 가 아니라 아주 옅은 채움인 이유: `transparent` 는 히트
+ * 테스트를 통과하지만 `fill: none` 은 통과하지 못한다 — 둘을 헷갈리면 판정이
+ * 통째로 사라진다. 여기서는 `transparent` 를 쓰고, 그 사실을 적어 둔다. */
+.sr-term-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+
+/* 그래프 바탕 — 끌기를 받는다. 노드의 판정 원보다 **아래**에 깔린다. */
+.sr-term-panhit {
+  fill: transparent;
+  cursor: grab;
+}
+
+.sr-term-panhit:active {
+  cursor: grabbing;
+}
+
+/* 화살표가 짚고 있는 자리. 초점(`data-on`)과 **다른 표시**여야 한다 — 하나는
+   «지금 보고 있는 것», 하나는 «지금 짚고 있는 것» 이라 같은 모양이면 둘을
+   구별할 수 없다. 초점은 발광, 커서는 고리다. */
+.sr-term-node[data-cursor='true'] .sr-term-node-dot,
+.sr-term-cluster[data-cursor='true'] .sr-term-cluster-dot {
+  stroke: var(--sr-term-cyan);
+  stroke-width: 2;
+}
+
+.sr-term-node[data-cursor='true'] .sr-term-node-label {
+  fill: var(--sr-term-fg);
+}
+
+.sr-term-tlmark[data-cursor='true'] .sr-term-tlstem {
+  stroke: var(--sr-term-cyan);
+  stroke-width: 2;
+  opacity: 1;
+}
+
+.sr-term-tlmark[data-cursor='true'] .sr-term-tlglyph {
+  fill: var(--sr-term-cyan);
+}
+
+/* ── 확대 손잡이 ───────────────────────────────────────────────────────────
+ * 그래프와 시간축이 **같은 자리**에 둔다(오른쪽 위). 축을 바꿨을 때 컨트롤이
+ * 옮겨 다니면 그때마다 눈이 다시 찾는다. */
+.sr-term-zoom {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  border: 1px solid var(--sr-term-line);
+  border-radius: 4px;
+  background: var(--sr-term-panel);
+  overflow: hidden;
+  z-index: 2;
+}
+
+/* 이 세 칸은 셋 다 **최소 32px** 이어야 한다 — `.sr-term-seg-btn` 이 이미 32
+   높이라 폭만 준다. 「1.0×」가 최장 라벨이고 그것이 잘리지 않는 폭이다
+   (「전체」는 한글 두 자라 더 좁다). */
+.sr-term-zoom .sr-term-seg-btn {
+  min-width: 40px;
+}
+
+.sr-term-zoom .sr-term-seg-btn + .sr-term-seg-btn {
+  border-left: 1px solid var(--sr-term-line);
+}
+
+/* ── 초점 테두리를 못 받던 것들 ────────────────────────────────────────────
+ * 아래 넷은 전부 `<button>`·`<a>` 였는데 초점 테두리가 없었다. 브라우저 기본
+ * 테두리는 이 어두운 면에서 거의 안 보이고, 그래서 «키보드로 지나가면 아무 데도
+ * 없는 것처럼 보이는» 상태였다(2.4.7 Focus Visible). */
+.sr-term-chip:focus-visible,
+.sr-term-crumb-btn:focus-visible,
+.sr-term-sortbtn:focus-visible,
+.sr-term-palette-item:focus-visible,
+.sr-term-srclink:focus-visible {
+  outline: 1px solid var(--sr-term-cyan);
+  outline-offset: -2px;
+}
+
+/* 칩의 높이를 20 → 24 로. 「누를 수 있는 것은 24px」(2.5.8)의 그 24 이고,
+   이 화면의 행 높이(`TERM_ROW_H`)와도 같은 수라 필터 띠가 왼쪽 목록과 같은
+   리듬으로 선다. */
+.sr-term-chip {
+  height: 24px;
+  line-height: 22px;
+}
+
+/* 정렬 버튼은 **열 머리 칸을 다 채운다**. 안 채우면 글자 폭만큼만 눌리고,
+   「z」 열에서는 그게 8px 이다. */
+.sr-term-sortbtn {
+  width: 100%;
+  height: 24px;
+}
+
+/* ── 단축키 목록 ───────────────────────────────────────────────────────────*/
+.sr-term-help {
+  width: 480px;
+}
+
+.sr-term-kbd {
+  display: inline-block;
+  padding: 0 4px;
+  border: 1px solid var(--sr-term-line);
+  border-radius: 4px;
+  background: var(--sr-term-panel-hi);
+  color: var(--sr-term-fg);
+  font: inherit;
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+/* 도시에의 고정폭 라벨 열은 «짧은 값이 오른쪽 끝에 선다» 는 전제 위에 있다
+   (「얼라인」 4 — 숫자는 오른쪽). 단축키 설명은 **문장**이라 그 규칙의 반대편이다:
+   오른쪽 정렬한 문장은 줄마다 시작점이 달라져서 훑어 읽을 수가 없다. 이 한 칸만
+   왼쪽으로 되돌리고 남는 폭을 다 쓴다 — 같은 절의 «글은 왼쪽» 이 그 근거다. */
+.sr-term-kv-wide {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  white-space: normal;
+}
+
+/* 단축키 목록은 **내용만큼만** 높다. `.sr-term-body` 는 패널 안에서 남는 높이를
+   다 먹는 부품이라(`flex: 1 1 auto`), 그대로 두면 열 줄짜리 목록 아래로 빈
+   상자가 화면 절반만큼 딸려 온다(실측 2026-08-27). */
+.sr-term-help .sr-term-body {
+  flex: 0 0 auto;
+  padding-bottom: 8px;
+}
+
+.sr-term-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  padding: 0 8px;
+  cursor: pointer;
+}
