@@ -7,6 +7,8 @@ LCG(seed 42) 320일 시리즈에 기본 파라미터를 걸면 KPI 가 정확히
 """
 import math
 
+import pytest
+
 from app import mrbacktest as bt
 
 PIN = dict(lookback=60, entry_z=2.0, exit_z=0.5, stop_z=3.5,
@@ -513,3 +515,72 @@ def test_open_leg_can_be_counted_as_a_trade_without_paying_an_exit():
     assert added["exitReason"] == "open"
     assert math.isclose(added["pnl"], base["open"]["pnl"])
     assert math.isclose(added["cost"], base["open"]["cost"])  # 진입 편도 하나뿐
+
+
+class TestTradableDvMask:
+    """롤일 Δ 마스크 [OWNER 2026-09-02 — "롤일 Δ 를 0 으로 마스크"].
+
+    선물·퓨처스왑의 값은 벤더 내재수익률이라 **수준**은 옳지만, 계약이 갈리는
+    날의 차분은 앞 계약 마지막과 뒷 계약 첫 값을 뺀 것이라 아무도 실현하지
+    못한다. 마스크는 그 봉의 Δ 만 0 으로 만들고 **수준·z·신호는 안 건드린다**.
+    """
+
+    @staticmethod
+    def _wave(n: int = 120) -> list[float]:
+        import math as _m
+        return [10.0 + 3.0 * _m.sin(i / 6.0) for i in range(n)]
+
+    def test_none_is_the_old_arithmetic(self):
+        """안 주면 예전과 **완전히 같은 수** — 원본 PMS 재현이 안 깨진다."""
+        vals = self._wave()
+        dates = [f"2020-{1 + i // 28:02d}-{1 + i % 28:02d}" for i in range(len(vals))]
+        a = bt.simulate(dates, vals, lookback=20, entry_z=1.0, exit_z=0.2,
+                                stop_z=4.0, cost_bp=0.0, notional=1.0)
+        b = bt.simulate(dates, vals, lookback=20, entry_z=1.0, exit_z=0.2,
+                                stop_z=4.0, cost_bp=0.0, notional=1.0,
+                                tradable_dv=None)
+        assert a["trades"] == b["trades"]
+        assert a["summary"] == b["summary"]
+
+    def test_masked_bar_pays_nothing_and_the_trade_says_so(self):
+        vals = self._wave()
+        dates = [f"2020-{1 + i // 28:02d}-{1 + i % 28:02d}" for i in range(len(vals))]
+        plain = [0.0] + [vals[i] - vals[i - 1] for i in range(1, len(vals))]
+        a = bt.simulate(dates, vals, lookback=20, entry_z=1.0, exit_z=0.2,
+                                stop_z=4.0, cost_bp=0.0, notional=1.0)
+        # 한 봉만 마스크한다 — **어떤 거래의 보유 구간 안**을 고른다(밖을 고르면
+        # 아무 거래도 안 갈리고 이 시험은 아무것도 안 잰다).
+        first = a["trades"][0]
+        cut = dates.index(first["entryDate"]) + 1
+        assert cut <= dates.index(first["exitDate"])
+        masked = list(plain)
+        masked[cut] = 0.0
+        b = bt.simulate(dates, vals, lookback=20, entry_z=1.0, exit_z=0.2,
+                                stop_z=4.0, cost_bp=0.0, notional=1.0,
+                                tradable_dv=masked)
+
+        # 신호는 값 위에서 나므로 거래의 **날짜와 방향**은 안 바뀐다.
+        assert [(t["entryDate"], t["exitDate"], t["direction"]) for t in a["trades"]] == \
+               [(t["entryDate"], t["exitDate"], t["direction"]) for t in b["trades"]]
+
+        # 그 봉을 지나는 거래는 정확히 그 봉의 Δ 만큼 갈린다.
+        gap = plain[cut]
+        touched = 0
+        for x, y in zip(a["trades"], b["trades"]):
+            if x["masked"] == 0 and y["masked"] == 0:
+                assert x == y
+                continue
+            touched += 1
+            assert y["masked"] == 1
+            assert math.isclose(y["dv"], x["dv"] - gap, abs_tol=1e-9)
+            # 수준은 안 건드린다 — 진입·청산 값은 그대로다.
+            assert (y["entryValue"], y["exitValue"]) == (x["entryValue"], x["exitValue"])
+        assert touched == 1
+
+    def test_length_must_match(self):
+        vals = self._wave(40)
+        dates = [f"2020-01-{1 + i:02d}" for i in range(len(vals))]
+        with pytest.raises(ValueError, match="tradable_dv"):
+            bt.simulate(dates, vals, lookback=10, entry_z=1.0, exit_z=0.2,
+                                stop_z=4.0, cost_bp=0.0, notional=1.0,
+                                tradable_dv=[0.0] * (len(vals) - 1))

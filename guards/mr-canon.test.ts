@@ -386,6 +386,104 @@ describe('머리 주석이 화면과 같은 말을 한다', () => {
   });
 });
 
+describe('스프레드는 한 물건이 아니다 — 대사가 다리마다 선다', () => {
+  /* [OWNER 2026-09-03 — "채권 KRD, bp, 손익과 IRS KRD, bp, 손익, 그리고 종합
+     손익이 하루에 찍혀야 함"].
+
+     종전 대사표는 하루가 한 줄이고 다리 레벨 셋이 «열» 이었다. 그런데 이건
+     채권 매수 · IRS 페이라 **하루에 다리가 둘**이고, 다리마다 감도·Δ·손익이
+     따로 있다 — 한 줄에 못 담는다. 그래서 백테스트·시뮬 대사표의 문법을
+     가져왔다: 다리마다 세 줄(KRD·Δbp·손익)에 종합 한 줄.
+
+     여기서 지키는 것은 «모양» 이 아니라 **누가 계산하나** 다. 다리 Δ 는 레벨의
+     차이고 KRD 는 부호 규약이며 손익은 엔진의 곱셈이다 — 셋 다 화면에서 다시
+     하면 화면과 엔진이 다른 수를 말할 자리가 생긴다(§16). 값이 실제로 닫히는지
+     는 `backend/tests/test_mr_legrecon.py` 가 라우트를 타고 잰다. */
+
+  it('화면이 다리 줄을 세운다 — 다리 하나면 종합 줄이 없다', () => {
+    const code = src('src/mr/StrategyWindow.tsx');
+    expect(code).toContain('function ReconDay');
+    for (const label of ['KRD', 'Δbp', '손익']) expect(code).toContain(label);
+    /* 다리가 하나인 계열은 백테스트와 글자 그대로 같은 3줄이다
+       [OWNER 2026-09-03 — "한개면 그냥 백테스트와 동일한 형태로"]. */
+    expect(code).toMatch(/const single = legs\.length === 1/);
+    expect(code).toMatch(/if \(!single\)/);
+  });
+
+  it('화면은 다리 값을 **다시 계산하지 않는다** — 서버가 낸 것만 적는다', () => {
+    const code = src('src/mr/StrategyWindow.tsx');
+    const day = code.slice(code.indexOf('function ReconDay'), code.indexOf('/** 대사표 머리의 한 줄'));
+    expect(day).toContain('g.krd');
+    expect(day).toContain('g.mtm');
+    expect(day).toContain('g.carry');
+    /* 곱셈·뺄셈이 이 부품 안에 있으면 §16 위반이다. `p.hold * notional` 은
+       다리가 아예 없는 봉(구 백엔드)의 감도라 예외로 남는다 — 그 자리는 종합
+       줄 하나뿐이고, 다리 줄에서는 서버 값만 쓴다. */
+    expect(day).not.toMatch(/g\.krd\s*\*/);
+    expect(day).not.toMatch(/g\.lvl\s*-/);
+  });
+
+  it('계약이 항등을 말한다 — KRD 합 0 · 손익 합 = 평가', () => {
+    /* **주석을 안 걷은 원문**을 본다 — `src()` 는 주석을 지우는데, 여기서
+       지키려는 것이 정확히 「계약이 그 항등을 말로 적어 두었나」다. 타입만
+       있으면 다음 사람이 부호를 자기 방향으로 읽는다(이 리포의 그 규율). */
+    const api = fs.readFileSync(path.join(root, 'src/mr/api.ts'), 'utf8');
+    expect(api).toMatch(/interface MrReconLeg/);
+    expect(api).toMatch(/Σ krd = 0/);
+    expect(api).toMatch(/Σ mtm = 평가/);
+  });
+
+  it('서버가 봉마다 그 항등을 재고, 안 맞으면 다리를 안 싣는다', () => {
+    const py = fs.readFileSync(path.join(root, 'backend/app/main.py'), 'utf8');
+    const fn = py.slice(py.indexOf('def _attach_leg_recon('), py.indexOf('@router.get("/api/mr/strategy")'));
+    expect(fn).toMatch(/LEG_RECON_TOL_KRW/);
+    /* 지어낸 분해를 화면에 올리지 않는다 — 안 맞으면 통째로 접는다. */
+    expect(fn.match(/return$/gm)?.length ?? 0).toBeGreaterThanOrEqual(3);
+    /* 롤일은 다리도 같이 0 이다 — 한쪽만 살리면 그 줄이 안 닫힌다. */
+    expect(fn).toMatch(/p\.get\("roll"\)/);
+  });
+
+  it('화면이 읽는 사람에게 **지금** 규약을 말한다 — 옛 문장이 남아 있지 않다', () => {
+    /* 2026-09-03 감사가 잡은 자리다. 표를 다리 줄로 바꿨는데 **설명 문장 둘이
+       옛 규약을 그대로 말하고 있었다** — 「감도 × Δ = 평가」. 새 표에서는 줄마다
+       `−KRD × Δ = 손익` 이고 다리 손익을 더해야 평가다. 부호까지 반대라, 그
+       문장을 읽고 손으로 검산하면 안 맞는다.
+
+       주석이 아니라 **화면에 서는 글자**라 더 무겁다. 코드에서 지운 규약이
+       설명에 남아 있으면 그건 화면이 거짓말을 하는 것이다. */
+    const code = src('src/mr/StrategyWindow.tsx');
+    expect(code).not.toContain('감도 × Δ = 평가');
+    expect(code).toContain('−KRD × Δ = 손익');
+  });
+
+  it('실가격과 엔진의 차이를 **성분으로** 적고, 표시 정밀도에서 더해진다', () => {
+    /* [OWNER 2026-09-03 — "이 방향이 정확한 대사"]. 실가격 대사는 엔진 손익과
+       체계적으로 다르다(par-par 대 DV01 중립). 그 차이를 한 줄로 뭉뚱그리면
+       읽는 사람이 이유를 못 찾는다 — 2026-09-03 감사에서 실측해 보니 가장 큰
+       항이 **거래비용**(엔진에만)이고 그 다음이 **롤다운**(실가격에만)이며,
+       내가 처음 쓴 문장은 그 둘을 빼놓고 가장 작은 항을 앞에 세우고 있었다.
+
+       그리고 세 항은 **화면에서 더해져야 한다.** 각자 반올림하면 만원 단위에서
+       어긋난다(실측 16건 중 3건). `lib/krw.ts::splitKrw` 가 2026-08-14 에 같은
+       사고로 만들어졌고, 이 줄도 같은 수법을 쓴다 — 마지막 항이 잔차를 진다. */
+    const code = src('src/mr/StrategyWindow.tsx');
+    expect(code).toContain('function bridgeText');
+    expect(code).toMatch(/manUnits\(/);
+    expect(code).toMatch(/fmtKrwFromMan\(/);
+    /* 잔차가 마지막 항에 실린다 — 이 한 줄이 「화면에서 더해진다」의 전부다. */
+    expect(code).toMatch(/uDiff - uCost - uRoll/);
+    for (const w of ['비용', '롤다운', '평가·캐리 차']) expect(code).toContain(w);
+  });
+
+  it('캐리도 다리마다 온다 — 엔진의 곱셈이 선형이라 합이 닫힌다', () => {
+    const py = fs.readFileSync(path.join(root, 'backend/app/mrcarry.py'), 'utf8');
+    expect(py).toMatch(/def carry_rates_by_leg\(/);
+    expect(py).toMatch(/LEG_NAMES/);
+    /* 선물 다리의 0 은 «모르는 값» 이 아니라 «0 이라고 아는 값» 이다. */
+    expect(py).toMatch(/선물 다리는 \*\*0 이 아니라/);
+  });
+});
+
 describe('결과를 못 바꾸는 노브는 화면에 안 선다 — 「관찰 σ」 은퇴', () => {
   /* [OWNER 2026-09-02 — "이건 뭔지 확인하고 필요없으면 치우기"]. `warnZ` 는
      이름이 「경보 문턱」이었는데 **경보하는 곳이 없었다**: z 그림에 점선 두
@@ -427,5 +525,49 @@ describe('결과를 못 바꾸는 노브는 화면에 안 선다 — 「관찰 �
   it('내린 이유가 주석에 남아 있다', () => {
     const raw = fs.readFileSync(path.join(root, 'src/mr/api.ts'), 'utf8');
     expect(raw).toMatch(/경보하는 곳이 없었고/);
+  });
+});
+
+describe('롤일 Δ 는 손익이 아니다 — 마스크와 그 표식', () => {
+  /* [OWNER 2026-09-02 — "롤일 Δ 를 0 으로 마스크"]. 선물·퓨처스왑의 값은 벤더
+     내재수익률이라 수준은 옳지만, 계약이 갈리는 날의 차분은 앞 계약 마지막과
+     뒷 계약 첫 값을 뺀 것이라 **아무도 실현하지 못한다**(실측: FUT 109건 중
+     35건 >1bp, 최대 25.6bp/거래 · FSW-3Y 는 총손익 +1.75억이 −0.71억으로 뒤집힘).
+
+     마스크는 손익만 건드리고 **수준·z·신호는 안 건드린다** — 그래서 「청산 −
+     진입」과 Δ 가 갈린다. 그 어긋남을 화면이 결함으로 읽히게 두면 안 된다. */
+
+  it('마스크가 붙은 거래·봉에 표식이 선다', () => {
+    const code = src('src/mr/StrategyWindow.tsx');
+    expect(code).toContain('function RollMark');
+    /* 거래 표 Δ · 대사표 합계 Δ · 롤 봉의 Δ 셋 다. */
+    expect(code.match(/<RollMark /g)?.length ?? 0).toBeGreaterThanOrEqual(3);
+    expect(code).toMatch(/t\.masked \?/);
+    expect(code).toMatch(/sel\.masked \?/);
+    expect(code).toMatch(/p\.roll \?/);
+  });
+
+  it('계약에 masked·roll 이 있고 뜻이 주석에 적혀 있다', () => {
+    const api = fs.readFileSync(path.join(root, 'src/mr/api.ts'), 'utf8');
+    expect(api).toMatch(/masked\?: number;/);
+    expect(api).toMatch(/roll\?: boolean;/);
+    expect(api).toMatch(/실현하지 못한다/);
+  });
+
+  it('엔진은 마스크를 안 주면 예전 산술 그대로다', () => {
+    const py = fs.readFileSync(path.join(root, 'backend/app/mrbacktest.py'), 'utf8');
+    expect(py).toContain('tradable_dv: list[float] | None = None');
+    /* 기본 경로가 값의 차분이라는 사실 — 적합성 벡터가 그것을 잰다. */
+    expect(py).toMatch(/if tradable_dv is None else list\(tradable_dv\)/);
+    expect(py).toContain('position * notional * dv_bar[i]');
+  });
+
+  it('롤일은 달력이 정한다 — 가격 탐지는 자료가 비어 못 잡는 날이 있다', () => {
+    const py = fs.readFileSync(path.join(root, 'backend/app/futures.py'), 'utf8');
+    expect(py).toContain('def roll_days(');
+    expect(py).toMatch(/셋째 화요일/);
+    /* 마스크를 거는 쪽은 선물 가족뿐이다 — BSS 는 상수만기라 롤이 없다. */
+    const main = fs.readFileSync(path.join(root, 'backend/app/main.py'), 'utf8');
+    expect(main).toMatch(/if kinds\[id\] in \("fut", "fsw"\):/);
   });
 });

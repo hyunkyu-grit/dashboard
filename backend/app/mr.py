@@ -204,16 +204,36 @@ def _fut_bundle() -> dict[str, dict[str, Any]]:
     for d, y3, y10 in irs:
         irs_by_date[d.isoformat()] = {"irs_3y": y3, "irs_10y": y10}
 
+    # 계약이 갈리는 날 — 봉마다 «이 Δ 는 거래할 수 없다» 는 표시가 된다
+    # [OWNER 2026-09-02 — "롤일 Δ 를 0 으로 마스크"]. 규칙과 실측은
+    # `futures.roll_days` 주석에. 퓨처스왑도 같은 날이다 — 그 계열의 롤 점프는
+    # 선물 다리에서 오고 IRS 다리는 상수만기라 롤이 없다.
+    rolls = {typ: {d.isoformat() for d in ft.roll_days(list(fut.series[typ].dates))}
+             for typ in ("3Y", "10Y") if fut.series.get(typ) is not None}
+
     out: dict[str, dict[str, Any]] = {}
     for sid, typ in (("FUT-KTB3", "3Y"), ("FUT-KTB10", "10Y")):
-        out[sid] = {"unit": "%", "points": [{"t": t, "v": round(v, 4)} for t, v in yields[typ]]}
+        rd = rolls.get(typ, set())
+        # `legs` = 그 봉의 **다리 레벨**(%) — 대사표가 다리마다 Δ·손익을 세운다
+        # [OWNER 2026-09-03]. 선물 아웃라이트는 다리가 하나라 값 자체가 그 다리다.
+        # **안 반올림한다**: 값(`v`)이 4자리로 접히므로 다리에서 또 접으면
+        # 「다리 Δ 의 차 = 값의 Δ」 항등에 잡티가 쌓인다(표시 자릿수는 화면 몫).
+        out[sid] = {"unit": "%",
+                    "points": [{"t": t, "v": round(v, 4), "roll": t in rd,
+                                "legs": [v]}
+                               for t, v in yields[typ]]}
     for sid, (typ, col) in FSW_IRS_COL.items():
+        rd = rolls.get(typ, set())
         pts = []
         for t, v in yields[typ]:
             leg = irs_by_date.get(t, {}).get(col)
             if leg is None:
                 continue
-            pts.append({"t": t, "v": round((v - float(leg)) * 100.0, 4)})
+            # 다리 둘을 그대로 싣는다 — 화면의 «선물 − IRS = 레벨» 이 닫히고,
+            # 대사표가 다리마다 Δbp 를 잰다. 값은 %(레벨 문법) 그대로다.
+            pts.append({"t": t, "v": round((v - float(leg)) * 100.0, 4),
+                        "roll": t in rd,
+                        "legs": [v, float(leg)]})
         out[sid] = {"unit": "bp", "points": pts}
     return out
 
@@ -222,7 +242,17 @@ HISTORY_N = 260
 
 
 def _bands(vals: list[float], window: int = WINDOW, k: float = K) -> tuple[list, list, list]:
-    """SMA(window) ± k·SD(ddof=1). 창이 차기 전은 None — 0 이 아니다."""
+    """SMA(window) ± k·**모집단** SD. 창이 차기 전은 None — 0 이 아니다.
+
+    **σ 규약은 엔진이 정본이다** [OWNER 2026-09-02 — "엔진(모집단 σ)으로 통일"].
+    2026-09-02 적대 대사가 잡은 자리: 이 보드는 ddof=1(표본), 전략 엔진
+    (`mrbacktest.rolling_series` — PMS 원본 이식)은 모집단 σ 라, **같은 계열·
+    같은 창·같은 날**의 z 가 √((w−1)/w) 배 갈렸다. BSS-3Y 2,958봉 중 9봉이
+    진입 문턱 반대편에 섰다 — 보드에서 「밴드 밖」인 날이 창에서는 아니었다.
+
+    엔진 쪽으로 맞춘 이유: 엔진은 PMS 재현이 계약이고 적합성 벡터로 잠겨 있어
+    바꾸면 그 계약이 깨진다. 보드는 순위·표시용이라 규약을 따라오면 된다.
+    (보드 z 는 이 변경으로 모두 √(w/(w−1)) 배 = 창 60 에서 0.84% 커진다.)"""
     n = len(vals)
     ma: list[float | None] = [None] * n
     up: list[float | None] = [None] * n
@@ -237,8 +267,9 @@ def _bands(vals: list[float], window: int = WINDOW, k: float = K) -> tuple[list,
             s += new - old
             s2 += new * new - old * old
         m = s / window
-        # ddof=1. 수치 오차로 음수가 될 수 있어 0 에서 자른다.
-        var = max(0.0, (s2 - window * m * m) / (window - 1))
+        # 모집단 σ(ddof=0) — 엔진과 같은 규약. 수치 오차로 음수가 될 수 있어
+        # 0 에서 자른다.
+        var = max(0.0, (s2 - window * m * m) / window)
         sd = math.sqrt(var)
         ma[i], up[i], lo[i] = m, m + k * sd, m - k * sd
     return ma, up, lo

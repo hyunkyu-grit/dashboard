@@ -175,6 +175,10 @@ export const mrStrategyUrl = (query: string) => liveUrl("/api/mr/strategy", quer
 /** BSS 테너 통합 장부 — 같은 규칙을 아홉 만기에 동시에 건 한 장부.
  * query 는 `/api/mr/strategy` 와 같고 `id` 만 없다. */
 export const mrBookUrl = (query: string) => liveUrl("/api/mr/book", query);
+/** 거래 하나의 실가격 일별 대사 — 자산스왑으로 세워 민평 노드를 범프한
+ * 테너별 KRD. **거래를 누를 때만** 도는 별도 패스라 라우트도 따로다
+ * (KRD 범프가 본체보다 비싸다 — `cashbond` 의 그 근거). */
+export const mrReconUrl = (query: string) => liveUrl("/api/mr/recon", query);
 
 export const simInstrumentsUrl = () => liveUrl("/api/instruments");
 export const simExpandUrl = () => liveUrl("/api/instruments/expand");

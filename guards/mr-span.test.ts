@@ -96,9 +96,22 @@ describe('거래 한 줄이 스스로 검산이 된다', () => {
     expect(code).toMatch(/fmtBp\(t\.dv, 2\)/);
   });
 
-  it('일별 대사에 레벨 열이 있다 — Δ 가 어느 값에서의 변화인지 표가 스스로 보인다', () => {
-    expect(code).toMatch(/\{ k: '레벨' \}/);
+  it('레벨이 화면에 서고, 대사와 **같은 위계**로 선다', () => {
+    /* 2026-09-03 에 레벨·z 가 대사표에서 나와 「일별 레벨」 칸이 됐다
+       [OWNER — "일별대사와 일별레벨은 동일한 위계임"]. 지키는 명제는 둘이다:
+       레벨이 여전히 화면에 서고, 그것이 대사의 **하위가 아니라 형제 탭**이다.
+       위계가 무너지면 「어디에 있었나」가 「얼마나 벌었나」의 부속이 된다. */
+    /* 열을 **상수로 붙들지 않는다** — 다리 이름이 계열마다 달라서 화면이
+       다리에서 뽑는다(2026-09-03 감사: 상수를 두었더니 화면은 안 읽고 가드만
+       읽는 죽은 상수가 됐고, `국고·IRS` 로 못 박혀 선물 계열에선 틀렸다). */
+    expect(code).toMatch(/const levelCols/);
+    expect(code).toMatch(/'레벨', 'z'/);
     expect(code).toMatch(/kind="level"/);
+    expect(code).toContain('levelPane');
+    /* 서랍 탭 배열에 둘이 나란히 — 하나가 다른 하나 안에 들어가면 안 된다. */
+    const tabs = code.slice(code.indexOf('drawer={['), code.indexOf(']}', code.indexOf('drawer={[')));
+    expect(tabs).toContain("id: 'recon'");
+    expect(tabs).toContain("id: 'levels'");
   });
 
   it('다리 레벨(국고·IRS·CD)이 점에 실리고 화면이 조건부로 세운다', () => {
@@ -111,8 +124,16 @@ describe('거래 한 줄이 스스로 검산이 된다', () => {
     expect(api).toMatch(/irs\?: number \| null/);
     expect(api).toMatch(/cd\?: number \| null/);
     expect(code).toMatch(/진입 국고/);
-    expect(code).toMatch(/RECON_LEG_COLS/);
-    expect(code).toMatch(/hasLegs/);
+    /* CD 는 **다리가 아니다**(감도·Δ 가 없어 줄로 세우면 유령 다리가 된다) —
+       「일별 레벨」의 맨 끝 열로 서고 BSS 에만 있다. 다리 레벨 자체는 서버가
+       봉마다 실어 준 `legs[].lvl` 을 그대로 적는다. */
+    expect(code).toMatch(/hasLegLevels \? \['CD'\]/);
+    /* 값은 이름이 아니라 **자리**로 찾는다 — 머리와 몸통이 `legNames` 한
+       목록만 읽어야 봉 하나가 다리를 빠뜨려도 격자가 안 어긋난다
+       (2026-09-03 감사가 그 두 출처를 잡았다). */
+    expect(code).toMatch(/const legNames/);
+    expect(code).toMatch(/p\.legs\?\.\[j\]\?\.lvl/);
+    expect(code).toMatch(/hasLegLevels/);
     /* 서버 조인은 캐리와 같은 출처(mrseries)다 — 낱개 라우트 안에서. */
     const py = fs.readFileSync(path.join(root, 'backend/app/main.py'), 'utf8');
     const strat = py.slice(py.indexOf('def mr_strategy('), py.indexOf('def mr_book('));

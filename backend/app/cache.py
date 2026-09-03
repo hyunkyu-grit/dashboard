@@ -81,7 +81,11 @@ DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache"
 # 거짓이고 KTB3 는 역사 구간에서 5% 합성 역산과 중앙 58bp 어긋난다(적대 대사
 # 실측). 같은 SQL 이 다른 문장을 만든다 — 안 올리면 v13 캐시가 옛 문장을 계속
 # 내준다.
-SCHEMA_VERSION = 14
+# v15 (2026-09-02): 보드 밴드의 σ 를 표본(ddof=1)에서 **모집단**으로 바꿨다
+# [OWNER — "엔진(모집단 σ)으로 통일"]. 같은 SQL 이 다른 z·밴드·상태를 만든다
+# (창 60 에서 σ 가 0.84% 작아지고, BSS-3Y 2,958봉 중 9봉은 밴드 안팎이 뒤집힌다).
+# 안 올리면 v14 캐시가 옛 규약의 밴드를 계속 내준다.
+SCHEMA_VERSION = 15
 
 
 def data_hash(path: Path, asof: "object | None" = None) -> str:

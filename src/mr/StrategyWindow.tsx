@@ -44,6 +44,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@coinbase/cds-web/tables';
+import { Tooltip } from '@coinbase/cds-web/overlays';
 import { Text } from '@coinbase/cds-web/typography';
 import { PeriodSelector } from '@coinbase/cds-web/visualizations/chart';
 
@@ -52,7 +53,7 @@ import type { ScalePriceLine } from '@/chart/ScaleChart';
 import type { Unit } from '@/lib/api';
 import { BacktestUnavailable } from '@/lib/api';
 import { fmtBp, fmtLevel, unitSuffix } from '@/lib/format';
-import { fmtKrw } from '@/lib/krw';
+import { fmtKrw, fmtKrwFromMan, manUnits } from '@/lib/krw';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { ReadoutCard, ReadoutFact, ReadoutLevel, ReadoutMoney, placeReadout } from '@/ui/ReadoutCard';
 import { Stat, StatColumn } from '@/ui/Stat';
@@ -64,7 +65,13 @@ import {
   type MrStrategyParams,
   type MrStrategyRun,
   type MrStrategyTrade,
+  type MrReconLeg,
+  type MrStrategyPoint,
+  fetchMrRecon,
+  type MrRecon,
 } from './api';
+import { backtestDays, reconNote } from '@/backtest/recon';
+import { ReconStack } from '@/ui/window/ReconStack';
 import { MrKnobBar, mrKnobsStale } from './KnobBar';
 import { Panel, WHY_WORD, headFont } from './parts';
 
@@ -187,6 +194,33 @@ const OPEN_KEY = 'open';
 
 
 /** 그날 사건의 한 마디 — 판독과 대사표의 「구분」 칸이 같은 말을 쓴다. */
+/** 롤 표식 — 「이 줄의 Δ 는 수준의 차가 아니다」 [OWNER 2026-09-02].
+ *
+ *  선물·퓨처스왑의 값은 벤더 내재수익률이라 **수준**은 옳지만, 계약이 갈리는
+ *  날의 차분은 앞 계약 마지막과 뒷 계약 첫 값을 뺀 것이라 아무도 실현하지
+ *  못한다. 그 봉의 Δ 를 0 으로 두면 대사표의 곱셈은 닫히지만 **「청산 − 진입」과
+ *  Δ 가 갈린다** — 표식이 없으면 읽는 사람이 그것을 표의 결함으로 읽는다.
+ *
+ *  글자가 아니라 위첨자 하나다: 숫자 열의 자릿수를 안 밀고, 뜻은 툴팁이 진다.
+ *  말줄임이 아니다(잘린 글자가 아니라 덧붙인 표식). */
+function RollMark({ n }: { n: number }) {
+  return (
+    <Tooltip
+      content={
+        <Text font="legal" as="span">
+          {`보유 중 선물 계약이 ${n}번 갈렸어요. 그날의 수준 변화는 거래할 수 없어서 Δ 에 안 실려요 — 그래서 청산 − 진입 과 Δ 가 달라요.`}
+        </Text>
+      }
+      maxWidth={280}
+      placement="bottom"
+    >
+      <Text font="legal" as="span" color="fgMuted" className="sr-mr-rollmark" tabIndex={0}>
+        {' R'}
+      </Text>
+    </Tooltip>
+  );
+}
+
 function eventWord(e: MrEvent | undefined, holding: boolean): string {
   if (!e) return holding ? '보유' : '—';
   return e.kind === 'entry' ? '진입' : (e.why ? WHY_WORD[e.why] : '청산');
@@ -235,21 +269,29 @@ function posWord(run: MrStrategyRun, i: number): string {
 }
 
 /** 대사표의 숫자 열 — 머리와 몸통이 **같은 목록**을 읽는다. 두 벌이면 열이
- * 어긋나고, 어긋난 대사표는 대사표가 아니다. */
-const RECON_COLS = [
-  /* 레벨이 첫 숫자 열이다 [OWNER 2026-09-02 — "직접 대사가 가능하므로"] —
-     Δ 가 어느 값에서 어느 값으로의 변화인지를 표가 스스로 보인다(이웃 두 줄의
-     레벨 차 = Δ). 밖의 장부와 맞출 때 붙잡는 것도 z 가 아니라 이 값이다. */
-  { k: '레벨' }, { k: 'z' }, { k: 'Δ (bp)' }, { k: '감도' },
-  { k: '평가' }, { k: '캐리' }, { k: '비용' }, { k: '그날' }, { k: '누적' },
-] as const;
+ * 어긋나고, 어긋난 대사표는 대사표가 아니다.
+ *
+ * ## 다리가 «열» 이 아니라 «행» 이다 [OWNER 2026-09-03]
+ *
+ * 종전에는 하루가 한 줄이고 다리 레벨 셋이 열이었다. 그런데 이건 **스프레드
+ * 플레이**라 하루에 다리가 둘이고, 다리마다 감도·Δ·손익이 따로 있다 — 한 줄에
+ * 다 못 담는다. 그래서 백테스트·시뮬 대사표의 문법을 그대로 가져온다:
+ * 하루가 **다리마다 세 줄**(KRD·Δbp·손익)이고 마지막에 종합 한 줄이다.
+ *
+ * 「값」 칸은 줄마다 단위가 다르다(₩/bp · bp · ₩) — 무엇인지는 「구분」이 말한다.
+ * ReconStack 의 테너 칸이 KRD·Δbp·손익을 차례로 담는 것과 같은 자리다. */
+export const RECON_COLS = ['값', '평가', '캐리', '비용', '그날', '누적'] as const;
 
-/* 다리 레벨 세 열 [OWNER 2026-09-02 — "스왑 파 커브 상의 레벨, 채권 커브 상의
-   레벨, CD금리 레벨"] — 레벨(스프레드) **앞**에 서서 «국고 − IRS = 레벨» 이
-   왼쪽에서 오른쪽으로 읽힌다. BSS 에만 있고(캐리와 같은 출처), 선물·퓨처스왑·
-   구 백엔드에는 없어 열이 통째로 접힌다 — 빈 열 셋을 세워 두면 표가 없는
-   데이터를 있는 척한다(「이탈 최대」 열의 그 조건부 문법). */
-const RECON_LEG_COLS = [{ k: '국고' }, { k: 'IRS' }, { k: 'CD' }] as const;
+/** 레벨·z·CD 는 **대사표에서 나갔다** [OWNER 2026-09-03 — "레벨이랑 Z값은
+ *  일별대사 말고 일별레벨 칸을 하나 파서 다른 칸에서 보여주게 하고"]. 대사는
+ *  「얼마나 벌었나」의 표고, 레벨은 「어디에 있었나」의 표다 — 위계가 같으므로
+ *  서랍의 **형제 탭**으로 선다.
+ *
+ *  그 칸의 열은 **상수가 아니라 다리에서 뽑는다**(`levelCols`) — 다리 이름이
+ *  계열마다 다르기 때문이다(BSS 국고·IRS · 퓨처스왑 선물·IRS · 선물 하나).
+ *  2026-09-03 감사에서 여기 `LEVEL_COLS` 상수가 있었는데, 화면은 안 읽고
+ *  가드만 읽는 **죽은 상수**였고 `국고·IRS` 로 못 박혀 있어 선물 계열에서는
+ *  틀린 값이었다 — 「관찰 σ」와 같은 병이라 지웠다. */
 
 /** 합계 줄의 다리 레벨 — 더할 수 있는 양이 아니라 **진입 → 청산**이다(레벨·z
  *  의 그 규칙). 한쪽이라도 없으면 지어내지 않고 '—' 다. */
@@ -312,6 +354,192 @@ function ReconNum({
   );
 }
 
+/** 실가격 대사의 **거래 총손익** — 행의 「그날」을 세로로 더한다.
+ *
+ * 이월 앵커 행은 `actual` 이 `null` 이라 자연히 빠진다(그 행은 «내일 아침에
+ * 들고 갈 리스크»이지 오늘의 돈이 아니다 — `ReconStack` 머리의 그 규약).
+ * 이 값이 백테스트 성과표의 거래 손익과 다른 이유는 `realPane` 머리에. */
+function reconTotal(r: Extract<MrRecon, { available: true }>): number {
+  return r.rows.reduce((a, x) => a + (x.actual ?? 0), 0);
+}
+
+/** 비교 줄의 문장 — **표시 정밀도에서 더해진다**(`splitKrw` 의 수법).
+ *
+ * 차이·비용·롤다운을 각각 한 번씩만 만원으로 반올림하고, 「평가·캐리 차」가
+ * 그 잔차를 진다. 세 항이 화면에서 차이와 정확히 같아진다 — 각자 반올림하면
+ * 만원 단위에서 어긋난다(실측 2026-09-03, 16건 중 3건).
+ *
+ * 항의 뜻: **비용은 엔진에만** 있고(편도 costBp 를 진입·청산에 물린다),
+ * **롤다운은 실가격에만** 있다(자산스왑을 실제로 가격하면 나온다). 남는 것이
+ * par-par 와 DV01 중립의 차 + 캐리·조달의 차다. */
+function bridgeText(t: MrStrategyTrade, r: Extract<MrRecon, { available: true }>): string {
+  const uDiff = manUnits(reconTotal(r) - t.pnl);
+  const uCost = manUnits(-t.cost);
+  const uRoll = manUnits(reconRolldown(r));
+  const uRest = uDiff - uCost - uRoll;
+  return (
+    `엔진 근사 ${fmtKrw(t.pnl)} · 실가격 ${fmtKrw(reconTotal(r))} · `
+    + `차이 ${fmtKrwFromMan(uDiff)}`
+    + ` (비용 ${fmtKrwFromMan(uCost)} · 롤다운 ${fmtKrwFromMan(uRoll)}`
+    + ` · 평가·캐리 차 ${fmtKrwFromMan(uRest)})`
+    + ` — 엔진은 DV01 중립 스프레드에 거래비용을 물리고, 이 표는 par-par`
+    + ` 자산스왑(액면 ${fmtEok(r.principal.krw)})을 실제로 가격해요.`
+    + ` 비용은 엔진에만, 롤다운은 실가격에만 있어요.`
+  );
+}
+
+/** 실가격 대사의 **롤다운 합** — 엔진에는 없는 항이다. 비교 줄이 차이를
+ * 성분으로 가를 때 쓴다(위 `reconTotal` 과 같은 규약: 이월 앵커는 null 이라
+ * 자연히 빠진다). */
+function reconRolldown(r: Extract<MrRecon, { available: true }>): number {
+  return r.rows.reduce((a, x) => a + (x.rolldown ?? 0), 0);
+}
+
+/** 대사표의 **하루** — 다리마다 세 줄(KRD·Δbp·손익)에 종합 한 줄
+ * [OWNER 2026-09-03 — "채권 KRD, bp, 손익과 IRS KRD, bp, 손익, 그리고 종합
+ * 손익이 하루에 찍혀야 함"].
+ *
+ * ## 왜 이 모양인가
+ *
+ * 아웃라이트는 물건이 하나라 KRD·Δbp·손익 세 줄로 닫힌다(백테스트 대사표).
+ * 스프레드는 **다리가 둘**이라 그 세 줄이 다리마다 있어야 「어느 다리가
+ * 벌었나」를 말할 수 있다. 다리가 하나인 계열(선물 아웃라이트)은 종합 줄이
+ * 없다 — 그때 표는 백테스트와 글자 그대로 같은 모양이고, 오른쪽 요약이 손익
+ * 줄에 붙는다 [OWNER 2026-09-03 — "한개면 그냥 백테스트와 동일한 형태로"].
+ *
+ * ## 항등이 세로로 닫힌다
+ *
+ * 서버가 봉마다 재고 안 맞으면 아예 안 보낸다(`main._attach_leg_recon`).
+ * 화면에서 눈으로 보이는 것은 둘이다 — **다리 KRD 의 합이 0**(DV01 중립)이고,
+ * **다리 손익의 합이 종합의 평가**다. 캐리도 같은 자리에서 합이 닫힌다.
+ *
+ *
+ * ## ⚠ 부호가 종전 「감도」 칸과 **반대**다
+ *
+ * 종전 이 표는 `감도 = hold × 명목` 을 싣고 `평가 = 감도 × Δ` 로 읽혔다. 그래서
+ * 국고 매수(BSS 는 `hold = −1`)의 감도가 **음수**로 찍혔다. 백테스트·시뮬
+ * 대사표는 반대 규약이다 — `손익 = −KRD × Δbp` 이고 **음수 KRD 가 「금리
+ * 오르면 버는 쪽」**(페이·숏)을 뜻한다. 오너가 붙여 준 실물 표로 대조했다
+ * (2026-09-03): `KRD −509,059 · Δbp 0.75 · 손익 +381,795`.
+ *
+ * 이 표를 백테스트 문법으로 옮기는 이상 부호도 그쪽을 따른다 — 한 데스크가 두
+ * 화면에서 KRD 를 다르게 읽으면 그게 사고다. 그래서 국고 매수의 KRD 는 이제
+ * **양수**다. 눈에 익은 수가 뒤집히는 변경이라 여기 적어 둔다.
+ * ## 롤일
+ *
+ * 롤일은 봉 전체의 Δ 가 마스크되므로 **다리도 같이 0** 이다 — 한쪽만 살리면
+ * 「감도 × Δ = 손익」이 그 줄에서 안 닫힌다. 왜 0 인지는 표식이 말한다.
+ *
+ * 날짜는 블록의 **첫 줄에만** 적는다. `rowSpan` 을 쓰지 않는 이유는 CDS
+ * `Table` 이 그 개념을 안 내놓기 때문이고(`ui/window/ReconStack` 머리의 그
+ * 조항), 빈 칸으로 두면 같은 읽기가 된다 — 백테스트 대사표가 이미 그렇다. */
+export function ReconDay({
+  p, word,
+}: {
+  p: MrStrategyPoint;
+  word: string;
+}) {
+  /* 서버가 다리를 안 보냈으면(구 백엔드·분해가 안 닫힌 봉) 종합 한 줄만 선다 —
+     없는 분해를 화면이 지어내지 않는다. */
+  const legs = p.legs ?? [];
+  const single = legs.length === 1;
+  const rows: React.ReactNode[] = [];
+
+  legs.forEach((g: MrReconLeg, j: number) => {
+    const first = j === 0;
+    /* 다리의 마지막 줄(손익)에 요약이 붙는 것은 **다리가 하나일 때뿐**이다.
+       그때는 종합 줄이 없으므로 **그날의 사건도 여기 붙는다** — 안 그러면
+       선물 두 계열의 대사표에서 「언제 들어가고 나왔나」가 통째로 사라진다
+       (2026-09-03 감사가 잡았다: `word` 가 `!single` 블록에만 있었다). */
+    const tail = single;
+    rows.push(
+      <TableRow key={`${p.t}-${g.k}-krd`} {...(first ? { 'data-sr-daytop': '1' } : {})}>
+        <TableCell>
+          {first ? <Text font="label2" as="span" tabularNumbers noWrap>{p.t}</Text> : ''}
+        </TableCell>
+        <TableCell>
+          <Text font="label2" as="span" color="fgMuted" noWrap>{`${g.k} KRD`}</Text>
+        </TableCell>
+        <ReconNum v={g.krd} kind="won" />
+        <ReconNum v={null} kind="won" />
+        <ReconNum v={null} kind="won" />
+        <ReconNum v={null} kind="won" />
+        <ReconNum v={null} kind="won" />
+        <ReconNum v={null} kind="won" />
+      </TableRow>,
+    );
+    rows.push(
+      <TableRow key={`${p.t}-${g.k}-dv`}>
+        <TableCell>{''}</TableCell>
+        <TableCell>
+          <Text font="label2" as="span" color="fgMuted" noWrap>{`${g.k} Δbp`}</Text>
+        </TableCell>
+        {p.roll ? (
+          <TableCell className="sr-num" justifyContent="flex-end">
+            <Text font="label2" as="span" tabularNumbers noWrap color="fgMuted">
+              {fmtBp(0, 2)}
+              <RollMark n={1} />
+            </Text>
+          </TableCell>
+        ) : (
+          <ReconNum v={g.dv} kind="bp" />
+        )}
+        <ReconNum v={null} kind="won" />
+        <ReconNum v={null} kind="won" />
+        <ReconNum v={null} kind="won" />
+        <ReconNum v={null} kind="won" />
+        <ReconNum v={null} kind="won" />
+      </TableRow>,
+    );
+    rows.push(
+      <TableRow key={`${p.t}-${g.k}-pnl`}>
+        <TableCell>{''}</TableCell>
+        <TableCell>
+          <Text font="label2" as="span" color="fgMuted" noWrap>
+            {tail ? `${g.k} 손익 · ${word}` : `${g.k} 손익`}
+          </Text>
+        </TableCell>
+        <ReconNum v={g.mtm} kind="won" tone />
+        <ReconNum v={tail ? p.mtm : null} kind="won" />
+        <ReconNum v={g.carry} kind="won" />
+        <ReconNum v={tail ? p.cost : null} kind="won" />
+        <ReconNum v={tail ? p.pnl : null} kind="won" tone />
+        <ReconNum v={tail ? p.tradePnl : null} kind="won" tone />
+      </TableRow>,
+    );
+  });
+
+  if (!single) {
+    rows.push(
+      <TableRow key={`${p.t}-sum`} {...(legs.length === 0 ? { 'data-sr-daytop': '1' } : {})}>
+        <TableCell>
+          {legs.length === 0 ? <Text font="label2" as="span" tabularNumbers noWrap>{p.t}</Text> : ''}
+        </TableCell>
+        <TableCell>
+          <Text font="label2" as="span" color="fgMuted" noWrap>
+            {legs.length === 0 ? word : `종합 · ${word}`}
+          </Text>
+        </TableCell>
+        {/* 「값」 칸은 **다리 줄의 것**이다(₩/bp · bp · ₩ 셋을 구분이 말한다).
+            종합 줄에는 대응하는 지표가 없어 비운다.
+
+            구 백엔드(다리 없음)에서는 종전에 여기 `hold × 명목`(옛 「감도」)을
+            세웠는데, 2026-09-03 감사에서 뺐다. 이유 둘: 다리 줄이 없으니 그 수가
+            **무엇인지 말해 줄 이름표가 없고**, 부호가 새 KRD 규약과 **반대**라
+            (위 「부호」 문단) 한 표 안에서 두 규약이 서게 된다. 남는 열들은 전부
+            제 이름을 달고 있으므로 읽기는 여전히 선다. */}
+        <ReconNum v={null} kind="won" />
+        <ReconNum v={p.mtm} kind="won" />
+        <ReconNum v={p.carry} kind="won" />
+        <ReconNum v={p.cost} kind="won" />
+        <ReconNum v={p.pnl} kind="won" tone />
+        <ReconNum v={p.tradePnl} kind="won" tone />
+      </TableRow>,
+    );
+  }
+  return <>{rows}</>;
+}
+
 /** 대사표 머리의 한 줄 — 「무엇을 보고 들어가 어떻게 나왔나」.
  *
  * 이탈 구간을 여기서 말하는 이유: 「밴드 복귀」 판에서는 진입 z 가 밴드 선
@@ -324,8 +552,9 @@ function reconSub(t: MrStrategyTrade, run: MrStrategyRun): string {
       ? ''
       : ` · ${t.outFrom}부터 밖 ${t.outDays}일` +
         (t.peakZ == null ? '' : `(최대 ${t.peakZ.toFixed(2)}σ)`);
-  /* 명목·액면이 대사표 머리에 선다 [OWNER 2026-09-02] — 감도 열이 곱하는 바로
-     그 수라, 이 표만 떼어 봐도 검산이 서게. 액면은 pv01 근사(거래 표의 그 각주). */
+  /* 명목·액면이 대사표 머리에 선다 [OWNER 2026-09-02] — 대사표의 KRD 줄이
+     ±이 수라(다리 둘이면 합이 0), 이 표만 떼어 봐도 검산이 서게. 액면은 pv01
+     근사(거래 표의 그 각주). */
   const size = ` · 명목 ${run.params.notional.toLocaleString()}원/bp` +
     (run.principal ? `(액면 약 ${fmtEok(run.principal.krw)})` : '');
   return `${t.entryT} → ${t.exitT} · ${t.bars}봉 · ${legs}${out} · ${WHY_WORD[t.why]}${size}`;
@@ -481,9 +710,32 @@ export function StrategyWindow({
   );
   const dirStat = !run ? '—' : only ? only.legs : '양방향';
 
-  /* 다리 레벨 유무 — BSS 만 있다(캐리와 같은 출처 — api.ts `govt` 주석).
-     선물·퓨처스왑·구 백엔드는 없고, 그때 열은 조용히 접힌다. */
-  const hasLegs = useMemo(() => !!run && run.points.some((p) => p.govt != null), [run]);
+  /* 다리 **레벨** 유무 — BSS 만 있다(캐리와 같은 출처 — api.ts `govt` 주석).
+     선물·퓨처스왑·구 백엔드는 없고, 그때 열은 조용히 접힌다.
+
+     ⚠ 점의 `legs`(다리별 대사 줄)와 **다른 것**이다. `legs` 는 계열 전부에
+     오고, 이 값은 「국고·IRS·CD 세 레벨을 아는가」다 — CD 열과 거래 표의
+     진입 다리 레벨이 이 값에 달려 있다. 2026-09-03 에 다리가 줄로 내려가면서
+     둘이 헷갈릴 자리가 생겨 이름을 늘렸다. */
+  const hasLegLevels = useMemo(() => !!run && run.points.some((p) => p.govt != null), [run]);
+  /* 대사표의 숫자 열 — 레벨·z·CD 는 2026-09-03 에 「일별 레벨」 칸으로 나갔다
+     (위 `LEVEL_COLS`). 머리와 몸통이 **같은 목록**을 읽어야 열이 안 어긋난다. */
+  const reconCols: readonly string[] = RECON_COLS;
+  /* 「일별 레벨」의 다리 이름 — 계열이 정한다(`국고`·`IRS`·`선물`). 다리가
+     있는 첫 봉에서 뽑고, **머리와 몸통이 이 한 목록만 읽는다.**
+
+     종전에는 머리는 이 목록에서, 몸통은 «그 줄의 봉»에서 열을 만들었다
+     (2026-09-03 감사) — 봉 하나가 다리를 빠뜨리면 그 줄만 짧아져 격자가
+     어긋난다. 어긋난 표는 대사표가 아니다(같은 이유로 `RECON_COLS` 도 한
+     목록이다). 값은 이름이 아니라 **자리**로 찾는다. */
+  const legNames: readonly string[] = useMemo(
+    () => (run?.points ?? []).find((p) => p.legs?.length)?.legs?.map((g) => g.k) ?? [],
+    [run],
+  );
+  const levelCols: readonly string[] = useMemo(
+    () => ['레벨', 'z', ...legNames, ...(hasLegLevels ? ['CD'] : [])],
+    [legNames, hasLegLevels],
+  );
   /* 날짜 → 점 — 거래 표가 진입 시점 다리 레벨을 여기서 찾는다(서버가 점마다
      실었으므로 거래에 또 싣지 않는다 — 같은 수를 두 자리에 두면 갈릴 수 있다). */
   const pointAt = useMemo(() => new Map((run?.points ?? []).map((p) => [p.t, p])), [run]);
@@ -615,7 +867,156 @@ export function StrategyWindow({
      열었다 닫았다 하는 탭» — `WindowDrawer.tsx` 머리)이고, 이 창도 같은
      물건을 같은 자리에 둔다. 종전에는 거래 패널의 «내용이 바뀌는» 판이라
      목록과 대사를 같이 볼 수 없었다. */
-  const reconPane = sel && run ? (
+  /** 「일별 레벨」 칸 — **어디에 있었나**의 표 [OWNER 2026-09-03 — "레벨이랑
+   *  Z값은 일별대사 말고 일별레벨 칸을 하나 파서 다른 칸에서 보여주게 하고
+   *  (일별대사와 일별레벨은 동일한 위계임)"].
+   *
+   *  대사는 「얼마나 벌었나」이고 이 표는 「어디에 있었나」다. 둘을 한 표에 두면
+   *  열이 열두 개가 되고, 어느 것이 돈이고 어느 것이 자리인지 눈이 매번 가른다.
+   *  위계가 같으므로 **서랍의 형제 탭**이지 대사의 하위가 아니다.
+   *
+   *  다리 레벨은 서버가 봉마다 실어 준 것을 그대로 적는다(`legs[].lvl`) —
+   *  BSS 는 국고·IRS, 퓨처스왑은 선물·IRS, 선물 아웃라이트는 하나다. CD 는
+   *  다리가 아니라 IRS 다리 캐리의 받는 쪽이라 맨 끝에 따로 선다. */
+  /* 거래 하나의 **실가격 대사** [OWNER 2026-09-03 — "이 방향이 정확한 대사"].
+     BSS 를 자산스왑으로 세워 민평 노드를 범프한 테너별 KRD 를 받는다. 서버가
+     별도 라우트인 이유(범프가 비싸다)와 같은 이유로 **거래를 누를 때만** 부른다. */
+  const [recon, setRecon] = useState<MrRecon | null>(null);
+  useEffect(() => {
+    if (!sel || !run) { setRecon(null); return; }
+    let alive = true;
+    setRecon(null);
+    fetchMrRecon(run.id, sel.entryT, sel.exitT, sel.dir, run.params.notional)
+      .then((r) => { if (alive) setRecon(r); })
+      /* 못 받아 온 것과 «못 세운다»는 다른 말이다 — 전자는 이유를 그대로 싣는다. */
+      .catch((e: unknown) => {
+        if (alive) setRecon({ available: false, why: e instanceof Error ? e.message : '대사를 못 받았어요.' });
+      });
+    return () => { alive = false; };
+  }, [sel, run]);
+
+  const levelPane = sel && run ? (
+    <VStack gap={0.5} width="100%" flexGrow={1} minHeight={0}>
+      <Text font="caption" as="span" color="fgMuted">
+        {reconSub(sel, run)}
+      </Text>
+      <Box className="sr-mr-drawertable" width="100%">
+        <Table bordered={false}>
+          <TableHeader sticky>
+            <TableRow>
+              <TableCell as="th" scope="col">
+                <Text font="caption" as="span" color="fgMuted">날짜</Text>
+              </TableCell>
+              {levelCols.map((c) => (
+                <TableCell key={c} as="th" scope="col" className="sr-num" justifyContent="flex-end">
+                  <Text font={headFont(c)} as="span" color="fgMuted" noWrap>{c}</Text>
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {reconRows.map(({ p }) => (
+              <TableRow key={p.t}>
+                <TableCell>
+                  <Text font="label2" as="span" tabularNumbers noWrap>{p.t}</Text>
+                </TableCell>
+                <ReconNum v={p.v} kind="level" unit={unit} />
+                <ReconNum v={p.z} kind="sigma" />
+                {legNames.map((k, j) => (
+                  <ReconNum key={k} v={p.legs?.[j]?.lvl ?? null} kind="level" unit={'%' as Unit} />
+                ))}
+                {hasLegLevels ? <ReconNum v={p.cd ?? null} kind="level" unit={'%' as Unit} /> : null}
+              </TableRow>
+            ))}
+            <TableRow>
+              <TableCell>
+                <Text font="label1" as="span" noWrap>합계</Text>
+              </TableCell>
+              {/* 레벨·z 는 더할 수 있는 양이 아니다 — **진입 → 청산**으로 적는다
+                  (거래 표의 그 규칙). 다리 레벨도 같은 자로 잰다. */}
+              <TableCell className="sr-num" justifyContent="flex-end">
+                <Text font="label1" as="span" tabularNumbers noWrap>
+                  {`${fmtReconLevel(sel.entryV, unit)}→${fmtReconLevel(sel.exitV, unit)}`}
+                </Text>
+              </TableCell>
+              <TableCell className="sr-num" justifyContent="flex-end">
+                <Text font="label1" as="span" tabularNumbers noWrap>
+                  {`${sel.entryZ.toFixed(2)}→${sel.exitZ == null ? '—' : sel.exitZ.toFixed(2)}`}
+                </Text>
+              </TableCell>
+              {legNames.map((k, j) => (
+                <LegArrow
+                  key={k}
+                  a={reconRows[0]?.p.legs?.[j]?.lvl}
+                  b={reconRows.at(-1)?.p.legs?.[j]?.lvl}
+                />
+              ))}
+              {hasLegLevels ? (
+                <LegArrow a={reconRows[0]?.p.cd} b={reconRows.at(-1)?.p.cd} />
+              ) : null}
+            </TableRow>
+          </TableBody>
+        </Table>
+      </Box>
+    </VStack>
+  ) : null;
+
+  /** 대사 칸의 **정본** — 실가격 자산스왑 대사 [OWNER 2026-09-03 — "krd에서
+   *  원래는 테너별로 민감도 찍어줬잖아 … 이 방향이 정확한 대사니까"].
+   *
+   *  BSS 는 국고 매수 · IRS 페이라 이 앱의 자산스왑과 같은 구조다. 그래서
+   *  `cashbond` 의 그 기계를 그대로 부른다 — 민평 노드를 1bp 씩 범프해 채권을
+   *  다시 가격하고, 그 결과가 **테너별 KRD**·Δbp·추정이다. 백테스트·시뮬과
+   *  같은 `ReconStack` 이 그린다(같은 응답 모양).
+   *
+   *  ## 이 수는 백테스트 성과표와 다르다 — 그게 측정이다
+   *
+   *  이 리포의 자산스왑은 par-par(같은 명목)이라 **DV01 중립이 아니고**
+   *  [OWNER 2026-08-14], MR 엔진은 반대로 DV01 중립이다. 그래서 실가격 손익이
+   *  엔진 손익보다 체계적으로 크다(실측 BSS-7Y 거래별 +0.7~+3.5백만원). 화면이
+   *  **둘을 나란히** 적어 「근사와 실제가 이만큼 다르다」를 보인다
+   *  [OWNER 2026-09-03] — 숨기면 두 화면이 다른 수를 말하는 이유가 사라진다.
+   *
+   *  ## 못 세우는 자리
+   *
+   *  민평 이력은 2020-01-02 부터라 MR 표본의 절반이 그 앞이고, 선물 계열은
+   *  자산스왑이 아니다. 앞의 것은 **왜인지만 적고 비워 두며**, 뒤의 것은 오늘
+   *  만든 다리 표(`ReconDay`)가 그대로 선다 [OWNER 2026-09-03]. */
+  const realPane = sel && run && recon?.available ? (
+    <VStack gap={0.5} width="100%" flexGrow={1} minHeight={0}>
+      <Text font="caption" as="span" color="fgMuted">
+        {reconSub(sel, run)}
+      </Text>
+      {/* 근사와 실제를 **한 줄에** — 이 차이가 곧 「DV01 중립 근사가 실제
+          자산스왑과 얼마나 다른가」다. 숨기면 백테스트 성과표와 이 표가 다른
+          수를 말하는 이유를 읽는 사람이 못 찾는다. */}
+      {/* 차이를 **성분으로 가른다** [2026-09-03 감사]. 종전에는 "잔여
+          금리노출과 캐리·롤다운·조달" 이라고만 적었는데, 실측해 보니 가장 큰
+          항이 **거래비용**(엔진만 있다)이고 그 다음이 **롤다운**(실가격만
+          있다)이며 잔여 금리노출은 가장 작았다(16건 합: 비용 +16.0백만 ·
+          롤다운 +7.9백만 · 평가 차 +1.9백만). 큰 것을 빼놓고 작은 것을 앞에
+          세운 문장이었다.
+
+          **표시 정밀도에서도 더해진다** — `splitKrw` 의 그 수법이다
+          (`lib/krw.ts`, 2026-08-14): 각 항을 한 번씩만 반올림하고 **마지막
+          항이 잔차를 진다.** 안 그러면 만원 단위에서 세 항의 합이 차이와
+          어긋난다(실측 16건 중 3건). 읽는 사람이 암산으로 줄을 검산할 수
+          있어야 하고, 그게 이 줄의 존재 이유다. */}
+      <Text font="legal" as="p" color="fgMuted">
+        {recon.truncated
+          ? `엔진 근사 ${fmtKrw(sel.pnl)} · 실가격은 창이 잘려 합을 못 내요 — 아래 각주를 보세요.`
+          : bridgeText(sel, recon)}
+      </Text>
+      <ReconStack
+        days={backtestDays(recon)}
+        tenors={recon.tenors}
+        defaultOrder="desc"
+        note={reconNote(recon)}
+      />
+    </VStack>
+  ) : null;
+
+  const reconPaneLegs = sel && run ? (
     /* 서랍의 **남는 높이를 받는다** — `.sr-drawer-body` 가 열 flex 라
        (`flex: 1 · min-height: 0`) 창이 눌리면 이 패널도 같이 줄어야 한다. */
     <VStack gap={0.5} width="100%" flexGrow={1} minHeight={0}>
@@ -639,8 +1040,8 @@ export function StrategyWindow({
                       <TableCell as="th" scope="col">
                         <Text font="caption" as="span" color="fgMuted">구분</Text>
                       </TableCell>
-                      {(hasLegs ? [...RECON_LEG_COLS, ...RECON_COLS] : [...RECON_COLS]).map((c) => (
-                        <TableCell key={c.k} as="th" scope="col" className="sr-num" justifyContent="flex-end">
+                      {reconCols.map((c) => (
+                        <TableCell key={c} as="th" scope="col" className="sr-num" justifyContent="flex-end">
                           {/* `caption` 이 아니라 `legal` 이다 — CDS 기본 테마의
                               `textTransform.caption = 'uppercase'` 가 「z」를 「Z」로,
                               「bp」를 「BP」로 만든다(실측 2026-08-28). 둘은 크기가
@@ -648,76 +1049,45 @@ export function StrategyWindow({
                               단위가 든 머리**는 `legal` 이 맞다 — `rv/SectorLane`
                               이 같은 근거로 정한 판례다. 이 표는 단위가 곧 검산의
                               전제라(감도 ₩/bp × Δbp) 대문자 BP 는 오식이다. */}
-                          <Text font={headFont(c.k)} as="span" color="fgMuted" noWrap>{c.k}</Text>
+                          <Text font={headFont(c)} as="span" color="fgMuted" noWrap>{c}</Text>
                         </TableCell>
                       ))}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {reconRows.map(({ p, i }) => (
-                      <TableRow key={p.t}>
-                        <TableCell>
-                          <Text font="label2" as="span" tabularNumbers noWrap>{p.t}</Text>
-                        </TableCell>
-                        <TableCell>
-                          <Text font="label2" as="span" color="fgMuted" noWrap>
-                            {eventWord(events.get(i), p.hold !== 0)}
-                          </Text>
-                        </TableCell>
-                        {/* 다리 셋(%) → 스프레드(bp) — (국고 − IRS) × 100
-                            = 레벨이 왼쪽에서 오른쪽으로 닫힌다. */}
-                        {hasLegs ? (
-                          <>
-                            <ReconNum v={p.govt ?? null} kind="level" unit={'%' as Unit} />
-                            <ReconNum v={p.irs ?? null} kind="level" unit={'%' as Unit} />
-                            <ReconNum v={p.cd ?? null} kind="level" unit={'%' as Unit} />
-                          </>
-                        ) : null}
-                        <ReconNum v={p.v} kind="level" unit={unit} />
-                        <ReconNum v={p.z} kind="sigma" />
-                        <ReconNum v={p.dv} kind="bp" />
-                        {/* 감도 — 이 줄의 곱셈이 곱한 바로 그 수. 무포지션
-                            봉(진입일)은 0 이라 평가도 0 이다. */}
-                        <ReconNum v={p.hold * run.params.notional} kind="won" />
-                        <ReconNum v={p.mtm} kind="won" />
-                        <ReconNum v={p.carry} kind="won" />
-                        <ReconNum v={p.cost} kind="won" />
-                        <ReconNum v={p.pnl} kind="won" tone />
-                        <ReconNum v={p.tradePnl} kind="won" tone />
-                      </TableRow>
+                      <ReconDay
+                        key={p.t}
+                        p={p}
+                        word={eventWord(events.get(i), p.hold !== 0)}
+                      />
                     ))}
                     <TableRow>
                       <TableCell>
                         <Text font="label1" as="span" noWrap>합계</Text>
                       </TableCell>
                       <TableCell>
-                        <Text font="label1" as="span" color="fgMuted" noWrap>{sel.bars}봉</Text>
+                        {/* 「값」 칸이 줄마다 단위가 다르므로(₩/bp · bp · ₩) 합계
+                            줄에서도 **무엇인지 말한다** — 여기 서는 것은 Δ 뿐이다
+                            (2026-09-03 감사: 이름표 없는 숫자가 서 있었다). */}
+                        <Text font="label1" as="span" color="fgMuted" noWrap>
+                          {`${sel.bars}봉 · Δ`}
+                        </Text>
                       </TableCell>
-                      {/* 다리 셋도 진입 → 청산 — 값은 대사표 첫/끝 줄이
-                          원천이라 거래에 따로 싣지 않는다. */}
-                      {hasLegs ? (
-                        <>
-                          <LegArrow a={reconRows[0]?.p.govt} b={reconRows.at(-1)?.p.govt} />
-                          <LegArrow a={reconRows[0]?.p.irs} b={reconRows.at(-1)?.p.irs} />
-                          <LegArrow a={reconRows[0]?.p.cd} b={reconRows.at(-1)?.p.cd} />
-                        </>
-                      ) : null}
+                      {/* 「값」 칸에는 **거래의 Δ 합계**가 선다. 다리 줄들이 그
+                          칸을 세 단위로 쓰지만(₩/bp · bp · ₩) 합계에서 더할 수
+                          있는 것은 Δ 뿐이고, 마스크된 롤이 몇 봉이었는지도 여기
+                          붙는다 — 「청산 − 진입」과 이 값이 갈리는 이유다. */}
+                      <TableCell className="sr-num" justifyContent="flex-end">
+                        <Text font="label1" as="span" tabularNumbers noWrap>
+                          {fmtBp(sel.dv, 2)}
+                          {sel.masked ? <RollMark n={sel.masked} /> : null}
+                        </Text>
+                      </TableCell>
                       {/* 레벨·z 는 더할 수 있는 양이 아니다 — 진입 → 청산으로
-                          적는다. 레벨 두 끝의 차가 곧 Δ 합계 칸이다(bp 계열
-                          에서 — 선물은 % 라 100배 갈리고, 그 사실은 거래 표
-                          머리의 주석이 진다). */}
-                      <TableCell className="sr-num" justifyContent="flex-end">
-                        <Text font="label1" as="span" tabularNumbers noWrap>
-                          {`${fmtReconLevel(sel.entryV, unit)}→${fmtReconLevel(sel.exitV, unit)}`}
-                        </Text>
-                      </TableCell>
-                      <TableCell className="sr-num" justifyContent="flex-end">
-                        <Text font="label1" as="span" tabularNumbers noWrap>
-                          {`${sel.entryZ.toFixed(2)}→${sel.exitZ == null ? '—' : sel.exitZ.toFixed(2)}`}
-                        </Text>
-                      </TableCell>
-                      <ReconNum v={sel.dv} kind="bp" head />
-                      <ReconNum v={null} kind="won" head />
+                          적는다. 레벨 두 끝의 차가 곧 Δ 합계다(bp 계열에서 —
+                          선물은 % 라 100배 갈리고, 그 사실은 거래 표 머리의
+                          주석이 진다). */}
                       <ReconNum v={sel.mtm} kind="won" head />
                       <ReconNum v={sel.carry} kind="won" head />
                       <ReconNum v={sel.cost} kind="won" head />
@@ -729,6 +1099,27 @@ export function StrategyWindow({
               </Box>
     </VStack>
   ) : null;
+
+  /* 대사 칸이 무엇을 세우나 [OWNER 2026-09-03].
+       BSS   → 실가격 자산스왑 대사. 못 세우면 **왜인지만** 적고 비워 둔다.
+       선물  → 자산스왑이 아니므로 다리 표(`ReconDay`)가 그대로 선다.
+     빈 칸에 이유를 쓰는 것이 서랍의 규율이고(`WindowDrawer` 의 `unavailable`),
+     여기서는 그 이유가 **서버 문장 그대로**다 — 화면이 다시 쓰면 갈린다. */
+  const reconContent = !sel || !run
+    ? null
+    : hasLegLevels
+      ? (recon?.available ? realPane : null)
+      : reconPaneLegs;
+  const reconWhy = !run
+    ? '실행하면 거래가 서고, 거래 줄을 누르면 하루씩 대사가 열려요.'
+    : !sel
+      ? '거래 줄을 누르면 하루씩 대사가 서요 — 자산스왑으로 세워 테너별 KRD 로 재요.'
+      : hasLegLevels && recon === null
+        ? '대사를 재는 중이에요 — 민평 노드를 하나씩 범프해서 채권을 다시 가격해요.'
+        : hasLegLevels && recon && !recon.available
+          ? recon.why
+          : undefined;
+
 
 
   return (
@@ -751,13 +1142,21 @@ export function StrategyWindow({
         {
           id: 'recon',
           label: '일별 대사',
-          content: reconPane,
-          /* 왜 비었는지를 그 자리에서 말한다(서랍의 규율) — 그리고 여는
-             방법까지 적는다: 이 창에서 대사는 «거래 하나»의 것이라 고르는
-             동작이 먼저다. */
+          content: reconContent,
+          /* 왜 비었는지를 그 자리에서 말한다(서랍의 규율). 민평 밖 거래와
+             선물 계열은 이유가 서버 문장 그대로 온다 — 위 `reconWhy`. */
+          unavailable: reconWhy,
+        },
+        {
+          /* **대사와 같은 위계** [OWNER 2026-09-03 — "일별대사와 일별레벨은
+             동일한 위계임"]. 대사는 「얼마나 벌었나」, 이 칸은 「어디에
+             있었나」다 — 하위 탭이 아니라 형제 탭이다. */
+          id: 'levels',
+          label: '일별 레벨',
+          content: levelPane,
           unavailable: run
-            ? '거래 줄을 누르면 하루씩 대사가 서요 — 감도 × Δ = 평가예요.'
-            : '실행하면 거래가 서고, 거래 줄을 누르면 하루씩 대사가 열려요.',
+            ? '거래 줄을 누르면 그 구간의 레벨·z·다리 레벨이 하루씩 서요.'
+            : '실행하면 거래가 서고, 거래 줄을 누르면 레벨이 하루씩 열려요.',
         },
       ]}
     >
@@ -1113,7 +1512,7 @@ export function StrategyWindow({
                             봤을 국고 커브·IRS 파·CD 91일(%). 값의 원천은 점
                             (서버 조인)이고 여기는 진입일을 찾아 적을 뿐이다.
                             BSS 에만 서는 조건부 열(「이탈 최대」의 그 문법). */}
-                        {hasLegs ? (
+                        {hasLegLevels ? (
                           <>
                             <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
                               <Text font="caption" as="span" color="fgMuted" noWrap>진입 국고</Text>
@@ -1194,7 +1593,7 @@ export function StrategyWindow({
                               {(t.dir > 0 ? run.dirs.plus : run.dirs.minus).short}
                             </Text>
                           </TableCell>
-                          {hasLegs ? (
+                          {hasLegLevels ? (
                             <>
                               <TableCell className="sr-num" justifyContent="flex-end">
                                 <Text font="label2" as="span" tabularNumbers noWrap>
@@ -1239,7 +1638,13 @@ export function StrategyWindow({
                             <Text font="label2" as="span" tabularNumbers noWrap>{fmtReconLevel(t.exitV, unit)}</Text>
                           </TableCell>
                           <TableCell className="sr-num" justifyContent="flex-end">
-                            <Text font="label2" as="span" tabularNumbers noWrap>{fmtBp(t.dv, 2)}</Text>
+                            {/* 롤을 지난 거래는 **청산 − 진입 ≠ Δ** 가 정상이다
+                                [OWNER 2026-09-02 — 롤일 Δ 마스크]. 표식이 없으면
+                                읽는 사람이 그 어긋남을 이 표의 결함으로 읽는다. */}
+                            <Text font="label2" as="span" tabularNumbers noWrap>
+                              {fmtBp(t.dv, 2)}
+                              {t.masked ? <RollMark n={t.masked} /> : null}
+                            </Text>
                           </TableCell>
                           <TableCell className="sr-num" justifyContent="flex-end">
                             <Text
@@ -1271,9 +1676,10 @@ export function StrategyWindow({
               {run.params.entryMode === 'touch'
                 ? '밖에 있다가 밴드 선으로 돌아오는 봉에 들어가요 — 방향은 나갔던 쪽이 정해요.'
                 : '|z|가 진입σ를 넘는 봉에 들어가요 — 밴드를 뚫는 그 봉이에요.'}{' '}
-              거래 줄을 누르면 일별 대사가 열려요(감도 × Δ = 평가 · 가로합 = 그날 ·
-              세로합 = 거래 손익). 표본 끝의 미청산 포지션은 누적에는 있고 거래 수에는
-              없어요(원본 규약).
+              거래 줄을 누르면 일별 대사가 열려요 — 하루가 다리마다 세 줄(KRD·Δbp·
+              손익)이고 마지막이 종합이에요. 줄마다 −KRD × Δ = 손익 · 다리 손익을 더하면
+              평가 · 세로합 = 거래 손익이에요. 표본 끝의 미청산 포지션은 누적에는 있고
+              거래 수에는 없어요(원본 규약).
               {run.dirs.why
                 ? ` ${run.dirs.why} 그래서 못 들어간 진입 신호가 ${run.dirs.blocked.spells}회(${run.dirs.blocked.days}일) 있어요.`
                 : ''}
@@ -1288,7 +1694,7 @@ export function StrategyWindow({
                 : ''}
               {/* 다리 레벨의 출처와 항등 — 안 적으면 이 세 열이 어디서 온
                   값인지, 스프레드와 무슨 관계인지 화면만 보고는 알 수 없다. */}
-              {hasLegs
+              {hasLegLevels
                 ? ' 다리 레벨(국고 커브·IRS 파·CD 91일)은 캐리와 같은 출처예요 — (국고 − IRS) × 100 = 레벨(bp)이 줄마다 그대로 닫혀요.'
                 : ''}
               {' '}국고 다리는 민평(평가사 고시) 기준이에요 — 체결가로 재면 성과가 낮아질 수 있어요.

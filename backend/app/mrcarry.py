@@ -59,8 +59,6 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
-from sqlalchemy import text
-
 from . import funding as fnd
 from .universe import _fetch_curves, _fetch_irs  # noqa: PLC2701 — 같은 데이터 창구
 from . import mrseries as mrs
@@ -68,10 +66,29 @@ from .mysqldb import engine
 from .mr import FSW_IRS_COL
 
 
-#: CD 91일 = 스펙의 **3M 노드**이고 SQL 열은 `cd_rate` 다
-#: (`dataset.SQL_COLUMN_TENOR`: "cd_rate → 3M — IRS 3M = CD91").
-#: `universe._fetch_irs` 의 매핑에는 6M~10Y 만 있어 여기서 따로 읽는다.
-CD_COL = "cd_rate"
+#: CD 91일 = 스펙의 **3M 노드**. `universe._fetch_irs` 의 매핑에는 6M~10Y 만
+#: 있어 따로 읽는다.
+#:
+#: ## 출처는 하나다 — imx `단기금리 · CD 91일물` [OWNER 2026-09-02]
+#:
+#: 종전에는 BSS 만 imx 를 읽고 FSW 는 `sim_portfolio.mkt_irs_close.cd_rate` 를
+#: 읽었다. 한 화면의 두 캐리가 다른 CD 위에 서 있었고, 겹치는 날의 **70.1%**
+#: 가 불일치(평균 4.15bp·최대 61bp)였다.
+#:
+#: 어느 쪽이 「지금 CD」인가를 실측으로 갈랐다(2026-09-02):
+#:
+#:   · `mkt` 는 imx 를 **10영업일 지연**시킨 계열에 가장 가깝다 — 같은 날
+#:     평균절대차 4.15bp 인데 imx 를 10영업일 당기면 **0.53bp** 로 준다.
+#:   · 제3의 표 `infomax.단기금리.CD_3개월` 이 imx 와 소수점까지 같다
+#:     (2022-10: imx·infomax 3.28 → 3.85 인 구간에 mkt 는 2.99 → 3.32).
+#:   · 범위도 imx 가 넓다 — mkt 는 2016-01 부터라 BSS 12년 표본의 앞
+#:     406일(2014-05~2016-01)에 캐리가 없다.
+#:
+#: 그래서 `mkt_irs_close.cd_rate` 를 이 파일에서 **안 읽는다**. 그 열은 IRS
+#: 종가 표의 부속이지 CD 의 정본이 아니다.
+#: (구 출처였던 `mkt_irs_close.cd_rate` 의 열 이름은 **안 남긴다** — 안 읽는
+#: 상수가 파일에 서 있으면 다음 사람이 그 열을 아직 쓴다고 읽는다. 이력은 위
+#: 주석이 진다.)
 
 
 def _tenor_of(sid: str) -> str:
@@ -87,63 +104,99 @@ def carry_rates(sid: str, kind: str, dates: list[str],
 
     돌려주는 둘째 값은 화면이 읽을 정의 문장이다(숫자 옆에 무엇인지가 없으면
     읽는 사람이 부호를 자기 방향으로 읽는다 — `mr.KIND_DEFN` 과 같은 규율).
+
+    **이 함수는 이제 `carry_rates_by_leg` 의 합이다.** 이 모듈 머리의 식이 원래
+    다리별로 적혀 있었는데(「국고 매수: +(국고 − 조달) · IRS 페이: +(CD − 스왑)」)
+    코드가 그 둘을 더한 값만 내보내고 있었다. 대사표가 다리마다 캐리를 세우려면
+    안 접힌 것이 필요하다 [OWNER 2026-09-03]. 합의 값은 한 자도 안 바뀐다.
+    """
+    legs = carry_rates_by_leg(sid, kind, dates, spec)
+    defn = CARRY_DEFN[kind]
+    out: list[float | None] = []
+    for i in range(len(dates)):
+        vals = [r[i] for _, r in legs]
+        out.append(None if any(v is None for v in vals) else sum(vals))
+    return out, defn
+
+
+#: 다리 이름 — 화면의 대사표 구분 칸이 이 말을 쓴다. 계열 종류마다 다르고,
+#: 길이가 곧 «다리 몇 개인가» 다(하나면 대사표가 백테스트와 같은 3줄이 된다).
+LEG_NAMES: dict[str, tuple[str, ...]] = {
+    "bss": ("국고", "IRS"),
+    "fsw": ("선물", "IRS"),
+    "fut": ("선물",),
+}
+
+#: 캐리 정의 문장 — 종전에 `carry_rates` 가 자리마다 돌려주던 그 문자열이다.
+CARRY_DEFN: dict[str, str] = {
+    "bss": "(국고 − 조달) + (CD 91일 − IRS)",
+    "fsw": "CD 91일 − IRS  (선물 다리는 조달이 없어요)",
+    "fut": "선물은 조달 현금흐름이 없어요 (캐리 0)",
+}
+
+
+def carry_rates_by_leg(
+    sid: str, kind: str, dates: list[str], spec: fnd.FundingSpec,
+) -> list[tuple[str, list[float | None]]]:
+    """다리마다의 **연 캐리(%)** — `(이름, 봉마다 하나)` 의 목록.
+
+    부호 기준은 `carry_rates` 와 같은 `position = -1` 이고, 엔진이 봉마다
+    `-position` 을 곱한다(`mrbacktest.simulate`: `c = -position * carry[i]`).
+    그 곱셈이 **선형**이라 다리별 합이 총 캐리와 한 자도 안 갈린다 — 대사표의
+    「다리 캐리 합 = 캐리」가 항등으로 닫히는 근거다.
     """
     if kind == "fut":
-        return [0.0] * len(dates), "선물은 조달 현금흐름이 없어요 (캐리 0)"
-
-    if kind == "bss":
+        rates = [[0.0] * len(dates)]
+    elif kind == "bss":
         # 값 계열이 긴 출처로 옮겨갔으므로(`mrseries`) **캐리도 같은 출처**에서
         # 읽는다 [OWNER 2026-08-28 — "옮기고"]. 안 그러면 2014~2020 구간에서
         # 국고·IRS 를 못 찾아 캐리가 조용히 0 이 되고, 6년치 손익이 캐리 없이
         # 계산된다 — 없는 값을 0 으로 채우는 그 사고다.
-        return _bss_rates(sid, dates, spec)
+        rates = _bss_rates_by_leg(sid, dates, spec)
+    else:
+        # 남는 kind 는 **퓨처스왑뿐**이다. 종전에는 이 자리가 fall-through 였고
+        # 그 아래에 닿지 않는 `kind == "bss"` 분기가 서 있었다 — 안 도는 코드가
+        # 「BSS 캐리는 이렇게 계산한다」고 말하면 다음 사람이 그것을 읽는다
+        # (2026-09-02 감사). 이제 세 갈래가 다 이름을 대고 서 있다.
+        rates = _fsw_rates_by_leg(sid, dates)
+    # **이름은 한 곳에서만 온다.** 종전에는 계산하는 자리마다 문자열을 적었는데,
+    # 화면 쪽(`main._attach_leg_recon`)은 `LEG_NAMES` 로 다리를 찾으므로 둘이
+    # 갈리면 캐리가 조용히 0 이 되고 대사표가 통째로 사라진다 — 예외도 안 난다.
+    # 짝지음을 한 줄로 모아 그 갈릴 자리를 없앤다(2026-09-03 감사).
+    names = LEG_NAMES[kind]
+    if len(rates) != len(names):
+        raise ValueError(f"{kind}: 다리 수({len(rates)})가 이름 수({len(names)})와 달라요")
+    return list(zip(names, rates))
 
+
+def _fsw_rates_by_leg(sid: str, dates: list[str]) -> list[list[float | None]]:
+    """퓨처스왑의 연 캐리(%) — 선물 다리 `0` · IRS 다리 `CD 91일 − 스왑고정`."""
     tenor = _tenor_of(sid)
     with engine().connect() as conn:
-        cdates, curves = _fetch_curves(conn)
         idates, irs = _fetch_irs(conn)
-        rows = conn.execute(text(
-            f"SELECT irs_date, {CD_COL} FROM sim_portfolio.mkt_irs_close ORDER BY irs_date"
-        )).mappings().fetchall()
 
-    ktb = curves.get("KTB", {})
     # 날짜 → 값. 없는 날은 아예 안 담는다 — 캐리를 지어내지 않는다.
-    cd91 = {r["irs_date"].isoformat(): float(r[CD_COL])
-            for r in rows if r[CD_COL] is not None}
+    # **CD 는 한 출처다** — `mrseries`(imx `단기금리 · CD 91일물`).
+    cd91 = dict(mrs.bundle()["cd"])
     swap = {d.isoformat(): v for d, v in zip(idates, irs.get(tenor, [])) if v is not None}
-    govt = ({d.isoformat(): v for d, v in zip(cdates, ktb.get(tenor, [])) if v is not None}
-            if kind == "bss" else {})
 
     out: list[float | None] = []
     for t in dates:
         s = swap.get(t)
         c = cd91.get(t)
-        if s is None or c is None:
-            out.append(None)
-            continue
-        if kind == "fsw":
-            out.append(c - s)                       # CD − 스왑고정
-            continue
-        g = govt.get(t)
-        if g is None:
-            out.append(None)
-            continue
-        # ⚠ **단위가 다르다.** 커브(국고·IRS·CD)는 **%**(3.817)이고
-        # `funding.rate_on` 은 **소수**(0.0285)다 — 실측 2026-08-27 에 그대로
-        # 빼서 100배 틀린 캐리(중앙 2.667%/년)를 냈다. 대수적으로 이 식은
-        # `BSS + (CD − 조달)` 로 접히므로 **0.1% 안팎**이어야 하고, 그 항등이
-        # 아래 `assert_units` 와 가드가 재는 것이다.
-        f = fnd.rate_on(spec, dt.date.fromisoformat(t)) * 100.0
-        out.append((g - f) + (c - s))               # (국고 − 조달) + (CD − 스왑)
+        out.append(None if (s is None or c is None) else c - s)   # CD − 스왑고정
 
-    defn = ("(국고 − 조달) + (CD 91일 − IRS)" if kind == "bss"
-            else "CD 91일 − IRS  (선물 다리는 조달이 없어요)")
-    return out, defn
+    # 선물 다리는 **0 이 아니라 «0 이라고 아는 값»** 이다 — 이 모듈 머리의 그
+    # 문단(증거금·일일정산이라 조달 현금흐름이 없고, 채권 캐리는 이미 선물
+    # 가격에 박혀 있어 또 빼면 이중계상)이 근거다. 대사표에 줄로 서야 읽는
+    # 사람이 «왜 이 다리는 캐리가 없나» 를 표에서 본다.
+    return [[0.0] * len(dates), out]
 
 
-def _bss_rates(sid: str, dates: list[str],
-               spec: fnd.FundingSpec) -> tuple[list[float | None], str]:
-    """BSS 의 연 캐리(%) — `(국고 − 조달) + (CD 91일 − 스왑)`.
+def _bss_rates_by_leg(
+    sid: str, dates: list[str], spec: fnd.FundingSpec,
+) -> list[list[float | None]]:
+    """BSS 의 연 캐리(%) — 국고 다리 `(국고 − 조달)` · IRS 다리 `(CD 91일 − 스왑)`.
 
     ⚠ **단위가 다르다.** 커브(국고·IRS·CD)는 %(3.817)이고 `funding.rate_on` 은
     소수(0.0285)다 — 실측 2026-08-27 에 그대로 빼서 100배 틀린 캐리(중앙
@@ -154,14 +207,20 @@ def _bss_rates(sid: str, dates: list[str],
     g = dict(zip(d, govt))
     s = dict(zip(d, swap))
     c = dict(zip(d, cd))
-    out: list[float | None] = []
+    bond: list[float | None] = []
+    irs: list[float | None] = []
     for t in dates:
         if t not in g or t not in s or t not in c:
-            out.append(None)
+            # **한쪽만 아는 날은 없다** — 셋이 같은 교집합에서 오므로 결측은
+            # 늘 같이 온다. 그래도 다리마다 None 을 넣는다: 합을 내는 쪽이
+            # 「하나라도 None 이면 None」으로 접으므로 종전 값과 같아진다.
+            bond.append(None)
+            irs.append(None)
             continue
         f = fnd.rate_on(spec, dt.date.fromisoformat(t)) * 100.0
-        out.append((g[t] - f) + (c[t] - s[t]))
-    return out, "(국고 − 조달) + (CD 91일 − IRS)"
+        bond.append(g[t] - f)
+        irs.append(c[t] - s[t])
+    return [bond, irs]
 
 
 def carry_krw(rates: list[float | None], dates: list[str], *,
@@ -206,12 +265,11 @@ def assert_identity(sid: str, kind: str, dates: list[str],
     """
     if kind != "bss":
         return
-    with engine().connect() as conn:
-        rows = conn.execute(text(
-            f"SELECT irs_date, {CD_COL} FROM sim_portfolio.mkt_irs_close ORDER BY irs_date"
-        )).mappings().fetchall()
-    cd91 = {r["irs_date"].isoformat(): float(r[CD_COL])
-            for r in rows if r[CD_COL] is not None}
+    # **같은 CD 를 읽는다** [OWNER 2026-09-02]. 종전에는 이 검사만 `mkt_irs_close`
+    # 를 읽어서, 계산은 imx CD 로 하고 검사는 딴 CD 로 하고 있었다 — 그 조합에서
+    # 이 항등은 **참인 산술에서도 깨진다**(겹치는 날 70% 불일치). 죽은 코드라
+    # 아무도 안 밟았을 뿐이고, 살리는 순간 거짓 경보가 났을 자리다.
+    cd91 = dict(mrs.bundle()["cd"])
     for i, t in enumerate(dates):
         if rates[i] is None or t not in cd91:
             continue

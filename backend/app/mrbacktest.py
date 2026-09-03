@@ -134,7 +134,8 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
              time_stop: int | None = None,
              cost_bp_series: list[float] | None = None,
              reverse_exit: bool = False,
-             close_open_at_end: bool = False) -> dict[str, Any]:
+             close_open_at_end: bool = False,
+             tradable_dv: list[float] | None = None) -> dict[str, Any]:
     """원본 simulateMeanReversion 의 바-루프 그대로. 반환 키도 그 어휘를 쓴다.
 
     `allow_dirs` 만 원본에 없던 자리다 — 실행할 수 있는 방향(+1 = 값이 오르면
@@ -223,6 +224,22 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
     roll = rolling_series(values, lookback)
     z = roll["z"]
 
+    # ── 봉마다 **거래 가능한** Δ [OWNER 2026-09-02 — "롤일 Δ 를 0 으로 마스크"] ──
+    #
+    # 기본은 계열의 차분 그대로다(`tradable_dv=None`) — 원본 PMS 와 완전히 같은
+    # 수이고 적합성 벡터가 그것을 잰다. 선물·퓨처스왑처럼 **계약이 갈리는 날의
+    # 차분을 아무도 실현하지 못하는** 계열만 그 봉을 0 으로 받아 온다
+    # (`futures.roll_days` 가 그 날을 정하고 `main._mr_leg` 이 넘긴다).
+    #
+    # 왜 계열을 안 고치고 Δ 를 따로 받나: 수준(z·밴드·진입 레벨·표시)은 벤더
+    # 내재금리가 정본이라 그대로 둬야 하고, 뒤로 조정한 계열을 쓰면 그 수준이
+    # 무의미해진다(`futures.FuturesSeries` 머리의 규약). **수준과 손익은 다른
+    # 계열 위에 설 수 있다** — 그 사실을 이 인자 하나로 적는다.
+    if tradable_dv is not None and len(tradable_dv) != n:
+        raise ValueError(f"tradable_dv 길이가 값과 달라요: {len(tradable_dv)} ≠ {n}")
+    dv_bar = ([0.0] + [values[i] - values[i - 1] for i in range(1, n)]
+              if tradable_dv is None else list(tradable_dv))
+
     def cost_at(i: int) -> float:
         """그 봉의 **편도** 비용(₩). 경로가 주어지면 그것이 이긴다."""
         return notional * (cost_bp if cost_bp_series is None else cost_bp_series[i])
@@ -305,7 +322,7 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
         gated_now = False
 
         if position != 0:
-            mtm = position * notional * (values[i] - values[i - 1])
+            mtm = position * notional * dv_bar[i]
             daily_pnl += mtm
             trade_mtm += mtm
             bar_mtm = mtm
@@ -349,7 +366,12 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
                     "exitValue": values[i],
                     # 보유 동안의 총 변화 — 대사표 「합계」 줄의 Δ 칸이다.
                     # 줄마다의 Δ 를 세로로 더한 값과 같아야 한다.
-                    "dv": values[i] - values[entry_idx],
+                    # **거래 가능한** Δ 의 합이다: `tradable_dv` 가 없으면
+                    # `values[i] − values[entry_idx]` 와 정확히 같고, 있으면
+                    # 마스크된 봉만큼 그것과 갈린다(그 봉 수가 `masked`).
+                    "dv": sum(dv_bar[k] for k in range(entry_idx + 1, i + 1)),
+                    "masked": sum(1 for k in range(entry_idx + 1, i + 1)
+                                  if dv_bar[k] != values[k] - values[k - 1]),
                     "pnl": trade_pnl,
                     # 대사용 삼분해 — 합이 `pnl` 과 같아야 한다.
                     "mtm": trade_mtm,
@@ -428,6 +450,7 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
     open_leg = None
     if position != 0 and entry_idx is not None:
         open_leg = {"entryDate": dates[entry_idx], "direction": position,
+                    "entryIdx": entry_idx,
                     "entryZ": entry_z_val, "entryValue": values[entry_idx],
                     "pnl": trade_pnl, "mtm": trade_mtm, "carry": trade_carry,
                     "cost": trade_cost, "bars": n - 1 - entry_idx,
@@ -451,7 +474,10 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
             "entryDate": open_leg["entryDate"], "exitDate": dates[-1],
             "direction": open_leg["direction"], "entryZ": open_leg["entryZ"],
             "exitZ": z[-1], "entryValue": open_leg["entryValue"],
-            "exitValue": values[-1], "dv": values[-1] - open_leg["entryValue"],
+            "exitValue": values[-1],
+            "dv": sum(dv_bar[k] for k in range(open_leg["entryIdx"] + 1, len(values))),
+            "masked": sum(1 for k in range(open_leg["entryIdx"] + 1, len(values))
+                          if dv_bar[k] != values[k] - values[k - 1]),
             "pnl": open_leg["pnl"], "mtm": open_leg["mtm"],
             "carry": open_leg["carry"], "cost": open_leg["cost"],
             "bars": open_leg["bars"], "outFrom": open_leg["outFrom"],

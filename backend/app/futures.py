@@ -367,6 +367,56 @@ def series_payload(fut: FuturesData, dataset, series_id: str, res: str = "full")
     }
 
 
+def _third_tuesday(year: int, month: int) -> dt.date:
+    d = dt.date(year, month, 1)
+    d += dt.timedelta(days=(1 - d.weekday()) % 7)   # 그 달 첫 화요일
+    return d + dt.timedelta(days=14)
+
+
+def roll_days(dates: list[dt.date]) -> set[dt.date]:
+    """계약이 갈리는 **거래일** — 분기월(3·6·9·12)의 셋째 화요일, 휴장이면 그
+    직전 거래일.
+
+    ## 왜 필요한가 [OWNER 2026-09-02 — "롤일 Δ 를 0 으로 마스크"]
+
+    MR 의 선물·퓨처스왑 손익은 **벤더 내재수익률의 차분** 위에 선다. 내재는
+    «수준»의 정본이지만(이 파일 머리의 규약) 계약이 갈리는 날의 차분은
+    **거래할 수 없는 값**이다 — 앞 계약의 마지막 값과 뒷 계약의 첫 값을 뺀
+    것이라 아무도 그 손익을 실현하지 못한다. 실측(2026-09-02 적대 대사):
+    FUT 거래 109건 중 35건이 >1bp 팬텀, 최대 25.6bp/거래.
+
+    ## 왜 달력인가 — 가격으로 못 잡는 날이 있다
+
+    `price_adj`(조정가, 롤갭 없음)와 `price_ctr`(계약별 종가, 롤갭 있음)의
+    차분이 갈리는 날을 잡는 것이 직접적이지만, `price_ctr` 은 폐형이 안 맞는
+    날 `None` 이라 **3Y 는 43번의 롤 중 4번만** 잡힌다. 달력은 전부 잡는다.
+
+    실측 대조(2026-09-02): 가격으로 탐지된 롤(3Y 4건·10Y 40건)이 **전부** 이
+    달력의 부분집합이다(차집합 0). 롤일의 내재 Δ 크기도 이 파일이 이미 적어
+    둔 값과 같다 — 3Y 중앙 5.7bp·최대 27.2bp, 10Y 3.4/16.3bp.
+
+    휴장 보정이 실재한다: 2021-09-17·2024-09-13 은 셋째 화요일이 추석 연휴라
+    만기가 앞당겨진 해다. 「셋째 화요일 **이하** 마지막 거래일」이 그 둘을
+    포함해 43/43 을 맞춘다.
+    """
+    if not dates:
+        return set()
+    lo, hi = min(dates), max(dates)
+    out: set[dt.date] = set()
+    for y in range(lo.year, hi.year + 1):
+        for m in (3, 6, 9, 12):
+            t3 = _third_tuesday(y, m)
+            # 만기가 자료 밖이면 그 롤은 **아직 안 일어났다**. 이 가드가 없으면
+            # `max(prior)` 가 마지막 거래일을 집어 분기월이 아닌 날을 롤이라고
+            # 말한다(시험이 잡은 자리 — 자료 끝이 분기 만기보다 앞설 때).
+            if not lo <= t3 <= hi:
+                continue
+            prior = [d for d in dates if d <= t3]
+            if prior:
+                out.add(max(prior))
+    return out
+
+
 # ── 달력 ────────────────────────────────────────────────────────────────────
 
 def calendar_of(fut: FuturesData, dataset, pos: FuturesPosition) -> list[dt.date]:

@@ -1065,8 +1065,12 @@ def _mr_leg(id: str, *, lookback: int, entryZ: float, exitZ: float, stopZ: float
     # 없으므로 **끌 수 있게** 둔다 — `carry=false` 면 예전 수 그대로다.
     carry_krw: list[float] | None = None
     carry_defn: str | None = None
+    #: 다리마다의 봉당 캐리(₩) — 대사표가 다리 줄에 세운다 [OWNER 2026-09-03].
+    #: 엔진의 `c = -position * carry[i]` 가 선형이라 이 합이 총 캐리와 항등이다.
+    carry_legs: list[tuple[str, list[float]]] = []
     if carry:
         rates, carry_defn = mrc.carry_rates(id, kinds[id], dates, spec)
+        leg_rates = mrc.carry_rates_by_leg(id, kinds[id], dates, spec)
         if kinds[id] == "fut":
             # 선물은 캐리가 0 이다(증거금·일일정산 — `mrcarry` 머리). 원금 환산이
             # 없으므로 pv01 도 필요 없다. 종전에는 그걸 먼저 읽으려 해서
@@ -1074,16 +1078,45 @@ def _mr_leg(id: str, *, lookback: int, entryZ: float, exitZ: float, stopZ: float
             # 라벨이 아니라 상품명이다. 기본이 `carry=true` 라 **선물 두 계열은
             # 전략 실험 창에서 아예 열리지 않았다**(실측 2026-08-28).
             carry_krw = [0.0] * len(dates)
+            carry_legs = [(nm, [0.0] * len(dates)) for nm, _ in leg_rates]
         else:
             # 명목 노브가 ₩/bp(DV01)라 원금 환산이 필요하다 — 그 근거도 그 파일에.
             pv = pv01(_curves["now"], TENOR_T[mrc._tenor_of(id)])
             carry_krw = mrc.carry_krw(rates, dates, notional_per_bp=notional, pv01=pv)
+            # 같은 환산을 다리마다 한 번씩 — `carry_krw` 가 봉마다 선형이라
+            # (원금 × r/100 × 날수/365) 다리 합이 총합과 갈리지 않는다. 다만
+            # **결측 처리가 갈릴 수 있어** 항등을 아래에서 실제로 잰다.
+            carry_legs = [
+                (nm, mrc.carry_krw(rr, dates, notional_per_bp=notional, pv01=pv))
+                for nm, rr in leg_rates
+            ]
+            # 지어낸 분해를 화면에 올리지 않는다 — 합이 안 맞으면 다리를 안 싣는다.
+            for i in range(len(dates)):
+                if abs(sum(lg[i] for _, lg in carry_legs) - carry_krw[i]) > 1e-6:
+                    carry_legs = []
+                    break
 
     # 필터·비용 경로는 **서버가** 만든다(§16, 브라우저는 계산하지 않는다).
     # 값은 bp 로 환산한 `vals` 위에서 잰다 — 화면 단위(%)로 재면 선물 계열의
     # 변동성 백분위가 딴 계열이 된다.
     gate = mrg.gate_for(regime, vals)
     cost_series = mrg.cost_for(costModel, vals)
+
+    # ── 롤일의 Δ 는 손익이 아니다 [OWNER 2026-09-02 — "롤일 Δ 를 0 으로 마스크"] ──
+    #
+    # 선물·퓨처스왑의 값은 벤더 **내재수익률**이라 수준은 옳지만, 계약이 갈리는
+    # 날의 차분은 앞 계약의 마지막과 뒷 계약의 첫 값을 뺀 것이라 **아무도 실현할
+    # 수 없다**. 실측(2026-09-02 적대 대사): FUT 거래 109건 중 35건이 >1bp 팬텀,
+    # 최대 25.6bp/거래. 롤일을 정하는 규칙과 그 검증은 `futures.roll_days` 에.
+    #
+    # BSS 는 상수만기라 해당이 없다 — 마스크를 안 만들면 `None` 이 넘어가고
+    # 엔진은 예전과 완전히 같은 수를 낸다.
+    tradable = None
+    if kinds[id] in ("fut", "fsw"):
+        flags = [bool(p.get("roll")) for p in pts]
+        tradable = [0.0] + [
+            0.0 if flags[i] else (vals[i] - vals[i - 1]) for i in range(1, len(vals))
+        ]
 
     r = mrbt.simulate(dates, vals, lookback=lookback, entry_z=entryZ,
                       exit_z=exitZ, stop_z=stopZ, cost_bp=costBp,
@@ -1094,11 +1127,123 @@ def _mr_leg(id: str, *, lookback: int, entryZ: float, exitZ: float, stopZ: float
                       time_stop=timeStop or None,
                       cost_bp_series=cost_series,
                       reverse_exit=reverseExit,
-                      close_open_at_end=countOpen)
+                      close_open_at_end=countOpen,
+                      tradable_dv=tradable)
     return {"id": id, "label": labels[id], "kind": kinds[id], "unit": unit,
             "dates": dates, "vals": vals, "disp": disp, "dirs": dirs,
             "carryKrw": carry_krw, "carryDefn": carry_defn,
-            "gate": gate, "costSeries": cost_series, "r": r}
+            "carryLegs": carry_legs,
+            "gate": gate, "costSeries": cost_series, "r": r,
+            # 롤 마스크의 재료 — 라우트가 봉마다 「거래 가능한 Δ」와 「그 봉이
+            # 롤인가」를 그대로 실어야 대사표가 닫힌다. BSS 는 None·False 다.
+            "tradable": tradable, "pts": pts}
+
+
+#: 다리 손익·캐리 합이 엔진의 수와 이만큼 넘게 갈리면 **다리를 안 싣는다**.
+#: 원 단위 표이므로 1원이 기준이다 — 잡티는 레벨의 4자리 반올림에서만 온다.
+LEG_RECON_TOL_KRW = 1.0
+
+
+def _attach_leg_recon(points: list[dict], *, kind: str,
+                      leg_lv: dict[str, tuple[float, float]],
+                      pts: list[dict], notional: float,
+                      carry_legs: list[tuple[str, list[float]]]) -> None:
+    """봉마다 **다리별 대사 줄**을 붙인다 [OWNER 2026-09-03 — "채권 KRD, bp,
+    손익과 IRS KRD, bp, 손익, 그리고 종합 손익이 하루에 찍혀야 함"].
+
+    ## 왜 서버가 하나
+
+    §16 그대로다 — 브라우저는 계산하지 않는다. 다리 Δ 는 %레벨의 차이고,
+    KRD 는 부호 규약이며, 손익은 엔진의 곱셈이다. 셋 다 화면에서 다시 하면
+    화면과 엔진이 다른 수를 말할 자리가 생긴다.
+
+    ## 산술 — 항등이 줄로 닫힌다
+
+    값은 `v = (다리0 − 다리1) × 100`(bp)이고 엔진은 `mtm = hold × N × Δv` 다.
+    그래서 Δv = Δ다리0 − Δ다리1 이고,
+
+        mtm = (hold·N)·Δ다리0 + (−hold·N)·Δ다리1
+
+    백테스트 대사표의 부호 규약(`손익 = −KRD × Δbp`)으로 옮기면
+
+        KRD(다리0) = −hold·N      KRD(다리1) = +hold·N      합 = 0
+
+    이다. **KRD 합이 0 인 것이 DV01 중립을 눈으로 보이는 자리**이고, 다리 손익의
+    합이 평가와 같은 것이 이 표의 자기검사다. 다리가 하나인 계열(FUT 아웃라이트)
+    은 KRD 가 하나뿐이라 합이 0 이 아니다 — 그때 표는 백테스트와 같은 3줄이다.
+
+    캐리는 엔진이 `c = -position × carry[i]` 로 먹으므로 다리별도 같은 곱셈이다
+    (`mrcarry.carry_rates_by_leg`).
+
+
+    ## ⚠ 부호가 종전 「감도」 칸과 반대다
+
+    종전 화면은 `감도 = hold × 명목` 을 싣고 `평가 = 감도 × Δ` 로 읽혔다 —
+    국고 매수(`hold = −1`)의 감도가 **음수**였다. 백테스트·시뮬 대사표는 반대
+    규약이고(`손익 = −KRD × Δbp`, **음수 KRD 가 페이·숏**), 이 표가 그 문법을
+    쓰는 이상 부호도 그쪽을 따른다. 한 데스크가 두 화면에서 KRD 를 다르게
+    읽으면 그게 사고다. 오너의 실물 표로 대조했다(2026-09-03):
+    `KRD −509,059 · Δbp 0.75 · 손익 +381,795`.
+    ## 롤일
+
+    롤일은 봉 전체의 Δ 가 마스크된다(`futures.roll_days`). **다리도 같이 0 이다**
+    — 한쪽만 살려 두면 「감도 × Δ = 손익」이 그 줄에서 안 닫힌다. 그 봉이 왜 0
+    인지는 화면의 롤 표식이 말한다.
+
+    ## 안 맞으면 안 싣는다
+
+    합이 엔진의 수와 갈리면 `legs` 를 아예 안 붙인다 — 화면은 열이 없는 것을
+    조용히 접고, 지어낸 분해가 대사표에 서지 않는다(이 리포의 그 규율).
+    """
+    names = mrc.LEG_NAMES.get(kind)
+    if not names:
+        return
+    n = len(points)
+
+    # 봉마다의 다리 레벨(%). BSS 는 조인해 둔 표에서, 선물 계열은 계열 자신이
+    # 실어 보낸 값에서 온다. 한 봉이라도 모르면 통째로 접는다.
+    if kind == "bss":
+        levels = [leg_lv.get(p["t"]) for p in points]
+    else:
+        levels = [tuple(q.get("legs") or ()) or None for q in pts]
+    if len(levels) != n or any(lv is None or len(lv) != len(names) for lv in levels):
+        return
+
+    carry_by_name = dict(carry_legs)
+    have_carry = all(nm in carry_by_name for nm in names)
+
+    rows: list[list[dict]] = []
+    for i, p in enumerate(points):
+        hold = p["hold"]
+        legs = []
+        for j, nm in enumerate(names):
+            if i == 0:
+                dv = None
+            elif p.get("roll"):
+                dv = 0.0                      # 마스크 — 위 「롤일」 문단
+            else:
+                dv = (levels[i][j] - levels[i - 1][j]) * 100.0
+            sign = -1.0 if j == 0 else 1.0    # KRD 부호 — 위 산술
+            krd = sign * hold * notional
+            mtm = 0.0 if (dv is None or hold == 0) else -krd * dv
+            car = 0.0
+            if have_carry and hold != 0:
+                car = -hold * carry_by_name[nm][i]
+            # `+ 0.0` 은 **음수 0 을 없앤다** — `-hold * 0.0` 이 `-0.0` 이 되고
+            # JSON 을 타고 화면에서 「-0」 으로 선다(선물 다리의 캐리가 늘 그렇다).
+            legs.append({"k": nm, "lvl": round(levels[i][j], 4),
+                         "dv": None if dv is None else round(dv, 4) + 0.0,
+                         "krd": round(krd, 2) + 0.0, "mtm": round(mtm, 2) + 0.0,
+                         "carry": round(car, 2) + 0.0})
+        # 자기검사 — 합이 엔진의 수와 갈리면 통째로 접는다.
+        if abs(sum(g["mtm"] for g in legs) - p["mtm"]) > LEG_RECON_TOL_KRW:
+            return
+        if have_carry and abs(sum(g["carry"] for g in legs) - p["carry"]) > LEG_RECON_TOL_KRW:
+            return
+        rows.append(legs)
+
+    for p, legs in zip(points, rows):
+        p["legs"] = legs
 
 
 @router.get("/api/mr/strategy")
@@ -1138,8 +1283,10 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
                   regime=regime, reverseExit=reverseExit, countOpen=countOpen,
                   spec=spec)
     dates, vals, disp = leg["dates"], leg["vals"], leg["disp"]
+    tradable, pts = leg["tradable"], leg["pts"]
     dirs, carry_defn = leg["dirs"], leg["carryDefn"]
     carry_krw, gate, cost_series = leg["carryKrw"], leg["gate"], leg["costSeries"]
+    carry_legs = leg["carryLegs"]
     r = leg["r"]
 
     # ── 액면 환산 [OWNER 2026-09-02 — "진입 레벨과 기준 노셔널과 같은 것들이
@@ -1189,9 +1336,16 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
             # 뒤의 `pos` 와 다르다 — 진입 봉은 0, 청산 봉은 ±1 이다. 백테스트
             # 대사표가 「전일 종가 KRD」를 싣는 것과 같은 자리이고, 이유도 같다:
             # 감도 × 변화 = 평가 가 **한 줄 안에서** 닫혀야 한다.
-            # `dv` = 전 봉 대비 변화(**bp**). 브라우저는 계산하지 않는다(§16).
+            # `dv` = 그 봉의 **거래 가능한** 변화(**bp**). 브라우저는 계산하지
+            # 않는다(§16). 롤일이 마스크된 계열(선물·퓨처스왑)에서는 그 봉이
+            # 0 이고, 그래야 대사표의 「감도 × 명목 × Δ = 평가」가 줄마다 닫힌다
+            # — 화면이 수준의 차(거래 불가)를 Δ 로 적으면 그 줄만 안 맞는다.
+            # 수준 자체(`v`·진입/청산 레벨)는 안 건드린다.
             "hold": r["points"][i]["hold"],
-            "dv": round(vals[i] - vals[i - 1], 4) if i > 0 else None,
+            "dv": (round(tradable[i], 4) if tradable is not None
+                   else round(vals[i] - vals[i - 1], 4)) if i > 0 else None,
+            # 그 봉이 롤이라 Δ 를 못 싣는가 — 화면이 「왜 0 인가」를 말할 수 있게.
+            "roll": bool(pts[i].get("roll")) if tradable is not None else False,
             # 거래 안 누적 — 대사표의 세로합을 줄마다 적는다(마지막 줄 = 거래 손익).
             "tradePnl": round(r["points"][i]["tradePnl"], 2),
             # 밴드 밖 여부와 연속 일수 — 측정 보드(`mr._state`)와 같은 어휘로,
@@ -1217,6 +1371,8 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
         p["govt"] = round(gv[0], 4) if gv else None
         p["irs"] = round(gv[1], 4) if gv else None
         p["cd"] = round(c, 4) if c is not None else None
+    _attach_leg_recon(points, kind=leg["kind"], leg_lv=leg_lv, pts=pts,
+                      notional=notional, carry_legs=carry_legs)
     trades = [
         {
             "entryT": t["entryDate"], "exitT": t["exitDate"],
@@ -1237,6 +1393,9 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
             "peakZ": round(t["peakZ"], 2) if t["peakZ"] is not None else None,
             # 보유 동안의 총 변화(bp) — 대사표 합계 줄의 Δ.
             "dv": round(t["dv"], 4),
+            # 보유 중 롤을 몇 번 지났나 — 0 이 아니면 「청산 − 진입 ≠ Δ」가
+            # 정상이다(그 차이가 곧 실현 못 한 롤 점프다).
+            "masked": int(t.get("masked", 0)),
             "pnl": round(t["pnl"], 2), "why": t["exitReason"],
             # 대사용 삼분해 — 셋의 합이 `pnl` 이다. 거래 한 줄을 눌렀을 때
             # 화면이 그 항등을 그대로 보여 준다(이 앱의 3분해 문법).
@@ -1349,6 +1508,96 @@ def _mr_cost_span(legs: list[dict]) -> dict | None:
         return None
     return {"model": "dynamic", "lo": round(min(paths), 3), "hi": round(max(paths), 3),
             "mid": round(sorted(paths)[len(paths) // 2], 3)}
+
+
+#: 대사가 설 수 없는 이유들 — 화면이 그대로 읽는 문장이다. 「없다」가 아니라
+#: **왜 없는지**를 말한다(이 리포의 그 규율 — 빈칸으로 렌더하느니 이유를 쓴다).
+MR_RECON_WHY = {
+    "kind": "선물 계열은 자산스왑이 아니에요 — 국채선물은 증거금·일일정산이라 "
+            "현물을 조달해 들고 있는 자산스왑으로 가격할 수 없어요. 다리별 표로 서요.",
+    "before": "민평 이력은 {first} 부터예요 — 이 거래는 그 앞이라 실가격 대사를 "
+              "세울 수 없어요.",
+    "after": "민평 이력은 {last} 까지예요 — 이 거래는 그 뒤예요.",
+}
+
+
+@router.get("/api/mr/recon")
+def mr_recon(id: str, entry: str, exit: str, notional: float = 1_000_000.0,
+             dir: int = -1,
+             fundingBasis: str = funding.DEFAULT_BASIS,
+             fundingSpreadBp: float = funding.DEFAULT_SPREAD_BP) -> dict:
+    """MR 거래 하나의 **실가격 일별 대사** [OWNER 2026-09-03 — "krd에서 원래는
+    테너별로 민감도 찍어줬잖아 … 이 방향이 정확한 대사니까"].
+
+    ## 왜 자산스왑을 세우나
+
+    BSS 는 **국고 매수 · IRS 페이**이고, 그게 이 앱의 자산스왑(`cashbond` 의
+    `ASW`)과 같은 구조다. 그래서 새 가격기를 짓지 않고 그쪽을 그대로 부른다 —
+    민평 노드를 1bp 씩 범프해 채권을 다시 가격하는 그 기계(`_krd_bond`)가
+    **테너별 KRD** 를 만들고, `Δbp` 는 자산스왑이라 «민평 − IRS» 스프레드의
+    변화가 되며, `추정 = −KRD × Δbp` 가 테너마다 선다. 응답 모양은
+    `backtest.book_recon` 과 같아서 화면이 `ReconStack` 으로 그대로 그린다.
+
+    ## 이 수는 백테스트의 수와 **다르다**
+
+    이 리포의 자산스왑은 **par-par(같은 명목)이고 DV01 중립이 아니다**
+    [OWNER 2026-08-14]. MR 엔진은 반대로 DV01 중립(명목이 스프레드 ₩/bp
+    하나)이라, 실가격 손익이 엔진 손익보다 체계적으로 크다(실측 2026-09-03,
+    BSS-7Y 거래별 +0.7백만~+3.5백만원). 그 차이는 결함이 아니라 **잔여
+    금리노출과 캐리·롤다운·조달을 실제로 센 값**이고, 화면이 둘을 나란히 적어
+    「근사와 실제가 이만큼 다르다」를 보이게 한다 [OWNER 2026-09-03].
+
+    ## 못 세우는 자리는 비워 둔다
+
+    민평 행렬은 2020-01-02 부터라 MR 표본(2014-06~)의 절반이 그 앞이다
+    (실측: BSS-7Y 16/34 · BSS-3Y 17/38). 그때는 표 대신 **왜 없는지**를
+    돌려준다 — 지어낸 대사를 세우지 않는다 [OWNER 2026-09-03].
+
+    별도 라우트인 이유는 `cashbond` 가 이미 아는 것과 같다: KRD 범프가 본체보다
+    비싸서 거래를 **누를 때만** 돈다.
+    """
+    kinds = {s: kd for s, _, kd in mr_mod.SERIES}
+    if id not in kinds:
+        raise HTTPException(status_code=404, detail=f"unknown mr series {id}")
+    if kinds[id] != "bss":
+        return {"available": False, "why": MR_RECON_WHY["kind"]}
+
+    tenor = mrc._tenor_of(id)                      # noqa: SLF001 — 같은 레인
+    try:
+        entry_d = dt.date.fromisoformat(entry)
+        exit_d = dt.date.fromisoformat(exit)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"날짜가 이상해요: {exc}")
+
+    try:
+        m = creditmatrix.load()
+    except creditmatrix.CreditMatrixError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    if entry_d < m.dates[0]:
+        return {"available": False,
+                "why": MR_RECON_WHY["before"].format(first=m.dates[0].isoformat())}
+    if exit_d > m.dates[-1]:
+        return {"available": False,
+                "why": MR_RECON_WHY["after"].format(last=m.dates[-1].isoformat())}
+
+    # 명목 노브는 ₩/bp(DV01)인데 자산스왑의 명목은 **액면**이다 — 환산은 낱개
+    # 라우트가 화면 머리에 적는 그 식 그대로다(`mrcarry.carry_krw` 의 원금).
+    pv = pv01(_curves["now"], TENOR_T[tenor])
+    principal = notional / (pv * 1e-4)
+    # 엔진 부호 `-1` 이 **국고 매수**다(`mr.dirs_for` — BSS 는 한 방향뿐).
+    # 자산스왑의 `direction` 은 채권 쪽 부호라 뒤집어 넘긴다.
+    pos = cashbond.BondPosition(
+        kind=cashbond.KIND_ASW, bond_type="KTB", tenor=tenor,
+        direction=-int(dir), notional=principal, entry=entry_d, exit=exit_d)
+    spec = _funding_spec(fundingBasis, fundingSpreadBp)
+    try:
+        rec = cashbond.book_recon(m, _dataset, [pos], spec)
+    except (cashbond.CashBondError, creditmatrix.CreditMatrixError) as exc:
+        # 가격기가 못 세우는 자리도 **이유를 그대로** 넘긴다.
+        return {"available": False, "why": str(exc)}
+    rec["available"] = True
+    rec["principal"] = {"krw": round(principal), "pv01": pv}
+    return rec
 
 
 @router.get("/api/mr/book")

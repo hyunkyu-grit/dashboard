@@ -10,7 +10,8 @@
  */
 
 import { BacktestUnavailable } from '@/lib/api';
-import { mrBoardUrl, mrBookUrl, mrHistoryUrl, mrStrategyUrl } from '@/lib/staticPaths';
+import { mrBoardUrl, mrBookUrl, mrHistoryUrl, mrReconUrl, mrStrategyUrl } from '@/lib/staticPaths';
+import type { BacktestRecon } from '@/lib/api';
 
 /** 밴드 상태 — 판정이지 행동이 아니다. 검증 레인(bollinger-mr)과 같은 어휘. */
 export type MrStateKind = 'below' | 'above' | 'reentry-low' | 'reentry-high' | 'inside';
@@ -280,9 +281,16 @@ export interface MrStrategyPoint {
    *  봉 ±1). 대사표의 「감도」가 이 값이고, `평가 = 감도 × 명목 × Δ` 가 한 줄
    *  안에서 닫힌다(백테스트 대사표의 「전일 종가 KRD」와 같은 자리). */
   hold: number;
-  /** 전 봉 대비 변화(**bp**). 첫 봉은 null. 브라우저는 계산하지 않는다(§16) —
-   *  %-계열(선물 내재금리)의 환산도 서버가 끝낸다. */
+  /** 그 봉의 **거래 가능한** 변화(**bp**). 첫 봉은 null. 브라우저는 계산하지
+   *  않는다(§16) — %-계열(선물 내재금리)의 환산도 서버가 끝낸다.
+   *
+   *  롤일(아래 `roll`)에는 **0** 이다 [OWNER 2026-09-02 — "롤일 Δ 를 0 으로
+   *  마스크"]. 그날 수준은 움직이지만 그 움직임은 계약이 갈린 것이라 아무도
+   *  실현하지 못한다. 대사표의 「감도 × 명목 × Δ = 평가」는 이 값 위에서 닫힌다. */
   dv: number | null;
+  /** 그 봉이 선물 계약이 갈리는 날인가 — 참이면 `dv` 가 0 이다. BSS 는 늘
+   *  거짓이다(상수만기라 롤이 없다). 구 백엔드는 이 열이 없다(undefined). */
+  roll?: boolean;
   /** 그 거래 안에서의 누적(₩) — 무포지션이면 0, 청산 봉이면 확정 손익이다.
    *  대사표의 **세로합**을 줄마다 적어서, 「합계」 줄이 스스로 맞는지 보이게 한다. */
   tradePnl: number;
@@ -300,6 +308,39 @@ export interface MrStrategyPoint {
   govt?: number | null;
   irs?: number | null;
   cd?: number | null;
+  /** 그 봉의 **다리별 대사 줄** [OWNER 2026-09-03 — "채권 KRD, bp, 손익과 IRS
+   *  KRD, bp, 손익, 그리고 종합 손익이 하루에 찍혀야 함"]. 스프레드 플레이는
+   *  한 물건이 아니라 다리 둘이라, 대사가 이중이어야 «어느 다리가 벌었나» 를
+   *  말할 수 있다. 선물 아웃라이트는 다리가 하나라 길이가 1 이고, 그때 표는
+   *  백테스트와 같은 3줄이다.
+   *
+   *  **항등 둘이 줄로 닫힌다**(서버가 봉마다 재고, 안 맞으면 아예 안 보낸다):
+   *  `Σ mtm = 평가` · 다리가 둘이면 `Σ krd = 0`(DV01 중립이 눈에 보인다).
+   *  구 백엔드는 이 열이 없다(undefined) — 화면이 조용히 접는다. */
+  legs?: MrReconLeg[];
+}
+
+/** 대사표의 다리 한 줄. 값은 전부 **서버가 낸다**(§16).
+ *
+ * ⚠ `MrDirection.legs`(방향의 이름 — "국고 매수 · IRS 페이" 같은 **문장**)와
+ * 이름이 겹친다. 이쪽은 봉마다의 **숫자 줄**이다. 둘이 같은 파일에 살아서
+ * 헷갈릴 자리라 적어 둔다(화면의 `hasLegLevels` 도 같은 이유로 이름이 길다). */
+export interface MrReconLeg {
+  /** 다리 이름 — 표의 구분 칸이 이 말을 쓴다(`국고`·`IRS`·`선물`). */
+  k: string;
+  /** 그 다리의 레벨(**%**). */
+  lvl: number;
+  /** 그 다리의 그 봉 변화(**bp**). 첫 봉은 null. 롤일에는 **다리도 0** 이다 —
+   *  한쪽만 살리면 「감도 × Δ = 손익」이 그 줄에서 안 닫힌다. */
+  dv: number | null;
+  /** 감도(**₩/bp**) — 백테스트 대사표의 부호 규약 그대로 `손익 = −KRD × Δbp`.
+   *  다리 둘이면 크기가 같고 부호가 반대다(합 0 = DV01 중립). */
+  krd: number;
+  /** 그 다리의 그날 평가(₩). */
+  mtm: number;
+  /** 그 다리의 그날 캐리(₩). 선물 다리는 늘 0 이다 — 증거금·일일정산이라
+   *  조달 현금흐름이 없고, 채권 캐리는 이미 선물 가격에 박혀 있다. */
+  carry: number;
 }
 
 export interface MrStrategyTrade {
@@ -332,8 +373,13 @@ export interface MrStrategyTrade {
   outDays: number | null;
   peakZ: number | null;
   /** 보유 동안의 총 변화(**bp**) — 대사표 「합계」 줄의 Δ 칸이고, 줄마다의
-   *  Δ 를 세로로 더한 값과 같아야 한다. */
+   *  Δ 를 세로로 더한 값과 같아야 한다. **거래 가능한** Δ 의 합이다. */
   dv: number;
+  /** 보유 중 지난 롤의 수. 0 이 아니면 **「청산 − 진입 ≠ Δ」가 정상**이고,
+   *  그 차이가 곧 실현하지 못한 롤 점프다 [OWNER 2026-09-02]. 화면은 그 줄에
+   *  표식을 세워 읽는 사람이 어긋남을 결함으로 읽지 않게 한다. 구 백엔드는
+   *  없다(undefined → 0 으로 읽는다). */
+  masked?: number;
 }
 
 /** 방향 하나의 이름 — 표 칸은 `short`, 문장은 `legs`. 서버가 계열마다 짓는다
@@ -637,6 +683,32 @@ export function fetchMrStrategy(id: string, p: MrStrategyParams): Promise<MrStra
 export function fetchMrBook(p: MrStrategyParams): Promise<MrBookRun> {
   return get<MrBookRun>(mrBookUrl(strategyQuery(p).toString()), 'mr book');
 }
+
+/** 거래 하나의 **실가격 일별 대사** [OWNER 2026-09-03 — "이 방향이 정확한 대사"].
+ *
+ *  BSS 를 자산스왑(국고 매수 · IRS 페이)으로 세워 민평 노드를 1bp 씩 범프한
+ *  **테너별 KRD** 와 그 위의 Δbp·추정을 받는다. 응답 모양은 백테스트 대사와
+ *  같아서 `backtestDays` 로 그대로 `ReconStack` 에 든다.
+ *
+ *  **거래를 누를 때만** 부른다 — KRD 범프가 본체보다 비싸서 서버도 라우트를
+ *  갈라 뒀다(`cashbond` 의 그 근거).
+ *
+ *  못 서는 자리는 `available: false` 와 **왜인지**가 온다: 민평 이력은
+ *  2020-01-02 부터라 MR 표본의 절반이 그 앞이고, 선물 계열은 자산스왑이
+ *  아니다. 지어낸 대사를 세우지 않는다. */
+export function fetchMrRecon(
+  id: string, entry: string, exit: string, dir: number, notional: number,
+): Promise<MrRecon> {
+  const q = new URLSearchParams({
+    id, entry, exit, dir: String(dir), notional: String(notional),
+  });
+  return get<MrRecon>(mrReconUrl(q.toString()), 'mr recon');
+}
+
+/** 실가격 대사 — 서 있거나(`available`), 왜 못 서는지(`why`)거나 둘 중 하나다. */
+export type MrRecon =
+  | ({ available: true; principal: { krw: number; pv01: number } } & BacktestRecon)
+  | { available: false; why: string };
 
 async function get<T>(url: string, what: string): Promise<T> {
   const r = await fetch(url);

@@ -3,8 +3,12 @@
 
 SQL 을 안 만진다: `build_mr` 의 주입 자리(fetch_uni)에 합성 계열을 넣는다.
 밴드 산술은 독립 구현(순수 파이썬 O(n) 누적합)이라 numpy rolling 과 값으로
-대조한다 — 검증 레인(bollinger-mr)이 pandas rolling 으로 낸 값과 같은
-정의(ddof=1)여야 화면과 검증이 같은 밴드를 말한다.
+대조한다.
+
+**σ 는 모집단(ddof=0)이다** [OWNER 2026-09-02 — "엔진(모집단 σ)으로 통일"].
+종전에는 ddof=1 이었고, 그래서 이 보드와 전략 엔진(`mrbacktest.rolling_series`)
+이 **같은 계열·같은 창·같은 날**에 다른 z 를 냈다(BSS-3Y 2,958봉 중 9봉이
+진입 문턱 반대편). 엔진은 PMS 재현이 계약이라 못 움직이므로 보드가 따라간다.
 """
 import math
 import random
@@ -23,7 +27,7 @@ def _numpy_bands(vals, window, k):
     for i in range(window - 1, n):
         w = v[i - window + 1 : i + 1]
         ma[i] = w.mean()
-        sd[i] = w.std(ddof=1)
+        sd[i] = w.std(ddof=0)
     return ma, ma + k * sd, ma - k * sd
 
 

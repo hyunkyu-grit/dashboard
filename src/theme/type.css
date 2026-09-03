@@ -904,6 +904,36 @@ thead th {
   max-height: 100%;
 }
 
+/* 대사표를 **하루가 통째로 보이는 밀도**로 [실물 실측 2026-09-03].
+ *
+ * 다리가 줄로 내려가면서 하루가 7줄이 됐다. CDS 기본 줄 높이는 44px 이라
+ * 하루가 308px 인데 **서랍 자체가 288px** 이었다 — 오너가 요구한 「하루에
+ * 찍혀야 함」이 화면에서 성립하지 않았다(브라우저 실측: 보이는 줄 5.6개).
+ *
+ * 높이는 `td` 가 아니라 CDS 가 셀 안에 두는 두 겹(`.cds-Cell` 과 그 자식)의
+ * 세로 여백에서 온다 — `td` 의 padding 은 이미 0 이라 거기를 만져도 안 줄었다.
+ * 두 겹을 눌러 **24px** 로 내리면 하루가 168px 이라 서랍에 한 날 반이 든다.
+ *
+ * 이 표에만 준다. 앱의 다른 표는 손으로 짚는 표라 CDS 기본 밀도가 맞고,
+ * 이건 「시스템 화면과 줄 단위로 맞춰 보는」 대사표다(ReconStack 머리의 그
+ * 규율 — 80영업일 240줄이 요구사항 그 자체다). */
+.sr-mr-drawertable tbody .cds-Cell {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.sr-mr-drawertable tbody .cds-Cell > * {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+/* 하루의 **첫 줄**에만 경계 — 날짜는 블록의 첫 줄에만 적히므로, 선이 없으면
+ * 일곱 줄이 이웃 날과 섞여 어디서 끊기는지 눈이 못 잡는다(실물 실측에서
+ * 바로 보였다). 가로선은 헤어라인이다 — 축 규칙(수평=헤어라인). */
+.sr-mr-drawertable tbody tr[data-sr-daytop] td {
+  box-shadow: inset 0 1px 0 var(--sr-edge-shadow);
+}
+
 /* 포지션 한 줄 — 표가 아니라 문장 줄이다. 구분선만 준다. */
 .sr-bt-row {
   padding: 6px 0;
@@ -1821,6 +1851,16 @@ thead th {
 /* `ThHelp` 의 **숙주 추종 판**(rv 손 표) — 크기만 못 박고 굵기·색은 물려받는다.
  * 그 표의 머리는 `Text` 없이 글자를 직접 넣어 `thead th` 의 700 을 받으므로,
  * 이 부품만 600 이면 한 행에 두 굵기가 선다(실측 2026-09-02). */
+/* 롤 표식 — 숫자 뒤에 붙는 위첨자 한 글자(`StrategyWindow.RollMark`).
+   점선 밑줄이 «설명 있음» 의 관례 표식인 것은 `.sr-rv-thhelp` 와 같다. */
+.sr-mr-rollmark {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  vertical-align: super;
+  font-size: 10px;
+}
+
 .sr-thhelp-host {
   font-size: 13px;
 }

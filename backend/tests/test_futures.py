@@ -645,3 +645,36 @@ class TestSimEntryPrice:
         ds = _dataset()
         with pytest.raises(BacktestError):
             instruments.expand(ds, "3Y", 1, 1e10, DATES[0], 104.0)
+
+
+class TestRollDays:
+    """롤일 달력 [OWNER 2026-09-02 — "롤일 Δ 를 0 으로 마스크"].
+
+    분기월(3·6·9·12)의 셋째 화요일, 휴장이면 그 직전 거래일. 가격으로 잡는
+    방법(`price_adj` 대 `price_ctr`)은 `price_ctr` 이 없는 날 못 잡는다 —
+    실측 2026-09-02: 3Y 는 43번의 롤 중 4번만 잡혔다. 달력은 전부 잡는다.
+    """
+
+    def test_the_third_tuesday_of_the_quarter_months(self):
+        dates = [dt.date(2026, 1, 1) + dt.timedelta(days=i) for i in range(400)
+                 if (dt.date(2026, 1, 1) + dt.timedelta(days=i)).weekday() < 5]
+        rolls = ft.roll_days(dates)
+        # 2026: 3/17 · 6/16 · 9/15 · 12/15 가 셋째 화요일이다.
+        for d in (dt.date(2026, 3, 17), dt.date(2026, 6, 16),
+                  dt.date(2026, 9, 15), dt.date(2026, 12, 15)):
+            assert d in rolls, d
+            assert d.weekday() == 1
+        assert all(d.month in (3, 6, 9, 12) for d in rolls)
+
+    def test_a_closed_third_tuesday_falls_back_to_the_prior_session(self):
+        """추석이 셋째 화요일에 걸린 해(2021-09-21·2024-09-17)의 그 자리."""
+        base = [dt.date(2021, 9, 1) + dt.timedelta(days=i) for i in range(30)]
+        sessions = [d for d in base if d.weekday() < 5
+                    and d not in {dt.date(2021, 9, 20), dt.date(2021, 9, 21),
+                                  dt.date(2021, 9, 22)}]
+        rolls = ft.roll_days(sessions)
+        assert dt.date(2021, 9, 17) in rolls      # 연휴 직전 거래일
+        assert dt.date(2021, 9, 21) not in rolls  # 셋째 화요일이지만 휴장
+
+    def test_no_dates_no_rolls(self):
+        assert ft.roll_days([]) == set()
