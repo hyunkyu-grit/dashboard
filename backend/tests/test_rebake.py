@@ -172,6 +172,13 @@ def test_is_due_flips_after_an_mpc_passes():
 # 아래 둘은 리베이크를 실제로 돌린다(각 ~10초). 이 리포에는 마커 규약이 없어서
 # `@pytest.mark.slow` 를 붙여 봐야 **경고만 나고 아무것도 안 걸러진다** — 붙여
 # 두면 걸러지는 줄 알게 되므로 안 붙인다.
+#
+# **셋 다 `offline=True` 로 돈다** [2026-09-03]. 안 그러면 엔진이 ECOS 를 새로
+# 때려서 `backend/data/raw/bigfoot_*.csv` 열한 장을 매번 다시 쓴다(값은 같고
+# `retrieved_at` 만 바뀌므로 전 행이 diff 로 뜬다). 이 셋이 재는 것은 **굽기의
+# 원자성·결정성**이지 데이터의 신선도가 아니다. 덤으로 망에 안 기댄다 — 오프라인
+# 이면 로더가 캐시로 조용히 넘어가서(`bigfoot/data/ecos.py:154`) 통과 여부가
+# 망 상태에 달리게 된다.
 
 
 @needs_artifacts
@@ -191,7 +198,7 @@ def test_a_failed_rebake_leaves_the_previous_numbers_untouched(monkeypatch):
 
     monkeypatch.setattr(rb.layer2, "build_assumptions", boom)
     with pytest.raises(rb.RebakeError):
-        rb.rebake(count_tests=False)
+        rb.rebake(offline=True, count_tests=False)
 
     try:
         for a in values:
@@ -220,7 +227,7 @@ def test_a_failed_rebake_says_blocked_instead_of_yesterdays_fresh(monkeypatch):
     monkeypatch.setattr(rb.layer2, "build_assumptions", boom)
     try:
         with pytest.raises(rb.RebakeError):
-            rb.rebake(count_tests=False)
+            rb.rebake(offline=True, count_tests=False)
 
         after = json.loads((OUT / "engine_status.json").read_text("utf-8"))
         assert after["staleness"]["state"] == "blocked"
