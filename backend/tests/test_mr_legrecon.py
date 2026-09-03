@@ -252,3 +252,41 @@ class TestRealRecon:
     def test_an_unknown_series_is_a_404_not_an_empty_table(self, client):
         assert client.get("/api/mr/recon?id=NOPE&entry=2021-01-04"
                           "&exit=2021-02-01&dir=-1").status_code == 404
+
+    def test_every_bss_trade_on_screen_can_be_reconciled(self, client):
+        """**화면이 보여 주는 것은 전부 대사할 수 있다** [OWNER 2026-09-03 —
+        "2020-01-02 이전의 데이터를 안 보이게 해서 차단"].
+
+        MR 의 값 계열은 `imx_data.timeseries`(2014-05-28~)인데 실가격 대사는
+        민평 행렬(`credit_matrix`, 2020-01-02~)로 채권을 다시 가격한다. 종전에는
+        그 갈림 때문에 거래의 절반이 «표가 안 뜨는 거래» 였다(BSS-7Y 34건 중 18).
+
+        표본을 민평의 첫 날로 자른 것이 그 답이다. 이 시험이 재는 것은 **자른
+        결과가 실제로 그 성질을 만드나** — 한 건이라도 못 재면 화면이 다시
+        「왜 안 뜨죠」를 받는다.
+        """
+        from app import creditmatrix
+
+        first = creditmatrix.load().dates[0].isoformat()
+        for sid in ("BSS-3Y", "BSS-7Y"):
+            b = client.get(f"/api/mr/strategy?id={sid}").json()
+            assert b["points"][0]["t"] >= first, f"{sid}: 표본이 민평보다 앞선다"
+            bad = []
+            for t in b["trades"]:
+                r = client.get(f"/api/mr/recon?id={sid}&entry={t['entryT']}"
+                               f"&exit={t['exitT']}&dir={t['dir']}").json()
+                if not r.get("available"):
+                    bad.append((t["entryT"], r.get("why", "")[:40]))
+            assert not bad, f"{sid}: 대사 못 하는 거래 {len(bad)}건 — {bad[:2]}"
+            assert len(b["trades"]) > 5, f"{sid}: 자르고 나니 거래가 너무 적다"
+
+    def test_futures_keep_their_full_sample(self, client):
+        """**선물 계열은 안 자른다.** 자산스왑이 아니라 민평 제약이 걸리지 않는
+        자리다 — 거기까지 자르면 얻는 것 없이 표본만 천 봉 잃는다(실측 FSW-3Y
+        2,614 → 1,636)."""
+        from app import creditmatrix
+
+        first = creditmatrix.load().dates[0].isoformat()
+        for sid in ("FSW-3Y", "FUT-KTB3"):
+            b = client.get(f"/api/mr/strategy?id={sid}").json()
+            assert b["points"][0]["t"] < first, f"{sid}: 선물인데 잘렸다"

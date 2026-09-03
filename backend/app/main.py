@@ -1018,6 +1018,41 @@ def _mr_check_knobs(lookback: int, entryZ: float, exitZ: float,
                             detail=f"레짐 필터가 이상해요: {regime} ({'|'.join(mrg.REGIMES)})")
 
 
+def _mr_reconcilable(pts: list[dict], kind: str) -> list[dict]:
+    """**대사할 수 있는 구간만** 엔진에 넣는다 [OWNER 2026-09-03 — "2020-01-02
+    이전의 데이터를 안 보이게 해서 차단"].
+
+    실가격 대사(`/api/mr/recon`)는 민평 행렬로 채권을 다시 가격하는데, 그 표는
+    **2020-01-02 부터**다(실측: `credit_matrix` 전 bond_type 이 같은 날 시작,
+    1,636일. MR 의 값 계열은 `imx_data.timeseries` 라 2014-05-28 부터라서 둘이
+    갈린다). 그래서 종전에는 거래의 절반이 «대사할 수 없는 거래» 였다
+    (BSS-7Y 34건 중 18건).
+
+    **화면이 보여 주는 것은 전부 대사할 수 있어야 한다.** 그래서 표본을
+    자른다 — 못 재는 구간의 성과를 세워 두고 「이 거래는 왜 표가 안 뜨죠」를
+    받는 것보다, 아예 안 보이는 편이 정직하다.
+
+    바닥은 **하드코딩하지 않는다** — 민평 행렬 자신의 첫 날을 읽는다. 데이터가
+    뒤로 늘면 표본도 같이 는다(전량 캐시라 왕복이 안 는다:
+    `creditmatrix.load` 는 워터마크가 같으면 재사용한다).
+
+    민평에 아예 닿지 못하면 **자르지 않는다** — 대사는 못 서지만 값 계열은
+    제 출처(imx)로 멀쩡하고, 못 읽었다고 6년을 지우는 것은 과하다.
+
+    **선물 계열은 안 자른다.** 그쪽은 자산스왑이 아니라 실가격 경로 자체가
+    없고(증거금·일일정산), 대사는 다리 표가 진다 — 민평 제약이 걸리지 않는
+    자리다. 거기까지 자르면 얻는 것 없이 표본만 천 봉 잃는다(실측: FSW-3Y
+    2,614 → 1,636).
+    """
+    if kind != "bss":
+        return pts
+    try:
+        first = creditmatrix.load().dates[0].isoformat()
+    except Exception:                                  # noqa: BLE001
+        return pts
+    return [p for p in pts if p["t"] >= first]
+
+
 def _mr_leg(id: str, *, lookback: int, entryZ: float, exitZ: float, stopZ: float,
             costBp: float, notional: float, carry: bool, entryMode: str,
             timeStop: int, costModel: str, regime: str, reverseExit: bool,
@@ -1036,6 +1071,7 @@ def _mr_leg(id: str, *, lookback: int, entryZ: float, exitZ: float, stopZ: float
     labels = {s: l for s, l, _ in mr_mod.SERIES}
     body = mr_mod.series_points(id)
     pts = [p for p in body["points"] if p.get("v") is not None]
+    pts = _mr_reconcilable(pts, kinds[id])
     dates = [p["t"] for p in pts]
     # ⚠ **손익 산술은 bp 위에서 한다** [2026-08-28].
     #

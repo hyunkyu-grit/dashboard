@@ -363,28 +363,50 @@ function reconTotal(r: Extract<MrRecon, { available: true }>): number {
   return r.rows.reduce((a, x) => a + (x.actual ?? 0), 0);
 }
 
-/** 비교 줄의 문장 — **표시 정밀도에서 더해진다**(`splitKrw` 의 수법).
+/** 비교 줄의 문장 — **같은 기준으로 놓고**, 표시 정밀도에서 더해진다.
  *
- * 차이·비용·롤다운을 각각 한 번씩만 만원으로 반올림하고, 「평가·캐리 차」가
- * 그 잔차를 진다. 세 항이 화면에서 차이와 정확히 같아진다 — 각자 반올림하면
- * 만원 단위에서 어긋난다(실측 2026-09-03, 16건 중 3건).
+ * ## 왜 «같은 기준» 인가 [OWNER 2026-09-03 — "1번 해결방법 찾아주세요"]
  *
- * 항의 뜻: **비용은 엔진에만** 있고(편도 costBp 를 진입·청산에 물린다),
- * **롤다운은 실가격에만** 있다(자산스왑을 실제로 가격하면 나온다). 남는 것이
- * par-par 와 DV01 중립의 차 + 캐리·조달의 차다. */
+ * 종전에는 두 수를 날것으로 나란히 놓고 차이를 성분으로만 적었다. 그런데 그
+ * 차이의 대부분은 **두 수가 다른 것을 세고 있어서** 생긴 것이었다(실측
+ * BSS-7Y 16건 합):
+ *
+ *     날것            엔진 688만 · 실가격 3,231만 · 차이 2,543만 (369%)
+ *     비용 양쪽       ...                        · 차이   943만 (137%)
+ *     비용+롤다운 정리 ...                        · 차이   154만 ( 22%)
+ *
+ * 그래서 둘을 같은 자로 잰다. **비용은 양쪽에 물린다** — 같은 스프레드를 같은
+ * 값에 지나므로 실제 자산스왑도 그 값을 낸다(엔진의 `costBp` 노브가 그 값이다).
+ * **롤다운은 뺀다** — 엔진에 그 항이 아예 없어서, 넣고 비교하면 «엔진이 롤다운을
+ * 틀리게 셌다» 가 아니라 «엔진이 안 세는 것과 비교했다» 가 된다.
+ *
+ * ## 뺀 롤다운은 **숨기지 않는다**
+ *
+ * 그게 이 대사의 가장 큰 수확이다: 실측 16건에서 롤다운이 789만원인데 엔진
+ * 총손익이 688만원이다 — **엔진이 안 세는 항이 엔진이 세는 전부보다 크다.**
+ * 그래서 따로 한 항으로 세운다.
+ *
+ * 남는 차이는 par-par 자산스왑과 DV01 중립 스프레드의 크기 차 + 캐리 정의의
+ * 차다(거래별 |차이| 중앙 146만 → 29만원).
+ *
+ * ## 표시 정밀도
+ *
+ * `splitKrw` 의 수법(`lib/krw.ts`, 2026-08-14): 엔진과 차이를 각각 한 번씩만
+ * 만원으로 반올림하고 **실가격이 그 합으로 선다.** 세 수가 화면에서 정확히
+ * 더해진다 — 각자 반올림하면 만원 단위에서 어긋난다. */
 function bridgeText(t: MrStrategyTrade, r: Extract<MrRecon, { available: true }>): string {
-  const uDiff = manUnits(reconTotal(r) - t.pnl);
-  const uCost = manUnits(-t.cost);
-  const uRoll = manUnits(reconRolldown(r));
-  const uRest = uDiff - uCost - uRoll;
+  const roll = reconRolldown(r);
+  /* 비용을 실가격에도 물리고(`t.cost` 는 이미 음수다), 엔진에 없는 롤다운은 뺀다. */
+  const like = reconTotal(r) + t.cost - roll;
+  const uEng = manUnits(t.pnl);
+  const uDiff = manUnits(like - t.pnl);
   return (
-    `엔진 근사 ${fmtKrw(t.pnl)} · 실가격 ${fmtKrw(reconTotal(r))} · `
-    + `차이 ${fmtKrwFromMan(uDiff)}`
-    + ` (비용 ${fmtKrwFromMan(uCost)} · 롤다운 ${fmtKrwFromMan(uRoll)}`
-    + ` · 평가·캐리 차 ${fmtKrwFromMan(uRest)})`
-    + ` — 엔진은 DV01 중립 스프레드에 거래비용을 물리고, 이 표는 par-par`
-    + ` 자산스왑(액면 ${fmtEok(r.principal.krw)})을 실제로 가격해요.`
-    + ` 비용은 엔진에만, 롤다운은 실가격에만 있어요.`
+    `엔진 ${fmtKrwFromMan(uEng)} · 실가격 ${fmtKrwFromMan(uEng + uDiff)}`
+    + ` · 차이 ${fmtKrwFromMan(uDiff)}`
+    + ` — 같은 기준으로 놨어요(비용은 양쪽에 물리고, 엔진에 없는 롤다운은 뺐어요).`
+    + ` 그 롤다운이 ${fmtKrw(roll)} 이라 엔진은 그만큼 덜 세요.`
+    + ` 남는 차이는 par-par 자산스왑(액면 ${fmtEok(r.principal.krw)})과`
+    + ` DV01 중립 스프레드의 크기 차예요.`
   );
 }
 
