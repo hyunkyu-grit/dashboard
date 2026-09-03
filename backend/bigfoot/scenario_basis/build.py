@@ -28,6 +28,7 @@ construction, so the gate should sit at numerical noise; thresholds
 from __future__ import annotations
 
 import json
+import os
 from datetime import date
 from pathlib import Path
 
@@ -44,7 +45,10 @@ from bigfoot.solve.system import (BigfootSystem, RESIDUAL_TAIL,
                                   RESIDUAL_TAIL_SOURCE)
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "output"
+#: 기저를 쓸 자리. `BIGFOOT_OUT` 이 있으면 그리로 쓴다 — 굽기 결정성
+#: 시험이 추적 산출물을 안 밀고 돌 수 있게 하는 통로다
+#: (`rebake/__main__.py::_run_engine` 가 넣어 준다). 없으면 원래 자리다.
+OUT = Path(os.environ.get("BIGFOOT_OUT") or (ROOT / "output"))
 
 T = 24
 #: 화면이 못 박는 분기 수. `src/lab/model/strategy/path.ts::PINNED_Q` 와 같은

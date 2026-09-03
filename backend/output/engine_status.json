@@ -117,7 +117,7 @@
   ],
   "tests": {
     "collected": 62,
-    "source": "pytest"
+    "source": "pytest (돌려서 셌어요)"
   },
   "engine": {
     "home": "backend/bigfoot",

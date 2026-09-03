@@ -254,11 +254,30 @@ def test_missing_data_raises_instead_of_killing_the_process():
         _read_cache(Path("없는_경로") / "없는_파일.csv", "없는_계열")
 
 
-def test_two_rebakes_are_byte_identical():
+def test_two_rebakes_are_byte_identical(tmp_path, monkeypatch):
     """결정성 잠금. 딕셔너리 순서·HP 필터 끝점·RNG 중 어느 하나라도 흔들리면
-    여기서 걸린다."""
+    여기서 걸린다.
+
+    **임시 디렉터리에 굽는다** [OWNER 2026-09-03]. 이 시험만 굽기를 두 번
+    성공시키는데, 예전에는 그게 진짜 자리에 떨어져서 추적 산출물 일곱 장
+    (`backend/output` 셋 · `src/lab/model/artifacts` 셋 · `src/lab/scenario/
+    basis.json`)을 오늘 날짜로 밀었다. 그러면 프런트의
+    `guards/scenario-parity.test.ts` 가 빨개진다 — 패리티 벡터는 커밋된
+    기저에서 뽑아 고정돼 있으니까. 백엔드 스위트를 돌리는 것만으로 프런트
+    가드가 깨지면 안 된다.
+
+    엔진은 하위 프로세스라 `rb.OUT` 을 모른다. `_run_engine` 이 그 자리를
+    `BIGFOOT_OUT` 으로 건네주므로 여기서 `rb.OUT` 만 돌리면 엔진까지 따라온다.
+    """
     from rebake import __main__ as rb
+    out = tmp_path / "output"
+    monkeypatch.setattr(rb, "OUT", out)
+    monkeypatch.setattr(rb, "FRONTEND", tmp_path / "artifacts")
+    monkeypatch.setattr(rb, "EXTRA_MIRRORS",
+                        {"scenario_basis.json": tmp_path / "scenario"
+                         / "basis.json"})
+
     rb.rebake(offline=True, count_tests=False)
-    first = (OUT / "scenario_basis.json").read_bytes()
+    first = (out / "scenario_basis.json").read_bytes()
     rb.rebake(offline=True, count_tests=False)
-    assert (OUT / "scenario_basis.json").read_bytes() == first
+    assert (out / "scenario_basis.json").read_bytes() == first

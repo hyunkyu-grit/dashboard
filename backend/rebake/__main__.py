@@ -67,6 +67,10 @@ def _run_engine(offline: bool) -> tuple[str, list[str]]:
     env = dict(os.environ)
     if offline:
         env["BIGFOOT_OFFLINE"] = "1"
+    # 엔진은 하위 프로세스라 이쪽 `OUT` 을 모른다. 시험이 `OUT` 을 임시
+    # 디렉터리로 돌렸을 때 엔진도 같이 따라오게 환경으로 건넨다.
+    env["BIGFOOT_OUT"] = str(OUT)
+    OUT.mkdir(parents=True, exist_ok=True)
     r = subprocess.run([sys.executable, "-m", "bigfoot.scenario_basis.build"],
                        cwd=BACKEND, capture_output=True, text=True, env=env)
     if r.returncode != 0:
