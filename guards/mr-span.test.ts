@@ -174,6 +174,11 @@ describe('거래 한 줄이 스스로 검산이 된다', () => {
     expect(py).toMatch(/def _mr_principal_at\(/);
     /* 대사 라우트와 엔진이 **같은 자**를 쓴다 — 안 그러면 표와 헤드라인이 갈린다. */
     expect(py).toMatch(/principal = _mr_principal_at\(entry_d, tenor, notional\)/);
-    expect(py).toMatch(/principal = _mr_principal_at\([\s\S]{0,40}t\["entryDate"\]/);
+    expect(py).toMatch(/principal = _mr_principal_at\(dt\.date\.fromisoformat\(e_iso\)/);
+    /* **미청산 다리도 같이 가격한다** — 총손익·낙폭이 그것을 실시간으로 지고
+       있어서(`mrbacktest` 의 그 주석), 빼먹으면 그 구간 봉이 통째로 0 이 되고
+       `Σ거래 + 미청산 ≠ 총손익` 이 된다(실측 2026-09-03: BSS-9M 51봉). */
+    expect(py).toMatch(/legs_to_price\.append\(\(op,/);
+    expect(py).toMatch(/summary"\]\["openPnl"\] = op\["pnl"\]/);
   });
 });

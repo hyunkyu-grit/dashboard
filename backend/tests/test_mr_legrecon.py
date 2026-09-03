@@ -398,3 +398,69 @@ class TestRealRecon:
                 sizes.append(p["krw"])
             # 커브가 움직인 만큼 액면도 움직여야 한다 — 다 같으면 옛 규약이다.
             assert max(sizes) / min(sizes) > 1.005, f"{sid}: 액면이 안 움직인다"
+
+    def test_the_open_leg_is_priced_too(self, client):
+        """**미청산 다리도 대사를 돈다** [전수 검산 2026-09-03].
+
+        표본 끝에 열려 있는 다리는 `trades` 에 없다. 그런데 총손익과 낙폭은
+        그것을 **실시간으로 지고 있다** — 누적이 보유 봉마다 MTM 을 더하기
+        때문이다(`mrbacktest` 의 그 주석). 실가격 회계를 얹으면서 그 구간을
+        빼먹었더니 **그 봉들이 통째로 0** 이 됐다(실측: BSS-9M 51봉 · 3Y 31봉 ·
+        7Y 13봉). 곡선이 거짓말을 하고, `Σ거래 + 미청산 ≠ 총손익` 이 됐다.
+
+        이 시험이 재는 것이 그 항등이다. 아홉 계열 전부를 본다 — 한 계열만
+        보면 마침 그때 평평한 계열을 골라 초록을 볼 수 있다.
+        """
+        for sid in ("BSS-6M", "BSS-9M", "BSS-2Y", "BSS-3Y", "BSS-7Y", "BSS-10Y"):
+            b = client.get(f"/api/mr/strategy?id={sid}").json()
+            assert b["real"] is True, sid
+            s_ = b["summary"]
+            got = sum(t["pnl"] for t in b["trades"]) + (s_.get("openPnl") or 0.0)
+            assert abs(got - s_["totalPnl"]) < 1.0,                 f"{sid}: Σ거래 + 미청산 ≠ 총손익 ({got:,.0f} vs {s_['totalPnl']:,.0f})"
+            # 보유 중인데 손익이 0 인 봉 — 대사가 안 돈 구간의 지문이다.
+            held = [p for p in b["points"] if p["hold"] != 0]
+            zero = [p for p in held if p["pnl"] == 0]
+            assert len(zero) <= max(5, len(held) // 50),                 f"{sid}: 보유 {len(held)}봉 중 {len(zero)}봉이 손익 0 — 대사가 안 돈 구간이 있다"
+
+    def test_every_recon_row_lands_on_a_bar(self, client):
+        """대사 행이 **하나도 안 버려진다**.
+
+        대사는 민평 달력, 엔진은 계열 달력이라 어긋날 수 있다. 어긋난 날의 돈을
+        버리면 거래의 세로합이 표와 갈리고, 마지막 봉에 몰아 얹으면 곡선이
+        그날만 튄다. 실측은 **어긋난 날 0** 이지만, 데이터가 바뀌면 조용히
+        생기는 종류라 여기서 지킨다.
+        """
+        for sid in ("BSS-3Y", "BSS-10Y"):
+            b = client.get(f"/api/mr/strategy?id={sid}").json()
+            bars = {p["t"] for p in b["points"]}
+            for t in b["trades"]:
+                r = client.get(f"/api/mr/recon?id={sid}&entry={t['entryT']}"
+                               f"&exit={t['exitT']}&dir={t['dir']}").json()
+                off = [x["t"] for x in r["rows"]
+                       if x.get("actual") is not None and x["t"] not in bars]
+                assert not off, f"{sid} {t['entryT']}: 봉에 없는 대사 날 {off[:3]}"
+
+    def test_the_signal_curve_and_the_pricing_curve_are_the_same(self, client):
+        """**신호가 본 국고와 대사가 가격하는 국고가 같은 커브다.**
+
+        값 계열은 `imx_data.timeseries`, 대사는 `credit_matrix` 민평이다. 둘이
+        갈리면 표는 **신호가 잡은 것과 다른 채권**을 가격하게 되고, 그건 대사가
+        아니다. 겹치는 날 전부에서 잰다(단위가 다르다 — `yield_at` 은 소수,
+        점의 다리 레벨은 %).
+        """
+        from app import creditmatrix
+
+        m = creditmatrix.load()
+        idx = {d.isoformat(): i for i, d in enumerate(m.dates)}
+        for sid in ("BSS-3Y", "BSS-7Y", "BSS-10Y"):
+            yrs = creditmatrix.TENOR_YEARS[sid.split("-", 1)[1]]
+            b = client.get(f"/api/mr/strategy?id={sid}").json()
+            worst = 0.0
+            for p in b["points"]:
+                i = idx.get(p["t"])
+                if i is None or not p.get("legs"):
+                    continue
+                mp = creditmatrix.yield_at(m, "KTB", i, yrs)
+                if mp is not None:
+                    worst = max(worst, abs(p["legs"][0]["lvl"] - mp * 100.0) * 100.0)
+            assert worst < 3.0, f"{sid}: 두 국고 커브가 {worst:.2f}bp 갈린다"

@@ -1153,7 +1153,7 @@ def _mr_scale_rows(rows: list[dict], scale: float) -> list[dict]:
 
 
 def _mr_real_accounting(r: dict, *, kind: str, tenor: str, notional: float,
-                        spec) -> bool:
+                        cost_bp: float, spec) -> bool:
     """`simulate()` 의 **언제** 위에 백테스트·시뮬의 **얼마** 를 얹는다
     [OWNER 2026-09-03 — "캐리 롤다운 다 넣고 우리가 원래 사용하던 백테스트/
     시뮬레이션에서의 대사와 동일하게 작성하기"].
@@ -1182,6 +1182,14 @@ def _mr_real_accounting(r: dict, *, kind: str, tenor: str, notional: float,
     자산스왑이 아니라 이 경로가 없다(증거금·일일정산). 그때 `False` 를 돌려주고
     라우트가 그 사실을 페이로드에 싣는다 — 두 회계가 섞여 있으면 화면이 말해야 한다.
 
+    ## 미청산 다리도 센다
+
+    표본 끝에 열려 있는 다리는 `trades` 에 없지만 **총손익과 낙폭은 그것을
+    실시간으로 지고 있다**(`mrbacktest` 의 그 주석 — 누적이 보유 봉마다 MTM 을
+    더한다). 여기서 빼먹으면 그 구간의 봉이 통째로 0 이 되고 곡선이 거짓말을
+    한다(실측 2026-09-03: BSS-9M 51봉·3Y 31봉이 그랬다). 그래서 청산일을
+    마지막 봉으로 잡아 같이 돌린다.
+
     ## 달력이 어긋나는 날
 
     대사는 민평 달력, 엔진은 계열 달력이라 대사 행의 날이 봉에 없을 수 있다.
@@ -1193,6 +1201,12 @@ def _mr_real_accounting(r: dict, *, kind: str, tenor: str, notional: float,
     trades = r["trades"]
     if not trades:
         return False
+    #: 대사를 돌릴 구간 — 거래들 + **미청산 다리**(청산일 = 마지막 봉).
+    last_t = r["points"][-1]["date"] if r["points"] else None
+    legs_to_price = [(t, t["entryDate"], t["exitDate"], t["direction"]) for t in trades]
+    op = r.get("open")
+    if op and last_t:
+        legs_to_price.append((op, op["entryDate"], last_t, op["direction"]))
     try:
         m = creditmatrix.load()
     except Exception:                                  # noqa: BLE001
@@ -1201,17 +1215,15 @@ def _mr_real_accounting(r: dict, *, kind: str, tenor: str, notional: float,
     #: 날짜 → 네 성분. 여러 거래가 한 날을 나눠 갖지 않는다(한 번에 한 포지션).
     day: dict[str, tuple[float, float, float, float]] = {}
     per_trade: list[dict[str, float]] = []
-    for t in trades:
+    for obj, e_iso, x_iso, direction in legs_to_price:
         # 액면은 **거래마다 진입일 커브**로 잰다 — 그래야 「명목 N원/bp」가 모든
         # 거래에서 같은 뜻이 된다(`_mr_pv01_at` 머리의 검산).
-        principal = _mr_principal_at(
-            dt.date.fromisoformat(t["entryDate"]), tenor, notional)
+        principal = _mr_principal_at(dt.date.fromisoformat(e_iso), tenor, notional)
         if principal is None:
             return False
         scale = principal / MR_REF_PRINCIPAL
-        got = _mr_recon_rows(
-            m, tenor, dt.date.fromisoformat(t["entryDate"]),
-            dt.date.fromisoformat(t["exitDate"]), -int(t["direction"]), spec)
+        got = _mr_recon_rows(m, tenor, dt.date.fromisoformat(e_iso),
+                             dt.date.fromisoformat(x_iso), -int(direction), spec)
         if got is None:
             return False                               # 한 건이라도 못 재면 전부 안 바꾼다
         rows = got["rows"]
@@ -1232,7 +1244,7 @@ def _mr_real_accounting(r: dict, *, kind: str, tenor: str, notional: float,
             agg["carry"] += c
             agg["rolldown"] += rd
             agg["funding"] += f
-        per_trade.append(agg)
+        per_trade.append((obj, agg))
 
     # ── 봉에 얹는다. 봉에 없는 날은 **다음 봉으로 이월**한다(위 「달력」). ──
     carry_over = [0.0, 0.0, 0.0, 0.0]
@@ -1271,14 +1283,27 @@ def _mr_real_accounting(r: dict, *, kind: str, tenor: str, notional: float,
         last["cumulativePnl"] += sum(left)
         last["tradePnl"] += sum(left)
 
-    for t, agg in zip(trades, per_trade):
-        t["mtm"] = agg["mtm"]
-        t["carry"] = agg["carry"]
-        t["rolldown"] = agg["rolldown"]
-        t["funding"] = agg["funding"]
-        t["pnl"] = agg["mtm"] + agg["carry"] + agg["rolldown"] + agg["funding"] + t["cost"]
+    for obj, agg in per_trade:
+        obj["mtm"] = agg["mtm"]
+        obj["carry"] = agg["carry"]
+        obj["rolldown"] = agg["rolldown"]
+        obj["funding"] = agg["funding"]
+        obj["pnl"] = (agg["mtm"] + agg["carry"] + agg["rolldown"]
+                      + agg["funding"] + obj["cost"])
 
     r["summary"].update(mrbt.summarize(r["points"], trades))
+    # 미청산 손익도 새 회계의 것으로 — 안 고치면 한 화면에 두 회계가 선다.
+    r["summary"]["openPnl"] = op["pnl"] if op else None
+    # 손익분기 비용도 총손익에 딸려 있다. 손익은 여전히 비용의 **정확한 일차식**
+    # 이므로(비용을 따로 더한다) 닫힌형이 그대로 산다: 문 돈 대비 몇 배까지
+    # 견디는가 = 1 + 총손익/문 돈 (`mrbacktest.breakeven_cost_bp` 의 그 산술).
+    paid = -sum(p["barCost"] for p in r["points"])
+    mult = None if paid <= 0 else 1.0 + r["summary"]["totalPnl"] / paid
+    if r["summary"].get("breakevenCostMult") is not None or mult is None:
+        r["summary"]["breakevenCostMult"] = mult
+        r["summary"]["breakevenCostBp"] = None
+    else:
+        r["summary"]["breakevenCostBp"] = None if mult is None else cost_bp * mult
     return True
 
 
@@ -1438,7 +1463,7 @@ def _mr_leg(id: str, *, lookback: int, entryZ: float, exitZ: float, stopZ: float
     if kinds[id] == "bss":
         real = _mr_real_accounting(
             r, kind=kinds[id], tenor=mrc._tenor_of(id),
-            notional=notional, spec=spec)
+            notional=notional, cost_bp=costBp, spec=spec)
 
     return {"id": id, "label": labels[id], "kind": kinds[id], "unit": unit,
             # 이 다리의 수가 «실가격 회계» 인가 «엔진 근사» 인가. 두 회계가
