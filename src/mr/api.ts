@@ -273,6 +273,11 @@ export interface MrStrategyPoint {
    *  편다(백테스트 창의 「일별 대사」와 같은 문법). */
   mtm: number;
   carry: number;
+  /** 롤다운·조달 — **실가격 회계에서만 온다**(`run.real`). 엔진 근사에는 그
+   *  항이 아예 없으므로 `undefined` 이고, 0 이 아니다: 0 은 「그날 롤다운이
+   *  없었다」는 다른 말이다. 선물 계열은 자산스왑이 아니라 늘 없다. */
+  rolldown?: number;
+  funding?: number;
   cost: number;
   pnl: number;
   /** 그날의 포지션(엔진 부호). 0 이면 무포지션이다. */
@@ -359,9 +364,13 @@ export interface MrStrategyTrade {
   /** 청산 사유. 우선순위가 곧 이름이다 — 손절 > 청산 > 역신호 > 타임스탑.
    *  `open` 은 표본 끝의 미청산 다리를 거래로 셀 때만 나온다(청산 비용 없음). */
   why: 'exit' | 'stop' | 'reverse' | 'time' | 'open';
-  /** 대사 삼분해 — `mtm + carry + cost = pnl`. 화면이 그 항등을 보여 준다. */
+  /** 대사 분해 — 실가격 회계에서는 **다섯**이 `pnl` 로 닫힌다
+   *  (`평가 + 캐리 + 롤다운 + 조달 + 비용`), 엔진 근사에서는 셋이다
+   *  (`평가 + 캐리 + 비용`). 화면이 그 항등을 보여 준다. */
   mtm: number;
   carry: number;
+  rolldown?: number;
+  funding?: number;
   cost: number;
   /** 보유 봉 수. */
   bars: number;
@@ -445,6 +454,19 @@ export interface MrNeighborRow {
 export interface MrStrategyRun {
   id: string;
   label: string;
+  /** 이 실행의 수가 **실가격 회계**인가 **엔진 근사**인가
+   *  [OWNER 2026-09-03 — "캐리 롤다운 다 넣고 우리가 원래 사용하던 백테스트/
+   *  시뮬레이션에서의 대사와 동일하게"].
+   *
+   *  `true` — BSS. 진입·청산 시점은 엔진(`mrbacktest.simulate`, PMS 원본
+   *  이식이라 잠겨 있다)이 정하고, **그 구간의 돈은 실제 자산스왑을 가격해서**
+   *  센다: 평가·캐리·롤다운·조달에 전략의 비용을 더한 다섯이 그날 손익이다.
+   *  일별 대사표가 그 수를 **그대로** 편다(실측 차 0.00원).
+   *
+   *  `false` — 선물 계열. 자산스왑이 아니라 그 경로가 없다(증거금·일일정산).
+   *  종전 근사(`평가 = 명목 × Δ스프레드`)라 롤다운·조달 항이 없다. 두 회계가
+   *  한 화면에 있으므로 화면이 그 사실을 말한다. */
+  real: boolean;
   unit: string;
   asof: string | null;
   params: MrStrategyParams;

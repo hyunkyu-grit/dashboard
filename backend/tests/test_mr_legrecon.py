@@ -43,11 +43,16 @@ pytestmark_live = pytest.mark.skipif(
 TOL = 1.0
 
 #: 계열 종류마다 다리 이름과 개수가 정해져 있다(`mrcarry.LEG_NAMES`).
+#: 다리 **분해**(감도·Δ·손익)는 이제 **근사 회계에서만** 온다. BSS 는
+#: 2026-09-03 부터 실가격 자산스왑으로 회계하므로 그 구간의 돈을 대사표가
+#: 세고, 점에는 「일별 레벨」이 쓰는 **레벨만** 실린다 — 폐기된 근사의 감도를
+#: 같이 세우면 한 화면에 두 회계가 선다.
 CASES = [
-    ("BSS-3Y", ["국고", "IRS"]),
     ("FSW-3Y", ["선물", "IRS"]),
     ("FUT-KTB3", ["선물"]),
 ]
+#: 실가격 회계라 레벨만 오는 계열.
+LEVEL_ONLY = [("BSS-3Y", ["국고", "IRS"]), ("BSS-7Y", ["국고", "IRS"])]
 
 
 @pytestmark_live
@@ -106,6 +111,21 @@ class TestLegRecon:
                 checked += 1
         assert checked > 100, f"{sid}: 실제로 곱한 줄이 {checked}개뿐이다"
 
+    @pytest.mark.parametrize("sid,names", LEVEL_ONLY)
+    def test_real_accounting_series_carry_levels_only(self, client, sid, names):
+        """실가격 회계 계열은 점에 **레벨만** 온다.
+
+        「일별 레벨」 칸이 그 값을 쓴다(`legs[].lvl`). 감도·손익·캐리는 폐기된
+        근사의 값이라 안 싣는다 — 있으면 화면이 두 회계를 같이 세우게 된다.
+        """
+        pts = client.get(f"/api/mr/strategy?id={sid}").json()["points"]
+        assert pts
+        for p in pts:
+            assert p.get("legs"), f"{sid} {p['t']}: 다리 레벨이 없다"
+            assert [g["k"] for g in p["legs"]] == names
+            for g in p["legs"]:
+                assert set(g) == {"k", "lvl"}, f"{sid} {p['t']}: 근사의 값이 남아 있다"
+
     def test_a_roll_day_masks_both_legs(self, client):
         """롤일은 봉 전체가 마스크다 — **한쪽만 살리면 그 줄이 안 닫힌다.**
 
@@ -138,13 +158,13 @@ class TestLegRecon:
         ⚠ 종전 화면의 「감도」 칸은 `hold × 명목` 이라 **반대 부호**였다.
         2026-09-03 에 앱 전체와 맞췄고, 그 사실은 `_attach_leg_recon` 머리에.
         """
-        pts = client.get("/api/mr/strategy?id=BSS-3Y").json()["points"]
+        pts = client.get("/api/mr/strategy?id=FSW-3Y").json()["points"]
         held = [p for p in pts if p["hold"] == -1]
         assert len(held) > 100, f"보유 봉이 {len(held)}개뿐이다 — 표본이 바뀌었다"
         for p in held:
             g, s = p["legs"]
-            assert g["k"] == "국고" and s["k"] == "IRS"
-            assert g["krd"] > 0, f"{p['t']}: 국고 매수인데 KRD 가 양수가 아니다"
+            assert g["k"] == "선물" and s["k"] == "IRS"
+            assert g["krd"] > 0, f"{p['t']}: 매수 다리인데 KRD 가 양수가 아니다"
             assert s["krd"] < 0, f"{p['t']}: IRS 페이인데 KRD 가 음수가 아니다"
 
         # 그리고 그 부호가 실제로 돈의 방향을 만든다 — 금리가 오른 날 국고
@@ -152,16 +172,17 @@ class TestLegRecon:
         up = [p for p in held if p["legs"][0]["dv"] and p["legs"][0]["dv"] > 0]
         assert up, "국고 금리가 오른 보유 봉이 없다"
         for p in up[:200]:
-            assert p["legs"][0]["mtm"] < 0, f"{p['t']}: 국고 금리가 올랐는데 벌었다"
+            assert p["legs"][0]["mtm"] < 0, f"{p['t']}: 매수 다리 금리가 올랐는데 벌었다"
         up_i = [p for p in held if p["legs"][1]["dv"] and p["legs"][1]["dv"] > 0]
         assert up_i, "IRS 금리가 오른 보유 봉이 없다"
         for p in up_i[:200]:
             assert p["legs"][1]["mtm"] > 0, f"{p['t']}: IRS 페이인데 금리 올라 잃었다"
 
-    def test_bss_legs_are_the_spread_itself(self, client):
+    @pytest.mark.parametrize("sid,_names", LEVEL_ONLY)
+    def test_bss_legs_are_the_spread_itself(self, client, sid, _names):
         """BSS 는 `(국고 − IRS) × 100 = 값` 이 정확히 성립한다 — 다리 레벨이
         스프레드의 **재료**이지 옆에 붙은 참고값이 아니라는 사실이다."""
-        pts = client.get("/api/mr/strategy?id=BSS-3Y").json()["points"]
+        pts = client.get(f"/api/mr/strategy?id={sid}").json()["points"]
         for p in pts[:500]:
             g, s = p["legs"][0]["lvl"], p["legs"][1]["lvl"]
             assert abs((g - s) * 100.0 - p["v"]) <= 0.05, f"{p['t']}: 다리 − 다리 ≠ 값"
@@ -290,3 +311,57 @@ class TestRealRecon:
         for sid in ("FSW-3Y", "FUT-KTB3"):
             b = client.get(f"/api/mr/strategy?id={sid}").json()
             assert b["points"][0]["t"] < first, f"{sid}: 선물인데 잘렸다"
+
+    def test_the_table_is_the_book(self, client):
+        """**대사표가 곧 엔진의 장부다** [OWNER 2026-09-03 — "캐리 롤다운 다
+        넣고 우리가 원래 사용하던 백테스트/시뮬레이션에서의 대사와 동일하게"].
+
+        종전에는 둘이 다른 회계였다 — 엔진은 `평가 = 명목 × Δ스프레드` 하나라
+        롤다운도 조달도 없었고, 실측에서 안 세는 롤다운이 세는 전부보다 컸다.
+        이제 진입·청산 시점만 엔진이 정하고 그 구간의 돈은 이 표가 센다.
+
+        **정확히 0 이어야 한다.** «거의 같다» 는 두 화면이 다른 수를 말한다는
+        뜻이고, 그러면 트레이더가 어느 쪽을 믿을지 골라야 한다.
+        """
+        b = client.get("/api/mr/strategy?id=BSS-7Y").json()
+        assert b["real"] is True, "BSS 인데 실가격 회계가 아니다"
+        assert b["trades"], "거래가 없다"
+        for t in b["trades"]:
+            r = client.get(f"/api/mr/recon?id=BSS-7Y&entry={t['entryT']}"
+                           f"&exit={t['exitT']}&dir={t['dir']}").json()
+            assert r["available"], f"{t['entryT']}: 대사가 안 선다"
+            tot = sum(x.get("actual") or 0 for x in r["rows"])
+            assert abs((tot + t["cost"]) - t["pnl"]) < 0.01,                 f"{t['entryT']}: 표 세로합 + 비용 ≠ 거래 손익"
+
+    def test_five_components_close_on_every_trade(self, client):
+        """`평가 + 캐리 + 롤다운 + 조달 + 비용 = 손익` — 다섯이 닫힌다.
+
+        백테스트·시뮬 대사의 네 성분에 전략의 비용 하나가 붙은 모양이다. 비용이
+        표에 없는 이유는 그것이 상품의 성질이 아니라 노브이기 때문이다.
+        """
+        b = client.get("/api/mr/strategy?id=BSS-3Y").json()
+        assert b["real"] is True
+        for t in b["trades"]:
+            five = (t["mtm"] + t["carry"] + t["rolldown"] + t["funding"] + t["cost"])
+            assert abs(five - t["pnl"]) < 0.02, f"{t['entryT']}: 다섯이 안 닫힌다"
+        # 봉 단위로도 닫힌다 — 대사표의 가로가 그것이다.
+        for p in b["points"]:
+            five = p["mtm"] + p["carry"] + p["rolldown"] + p["funding"] + p["cost"]
+            assert abs(five - p["pnl"]) < 0.02, f"{p['t']}: 봉의 다섯이 안 닫힌다"
+
+    def test_futures_keep_the_engine_approximation_and_say_so(self, client):
+        """선물 계열은 자산스왑이 아니라 이 회계가 **없다**. 0 으로 채우지 않고
+        열 자체를 안 보낸다 — 0 은 「그날 롤다운이 없었다」는 다른 말이다."""
+        for sid in ("FUT-KTB3", "FSW-3Y"):
+            b = client.get(f"/api/mr/strategy?id={sid}").json()
+            assert b["real"] is False, sid
+            p = b["points"][len(b["points"]) // 2]
+            assert "rolldown" not in p and "funding" not in p, sid
+            assert abs((p["mtm"] + p["carry"] + p["cost"]) - p["pnl"]) < 0.02, sid
+
+    def test_the_locked_pms_vector_still_passes(self):
+        """**엔진 함수는 안 건드렸다.** 회계는 라우트에서 얹으므로 `simulate`
+        의 적합성 벡터가 그대로 통과해야 한다 — 이 시험이 그 사실의 기록이다."""
+        from tests import test_mrbacktest as tb
+
+        tb.test_kpi_conformance_vector_matches_pms()

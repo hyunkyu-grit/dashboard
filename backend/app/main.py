@@ -1018,6 +1018,214 @@ def _mr_check_knobs(lookback: int, entryZ: float, exitZ: float,
                             detail=f"레짐 필터가 이상해요: {regime} ({'|'.join(mrg.REGIMES)})")
 
 
+#: 대사를 캐시해 두는 기준 액면. **대사는 명목에 선형이다**(실측 2026-09-03:
+#: 3배 명목에서 차이가 서버 자신의 원 단위 반올림 ≤2원). 그래서 한 번 재고
+#: 배수로 쓴다 — 명목 노브를 돌려도 다시 안 잰다.
+MR_REF_PRINCIPAL = 1_000_000_000.0
+#: (워터마크, 계열, 진입, 청산, 방향, 조달기준, 조달스프레드) → 기준 액면의 행.
+#: 워터마크가 키에 있어 민평이 갱신되면 저절로 갈린다.
+_mr_recon_cache: dict[tuple, dict | None] = {}
+MR_RECON_CACHE_MAX = 4096
+
+
+def _mr_recon_rows(m, tenor: str, entry: dt.date, exit_: dt.date,
+                   direction: int, spec) -> dict | None:
+    """기준 액면에서의 대사 — `{"tenors", "rows"}`. 못 세우면 `None`.
+
+    **거래 목록은 z 에만 달려 있다**(`mrbacktest` 머리) — 명목·비용·조달을
+    돌려도 진입·청산 날짜가 안 움직인다. 그래서 이 캐시는 노브를 돌리는 동안
+    거의 다 맞는다. 통합 장부(아홉 다리 143건)가 매번 8초를 쓰지 않는 이유다.
+    """
+    key = (m.watermark, tenor, entry, exit_, direction, spec.basis, spec.spread_bp)
+    if key in _mr_recon_cache:
+        return _mr_recon_cache[key]
+    try:
+        pos = cashbond.BondPosition(
+            kind=cashbond.KIND_ASW, bond_type="KTB", tenor=tenor,
+            direction=direction, notional=MR_REF_PRINCIPAL, entry=entry, exit=exit_)
+        rec = cashbond.book_recon(m, _dataset, [pos], spec)
+        # 창이 잘리면 **회계가 반쪽이다** — 반쪽을 총손익이라 부르지 않는다.
+        got = None if rec.get("truncated") else {"tenors": rec["tenors"], "rows": rec["rows"]}
+    except (cashbond.CashBondError, creditmatrix.CreditMatrixError, KeyError, ValueError):
+        got = None
+    if len(_mr_recon_cache) >= MR_RECON_CACHE_MAX:
+        _mr_recon_cache.clear()          # 통째로 버린다 — LRU 를 짤 값이 아니다
+    _mr_recon_cache[key] = got
+    return got
+
+
+#: 명목에 **비례하지 않는** 칸 — 금리 변화지 돈이 아니다.
+MR_ROW_NOT_MONEY = ("t", "dbp", "carryover")
+
+
+def _mr_scale_rows(rows: list[dict], scale: float) -> list[dict]:
+    """기준 액면의 행을 실제 액면으로. **`dbp` 는 안 곱한다** — 그건 금리의
+    변화지 돈이 아니다(곱하면 표가 「그날 3배로 움직였다」고 말한다).
+
+    화면과 엔진이 **같은 수**를 쓰게 하려고 둘 다 이 길을 지난다. 각자 재면
+    기준 액면에서의 원 단위 반올림이 배수만큼 벌어져 표와 헤드라인이 갈린다
+    (실측 2026-09-03: 그 차이가 거래당 최대 21원이었다).
+    """
+    out: list[dict] = []
+    for r in rows:
+        d: dict = {}
+        for k, v in r.items():
+            if k in MR_ROW_NOT_MONEY or v is None:
+                d[k] = v
+            elif isinstance(v, dict):
+                d[k] = {a: (b if k == "dbp" or b is None else round(b * scale))
+                        for a, b in v.items()}
+            elif isinstance(v, (int, float)) and not isinstance(v, bool):
+                d[k] = round(v * scale)
+            else:
+                d[k] = v
+        # ── 행이 **스스로 더해지게** 한다 ─────────────────────────────────────
+        # 기준 액면에서 이미 원 단위로 반올림된 값을 배수하면 성분의 합과 총계가
+        # 갈린다(실측: 1.64배에서 `Σest` 와 `estTotal` 이 최대 8원). 표가 가로로
+        # 안 더해지면 그건 대사표가 아니라 숫자 더미다 — `splitKrw` 의 그 규칙
+        # 으로 **한쪽이 잔차를 진다.**
+        if isinstance(d.get("est"), dict) and isinstance(d.get("krd"), dict):
+            # **줄이 곱해진다** — 추정을 반올림한 KRD·Δbp 에서 유도한다. 각자
+            # 반올림하면 `−KRD × Δbp ≠ 추정` 이 되고(실측 2원), 그건 이 표가
+            # 테너별 KRD 를 세우는 이유 자체를 깨뜨린다.
+            dbp = d.get("dbp") or {}
+            d["est"] = {lb: (0 if dbp.get(lb) is None else round(-k * dbp[lb]))
+                        for lb, k in d["krd"].items()}
+            d["estTotal"] = sum(d["est"].values())     # 총계는 성분의 합이다
+        if d.get("actual") is not None:
+            # 「그날 손익」이 정본이고 **평가가 잔차를 진다**(엔진과 같은 규칙).
+            d["valuation"] = (d["actual"] - (d.get("carry") or 0)
+                              - (d.get("rolldown") or 0) - (d.get("funding") or 0))
+            if d.get("estTotal") is not None:
+                d["residual"] = d["valuation"] - d["estTotal"]
+        out.append(d)
+    return out
+
+
+def _mr_real_accounting(r: dict, *, kind: str, tenor: str, principal: float,
+                        spec) -> bool:
+    """`simulate()` 의 **언제** 위에 백테스트·시뮬의 **얼마** 를 얹는다
+    [OWNER 2026-09-03 — "캐리 롤다운 다 넣고 우리가 원래 사용하던 백테스트/
+    시뮬레이션에서의 대사와 동일하게 작성하기"].
+
+    ## 무엇을 바꾸고 무엇을 안 바꾸나
+
+    **엔진 함수는 안 건드린다.** `mrbacktest.simulate` 는 PMS 원본 이식이고
+    합성 픽스처로 잠겨 있다(`test_mrbacktest.test_kpi_conformance_vector_matches_pms`).
+    그것이 정하는 것은 **진입·청산 시점**이고, 여기서 바꾸는 것은 **그 구간의
+    돈을 어떻게 세는가**다. 잠긴 벡터는 그대로 통과한다.
+
+    ## 왜 바꾸나
+
+    종전 산술은 `평가 = 명목 × Δ스프레드` 하나였다 — **롤다운도 조달도 없었다.**
+    실측(BSS-7Y 16건): 엔진이 안 세는 롤다운이 789만원인데 엔진 총손익이
+    688만원이다. 안 세는 항이 세는 전부보다 크면 그건 근사가 아니라 다른 물건이다.
+
+    그래서 BSS 를 **실제 자산스왑으로 가격해** 평가·캐리·롤다운·조달을 받는다
+    (`cashbond.book_recon` — 백테스트·시뮬 대사가 쓰는 바로 그 함수). 비용만
+    엔진의 것을 그대로 둔다 — `costBp` 는 전략의 노브지 상품의 성질이 아니다.
+
+        그날 손익 = 평가 + 캐리 + 롤다운 + 조달 + 비용
+
+    ## 선물 계열은 안 바꾼다
+
+    자산스왑이 아니라 이 경로가 없다(증거금·일일정산). 그때 `False` 를 돌려주고
+    라우트가 그 사실을 페이로드에 싣는다 — 두 회계가 섞여 있으면 화면이 말해야 한다.
+
+    ## 달력이 어긋나는 날
+
+    대사는 민평 달력, 엔진은 계열 달력이라 대사 행의 날이 봉에 없을 수 있다.
+    **버리지 않는다** — 다음 봉으로 이월해서 얹는다. 그래야 거래의 세로합이
+    대사표의 합과 한 자도 안 갈린다.
+    """
+    if kind != "bss":
+        return False
+    trades = r["trades"]
+    if not trades:
+        return False
+    try:
+        m = creditmatrix.load()
+    except Exception:                                  # noqa: BLE001
+        return False
+
+    scale = principal / MR_REF_PRINCIPAL
+    #: 날짜 → 네 성분. 여러 거래가 한 날을 나눠 갖지 않는다(한 번에 한 포지션).
+    day: dict[str, tuple[float, float, float, float]] = {}
+    per_trade: list[dict[str, float]] = []
+    for t in trades:
+        got = _mr_recon_rows(
+            m, tenor, dt.date.fromisoformat(t["entryDate"]),
+            dt.date.fromisoformat(t["exitDate"]), -int(t["direction"]), spec)
+        if got is None:
+            return False                               # 한 건이라도 못 재면 전부 안 바꾼다
+        rows = got["rows"]
+        agg = {"mtm": 0.0, "carry": 0.0, "rolldown": 0.0, "funding": 0.0}
+        for row in _mr_scale_rows(rows, scale):
+            if row.get("actual") is None:
+                continue                               # 이월 앵커 — 오늘의 돈이 아니다
+            # **「그날 손익」이 정본이고 평가가 잔차를 진다** — `splitKrw` 의 그
+            # 규칙(`lib/krw.ts`, 2026-08-14). 서버가 성분마다 따로 반올림하므로
+            # `actual ≠ 평가+캐리+롤다운+조달` 이고(실측 거래당 최대 23원), 각자
+            # 더하면 대사표의 합과 헤드라인이 갈린다. 한쪽이 잔차를 지면 **줄이
+            # 반드시 가로로 더해지고** 표와 엔진이 한 자도 안 갈린다.
+            c, rd, f = (row.get("carry") or 0.0), (row.get("rolldown") or 0.0), (row.get("funding") or 0.0)
+            v = (row.get("actual") or 0.0) - c - rd - f
+            prev = day.get(row["t"], (0.0, 0.0, 0.0, 0.0))
+            day[row["t"]] = (prev[0] + v, prev[1] + c, prev[2] + rd, prev[3] + f)
+            agg["mtm"] += v
+            agg["carry"] += c
+            agg["rolldown"] += rd
+            agg["funding"] += f
+        per_trade.append(agg)
+
+    # ── 봉에 얹는다. 봉에 없는 날은 **다음 봉으로 이월**한다(위 「달력」). ──
+    carry_over = [0.0, 0.0, 0.0, 0.0]
+    seen: set[str] = set()
+    cum = 0.0
+    trade_cum = 0.0
+    for pt in r["points"]:
+        d = pt["date"] if "date" in pt else pt["t"]
+        got = day.get(d)
+        if got:
+            seen.add(d)
+        v, c, rd, f = (
+            (got[0] + carry_over[0], got[1] + carry_over[1],
+             got[2] + carry_over[2], got[3] + carry_over[3]) if got
+            else (carry_over[0], carry_over[1], carry_over[2], carry_over[3]))
+        carry_over = [0.0, 0.0, 0.0, 0.0]
+        cost = pt["barCost"]
+        pt["mtm"] = v
+        pt["barCarry"] = c
+        pt["barRolldown"] = rd
+        pt["barFunding"] = f
+        pt["dailyPnl"] = v + c + rd + f + cost
+        cum += pt["dailyPnl"]
+        pt["cumulativePnl"] = cum
+        trade_cum = 0.0 if pt["position"] == 0 and pt["dailyPnl"] == 0 else trade_cum + pt["dailyPnl"]
+        pt["tradePnl"] = trade_cum
+    # 봉에 못 얹은 날 — 마지막 봉에 몰아 얹어 **한 자도 안 잃는다**.
+    left = [sum(day[d][i] for d in day if d not in seen) for i in range(4)]
+    if any(abs(x) > 1e-9 for x in left) and r["points"]:
+        last = r["points"][-1]
+        last["mtm"] += left[0]
+        last["barCarry"] += left[1]
+        last["barRolldown"] += left[2]
+        last["barFunding"] += left[3]
+        last["dailyPnl"] += sum(left)
+        last["cumulativePnl"] += sum(left)
+        last["tradePnl"] += sum(left)
+
+    for t, agg in zip(trades, per_trade):
+        t["mtm"] = agg["mtm"]
+        t["carry"] = agg["carry"]
+        t["rolldown"] = agg["rolldown"]
+        t["funding"] = agg["funding"]
+        t["pnl"] = agg["mtm"] + agg["carry"] + agg["rolldown"] + agg["funding"] + t["cost"]
+
+    r["summary"].update(mrbt.summarize(r["points"], trades))
+    return True
+
+
 def _mr_reconcilable(pts: list[dict], kind: str) -> list[dict]:
     """**대사할 수 있는 구간만** 엔진에 넣는다 [OWNER 2026-09-03 — "2020-01-02
     이전의 데이터를 안 보이게 해서 차단"].
@@ -1165,7 +1373,22 @@ def _mr_leg(id: str, *, lookback: int, entryZ: float, exitZ: float, stopZ: float
                       reverse_exit=reverseExit,
                       close_open_at_end=countOpen,
                       tradable_dv=tradable)
+
+    # ── 회계를 백테스트·시뮬과 같은 것으로 [OWNER 2026-09-03] ────────────────
+    # `simulate` 가 정한 **언제** 위에 실제 자산스왑의 **얼마** 를 얹는다.
+    # 엔진 함수는 안 건드린다(잠긴 적합성 벡터가 그대로 통과한다) — 근거와
+    # 한계는 `_mr_real_accounting` 머리에.
+    real = False
+    if kinds[id] == "bss":
+        pv_r = pv01(_curves["now"], TENOR_T[mrc._tenor_of(id)])
+        real = _mr_real_accounting(
+            r, kind=kinds[id], tenor=mrc._tenor_of(id),
+            principal=notional / (pv_r * 1e-4), spec=spec)
+
     return {"id": id, "label": labels[id], "kind": kinds[id], "unit": unit,
+            # 이 다리의 수가 «실가격 회계» 인가 «엔진 근사» 인가. 두 회계가
+            # 한 화면에 섞이면 화면이 그 사실을 말해야 한다.
+            "real": real,
             "dates": dates, "vals": vals, "disp": disp, "dirs": dirs,
             "carryKrw": carry_krw, "carryDefn": carry_defn,
             "carryLegs": carry_legs,
@@ -1183,7 +1406,8 @@ LEG_RECON_TOL_KRW = 1.0
 def _attach_leg_recon(points: list[dict], *, kind: str,
                       leg_lv: dict[str, tuple[float, float]],
                       pts: list[dict], notional: float,
-                      carry_legs: list[tuple[str, list[float]]]) -> None:
+                      carry_legs: list[tuple[str, list[float]]],
+                      levels_only: bool = False) -> None:
     """봉마다 **다리별 대사 줄**을 붙인다 [OWNER 2026-09-03 — "채권 KRD, bp,
     손익과 IRS KRD, bp, 손익, 그리고 종합 손익이 하루에 찍혀야 함"].
 
@@ -1230,6 +1454,13 @@ def _attach_leg_recon(points: list[dict], *, kind: str,
 
     합이 엔진의 수와 갈리면 `legs` 를 아예 안 붙인다 — 화면은 열이 없는 것을
     조용히 접고, 지어낸 분해가 대사표에 서지 않는다(이 리포의 그 규율).
+
+    ## 실가격 회계에서는 **레벨만** 싣는다
+
+    실가격 회계가 서면 그 구간의 돈은 자산스왑 대사가 센다 — 다리의 감도·손익·
+    캐리는 폐기된 근사(`평가 = 명목 × Δ스프레드`)의 값이라 같이 세우면 한 화면에
+    두 회계가 선다. 「일별 레벨」 칸이 쓰는 **레벨**은 근사와 무관한 사실이므로
+    그것만 남긴다.
     """
     names = mrc.LEG_NAMES.get(kind)
     if not names:
@@ -1267,11 +1498,17 @@ def _attach_leg_recon(points: list[dict], *, kind: str,
                 car = -hold * carry_by_name[nm][i]
             # `+ 0.0` 은 **음수 0 을 없앤다** — `-hold * 0.0` 이 `-0.0` 이 되고
             # JSON 을 타고 화면에서 「-0」 으로 선다(선물 다리의 캐리가 늘 그렇다).
+            if levels_only:
+                legs.append({"k": nm, "lvl": round(levels[i][j], 4)})
+                continue
             legs.append({"k": nm, "lvl": round(levels[i][j], 4),
                          "dv": None if dv is None else round(dv, 4) + 0.0,
                          "krd": round(krd, 2) + 0.0, "mtm": round(mtm, 2) + 0.0,
                          "carry": round(car, 2) + 0.0})
         # 자기검사 — 합이 엔진의 수와 갈리면 통째로 접는다.
+        if levels_only:
+            rows.append(legs)
+            continue
         if abs(sum(g["mtm"] for g in legs) - p["mtm"]) > LEG_RECON_TOL_KRW:
             return
         if have_carry and abs(sum(g["carry"] for g in legs) - p["carry"]) > LEG_RECON_TOL_KRW:
@@ -1392,6 +1629,12 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
             # 셋의 합 = `pnl`(그날 손익)이고, 대사표가 그 항등을 잰다.
             "mtm": round(r["points"][i]["mtm"], 2),
             "carry": round(r["points"][i]["barCarry"], 2),
+            # 롤다운·조달은 **실가격 회계에서만** 온다(엔진 근사에는 그 항이
+            # 없다). 없으면 열이 조용히 접힌다 — 0 으로 채우면 «그날 롤다운이
+            # 0 이었다» 는 거짓말이 된다.
+            **({"rolldown": round(r["points"][i]["barRolldown"], 2),
+                "funding": round(r["points"][i]["barFunding"], 2)}
+               if leg["real"] else {}),
             "cost": round(r["points"][i]["barCost"], 2),
             "pnl": round(r["points"][i]["dailyPnl"], 2),
             "pos": r["points"][i]["position"],
@@ -1408,7 +1651,8 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
         p["irs"] = round(gv[1], 4) if gv else None
         p["cd"] = round(c, 4) if c is not None else None
     _attach_leg_recon(points, kind=leg["kind"], leg_lv=leg_lv, pts=pts,
-                      notional=notional, carry_legs=carry_legs)
+                      notional=notional, carry_legs=carry_legs,
+                      levels_only=leg["real"])
     trades = [
         {
             "entryT": t["entryDate"], "exitT": t["exitDate"],
@@ -1437,6 +1681,9 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
             # 화면이 그 항등을 그대로 보여 준다(이 앱의 3분해 문법).
             "mtm": round(t["mtm"], 2),
             "carry": round(t["carry"], 2),
+            # 실가격 회계에서만 오는 둘 — 엔진 근사에는 그 항이 없다.
+            **({"rolldown": round(t["rolldown"], 2),
+                "funding": round(t["funding"], 2)} if leg["real"] else {}),
             "cost": round(t["cost"], 2),
             "bars": t["bars"],
         }
@@ -1454,6 +1701,9 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
                    "countOpen": countOpen},
         # 명목(₩/bp)의 액면 환산 — 위 주석의 근사. 거래 표·대사표가 「이 손익을
         # 내려면 실제로 몇 억을 걸어야 했나」를 적을 수 있게 낸다.
+        # 이 실행의 수가 «실가격 회계» 인가 «엔진 근사» 인가 — 화면이 그 사실을
+        # 말해야 한다. 선물 계열은 자산스왑이 아니라 늘 근사다.
+        "real": leg["real"],
         "principal": principal,
         # 비용이 봉마다 다르면 「편도 몇 bp」가 한 숫자로 안 나온다 — 실제로 쓴
         # 범위와 중앙값을 화면이 적을 수 있게 낸다.
@@ -1620,18 +1870,20 @@ def mr_recon(id: str, entry: str, exit: str, notional: float = 1_000_000.0,
     # 라우트가 화면 머리에 적는 그 식 그대로다(`mrcarry.carry_krw` 의 원금).
     pv = pv01(_curves["now"], TENOR_T[tenor])
     principal = notional / (pv * 1e-4)
-    # 엔진 부호 `-1` 이 **국고 매수**다(`mr.dirs_for` — BSS 는 한 방향뿐).
-    # 자산스왑의 `direction` 은 채권 쪽 부호라 뒤집어 넘긴다.
-    pos = cashbond.BondPosition(
-        kind=cashbond.KIND_ASW, bond_type="KTB", tenor=tenor,
-        direction=-int(dir), notional=principal, entry=entry_d, exit=exit_d)
     spec = _funding_spec(fundingBasis, fundingSpreadBp)
-    try:
-        rec = cashbond.book_recon(m, _dataset, [pos], spec)
-    except (cashbond.CashBondError, creditmatrix.CreditMatrixError) as exc:
-        # 가격기가 못 세우는 자리도 **이유를 그대로** 넘긴다.
-        return {"available": False, "why": str(exc)}
-    rec["available"] = True
+    # 엔진 부호 `-1` 이 **국고 매수**다(`mr.dirs_for` — BSS 는 한 방향뿐).
+    # 자산스왑의 `direction` 은 채권 쪽 부호라 뒤집어 넘긴다(`_mr_recon_rows`
+    # 안에서 포지션이 선다 — 캐시 키가 그 인자들이다).
+    # **엔진과 같은 길을 지난다** — 기준 액면에서 한 번 재고 배수로 쓴다. 각자
+    # 재면 반올림이 벌어져 표와 헤드라인이 갈린다(`_mr_scale_rows` 머리).
+    got = _mr_recon_rows(m, tenor, entry_d, exit_d, -int(dir), spec)
+    if got is None:
+        return {"available": False,
+                "why": "대사를 못 세웠어요 — 구간이 너무 길거나 민평이 그 날들을 "
+                       "다 갖고 있지 않아요."}
+    rec = {"tenors": got["tenors"],
+           "rows": _mr_scale_rows(got["rows"], principal / MR_REF_PRINCIPAL),
+           "truncated": False, "available": True}
     rec["principal"] = {"krw": round(principal), "pv01": pv}
     return rec
 

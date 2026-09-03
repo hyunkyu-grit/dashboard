@@ -456,29 +456,28 @@ describe('스프레드는 한 물건이 아니다 — 대사가 다리마다 선
     expect(code).toContain('−KRD × Δ = 손익');
   });
 
-  it('실가격과 엔진을 **같은 기준으로** 놓고, 뺀 롤다운은 숨기지 않는다', () => {
-    /* [OWNER 2026-09-03 — "1번 해결방법 찾아주세요"]. 두 수를 날것으로 나란히
-       놓으면 차이가 엔진의 369% 인데, 그 대부분은 **둘이 다른 것을 세고 있어서**
-       생긴다. 비용을 양쪽에 물리고(같은 스프레드를 같은 값에 지난다) 엔진에
-       없는 롤다운을 빼면 22% 로 준다(실측 BSS-7Y 16건: 2,543만 → 943만 → 154만).
+  it('대사표가 곧 엔진의 장부다 — 줄이 검산이 된다', () => {
+    /* [OWNER 2026-09-03 — "캐리 롤다운 다 넣고 우리가 원래 사용하던 백테스트/
+       시뮬레이션에서의 대사와 동일하게 작성하기"].
 
-       그리고 **뺀 롤다운을 숨기면 안 된다** — 그게 이 대사의 가장 큰 수확이다.
-       실측에서 롤다운 789만원이 엔진 총손익 688만원보다 크다. 엔진이 안 세는
-       항이 엔진이 세는 전부보다 크다는 사실이 화면에 서야 한다.
+       종전에는 둘이 다른 회계였다 — 엔진은 `평가 = 명목 × Δ스프레드` 하나뿐이라
+       롤다운도 조달도 없었고, 실측에서 **안 세는 롤다운(789만원)이 세는 전부
+       (688만원)보다 컸다.** 이제 진입·청산 시점만 엔진이 정하고 그 구간의 돈은
+       이 표가 센다(`평가·캐리·롤다운·조달` + 전략의 비용). 실측 차 0.00원.
 
-       표시 정밀도: `splitKrw` 의 수법(`lib/krw.ts`) — 엔진과 차이를 각각 한 번씩
-       반올림하고 실가격이 그 합으로 선다. 각자 반올림하면 만원에서 어긋난다. */
+       그래서 이 줄은 «차이의 변명» 이 아니라 **검산**이다 — 표의 세로합에 비용을
+       더하면 거래 손익이 나온다. 그 산술이 화면에서 더해져야 하므로 만원 단위
+       반올림도 `splitKrw` 의 수법을 쓴다(`lib/krw.ts`). */
     const code = src('src/mr/StrategyWindow.tsx');
     expect(code).toContain('function bridgeText');
-    /* 같은 기준 — 비용을 더하고 롤다운을 뺀 값이 비교 대상이다. */
-    expect(code).toMatch(/reconTotal\(r\) \+ t\.cost - roll/);
-    /* 표시 정밀도에서 더해진다 — 실가격을 «엔진 + 차이» 로 그린다. */
-    expect(code).toMatch(/uEng \+ uDiff/);
+    expect(code).toMatch(/uTot \+ uCost/);
     expect(code).toMatch(/manUnits\(/);
     expect(code).toMatch(/fmtKrwFromMan\(/);
-    /* 뺀 롤다운은 숨기지 않는다. */
-    expect(code).toContain('그 롤다운이');
-    expect(code).toContain('엔진은 그만큼 덜 세요');
+    for (const w of ['표 세로합', '거래 손익', '전략의 노브']) expect(code).toContain(w);
+    /* 계약이 두 회계를 구분해 말한다 — 선물은 이 표가 없다. */
+    const api = fs.readFileSync(path.join(root, 'src/mr/api.ts'), 'utf8');
+    expect(api).toMatch(/real: boolean/);
+    expect(api).toMatch(/rolldown\?: number/);
   });
 
   it('캐리도 다리마다 온다 — 엔진의 곱셈이 선형이라 합이 닫힌다', () => {
