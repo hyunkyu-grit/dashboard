@@ -218,9 +218,12 @@ class TestRealRecon:
         assert first["available"], first.get("why")
         assert first["tenors"], "테너 열이 비었다"
         assert first["rows"], "행이 없다"
-        # 액면은 **전략 라우트와 같은 수**여야 한다 — 두 화면이 다른 명목으로
-        # 같은 거래를 말하면 대사가 아니다.
-        assert first["principal"]["krw"] == b["principal"]["krw"]
+        # 액면은 **그 거래의 진입일 커브**로 잰 것이다 — 머리의 액면(«지금
+        # 세우면»)과 다른 것이 정상이다(2026-09-03 검산). 두 화면이 갈리지
+        # 않는다는 것은 「명목 = 액면 × pv01 × 1e-4」가 닫히는 것으로 잰다.
+        n = b["params"]["notional"]
+        p0 = first["principal"]
+        assert abs(p0["krw"] * p0["pv01"] * 1e-4 - n) < 1.0
 
         checked = 0
         for r in first["rows"]:
@@ -365,3 +368,33 @@ class TestRealRecon:
         from tests import test_mrbacktest as tb
 
         tb.test_kpi_conformance_vector_matches_pms()
+
+    def test_the_notional_knob_means_the_same_thing_on_every_trade(self, client):
+        """**「명목 N원/bp」가 모든 거래에서 같은 뜻이다** [검산 2026-09-03].
+
+        자산스왑의 명목은 액면인데 노브는 DV01(₩/bp)이라 환산이 필요하다.
+        종전에는 그 환산을 **지금 커브** pv01 하나로 6년 내내 했다 — `mrcarry` 가
+        「[알려진 근사]」로 적으면서 «크기만 정하고 부호·시점은 안 건드린다» 고
+        했고, 손익이 `명목 × Δ스프레드` 이던 시절에는 참이었다.
+
+        **회계가 실가격으로 바뀌면서 그 문장이 거짓이 됐다.** 손익이 액면을
+        가격해서 나오므로 환산 오차가 손익 전체를 스케일한다. 손으로 재 보니
+        진입 시점 연금계수가 지금보다 최대 16%(10Y) 커서, 옛 거래가 노브가
+        말하는 것보다 그만큼 큰 포지션이었고 총손익이 2~8% 부풀어 있었다.
+
+        그래서 거래마다 진입일 커브로 잰다. 이 시험이 재는 것이 그 항등이다 —
+        페이로드 안에서 **정확히** 닫혀야 손 대사가 선다.
+        """
+        for sid in ("BSS-3Y", "BSS-7Y", "BSS-10Y"):
+            b = client.get(f"/api/mr/strategy?id={sid}").json()
+            n = b["params"]["notional"]
+            sizes = []
+            for t in b["trades"]:
+                r = client.get(f"/api/mr/recon?id={sid}&entry={t['entryT']}"
+                               f"&exit={t['exitT']}&dir={t['dir']}").json()
+                assert r["available"], f"{sid} {t['entryT']}: {r.get('why')}"
+                p = r["principal"]
+                assert abs(p["krw"] * p["pv01"] * 1e-4 - n) < 1.0,                     f"{sid} {t['entryT']}: 명목 ≠ 액면 × pv01 × 1e-4"
+                sizes.append(p["krw"])
+            # 커브가 움직인 만큼 액면도 움직여야 한다 — 다 같으면 옛 규약이다.
+            assert max(sizes) / min(sizes) > 1.005, f"{sid}: 액면이 안 움직인다"

@@ -1028,6 +1028,56 @@ _mr_recon_cache: dict[tuple, dict | None] = {}
 MR_RECON_CACHE_MAX = 4096
 
 
+#: 날짜 → 그날 커브의 par-swap 연금계수. 부트스트랩이 비싸서 캐시한다.
+_mr_pv01_cache: dict[tuple[str, float], float] = {}
+
+
+def _mr_pv01_at(on: dt.date, tenor_years: float) -> float | None:
+    """**그날 커브의** pv01. 없으면 `None`.
+
+    ## 왜 «그날» 이어야 하나 [검산 2026-09-03]
+
+    명목 노브는 `₩/bp`(DV01)이고 자산스왑의 명목은 **액면**이라 환산이 필요한데,
+    종전에는 그 환산을 **지금 커브**의 pv01 하나로 6년 내내 했다. `mrcarry` 가
+    그것을 「[알려진 근사]」로 적어 두면서 «이 환산은 캐리의 크기만 정하고 부호나
+    시점은 안 건드린다» 고 했고, 손익이 `명목 × Δ스프레드` 이던 시절에는 참이었다.
+
+    **회계를 실가격으로 바꾸면서 그 문장이 거짓이 됐다** — 이제 손익은 그 액면을
+    가격해서 나오므로 환산 오차가 손익 전체를 스케일한다. 손으로 재 보니 진입
+    시점 연금계수가 6.15~6.76(7Y)이고 지금은 6.08 이라, 옛 거래일수록 **명목
+    노브가 말하는 것보다 최대 11% 큰 포지션**이었다(10Y 는 16%). 총손익으로는
+    2~8% 다.
+
+    그래서 거래마다 **진입일 커브**로 잰다. 그러면 「명목 1,000,000원/bp」가 모든
+    거래에서 같은 뜻이 되고, 백테스트가 요구하는 «비교 가능한 거래» 가 된다.
+    """
+    key = (on.isoformat(), tenor_years)
+    if key in _mr_pv01_cache:
+        return _mr_pv01_cache[key]
+    try:
+        from .backtest import _curve_at                # noqa: PLC0415 — 순환 회피
+        j = {d: i for i, d in enumerate(_dataset.dates)}.get(on)
+        if j is None:
+            # IRS 달력에 없는 날 — 직전 영업일로 물러선다(민평 달력의 그 규약).
+            prev = [i for i, d in enumerate(_dataset.dates) if d <= on]
+            if not prev:
+                return None
+            j = prev[-1]
+        v = float(pv01(_curve_at(_dataset, j), tenor_years))
+    except Exception:                                  # noqa: BLE001
+        return None
+    if len(_mr_pv01_cache) > 8192:
+        _mr_pv01_cache.clear()
+    _mr_pv01_cache[key] = v
+    return v
+
+
+def _mr_principal_at(on: dt.date, tenor: str, notional: float) -> float | None:
+    """그 거래의 **액면** — 진입일 커브에서 명목(₩/bp)을 액면으로."""
+    pv = _mr_pv01_at(on, TENOR_T[tenor])
+    return None if not pv else notional / (pv * 1e-4)
+
+
 def _mr_recon_rows(m, tenor: str, entry: dt.date, exit_: dt.date,
                    direction: int, spec) -> dict | None:
     """기준 액면에서의 대사 — `{"tenors", "rows"}`. 못 세우면 `None`.
@@ -1102,7 +1152,7 @@ def _mr_scale_rows(rows: list[dict], scale: float) -> list[dict]:
     return out
 
 
-def _mr_real_accounting(r: dict, *, kind: str, tenor: str, principal: float,
+def _mr_real_accounting(r: dict, *, kind: str, tenor: str, notional: float,
                         spec) -> bool:
     """`simulate()` 의 **언제** 위에 백테스트·시뮬의 **얼마** 를 얹는다
     [OWNER 2026-09-03 — "캐리 롤다운 다 넣고 우리가 원래 사용하던 백테스트/
@@ -1148,11 +1198,17 @@ def _mr_real_accounting(r: dict, *, kind: str, tenor: str, principal: float,
     except Exception:                                  # noqa: BLE001
         return False
 
-    scale = principal / MR_REF_PRINCIPAL
     #: 날짜 → 네 성분. 여러 거래가 한 날을 나눠 갖지 않는다(한 번에 한 포지션).
     day: dict[str, tuple[float, float, float, float]] = {}
     per_trade: list[dict[str, float]] = []
     for t in trades:
+        # 액면은 **거래마다 진입일 커브**로 잰다 — 그래야 「명목 N원/bp」가 모든
+        # 거래에서 같은 뜻이 된다(`_mr_pv01_at` 머리의 검산).
+        principal = _mr_principal_at(
+            dt.date.fromisoformat(t["entryDate"]), tenor, notional)
+        if principal is None:
+            return False
+        scale = principal / MR_REF_PRINCIPAL
         got = _mr_recon_rows(
             m, tenor, dt.date.fromisoformat(t["entryDate"]),
             dt.date.fromisoformat(t["exitDate"]), -int(t["direction"]), spec)
@@ -1380,10 +1436,9 @@ def _mr_leg(id: str, *, lookback: int, entryZ: float, exitZ: float, stopZ: float
     # 한계는 `_mr_real_accounting` 머리에.
     real = False
     if kinds[id] == "bss":
-        pv_r = pv01(_curves["now"], TENOR_T[mrc._tenor_of(id)])
         real = _mr_real_accounting(
             r, kind=kinds[id], tenor=mrc._tenor_of(id),
-            principal=notional / (pv_r * 1e-4), spec=spec)
+            notional=notional, spec=spec)
 
     return {"id": id, "label": labels[id], "kind": kinds[id], "unit": unit,
             # 이 다리의 수가 «실가격 회계» 인가 «엔진 근사» 인가. 두 회계가
@@ -1866,10 +1921,13 @@ def mr_recon(id: str, entry: str, exit: str, notional: float = 1_000_000.0,
         return {"available": False,
                 "why": MR_RECON_WHY["after"].format(last=m.dates[-1].isoformat())}
 
-    # 명목 노브는 ₩/bp(DV01)인데 자산스왑의 명목은 **액면**이다 — 환산은 낱개
-    # 라우트가 화면 머리에 적는 그 식 그대로다(`mrcarry.carry_krw` 의 원금).
-    pv = pv01(_curves["now"], TENOR_T[tenor])
-    principal = notional / (pv * 1e-4)
+    # 명목 노브는 ₩/bp(DV01)인데 자산스왑의 명목은 **액면**이다. 환산은
+    # **그 거래의 진입일 커브**로 한다 — 엔진이 같은 자를 쓰므로 표와 헤드라인이
+    # 갈리지 않는다(`_mr_pv01_at` 머리의 검산).
+    principal = _mr_principal_at(entry_d, tenor, notional)
+    if principal is None:
+        return {"available": False,
+                "why": "진입일 커브를 못 읽어서 액면을 못 세워요."}
     spec = _funding_spec(fundingBasis, fundingSpreadBp)
     # 엔진 부호 `-1` 이 **국고 매수**다(`mr.dirs_for` — BSS 는 한 방향뿐).
     # 자산스왑의 `direction` 은 채권 쪽 부호라 뒤집어 넘긴다(`_mr_recon_rows`
@@ -1884,7 +1942,10 @@ def mr_recon(id: str, entry: str, exit: str, notional: float = 1_000_000.0,
     rec = {"tenors": got["tenors"],
            "rows": _mr_scale_rows(got["rows"], principal / MR_REF_PRINCIPAL),
            "truncated": False, "available": True}
-    rec["principal"] = {"krw": round(principal), "pv01": pv}
+    # 액면과 **그 액면을 만든 pv01** 을 같이 싣는다 — 페이로드 안에서
+    # `명목 = 액면 × pv01 × 1e-4` 이 닫혀야 손 대사가 선다(이 리포의 그 규율).
+    rec["principal"] = {"krw": round(principal),
+                        "pv01": _mr_pv01_at(entry_d, TENOR_T[tenor])}
     return rec
 
 

@@ -153,12 +153,27 @@ describe('거래 한 줄이 스스로 검산이 된다', () => {
     expect(src('src/mr/BookWindow.tsx')).toMatch(/exitZ == null \? '—'/);
   });
 
-  it('명목·액면이 화면에 선다 — 액면은 근사임을 같이 적는다', () => {
-    /* 서버가 환산한다(지금 커브 pv01 하나 — 근사). 계약에 있어야 화면이 적는다. */
+  it('명목·액면이 화면에 서고, 액면은 **거래마다 진입일 커브**로 잰다', () => {
+    /* 2026-09-03 검산이 잡은 자리다. 종전에는 액면을 **지금 커브** pv01 하나로
+       6년 내내 환산했고, `mrcarry` 가 그것을 「[알려진 근사]」로 적으면서
+       «크기만 정하고 부호·시점은 안 건드린다» 고 했다 — 손익이
+       `명목 × Δ스프레드` 이던 시절에는 참이었다.
+
+       회계가 실가격으로 바뀌면서 그 문장이 거짓이 됐다: 손익이 액면을 가격해서
+       나오므로 환산 오차가 손익 전체를 스케일한다. 실측으로 옛 거래가 명목
+       노브보다 최대 16%(10Y) 큰 포지션이었고 총손익이 2~8% 부풀어 있었다.
+
+       그래서 거래마다 진입일 커브로 잰다. 지키는 명제는 **「명목 N원/bp」가 모든
+       거래에서 같은 뜻이다** — 그 항등(`명목 = 액면 × pv01 × 1e-4`)이 페이로드
+       안에서 닫히는 것은 `test_mr_legrecon` 이 라우트를 타고 잰다. */
     expect(src('src/mr/api.ts')).toMatch(/principal: \{ krw: number; pv01: number \} \| null/);
-    expect(code).toMatch(/pv01 근사/);
+    /* 머리의 액면은 «지금 세우면» 이라고 화면이 말한다. */
+    expect(code).toMatch(/지금 커브/);
     const py = fs.readFileSync(path.join(root, 'backend/app/main.py'), 'utf8');
-    /* 환산식은 캐리의 그 식과 같아야 한다 — 명목 / (pv01 × 1e-4). */
-    expect(py).toMatch(/notional \/ \(pv \* 1e-4\)/);
+    expect(py).toMatch(/def _mr_pv01_at\(/);
+    expect(py).toMatch(/def _mr_principal_at\(/);
+    /* 대사 라우트와 엔진이 **같은 자**를 쓴다 — 안 그러면 표와 헤드라인이 갈린다. */
+    expect(py).toMatch(/principal = _mr_principal_at\(entry_d, tenor, notional\)/);
+    expect(py).toMatch(/principal = _mr_principal_at\([\s\S]{0,40}t\["entryDate"\]/);
   });
 });

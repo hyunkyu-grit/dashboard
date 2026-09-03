@@ -551,7 +551,7 @@ function reconSub(t: MrStrategyTrade, run: MrStrategyRun): string {
      ±이 수라(다리 둘이면 합이 0), 이 표만 떼어 봐도 검산이 서게. 액면은 pv01
      근사(거래 표의 그 각주). */
   const size = ` · 명목 ${run.params.notional.toLocaleString()}원/bp` +
-    (run.principal ? `(액면 약 ${fmtEok(run.principal.krw)})` : '');
+    (run.principal ? `(액면 약 ${fmtEok(run.principal.krw)} — 지금 커브)` : '');
   return `${t.entryT} → ${t.exitT} · ${t.bars}봉 · ${legs}${out} · ${WHY_WORD[t.why]}${size}`;
 }
 
@@ -738,7 +738,12 @@ export function StrategyWindow({
   /* 거래 표 머리 — 총 건수·명목·액면 [OWNER 2026-09-02 — "진입 레벨과 기준
      노셔널과 같은 것들이 전부 나와야 직접 대사가 가능"]. 명목·액면은 모든
      거래에 **같은 수**라 열이 아니라 머리에 선다 — 같은 수 서른여덟 줄은 표가
-     없는 정보를 있는 척하는 것이다. 액면은 pv01 근사(api.ts `principal` 주석). */
+     없는 정보를 있는 척하는 것이다.
+
+     액면은 **지금 커브** 기준이다 — 「지금 세우면 이만큼」이다. 거래마다의
+     액면은 그 거래의 진입일 커브로 따로 잰다(2026-09-03 검산: 그렇게 안 하면
+     옛 거래가 명목 노브보다 최대 16% 큰 포지션이 된다). 그 값은 대사표가
+     적는다. */
   const tradeSub = !run ? undefined
     : run.trades.length === 0 ? '이 창에 거래가 없어요'
     : [
@@ -747,7 +752,7 @@ export function StrategyWindow({
           ? `${run.trades.length}건`
           : `구간에 걸친 ${shownTrades.length}건 / 전체 ${run.trades.length}건`,
         `명목 ${run.params.notional.toLocaleString()}원/bp`,
-        run.principal ? `액면 약 ${fmtEok(run.principal.krw)}(pv01 근사)` : null,
+        run.principal ? `액면 약 ${fmtEok(run.principal.krw)}(지금 커브)` : null,
       ].filter((x): x is string => x != null).join(' · ');
 
   /* 「실전 규칙이 켜져 있어요」 각주는 **없앴다** [2026-09-02 검사]. 그 다섯을
@@ -1284,7 +1289,7 @@ export function StrategyWindow({
                      배포 순서 함정) — 후자에 「선물은…」을 적으면 BSS 창이
                      거짓말을 한다. 모르면 조용히 비운다. */
                   note={run.principal
-                    ? `액면 약 ${fmtEok(run.principal.krw)} (pv01 근사)`
+                    ? `액면 약 ${fmtEok(run.principal.krw)} (지금 커브)`
                     : run.principal === null ? '선물은 액면 환산이 없어요' : undefined}
                 />
                 <Stat label="종가" value={run.asof ?? '—'} />
@@ -1685,7 +1690,7 @@ export function StrategyWindow({
                 ? ` 캐리는 ${run.carry.defn}이고 조달은 ${run.carry.funding} 이에요 — 원본 PMS 산술에는 없던 항이에요.`
                 : ''}
               {run.principal
-                ? ` 액면 환산(약 ${fmtEok(run.principal.krw)})은 지금 커브의 pv01 하나로 나눈 근사예요 — 크기만 좌우하고 부호·시점은 안 건드려요.`
+                ? ` 액면은 **거래마다 진입일 커브**로 환산해요 — 그래야 「명목 ${run.params.notional.toLocaleString()}원/bp」가 모든 거래에서 같은 뜻이에요. 머리의 ${fmtEok(run.principal.krw)}은 «지금 세우면» 이고, 거래마다의 액면은 그 거래의 대사표가 적어요(표본 안에서 ${run.real ? '5~16%' : ''} 움직여요).`
                 : ''}
               {/* 다리 레벨의 출처와 항등 — 안 적으면 이 세 열이 어디서 온
                   값인지, 스프레드와 무슨 관계인지 화면만 보고는 알 수 없다. */}
