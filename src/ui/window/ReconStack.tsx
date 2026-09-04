@@ -305,6 +305,22 @@ export function ReconStack({
   };
   /** 다리 모드에서 하루가 차지하는 줄 수 — 다리마다 셋 + 합계 하나. */
   const dayRows = (d: ReconStackDay) => (d.legs?.length ?? 0) * METRICS.length + 1;
+  /** 합계 줄이 그리는 돈 — 하루의 것이되 **추정과 잔차는 다리에서 온다.**
+   *
+   * 서버는 행 수준에도 `est`·`residual` 을 싣는데 그것은 은퇴한 스프레드 자의
+   * 값이다(백테스트·시뮬 표가 아직 그 모양을 쓴다). 그대로 그리면 합계 줄에서
+   * **「잔차 = 평가 − 추정(합계)」가 거짓이 된다** — 실측 2026-09-04, 04-09 행:
+   * 추정 +2,130,866 · 평가 +2,115,609 인데 잔차 칸이 −51,252(옛 자)로 서서
+   * 평가−추정 −15,257 과 갈렸다. 표 밑 각주가 주장하는 항등을 표가 스스로
+   * 깨뜨리는 자리라 다리에서 유도한다. */
+  const daySummary = (d: ReconStackDay): ReconMoney => {
+    if (!legMode) return d;
+    const legs = d.legs ?? [];
+    const res = legs.some((l) => l.residual === null || l.residual === undefined)
+      ? null
+      : legs.reduce((s, l) => s + (l.residual ?? 0), 0);
+    return { ...d, estTotal: dayEstTotal(d), residual: res };
+  };
 
   /* 격자 셀 한 줄 — **다리든 하루든 같은 코드가 그린다.** 두 벌로 쓰면 히트맵
      기준이나 빈칸 규약이 한쪽에서만 바뀐다. */
@@ -579,7 +595,7 @@ export function ReconStack({
                       {summaryCols.map((c) => (
                         <td key={c.label} className="sr-recon-td sr-recon-right">
                           <span className="sr-recon-strong">
-                            <Won v={c.get(d)} />
+                            <Won v={c.get(daySummary(d))} />
                           </span>
                         </td>
                       ))}

@@ -51,9 +51,13 @@ const DAY: ReconStackDay = {
   krd: {},
   dbp: {},
   est: {},
-  estTotal: -195_579,
+  /* 행 수준의 `estTotal`·`residual` 은 **은퇴한 스프레드 자**의 값이다(서버가
+     백테스트·시뮬을 위해 아직 싣는다). 다리 합(-296,162 + 100,583 = -195,579,
+     잔차 -3,838 + -1,583 = -5,421)과 **일부러 다르게** 둬서, 합계 줄이 이 값을
+     그대로 그리면 아래 시험이 잡게 한다. */
+  estTotal: -111_111,
   valuation: -201_000,
-  residual: -5_421,
+  residual: -89_889,
   carry: 73_470,
   rolldown: 1_965,
   funding: -34_455,
@@ -180,6 +184,22 @@ describe('다리별 대사표의 격자', () => {
     expect(money.every((t) => t === '—')).toBe(true);
     // 그런데 KRD 는 서 있다 — 이월 리스크는 사실이다.
     expect(rows[7].textContent).toContain('970,000');
+  });
+
+  /* 표 밑 각주가 주장하는 항등이다 — 「잔차 = 평가 − 추정(합계)」. 합계 줄이
+     행 수준의 옛 값을 그대로 그리면 그 줄에서만 항등이 깨지는데, DOM 구조는
+     멀쩡해서 다른 가드가 못 잡는다(실측 2026-09-04 스크린샷이 잡았다). */
+  it('합계 줄의 추정·잔차는 다리에서 온다 — 옛 스프레드 자가 아니다', () => {
+    const rows = [...draw([DAY], TENORS).querySelectorAll('tbody tr')];
+    const money = [...rows[6].querySelectorAll('td.sr-recon-right')].map(
+      (n) => n.textContent,
+    );
+    // [합계(추정), 평가, 잔차, 캐리, 롤다운, 조달, 그날 손익]
+    expect(money[0]).toBe('-195,579'); // 다리 추정의 합 (행 수준 -111,111 아님)
+    expect(money[2]).toBe('-5,421'); //  다리 잔차의 합 (행 수준 -89,889 아님)
+    // 그리고 그 셋이 실제로 닫힌다.
+    const n = (t: string | null) => Number((t ?? '').replace(/[+,]/g, ''));
+    expect(n(money[1]) - n(money[0])).toBe(n(money[2]));
   });
 
   it('다리가 없으면 종전 그대로 하루 세 줄이다', () => {
