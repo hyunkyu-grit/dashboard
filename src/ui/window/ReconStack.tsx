@@ -11,6 +11,15 @@
  * 앵커다 — 마지막 날의 종가 KRD(다음 영업일로 들고 가는 리스크)만 있고 Δbp·손익은
  * null(—) 이다.
  *
+ * **다리별 대사에서는 일곱 줄이다** [OWNER 2026-09-04 — 「국고매수랑 IRS Pay가
+ * 별개로 뜨게 해줘」]. 행에 `legs` 가 실려 오면 다리마다 그 셋이 서고(국고·IRS)
+ * 합계 한 줄이 닫는다. 왼쪽 고정 열이 셋이 된다 — 날짜(일곱을 덮음) · 다리(셋씩
+ * 덮음) · 구분. 다리는 **자기 커브** 위에 서므로 열 집합이 어긋나고(민평 2.5Y ↔
+ * IRS 4Y·6Y), 표의 열은 합집합이며 없는 칸은 빈칸이다 — 부르는 쪽이 `tenors` 로
+ * 그 합집합을 준다(`backtest/recon.ts` 의 `reconTenors`). 합계 줄의 테너 칸을
+ * 비우는 이유는 혼합 북 격자를 가른 것과 같다: 두 커브의 KRD 는 한 칸에 못
+ * 더한다.
+ *
  * 렌즈 토글(한 번에 한 지표)은 v1 에서 은퇴했다: 트레이딩 시스템 화면과 나란히 놓고
  * 줄 단위로 맞춰 보는 것이 이 표의 목적인데, 시스템 쪽은 세 값이 같이 보이고 이쪽은
  * 하나씩만 보였다. 80영업일 240줄이 요구사항 그 자체다.
@@ -57,14 +66,9 @@ import { useState } from 'react';
 
 import { directionVar, tintFor } from '@/theme/tint';
 
-export interface ReconStackDay {
-  /** ISO 날짜 — 행 키이자 화면의 MM-DD */
-  date: string;
-  /** 툴팁. 연도와 (시뮬) D+n 을 진다. */
-  title?: string;
-  krd: Record<string, number>;
-  dbp: Record<string, number | null>;
-  est: Record<string, number>;
+/** 돈 칸 — **하루도 다리도** 이 모양을 진다. 요약 열(평가·잔차·캐리·롤다운·
+ * 조달·그날 손익)이 둘 다에 서므로 한 타입이어야 게터가 하나로 돈다. */
+export interface ReconMoney {
   /** 이월 앵커 블록에서 null — 아직 오지 않은 날이다. */
   estTotal: number | null;
   valuation: number | null;
@@ -80,6 +84,37 @@ export interface ReconStackDay {
    * 이미 음수로 준다 — 여기서 부호를 다시 주지 않는다. */
   funding?: number | null;
   actual: number | null;
+}
+
+/** 한 다리의 하루 [OWNER 2026-09-04 — 「국고매수랑 IRS Pay가 별개로 뜨게」].
+ *
+ * 격자(KRD·Δbp·손익)를 **자기 커브 위에서** 진다: 국고 다리는 민평 노드와 Δ민평,
+ * IRS 다리는 IRS 노드와 ΔIRS. 종전 표는 국고 다리의 KRD 에 «민평 − IRS» 스프레드
+ * Δ 를 곱하고 있었다 — 한 다리의 감도에 두 다리의 Δ 를 곱한 섞인 자였고, 그 몫이
+ * 전부 잔차로 갔다(실측 2026-09-04: 9봉 거래에서 Σ|잔차| 199만 → 6.4만원).
+ *
+ * **열쇠는 자기 노드만 있다.** 민평엔 2.5Y·20Y·30Y 가 있고 IRS 엔 1D·4Y·6Y·8Y·9Y
+ * 가 있어 두 다리의 열이 어긋나는데, 없는 열은 이 레코드에 키가 없어 표에서
+ * 저절로 빈칸(—)이 된다. */
+export interface ReconStackLeg extends ReconMoney {
+  /** 화면에 서는 이름 — 「국고」·「IRS」. 서버가 준다. */
+  name: string;
+  krd: Record<string, number>;
+  dbp: Record<string, number | null>;
+  est: Record<string, number>;
+}
+
+export interface ReconStackDay extends ReconMoney {
+  /** ISO 날짜 — 행 키이자 화면의 MM-DD */
+  date: string;
+  /** 툴팁. 연도와 (시뮬) D+n 을 진다. */
+  title?: string;
+  krd: Record<string, number>;
+  dbp: Record<string, number | null>;
+  est: Record<string, number>;
+  /** 다리별 대사. 있으면 표가 **다리마다 세 줄**을 세우고 합계 줄로 닫는다
+   * (하루 일곱 줄). 없으면 종전 그대로 하루 세 줄이다. */
+  legs?: ReconStackLeg[];
 }
 
 type Metric = 'krd' | 'dbp' | 'est';
@@ -117,6 +152,9 @@ function tenorWidth(labels: string[], cells: string[]): string {
  * 왼쪽 이웃 위로 새어 나갔다. */
 const TAIL_CH = 15;
 const DATE_CH = 7;
+/** 다리 열 — 다리별 대사에서만 선다(「국고」·「IRS」·「합계」). 한글 두 글자가
+ * '0' 진행폭의 두 배쯤이라 5ch 면 안 접힌다(구분 열과 같은 자). */
+const LEG_CH = 5;
 const KIND_CH = 5;
 
 /** 13px 헤더의 `ch` ≠ 14px 본문의 `ch`. 헤더가 본문 트랙과 같은 자리를 가리키려면
@@ -167,6 +205,14 @@ export function ReconStack({
   }
   const shown = order === 'asc' ? days : [...days].reverse();
 
+  /* 다리별 대사인가 — **하루라도 다리가 있으면** 표 전체가 다리 모양이다.
+     섞으면 같은 표에서 하루가 세 줄이었다 일곱 줄이 된다. */
+  const legMode = days.some((d) => (d.legs?.length ?? 0) > 0);
+  /** 격자를 읽을 레코드들 — 다리 모드면 다리들, 아니면 하루 자신. */
+  const gridOf = (d: ReconStackDay): (ReconStackDay | ReconStackLeg)[] =>
+    legMode ? (d.legs ?? []) : [d];
+
+
   /* 열은 **열쇠와 라벨이 다를 수 있다.** 격자가 하나면 둘이 같고(테너 문자열),
      둘로 갈리면 열쇠에 접두사가 붙는다. 아래는 전부 이 목록으로만 돈다 —
      `tenors` 를 직접 훑는 자리가 남으면 접두사가 화면에 새어 나온다. */
@@ -200,42 +246,99 @@ export function ReconStack({
      서고, 선물 표만 그 질문 없는 열이 안 선다. */
   const hasCarry = days.some((d) => typeof d.carry === 'number');
   const hasRolldown = days.some((d) => typeof d.rolldown === 'number');
-  const summaryCols: { label: string; get: (d: ReconStackDay) => number | null }[] = [
+  /* 게터가 `ReconMoney` 를 받는 이유: 다리 모드에서 **같은 열이 다리 줄에도**
+     선다. 두 벌로 쓰면 «다리의 캐리» 와 «하루의 캐리» 가 다른 코드가 되고, 그
+     둘이 갈리는 순간 표가 두 답을 말한다. */
+  const summaryCols: { label: string; get: (d: ReconMoney) => number | null }[] = [
     { label: '평가', get: (d) => d.valuation },
     ...(hasResidual
-      ? [{ label: '잔차', get: (d: ReconStackDay) => d.residual ?? null }]
+      ? [{ label: '잔차', get: (d: ReconMoney) => d.residual ?? null }]
       : []),
-    ...(hasCarry ? [{ label: '캐리', get: (d: ReconStackDay) => d.carry }] : []),
+    ...(hasCarry ? [{ label: '캐리', get: (d: ReconMoney) => d.carry }] : []),
     ...(hasRolldown
-      ? [{ label: '롤다운', get: (d: ReconStackDay) => d.rolldown }]
+      ? [{ label: '롤다운', get: (d: ReconMoney) => d.rolldown }]
       : []),
     ...(hasFunding
-      ? [{ label: '조달', get: (d: ReconStackDay) => d.funding ?? null }]
+      ? [{ label: '조달', get: (d: ReconMoney) => d.funding ?? null }]
       : []),
     { label: '그날 손익', get: (d) => d.actual },
   ];
   const tailCols = summaryCols.length + 1; // 맨 앞의 합계 열
+  /* 왼쪽 고정 열의 폭과 그 안의 자리. 다리 열이 서면 구분 열이 그만큼 밀리고,
+     `<colgroup>` 트랙과 sticky 오프셋이 **같은 상수를 곱해야** 어긋나지 않는다
+     (이 표의 첫 규율). */
+  const legCh = legMode ? LEG_CH : 0;
+  const kindLeft = DATE_CH + legCh;
+  const leftCh = kindLeft + KIND_CH;
 
   const tenorW = tenorWidth(
     cols.map((c) => c.label),
     days.flatMap((d) =>
-      METRICS.flatMap((m) => cols.map((c) => cellText(m, d[m][c.key] ?? null))),
+      gridOf(d).flatMap((g) =>
+        METRICS.flatMap((m) => cols.map((c) => cellText(m, g[m][c.key] ?? null))),
+      ),
     ),
   );
 
   /* 히트맵 농도의 기준은 **표 전체**의 max|KRD| — 날마다 다시 잡으면 작은 날의 작은
      값이 큰 날의 큰 값과 같은 진하기가 된다. */
   const krdScale = Math.max(
-    ...days.flatMap((d) => cols.map((c) => Math.abs(d.krd[c.key] ?? 0))),
+    ...days.flatMap((d) =>
+      gridOf(d).flatMap((g) => cols.map((c) => Math.abs(g.krd[c.key] ?? 0))),
+    ),
     0,
   );
 
-  const rowTotal = (d: ReconStackDay, m: Metric): number | null => {
+  const rowTotal = (g: ReconStackDay | ReconStackLeg, m: Metric): number | null => {
     // KRD 의 합계는 **두 커브가 다 1bp 움직였을 때**의 원/bp 다. 열을 섞는 것과
     // 다른 셈이다(칸 하나가 두 위험을 뜻하는 게 아니라, 북 전체의 평행이동이다).
-    if (m === 'krd') return cols.reduce((s, c) => s + (d.krd[c.key] ?? 0), 0);
-    if (m === 'est') return d.estTotal;
+    if (m === 'krd') return cols.reduce((s, c) => s + (g.krd[c.key] ?? 0), 0);
+    if (m === 'est') return g.estTotal;
     return null; // Δbp 의 테너 합은 아무 뜻이 없다
+  };
+  /** 다리 모드의 합계 줄에 서는 추정 — **두 다리의 합**이다. 스프레드 관점은
+   *  은퇴했다 [OWNER 2026-09-04 — 「없앤다」]. */
+  const dayEstTotal = (d: ReconStackDay): number | null => {
+    const legs = d.legs ?? [];
+    if (legs.some((l) => l.estTotal === null)) return null;
+    return legs.reduce((s, l) => s + (l.estTotal ?? 0), 0);
+  };
+  /** 다리 모드에서 하루가 차지하는 줄 수 — 다리마다 셋 + 합계 하나. */
+  const dayRows = (d: ReconStackDay) => (d.legs?.length ?? 0) * METRICS.length + 1;
+
+  /* 격자 셀 한 줄 — **다리든 하루든 같은 코드가 그린다.** 두 벌로 쓰면 히트맵
+     기준이나 빈칸 규약이 한쪽에서만 바뀐다. */
+  const gridCells = (g: ReconStackDay | ReconStackLeg, m: Metric) =>
+    cols.map((c) => {
+      const v = g[m][c.key] ?? null;
+      return (
+        <td
+          key={c.key}
+          className={`sr-recon-td sr-recon-center${
+            sepKeys.has(c.key) ? ' sr-recon-groupsep' : ''
+          }`}
+          style={
+            m === 'krd'
+              ? { background: tintFor(v ?? 0, krdScale) }
+              : v === null || v === 0
+                ? undefined
+                : { color: directionVar(v) }
+          }
+        >
+          {v === null || v === 0 ? (
+            <span className="sr-recon-blank">—</span>
+          ) : (
+            cellText(m, v)
+          )}
+        </td>
+      );
+    });
+
+  /** 줄의 합계 칸. KRD 는 원 단위 정수, 나머지는 방향색 돈이다. */
+  const totalCell = (g: ReconStackDay | ReconStackLeg, m: Metric) => {
+    const total = rowTotal(g, m);
+    if (total === null) return <span className="sr-recon-blank">—</span>;
+    return m === 'krd' ? Math.round(total).toLocaleString('en-US') : <Won v={total} />;
   };
 
   return (
@@ -251,11 +354,12 @@ export function ReconStack({
         <table
           className="sr-recon"
           style={{
-            width: `calc(${DATE_CH}ch + ${KIND_CH}ch + ${cols.length} * (${tenorW}) + ${tailCols} * ${TAIL_CH}ch)`,
+            width: `calc(${leftCh}ch + ${cols.length} * (${tenorW}) + ${tailCols} * ${TAIL_CH}ch)`,
           }}
         >
           <colgroup>
             <col style={{ width: `${DATE_CH}ch` }} />
+            {legMode ? <col style={{ width: `${LEG_CH}ch` }} /> : null}
             <col style={{ width: `${KIND_CH}ch` }} />
             {cols.map((c) => (
               <col key={c.key} style={{ width: tenorW }} />
@@ -273,9 +377,12 @@ export function ReconStack({
             {banded ? (
               <tr className="sr-recon-grouprow">
                 <th className="sr-recon-th sr-recon-pin" style={{ left: 0 }} />
+                {legMode ? (
+                  <th className="sr-recon-th sr-recon-pin" style={{ left: headCh(DATE_CH) }} />
+                ) : null}
                 <th
                   className="sr-recon-th sr-recon-pin sr-recon-edge-l"
-                  style={{ left: headCh(DATE_CH) }}
+                  style={{ left: headCh(kindLeft) }}
                 />
                 {banded.map((g, gi) => (
                   <th
@@ -291,7 +398,7 @@ export function ReconStack({
                         규율과 같은 이유다. */}
                     <span
                       className="sr-recon-grouplabel"
-                      style={{ left: headCh(DATE_CH + KIND_CH) }}
+                      style={{ left: headCh(leftCh) }}
                     >
                       {g.label}
                     </span>
@@ -331,9 +438,14 @@ export function ReconStack({
               </th>
               {/* 왼쪽 범례의 **안쪽 경계** — 이 밑으로 격자가 지나간다는 표식
                   (`sr-recon-edge-l`, type.css 의 근거). */}
+              {legMode ? (
+                <th className="sr-recon-th sr-recon-pin" style={{ left: headCh(DATE_CH) }}>
+                  다리
+                </th>
+              ) : null}
               <th
                 className="sr-recon-th sr-recon-pin sr-recon-edge-l"
-                style={{ left: headCh(DATE_CH) }}
+                style={{ left: headCh(kindLeft) }}
               >
                 구분
               </th>
@@ -370,96 +482,161 @@ export function ReconStack({
           </thead>
           <tbody>
             {shown.map((d) =>
-              METRICS.map((m, mi) => {
-                const total = rowTotal(d, m);
-                return (
-                  <tr
-                    key={`${d.date}-${m}`}
-                    // 하루의 경계만 헤어라인 — 세 줄이 한 덩어리로 읽힌다.
-                    className={mi === 0 ? 'sr-recon-daytop' : undefined}
-                  >
-                    {/* 왼쪽 범례 — 먼 테너를 보는 중에도 어느 날의 어느 줄인지가
-                        남는다. 불투명 배경이 필수다: 밑을 지나는 히트맵 틴트가
-                        비치면 안 된다. 구분 칸의 13px 는 **안쪽 span** 에 있다 —
-                        `td` 가 13px 이면 left 의 `ch` 가 트랙과 다른 자로 풀린다. */}
-                    {mi === 0 && (
+              legMode
+                ? /* 다리별 대사 — 하루가 **일곱 줄**이다: 다리마다 KRD·Δbp·손익
+                     셋씩, 그리고 합계 한 줄 [OWNER 2026-09-04]. 날짜 칸이 일곱을
+                     통째로 덮고, 다리 칸이 셋씩 덮어 층이 눈에 남는다. */
+                  [
+                    ...(d.legs ?? []).flatMap((lg, li) =>
+                      METRICS.map((m, mi) => (
+                        <tr
+                          key={`${d.date}-${lg.name}-${m}`}
+                          className={
+                            li === 0 && mi === 0
+                              ? 'sr-recon-daytop'
+                              : mi === 0
+                                ? 'sr-recon-legtop'
+                                : undefined
+                          }
+                        >
+                          {li === 0 && mi === 0 && (
+                            <td
+                              className="sr-recon-td sr-recon-stick sr-recon-top"
+                              style={{ left: 0 }}
+                              rowSpan={dayRows(d)}
+                              title={d.title ?? d.date}
+                            >
+                              {d.date.slice(5)}
+                            </td>
+                          )}
+                          {mi === 0 && (
+                            <td
+                              className="sr-recon-td sr-recon-stick sr-recon-top"
+                              style={{ left: `${DATE_CH}ch` }}
+                              rowSpan={METRICS.length}
+                            >
+                              <span className="sr-recon-kind">{lg.name}</span>
+                            </td>
+                          )}
+                          <td
+                            className="sr-recon-td sr-recon-stick sr-recon-edge-l"
+                            style={{ left: `${kindLeft}ch` }}
+                          >
+                            <span className="sr-recon-kind">{METRIC_LABEL[m]}</span>
+                          </td>
+                          {gridCells(lg, m)}
+                          <td className="sr-recon-td sr-recon-right sr-recon-div-l">
+                            <span className="sr-recon-strong">{totalCell(lg, m)}</span>
+                          </td>
+                          {mi === 0 &&
+                            summaryCols.map((c, ci) => (
+                              <td
+                                key={c.label}
+                                className="sr-recon-td sr-recon-right sr-recon-top"
+                                rowSpan={METRICS.length}
+                              >
+                                {ci === summaryCols.length - 1 ? (
+                                  <span className="sr-recon-strong">
+                                    <Won v={c.get(lg)} />
+                                  </span>
+                                ) : (
+                                  <Won v={c.get(lg)} />
+                                )}
+                              </td>
+                            ))}
+                        </tr>
+                      )),
+                    ),
+                    /* 합계 줄 — 테너 칸은 비운다. 두 다리의 KRD 는 **다른
+                       커브**에 실린 감도라 한 칸에 더할 수 없다(혼합 북 격자를
+                       가른 것과 같은 근거). 더할 수 있는 것은 돈뿐이다. */
+                    <tr key={`${d.date}-sum`} className="sr-recon-legtop">
                       <td
-                        className="sr-recon-td sr-recon-stick sr-recon-top"
-                        style={{ left: 0 }}
-                        rowSpan={3}
-                        title={d.title ?? d.date}
+                        className="sr-recon-td sr-recon-stick"
+                        style={{ left: `${DATE_CH}ch` }}
                       >
-                        {d.date.slice(5)}
+                        <span className="sr-recon-kind sr-recon-strong">합계</span>
                       </td>
-                    )}
-                    <td
-                      className="sr-recon-td sr-recon-stick sr-recon-edge-l"
-                      style={{ left: `${DATE_CH}ch` }}
-                    >
-                      <span className="sr-recon-kind">{METRIC_LABEL[m]}</span>
-                    </td>
-                    {cols.map((c) => {
-                      const v = d[m][c.key] ?? null;
-                      return (
+                      <td
+                        className="sr-recon-td sr-recon-stick sr-recon-edge-l"
+                        style={{ left: `${kindLeft}ch` }}
+                      />
+                      {cols.map((c) => (
                         <td
                           key={c.key}
                           className={`sr-recon-td sr-recon-center${
                             sepKeys.has(c.key) ? ' sr-recon-groupsep' : ''
                           }`}
-                          style={
-                            m === 'krd'
-                              ? { background: tintFor(v ?? 0, krdScale) }
-                              : v === null || v === 0
-                                ? undefined
-                                : { color: directionVar(v) }
-                          }
                         >
-                          {v === null || v === 0 ? (
-                            <span className="sr-recon-blank">—</span>
-                          ) : (
-                            cellText(m, v)
-                          )}
-                        </td>
-                      );
-                    })}
-                    {/* 돈 칸 — 테너와 같이 흐른다(위 헤더의 그 근거).
-                        ⚠ 굵기는 **안쪽 span 이 진다**: `ch` 는 그 요소 폰트의
-                        '0' 진행폭이고 미디엄의 0 이 살짝 넓어, 셀에 굵기를 얹으면
-                        `<colgroup>` 트랙과 어긋난다(v1 실측 44ch 에 13px). */}
-                    <td className="sr-recon-td sr-recon-right sr-recon-div-l">
-                      <span className="sr-recon-strong">
-                        {total === null ? (
                           <span className="sr-recon-blank">—</span>
-                        ) : m === 'krd' ? (
-                          Math.round(total).toLocaleString('en-US')
-                        ) : (
-                          <Won v={total} />
-                        )}
-                      </span>
-                    </td>
-                    {mi === 0 &&
-                      summaryCols.map((c, ci) => {
-                        const step = summaryCols.length - 1 - ci;
-                        const v = c.get(d);
-                        return (
+                        </td>
+                      ))}
+                      <td className="sr-recon-td sr-recon-right sr-recon-div-l">
+                        <span className="sr-recon-strong">
+                          <Won v={dayEstTotal(d)} />
+                        </span>
+                      </td>
+                      {summaryCols.map((c) => (
+                        <td key={c.label} className="sr-recon-td sr-recon-right">
+                          <span className="sr-recon-strong">
+                            <Won v={c.get(d)} />
+                          </span>
+                        </td>
+                      ))}
+                    </tr>,
+                  ]
+                : METRICS.map((m, mi) => (
+                    <tr
+                      key={`${d.date}-${m}`}
+                      // 하루의 경계만 헤어라인 — 세 줄이 한 덩어리로 읽힌다.
+                      className={mi === 0 ? 'sr-recon-daytop' : undefined}
+                    >
+                      {/* 왼쪽 범례 — 먼 테너를 보는 중에도 어느 날의 어느 줄인지가
+                          남는다. 불투명 배경이 필수다: 밑을 지나는 히트맵 틴트가
+                          비치면 안 된다. 구분 칸의 13px 는 **안쪽 span** 에 있다 —
+                          `td` 가 13px 이면 left 의 `ch` 가 트랙과 다른 자로 풀린다. */}
+                      {mi === 0 && (
+                        <td
+                          className="sr-recon-td sr-recon-stick sr-recon-top"
+                          style={{ left: 0 }}
+                          rowSpan={3}
+                          title={d.title ?? d.date}
+                        >
+                          {d.date.slice(5)}
+                        </td>
+                      )}
+                      <td
+                        className="sr-recon-td sr-recon-stick sr-recon-edge-l"
+                        style={{ left: `${kindLeft}ch` }}
+                      >
+                        <span className="sr-recon-kind">{METRIC_LABEL[m]}</span>
+                      </td>
+                      {gridCells(d, m)}
+                      {/* 돈 칸 — 테너와 같이 흐른다(위 헤더의 그 근거).
+                          ⚠ 굵기는 **안쪽 span 이 진다**: `ch` 는 그 요소 폰트의
+                          '0' 진행폭이고 미디엄의 0 이 살짝 넓어, 셀에 굵기를 얹으면
+                          `<colgroup>` 트랙과 어긋난다(v1 실측 44ch 에 13px). */}
+                      <td className="sr-recon-td sr-recon-right sr-recon-div-l">
+                        <span className="sr-recon-strong">{totalCell(d, m)}</span>
+                      </td>
+                      {mi === 0 &&
+                        summaryCols.map((c, ci) => (
                           <td
                             key={c.label}
                             className="sr-recon-td sr-recon-right sr-recon-top"
                             rowSpan={3}
                           >
-                            {step === 0 ? (
+                            {ci === summaryCols.length - 1 ? (
                               <span className="sr-recon-strong">
-                                <Won v={v} />
+                                <Won v={c.get(d)} />
                               </span>
                             ) : (
-                              <Won v={v} />
+                              <Won v={c.get(d)} />
                             )}
                           </td>
-                        );
-                      })}
-                  </tr>
-                );
-              }),
+                        ))}
+                    </tr>
+                  )),
             )}
           </tbody>
         </table>

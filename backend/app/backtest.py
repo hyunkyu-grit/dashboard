@@ -684,6 +684,34 @@ def _leg_swap(leg: Leg, entry_date: dt.date) -> VanillaSwap:
     )
 
 
+def bumped_par_curve(
+    par: list[tuple[float, float]],
+    label: str,
+    cache: dict[str, "np.ndarray | None"],
+) -> "np.ndarray | None":
+    """`label` 파 노드만 1bp 올린 제로커브. 그날 그 노드가 없으면 `None`.
+
+    `_book_recon` 의 KRD 범프가 쓰던 인라인 산술을 그대로 들어낸 것이다. 채권
+    표의 **자산스왑 스왑 다리**도 이것을 부른다(`cashbond._swap_krd`) — KRD 의
+    정의가 두 곳에 서면 두 표가 같은 리스크를 다르게 말한다. 이 리포의
+    「두 번째 정의 금지」가 그 규칙이다.
+
+    `cache` 는 **한 행 안에서** 공유한다. 부트스트랩이 비싸고 한 행의 여러
+    포지션이 같은 노드를 흔들기 때문이다. 노드가 없는 라벨은 `None` 으로 캐시해
+    포지션마다 다시 훑지 않는다.
+    """
+    if label in cache:
+        return cache[label]
+    t_l = TENOR_T[label]
+    if not any(abs(t - t_l) < 1e-9 for t, _r in par):
+        cache[label] = None          # 그날 노드가 없다 — KRD 0 (시뮬의 분할과 같은 규약)
+        return None
+    cache[label] = bootstrap_zero_curve(
+        [(t, r + (1e-4 if abs(t - t_l) < 1e-9 else 0.0)) for t, r in par]
+    )
+    return cache[label]
+
+
 def _book_recon(
     dataset: Dataset,
     positions: list[Position],
@@ -855,14 +883,10 @@ def _book_recon(
             if alive_fwd:
                 base_dirty = f_clean + f_accrued
                 for lb in info["bump"]:
-                    t_l = TENOR_T[lb]
-                    if lb not in bumped:
-                        if not any(abs(t - t_l) < 1e-9 for t, _r in par):
-                            continue  # no node that day — KRD 0, like the sim's partition
-                        bumped[lb] = bootstrap_zero_curve(
-                            [(t, r + (1e-4 if abs(t - t_l) < 1e-9 else 0.0)) for t, r in par]
-                        )
-                    b_clean, b_accrued = dirty_on(info, nxt, bumped[lb], fx)
+                    zc_b = bumped_par_curve(par, lb, bumped)
+                    if zc_b is None:
+                        continue  # no node that day — KRD 0, like the sim's partition
+                    b_clean, b_accrued = dirty_on(info, nxt, zc_b, fx)
                     krd[lb] += -((b_clean + b_accrued) - base_dirty)
 
         if i >= start:

@@ -74,7 +74,32 @@ export function backtestDays(recon: BacktestRecon): ReconStackDay[] {
     rolldown: r.rolldown,
     ...(r.funding === undefined ? {} : { funding: r.funding }),
     actual: r.actual,
+    /* 다리별 대사 [2026-09-04]. 여기서도 **이름만 바꿔 넘긴다** — 개시를
+       평가에 접는 것은 하루의 일이고, 다리 블록에는 개시 항이 없다(자산스왑의
+       개시는 국고 다리의 진입일 한 밤이라 서버가 이미 평가에 넣어 보낸다). */
+    ...(r.legs === undefined ? {} : { legs: r.legs }),
   }));
+}
+
+/** 표의 열 — 다리별 대사면 **두 다리의 합집합**이다. 민평과 IRS 의 라벨 집합이
+ * 어긋나므로(2.5Y·20Y·30Y ↔ 1D·4Y·6Y·8Y·9Y) 한쪽 목록만 쓰면 다른 다리의 칸이
+ * 통째로 사라진다.
+ *
+ * **만기순으로 다시 세운다.** 두 목록을 그냥 이어 붙이면 IRS 에만 있는 1D·4Y·6Y
+ * 가 민평의 30Y 뒤에 서서, 커브가 왼쪽에서 오른쪽으로 길어진다는 이 표의 유일한
+ * 읽는 법이 깨진다. */
+const tenorYears = (t: string): number => {
+  const n = Number.parseFloat(t);
+  if (!Number.isFinite(n)) return Number.POSITIVE_INFINITY;
+  if (t.endsWith('D')) return n / 365;
+  if (t.endsWith('M')) return n / 12;
+  return n;
+};
+
+export function reconTenors(recon: BacktestRecon): string[] {
+  if (!recon.legTenors?.length) return recon.tenors;
+  const all = new Set(recon.legTenors.flatMap((leg) => leg.tenors));
+  return [...all].sort((a, b) => tenorYears(a) - tenorYears(b));
 }
 
 /** 표 아래 한 줄 — 잘린 창은 **데이터 사실**이라 화면이 말해야 한다.

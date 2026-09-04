@@ -1579,6 +1579,15 @@ thead th {
   border-top: 1px solid var(--color-bgLine);
 }
 
+/* 다리 사이의 경계 [OWNER 2026-09-04 — 다리별 대사]. 하루가 일곱 줄이 되면서
+   층이 하나 늘었다: 날짜 칸(rowSpan 7)이 하루를, 다리 칸(rowSpan 3)이 다리를
+   덮고, 이 헤어라인이 그 다리 사이를 긋는다. 하루 경계와 **같은 토큰**을 쓴다 —
+   색을 하나 더 만들면 그 색이 무엇을 뜻하는지 표가 말해야 하는데, 층은 이미
+   두 rowSpan 이 말하고 있다. */
+.sr-recon-legtop > td {
+  border-top: 1px solid var(--color-bgLine);
+}
+
 .sr-recon-note,
 .sr-recon-empty {
   padding-top: 8px;

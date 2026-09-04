@@ -464,3 +464,148 @@ class TestRealRecon:
                 if mp is not None:
                     worst = max(worst, abs(p["legs"][0]["lvl"] - mp * 100.0) * 100.0)
             assert worst < 3.0, f"{sid}: 두 국고 커브가 {worst:.2f}bp 갈린다"
+
+
+class TestTwoLegRecon:
+    """대사표가 **국고 매수와 IRS 페이를 별개로** 세운다
+    [OWNER 2026-09-04 — 「국고매수랑 IRS Pay가 별개로 뜨게 해줘」].
+
+    종전 표는 자가 섞여 있었다: KRD 는 `_krd_bond` 라 **국고 다리 것만**인데
+    Δbp 는 `asw_series` 라 **«민평 − IRS» 스프레드**였다. par-par 자산스왑의
+    1차 근사로는 성립하지만 한 다리의 감도에 두 다리의 Δ 를 곱한 자였고, 그
+    몫이 전부 잔차로 갔다.
+
+    여기서 재는 것은 셋이다: 다리가 **닫히는가**(합·성분·곱셈), 다리가 **자기
+    커브 위에 서는가**, 그리고 그래서 **잔차가 실제로 줄었는가**.
+    """
+
+    #: 오너가 화면에서 짚은 그 거래 — 9봉, 국고 매수·IRS 페이, 청산.
+    TRADE = "id=BSS-7Y&entry=2020-03-27&exit=2020-04-09&dir=-1&notional=1000000"
+
+    @pytest.fixture(scope="class")
+    def client(self):
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        with TestClient(app) as c:
+            yield c
+
+    @pytest.fixture(scope="class")
+    def rec(self, client):
+        r = client.get(f"/api/mr/recon?{self.TRADE}").json()
+        assert r.get("available"), r.get("why")
+        return r
+
+    def test_every_row_carries_both_legs(self, rec):
+        """행마다 다리 둘. 하나라도 비면 그날 화면이 한 다리만 말한다."""
+        assert rec.get("legTenors"), "다리별 열 목록이 없다"
+        assert [g["name"] for g in rec["legTenors"]] == ["국고", "IRS"]
+        for r in rec["rows"]:
+            legs = r.get("legs")
+            assert legs and [lg["name"] for lg in legs] == ["국고", "IRS"], r["t"]
+
+    def test_the_two_legs_add_up_to_the_day(self, rec):
+        """국고 + IRS = 그날 손익, **원 단위로 0**.
+
+        반올림을 각자 하면 여기가 갈린다 — 그래서 총계 행이 정본이고 국고
+        다리가 잔차를 진다(`main._mr_scale_rows`). 이 시험이 그 규율의 핀이다.
+        """
+        for r in rec["rows"]:
+            if r.get("actual") is None:
+                continue
+            b, s = r["legs"]
+            assert b["actual"] + s["actual"] == r["actual"], r["t"]
+
+    def test_each_leg_closes_its_own_components(self, rec):
+        """다리마다 `평가 + 캐리 + 롤다운 + 조달 = 그날 손익`, 0원.
+
+        그리고 다리별 캐리·롤다운의 합이 하루의 것과 같다 — 안 그러면 표가
+        세로로는 닫히는데 가로로는 안 닫힌다.
+        """
+        for r in rec["rows"]:
+            if r.get("actual") is None:
+                continue
+            b, s = r["legs"]
+            for lg in (b, s):
+                parts = (lg["valuation"] + (lg["carry"] or 0)
+                         + (lg["rolldown"] or 0) + (lg["funding"] or 0))
+                assert parts == lg["actual"], f"{r['t']} {lg['name']}"
+            assert (b["carry"] or 0) + (s["carry"] or 0) == (r["carry"] or 0), r["t"]
+            assert (b["rolldown"] or 0) + (s["rolldown"] or 0) == (r["rolldown"] or 0), r["t"]
+
+    def test_only_the_bond_leg_is_funded(self, rec):
+        """조달은 **국고 다리만** 진다 — 현물을 조달해 들고 있는 비용이다.
+
+        IRS 다리는 `None` 이다. 0 으로 채우면 「그날 조달이 0 이었다」는 다른
+        말이 되고, 화면이 그 다리에도 조달 칸을 세운다(공란 정책).
+        """
+        funded = 0
+        for r in rec["rows"]:
+            if r.get("actual") is None:
+                continue
+            b, s = r["legs"]
+            assert s["funding"] is None, f"{r['t']}: IRS 다리에 조달이 섰다"
+            if b["funding"]:
+                funded += 1
+        assert funded > 0, "국고 다리에 조달이 한 번도 안 섰다"
+
+    def test_each_leg_closes_its_own_multiplication(self, rec):
+        """다리마다 `추정 = −KRD × Δbp`, 칸마다.
+
+        이 곱셈이 다리 안에서 닫혀야 «감도와 Δ 가 같은 커브 위에 있다» 가
+        참이다. 종전 표에서 안 닫히던 것이 이 변경의 이유다.
+        """
+        checked = 0
+        for r in rec["rows"]:
+            for lg in r.get("legs") or []:
+                krd, dbp, est = lg["krd"], lg["dbp"] or {}, lg["est"] or {}
+                for lb, k in krd.items():
+                    d = dbp.get(lb)
+                    if d is None:
+                        continue
+                    assert est.get(lb, 0) == round(-k * d), f"{r['t']} {lg['name']} {lb}"
+                    checked += 1
+                if lg["estTotal"] is not None:
+                    assert sum(est.values()) == lg["estTotal"], f"{r['t']} {lg['name']}"
+        assert checked > 100, f"곱셈을 잰 칸이 {checked}개뿐이다"
+
+    def test_the_legs_stand_on_their_own_curves(self, rec):
+        """국고는 민평 노드, IRS 는 IRS 노드 — **다른 집합**이다.
+
+        민평엔 2.5Y 가 있고 IRS 엔 4Y·6Y 가 있다. 두 열이 같으면 그건 아직
+        한 커브로 재고 있다는 뜻이다.
+        """
+        bond, swap = rec["legTenors"]
+        assert "2.5Y" in bond["tenors"], "민평 전용 노드가 국고 다리에 없다"
+        assert {"4Y", "6Y"} <= set(swap["tenors"]), "IRS 전용 노드가 IRS 다리에 없다"
+        assert set(bond["tenors"]) != set(swap["tenors"])
+
+    def test_paying_fixed_is_short_where_the_bond_is_long(self, rec):
+        """**부호가 반대다.** 국고 매수는 잔존 언저리에서 KRD 양수, IRS 페이는
+        같은 자리에서 음수다(앱 규약: 손익 = −KRD × Δbp).
+
+        둘이 같은 부호로 서면 자산스왑을 두 번 산 것이고, 그건 이 표가 말할 수
+        있는 가장 큰 거짓말이다.
+        """
+        mid = [r for r in rec["rows"] if r.get("actual") is not None][len(rec["rows"]) // 2]
+        b, s = mid["legs"]
+        assert b["krd"].get("7Y", 0) > 0, f"{mid['t']}: 국고 7Y 가 양수가 아니다"
+        assert s["krd"].get("7Y", 0) < 0, f"{mid['t']}: IRS 7Y 가 음수가 아니다"
+
+    def test_the_leg_ruler_beats_the_spread_ruler(self, rec):
+        """**잔차가 줄어야 한다** — 이 변경의 값어치가 그것이다.
+
+        종전 잔차는 `평가 − (국고 KRD × Δ스프레드)` 였고, 새 잔차는 두 다리가
+        자기 커브에서 낸 추정의 합을 뺀 것이다. 후자가 크면 자를 잘못 바꾼
+        것이다(실측 2026-09-04: 199만 → 6.4만원, 96.8% 감소).
+        """
+        old = new = 0.0
+        for r in rec["rows"]:
+            if r.get("residual") is None:
+                continue
+            b, s = r["legs"]
+            old += abs(r["residual"])
+            new += abs(b["residual"] + s["residual"])
+        assert old > 0, "옛 잔차가 전부 0 이라 비교가 안 된다"
+        assert new < old * 0.5, f"잔차가 안 줄었다 — 옛 {old:,.0f} 새 {new:,.0f}"

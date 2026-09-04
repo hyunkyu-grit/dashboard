@@ -1079,23 +1079,32 @@ def _mr_principal_at(on: dt.date, tenor: str, notional: float) -> float | None:
 
 
 def _mr_recon_rows(m, tenor: str, entry: dt.date, exit_: dt.date,
-                   direction: int, spec) -> dict | None:
+                   direction: int, spec, with_legs: bool = False) -> dict | None:
     """기준 액면에서의 대사 — `{"tenors", "rows"}`. 못 세우면 `None`.
 
     **거래 목록은 z 에만 달려 있다**(`mrbacktest` 머리) — 명목·비용·조달을
     돌려도 진입·청산 날짜가 안 움직인다. 그래서 이 캐시는 노브를 돌리는 동안
     거의 다 맞는다. 통합 장부(아홉 다리 143건)가 매번 8초를 쓰지 않는 이유다.
     """
-    key = (m.watermark, tenor, entry, exit_, direction, spec.basis, spec.spread_bp)
+    #: `with_legs` 가 **열쇠에 든다** — 다리 유무는 응답의 모양을 바꾼다. 안
+    #: 넣으면 회계가 먼저 캐시를 채우고 화면이 다리 없는 판을 받는다.
+    key = (m.watermark, tenor, entry, exit_, direction, spec.basis, spec.spread_bp,
+           with_legs)
     if key in _mr_recon_cache:
         return _mr_recon_cache[key]
     try:
         pos = cashbond.BondPosition(
             kind=cashbond.KIND_ASW, bond_type="KTB", tenor=tenor,
             direction=direction, notional=MR_REF_PRINCIPAL, entry=entry, exit=exit_)
-        rec = cashbond.book_recon(m, _dataset, [pos], spec)
+        rec = cashbond.book_recon(m, _dataset, [pos], spec, with_legs=with_legs)
         # 창이 잘리면 **회계가 반쪽이다** — 반쪽을 총손익이라 부르지 않는다.
-        got = None if rec.get("truncated") else {"tenors": rec["tenors"], "rows": rec["rows"]}
+        got = (
+            None if rec.get("truncated")
+            # `legTenors` 는 다리별 대사의 **열 목록**이다 — 화면이 두 다리의
+            # 합집합으로 칸을 세운다. 자산스왑 북에서만 온다.
+            else {"tenors": rec["tenors"], "rows": rec["rows"],
+                  "legTenors": rec.get("legTenors")}
+        )
     except (cashbond.CashBondError, creditmatrix.CreditMatrixError, KeyError, ValueError):
         got = None
     if len(_mr_recon_cache) >= MR_RECON_CACHE_MAX:
@@ -1148,6 +1157,54 @@ def _mr_scale_rows(rows: list[dict], scale: float) -> list[dict]:
                               - (d.get("rolldown") or 0) - (d.get("funding") or 0))
             if d.get("estTotal") is not None:
                 d["residual"] = d["valuation"] - d["estTotal"]
+        # ── 다리 블록도 같은 자로 [OWNER 2026-09-04] ─────────────────────────
+        # 리스트라 위 루프의 어느 갈래에도 안 걸린다 — 안 곱하면 다리합이
+        # 총계와 갈리고(실측: 배수 1.48 에서 거래당 431만원) 화면이 두 답을
+        # 말한다. 반올림 규율은 위와 같다: **총계 행이 정본이고 국고 다리가
+        # 잔차를 진다.**
+        legs = r.get("legs")
+        if isinstance(legs, list) and legs:
+            scaled: list[dict] = []
+            for lg in legs:
+                e: dict = {}
+                for k, v in lg.items():
+                    if k == "name" or k in MR_ROW_NOT_MONEY or v is None:
+                        e[k] = v
+                    elif isinstance(v, dict):
+                        e[k] = {a: (b if k == "dbp" or b is None else round(b * scale))
+                                for a, b in v.items()}
+                    elif isinstance(v, (int, float)) and not isinstance(v, bool):
+                        e[k] = round(v * scale)
+                    else:
+                        e[k] = v
+                if isinstance(e.get("est"), dict) and isinstance(e.get("krd"), dict):
+                    # 다리 안에서도 **줄이 곱해진다** — 추정을 반올림한 KRD·Δbp
+                    # 에서 유도한다(위 총계 줄과 같은 근거).
+                    dbp_l = e.get("dbp") or {}
+                    e["est"] = {lb: (0 if dbp_l.get(lb) is None else round(-k * dbp_l[lb]))
+                                for lb, k in e["krd"].items()}
+                    e["estTotal"] = sum(e["est"].values())
+                scaled.append(e)
+            if len(scaled) == 2 and d.get("actual") is not None:
+                bond, swap = scaled
+                s_carry = swap.get("carry") or 0
+                s_roll = swap.get("rolldown") or 0
+                s_act = swap.get("actual") or 0
+                # IRS 다리는 조달이 없다 — 그 다리 안에서 평가가 잔차를 진다.
+                swap["valuation"] = s_act - s_carry - s_roll
+                swap["funding"] = None
+                # 국고 다리는 **총계에서 IRS 다리를 뺀 것**이다. 각자 반올림해
+                # 세우면 다리합이 그날 손익과 원 단위로 갈린다.
+                bond["carry"] = (d.get("carry") or 0) - s_carry
+                bond["rolldown"] = (d.get("rolldown") or 0) - s_roll
+                bond["funding"] = d.get("funding") or 0
+                bond["actual"] = d["actual"] - s_act
+                bond["valuation"] = (bond["actual"] - bond["carry"]
+                                     - bond["rolldown"] - bond["funding"])
+                for lg in (bond, swap):
+                    if lg.get("estTotal") is not None:
+                        lg["residual"] = lg["valuation"] - lg["estTotal"]
+            d["legs"] = scaled
         out.append(d)
     return out
 
@@ -1222,6 +1279,9 @@ def _mr_real_accounting(r: dict, *, kind: str, tenor: str, notional: float,
         if principal is None:
             return False
         scale = principal / MR_REF_PRINCIPAL
+        # 회계는 **총계만** 쓴다 — 다리를 물으면 IRS 파 커브 범프가 거래마다
+        # 붙어서(실측 5.55배) 전략 라우트가 통째로 느려진다. 다리는 거래를
+        # 누를 때 `/api/mr/recon` 이 받는다.
         got = _mr_recon_rows(m, tenor, dt.date.fromisoformat(e_iso),
                              dt.date.fromisoformat(x_iso), -int(direction), spec)
         if got is None:
@@ -1900,9 +1960,25 @@ def mr_recon(id: str, entry: str, exit: str, notional: float = 1_000_000.0,
     BSS 는 **국고 매수 · IRS 페이**이고, 그게 이 앱의 자산스왑(`cashbond` 의
     `ASW`)과 같은 구조다. 그래서 새 가격기를 짓지 않고 그쪽을 그대로 부른다 —
     민평 노드를 1bp 씩 범프해 채권을 다시 가격하는 그 기계(`_krd_bond`)가
-    **테너별 KRD** 를 만들고, `Δbp` 는 자산스왑이라 «민평 − IRS» 스프레드의
-    변화가 되며, `추정 = −KRD × Δbp` 가 테너마다 선다. 응답 모양은
-    `backtest.book_recon` 과 같아서 화면이 `ReconStack` 으로 그대로 그린다.
+    **테너별 KRD** 를 만든다. 응답 모양은 `backtest.book_recon` 과 같아서 화면이
+    `ReconStack` 으로 그대로 그린다.
+
+    ## 표는 **다리 둘**이다 [OWNER 2026-09-04 — 「국고매수랑 IRS Pay가 별개로」]
+
+    행마다 `legs: [국고, IRS]` 가 실린다(`with_legs=True`). 다리마다 **자기 커브**
+    위에 선다: 국고는 민평 노드·Δ민평, IRS 는 IRS 노드·ΔIRS.
+
+    종전에는 한 벌이었고 그 자가 섞여 있었다 — `krd` 는 `_krd_bond` 라 국고 다리
+    것만인데 `dbp` 는 `asw_series` 라 «민평 − IRS» 스프레드여서, `추정 = −(국고
+    KRD) × Δ스프레드` 였다. par-par 자산스왑의 1차 근사로는 성립하지만 한 다리의
+    감도에 두 다리의 Δ 를 곱한 것이고, 그 몫이 전부 잔차로 갔다(실측 2026-09-04,
+    9봉 거래: Σ|잔차| 199만 → 6.4만원). 스프레드 관점은 화면에서 은퇴했다
+    [OWNER — 「없앤다」]. 페이로드의 행 수준 `krd`·`dbp`·`est` 는 백테스트·시뮬
+    표가 아직 그 모양을 쓰기 때문에 남아 있다.
+
+    IRS 다리의 KRD 는 파 커브를 노드마다 흔드는 값이라 **여기서만** 켠다
+    (`cashbond.book_recon` 의 `with_legs` 머리 — 250일 창에서 6.9배). 전략
+    라우트의 회계는 총계만 쓰므로 끈 채로 돈다.
 
     ## 이 수는 백테스트의 수와 **다르다**
 
@@ -1959,7 +2035,7 @@ def mr_recon(id: str, entry: str, exit: str, notional: float = 1_000_000.0,
     # 안에서 포지션이 선다 — 캐시 키가 그 인자들이다).
     # **엔진과 같은 길을 지난다** — 기준 액면에서 한 번 재고 배수로 쓴다. 각자
     # 재면 반올림이 벌어져 표와 헤드라인이 갈린다(`_mr_scale_rows` 머리).
-    got = _mr_recon_rows(m, tenor, entry_d, exit_d, -int(dir), spec)
+    got = _mr_recon_rows(m, tenor, entry_d, exit_d, -int(dir), spec, with_legs=True)
     if got is None:
         return {"available": False,
                 "why": "대사를 못 세웠어요 — 구간이 너무 길거나 민평이 그 날들을 "
@@ -1967,6 +2043,8 @@ def mr_recon(id: str, entry: str, exit: str, notional: float = 1_000_000.0,
     rec = {"tenors": got["tenors"],
            "rows": _mr_scale_rows(got["rows"], principal / MR_REF_PRINCIPAL),
            "truncated": False, "available": True}
+    if got.get("legTenors"):
+        rec["legTenors"] = got["legTenors"]
     # 액면과 **그 액면을 만든 pv01** 을 같이 싣는다 — 페이로드 안에서
     # `명목 = 액면 × pv01 × 1e-4` 이 닫혀야 손 대사가 선다(이 리포의 그 규율).
     rec["principal"] = {"krw": round(principal),

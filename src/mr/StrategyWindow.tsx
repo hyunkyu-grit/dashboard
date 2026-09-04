@@ -70,7 +70,7 @@ import {
   fetchMrRecon,
   type MrRecon,
 } from './api';
-import { backtestDays, reconNote } from '@/backtest/recon';
+import { backtestDays, reconNote, reconTenors } from '@/backtest/recon';
 import { ReconStack } from '@/ui/window/ReconStack';
 import { MrKnobBar, mrKnobsStale } from './KnobBar';
 import { Panel, WHY_WORD, headFont } from './parts';
@@ -1009,7 +1009,10 @@ export function StrategyWindow({
       </Text>
       <ReconStack
         days={backtestDays(recon)}
-        tenors={recon.tenors}
+        /* 열은 **두 다리의 합집합**이다 [OWNER 2026-09-04] — 민평과 IRS 의
+           라벨이 어긋나서 한쪽 목록만 쓰면 다른 다리의 칸이 통째로 사라진다.
+           다리별 대사가 아니면 이 함수가 `recon.tenors` 를 그대로 돌려준다. */
+        tenors={reconTenors(recon)}
         defaultOrder="desc"
         note={reconNote(recon)}
       />

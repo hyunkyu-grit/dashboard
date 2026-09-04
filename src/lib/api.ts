@@ -523,6 +523,26 @@ export interface BacktestReconRow {
   funding?: number | null;
   residual: number | null;
   carryover?: boolean;
+  /** 다리별 대사 [OWNER 2026-09-04 — 국고매수와 IRS Pay 를 별개로]. 자산스왑
+   * 북에서만 온다: 국고 다리는 민평 노드·Δ민평, IRS 다리는 IRS 노드·ΔIRS 다.
+   * 두 다리의 그날 손익 합이 이 행의 `actual` 과 원 단위로 같다. */
+  legs?: BacktestReconLeg[];
+}
+
+/** 한 다리의 하루 — 행과 같은 필드에 이름이 붙은 것. 조달은 국고 다리만
+ * 진다(IRS 다리엔 조달할 원금이 없다) — 그쪽은 `null` 이다. */
+export interface BacktestReconLeg {
+  name: string;
+  krd: Record<string, number>;
+  dbp: Record<string, number | null>;
+  est: Record<string, number>;
+  estTotal: number | null;
+  actual: number | null;
+  valuation: number | null;
+  rolldown: number | null;
+  carry: number | null;
+  funding?: number | null;
+  residual: number | null;
 }
 
 export interface BacktestRecon {
@@ -531,6 +551,9 @@ export interface BacktestRecon {
   rows: BacktestReconRow[];
   /** true when the window was cut to the last ~250 business days */
   truncated: boolean;
+  /** 다리마다의 열 [2026-09-04]. 민평엔 2.5Y·20Y·30Y, IRS 엔 1D·4Y·6Y·8Y·9Y 가
+   * 있어 **두 집합이 어긋난다** — 표의 열은 이 둘의 합집합이고 없는 칸은 빈칸이다. */
+  legTenors?: { name: string; tenors: string[] }[];
 }
 
 /** 일별 대사는 **표 둘**이다 [OWNER, 2026-08-25 — 엔진 단위 분리]. 스왑 표는

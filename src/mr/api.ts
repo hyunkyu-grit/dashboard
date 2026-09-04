@@ -712,6 +712,11 @@ export function fetchMrBook(p: MrStrategyParams): Promise<MrBookRun> {
  *  **테너별 KRD** 와 그 위의 Δbp·추정을 받는다. 응답 모양은 백테스트 대사와
  *  같아서 `backtestDays` 로 그대로 `ReconStack` 에 든다.
  *
+ *  **행마다 다리 둘이 실린다** [OWNER 2026-09-04]: 국고 다리는 민평 노드·Δ민평,
+ *  IRS 다리는 IRS 노드·ΔIRS 다. 표의 열은 두 다리의 합집합이라 `recon.tenors` 가
+ *  아니라 `reconTenors(recon)` 를 넘겨야 한다 — 민평 목록만 넘기면 IRS 전용
+ *  노드(1D·4Y·6Y·8Y)의 감도가 화면에서 소리 없이 사라진다.
+ *
  *  **거래를 누를 때만** 부른다 — KRD 범프가 본체보다 비싸서 서버도 라우트를
  *  갈라 뒀다(`cashbond` 의 그 근거).
  *
