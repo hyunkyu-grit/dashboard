@@ -10,7 +10,14 @@
  */
 
 import { BacktestUnavailable } from '@/lib/api';
-import { mrBoardUrl, mrBookUrl, mrHistoryUrl, mrReconUrl, mrStrategyUrl } from '@/lib/staticPaths';
+import {
+  mrBoardUrl,
+  mrBookUrl,
+  mrHistoryUrl,
+  mrOptimizeUrl,
+  mrReconUrl,
+  mrStrategyUrl,
+} from '@/lib/staticPaths';
 import type { BacktestRecon } from '@/lib/api';
 
 /** 밴드 상태 — 판정이지 행동이 아니다. 검증 레인(bollinger-mr)과 같은 어휘. */
@@ -237,18 +244,28 @@ export const MR_STRATEGY_LOOKBACKS = [20, 60, 120] as const;
  * **비용은 2026-08-28 에 프리셋이 생겼다.** 종전에는 같은 이유로 자유 입력만
  * 뒀는데, 그 사이에 근거가 생겼다 — 오너가 국고3Y·IRS3Y 패키지 실제 편도를
  * **≤0.5bp** 로 답했다. 근거 있는 값이 있으면 프리셋이 지어낸 기준이 아니라
- * 사실이 된다. 셋의 뜻이 각각 다르다(`MR_COST_PRESETS`).
+ * 사실이 된다. 셋의 뜻이 각각 다르다(`MR_COST_PRESETS`) — 2026-09-04 에
+ * 0.05/0.2/0.5 에서 **0.25/0.5/1** 로 갈렸다(그 상수의 주석에 근거).
  */
-/** 편도 비용(bp)의 선택지 — **셋의 뜻이 다르다**.
+/** 편도 비용(bp)의 선택지 — **셋의 뜻이 다르다** [OWNER 2026-09-04 — "비용기준은
+ * 0.25/0.5/1로 설정하기"].
  *
- *   0.05  첫 PMS 의 값. 재현용이지 이 데스크의 호가폭이 아니다.
- *   0.2   중간. 좋은 날의 호가폭 언저리.
+ *   0.25  좋은 날의 호가폭. 실측(0.5)의 절반이라 «잘 맞았을 때» 의 판이다.
  *   0.5   **오너 실측** — 국고3Y·IRS3Y 패키지 실제 편도(2026-08-26). 기본값이다.
+ *   1.0   나쁜 날. 변동성이 뛰면 호가폭이 두 배가 되고, z 문턱을 넘는 봉이
+ *         **바로 그런 봉**이다(동적 비용 모델의 근거였던 실측: 진입일의 변동성
+ *         백분위 중앙값 0.71 대 평시 0.46).
  *
- * 기본을 0.5 로 둔 이유: 싸게 잡은 비용은 결론을 통째로 뒤집는다. 이웃 레인이
- * 0.05 에서 통과하고 0.5 에서 죽는 판정을 냈고(손익분기 0.479bp), 이 창도
- * 0.05 로 열리면 그 함정을 매번 다시 밟게 된다. */
-export const MR_COST_PRESETS = [0.05, 0.2, 0.5] as const;
+ * 종전 셋은 0.05/0.2/0.5 였다. 0.05 는 첫 PMS 의 값이라 재현용이었는데,
+ * **이 데스크의 호가폭이 아닌 값을 화면이 고를 수 있게 두면 그 값으로 통과한
+ * 판정이 나온다** — 이웃 레인이 0.05 에서 통과하고 0.5 에서 죽었다(손익분기
+ * 0.479bp). 새 셋은 실측을 가운데 두고 **양쪽이 다 실장의 값**이다: 좋은 날과
+ * 나쁜 날. 자유 입력은 남는다 — 그날 그 종목의 호가폭이 셋 중 어느 것도 아닐
+ * 수 있다.
+ *
+ * ⚠ 0.05 를 다시 보려면 자유 입력에 적으면 된다. 값이 사라진 것이 아니라
+ * **화면이 권하지 않게** 된 것이다. */
+export const MR_COST_PRESETS = [0.25, 0.5, 1] as const;
 
 export const MR_STRATEGY_PRESETS = {
   entryZ: [1.5, 2.0, 2.5],
@@ -258,6 +275,84 @@ export const MR_STRATEGY_PRESETS = {
 
 /** σ 표기 — 2.0 은 「2」로. 알약 넷이 한 줄에 서므로 자릿수가 곧 폭이다. */
 export const fmtSigma = (v: number): string => `${Number(v.toFixed(1))}σ`;
+
+/* ── 구간 — **전역 설정값** [OWNER 2026-09-04 — "지난 1년, 지난 1분기, 지난
+ * 1개월을 전역 설정값으로 두고 이를 조정하면 성과도 바뀌게 해주기"] ─────────
+ *
+ * 2026-09-02 판에서 이것은 **표시 창**이었다: 차트와 거래 표만 자르고 성과
+ * 카드는 전체 기간 그대로였다. 이제는 성과도 바뀐다 — 카드·최적화 격자가 전부
+ * 이 구간 위에서 채점된다(서버 `mrmetrics.py` 머리 §구간).
+ *
+ * **엔진은 다시 안 돈다.** 룩백의 워밍업이 구간 앞에 있어야 z 가 서므로(1개월
+ * 창에서 120일 룩백은 아예 못 선다), 시뮬은 늘 전체 표본 위에서 한 번 돌고
+ * 채점만 잘린다. 그래서 이 고르개는 **stale 을 안 세운다** — 서버가 네 구간을
+ * 한 번에 보내 오고(`MrStrategyRun.spans`) 화면은 고르기만 한다.
+ *
+ * 목록이 여기 있는 이유는 캐논 얼라인 8 이다: 서버(`mrmetrics.SPANS`)와
+ * 화면이 같은 키를 써야 하고, 화면 안에서도 노브 바·창 본문이 한 목록을 봐야
+ * 한다(종전에는 `StrategyWindow` 안에만 있었다). */
+export const MR_SPANS = [
+  { v: 'all', label: '전체', months: null },
+  { v: '1y', label: '지난 1년', months: 12 },
+  { v: '1q', label: '지난 1분기', months: 3 },
+  { v: '1m', label: '지난 1개월', months: 1 },
+] as const;
+export type MrSpan = (typeof MR_SPANS)[number]['v'];
+
+/** `PeriodSelector` 는 `{id,label}` 탭을 받는다 — 두 번 적지 않고 유도한다. */
+export const MR_SPAN_TABS = MR_SPANS.map((s) => ({ id: s.v as string, label: s.label }));
+
+export const MR_SPAN_LABEL: Record<MrSpan, string> = Object.fromEntries(
+  MR_SPANS.map((s) => [s.v, s.label]),
+) as Record<MrSpan, string>;
+
+/** ── 절대수익형 성과지표 [OWNER 2026-09-04 — "샤프가 아니라 절대수익형펀드
+ *  (헤지펀드)에서 사용하는 성과지표"] ────────────────────────────────────────
+ *
+ *  샤프는 **상승 변동성도 벌**한다. 절대수익을 파는 데스크가 답해야 하는 물음은
+ *  「얼마를 걸고 얼마나 아팠나」이고, 그 분모는 σ 가 아니라 **낙폭**이거나
+ *  **하방편차**다. 정의·분모·왜 이 조합인가는 서버 `mrmetrics.py` 머리가 진다
+ *  (같은 것을 두 곳에 적지 않는다).
+ *
+ *  **수익률이 아니라 원이다** — 이 데스크에는 AUM 이 없다. 비율 지표는 분자·
+ *  분모가 둘 다 원이라, 수익률 기반 문헌값과 크기를 직접 비교하면 안 된다.
+ *  같은 화면 안의 구성끼리 비교하는 값이고, 화면이 그 사실을 적는다. */
+export interface MrPerf {
+  /** 구간의 첫·마지막 봉과 봉 수 — 카드가 「무엇을 잰 수인가」를 말한다. */
+  from: string | null;
+  to: string | null;
+  days: number;
+  totalPnl: number;
+  /** 구간 시작을 0 으로 다시 그은 낙폭(₩·양수). */
+  maxDrawdown: number;
+  /** 평균 / 하방편차 × √252. 하방편차가 0(손실 난 날이 없다)이면 null. */
+  sortino: number | null;
+  /** 연환산 손익 / 최대낙폭. 낙폭이 0 이면 null. */
+  calmar: number | null;
+  /** Schwager Gain-to-Pain — **월 버킷**이다. 손실 월이 없거나 버킷이 둘도
+   *  안 되면 null이고, `gprMonths` 가 그 둘을 가른다. */
+  gpr: number | null;
+  gprMonths: number;
+  /** Ω(θ=0) — Σ이익일 / Σ손실일. **일별**이라 GPR 과 분모가 다르다. */
+  omega: number | null;
+  /** Σ이긴 거래 / |Σ진 거래| — **거래** 기준(위 둘은 시간 기준). */
+  profitFactor: number | null;
+  /** RMS 낙폭(₩) — 낙폭의 «깊이 × 길이». */
+  ulcer: number;
+  /** 연환산 손익 / Ulcer. */
+  martin: number | null;
+  /** 최대 낙폭의 **골에서** 전고점까지 걸린 영업일. 낙폭이 없으면 null. */
+  recoveryDays: number | null;
+  /** 구간 안에서 되찾았는가 — 일수만 보면 아직 물속인 구간이 회복한 구간처럼
+   *  읽힌다. */
+  recovered: boolean;
+  winRate: number | null;
+  numTrades: number;
+  breakevenCostBp: number | null;
+  breakevenCostMult: number | null;
+}
+
+export type MrSpanPerf = MrPerf & { span: MrSpan };
 
 export interface MrStrategyPoint {
   t: string;
@@ -463,9 +558,10 @@ export interface MrStrategyRun {
    *  센다: 평가·캐리·롤다운·조달에 전략의 비용을 더한 다섯이 그날 손익이다.
    *  일별 대사표가 그 수를 **그대로** 편다(실측 차 0.00원).
    *
-   *  `false` — 선물 계열. 자산스왑이 아니라 그 경로가 없다(증거금·일일정산).
-   *  종전 근사(`평가 = 명목 × Δ스프레드`)라 롤다운·조달 항이 없다. 두 회계가
-   *  한 화면에 있으므로 화면이 그 사실을 말한다. */
+   *  `false` — 실가격을 못 세운 구간. 2026-09-04 부터 **선물 넷도 실가격**이라
+   *  (선물 다리는 조정가 차분, FSW 의 IRS 다리는 스왑 엔진) 보통 참이고, 거짓은
+   *  그 구간의 종가·마킹이 빠졌을 때다. 두 회계가 한 화면에 설 수 있으므로
+   *  화면이 그 사실을 말한다. */
   real: boolean;
   unit: string;
   asof: string | null;
@@ -474,9 +570,13 @@ export interface MrStrategyRun {
   trades: MrStrategyTrade[];
   dirs: MrStrategyDirs;
   /** 명목(₩/bp)의 액면 환산 [OWNER 2026-09-02 — "기준 노셔널이 다 나올 수
-   *  있게"]. **지금 커브의 pv01 하나**로 나눈 근사다(서버 주석 — 커브가 6년
-   *  내내 하나라 크기만 좌우한다). 선물은 원금이 없어(증거금·일일정산) null. */
-  principal: { krw: number; pv01: number } | null;
+   *  있게"]. **지금 커브 하나**로 잰 값이다 — 거래마다의 액면은 그 거래의
+   *  진입일 커브가 정하고(대사표가 적는다) 이 수는 «지금 세우면» 이다.
+   *
+   *  BSS 는 스왑 pv01 로 나누고, 선물 계열은 **선물 DV01**(합성채 PVBP)로
+   *  나눈다 — 그래서 그쪽 `pv01` 은 null 이다(스왑의 항등이 안 서는 자리라
+   *  공란). 아예 못 세우면 필드 전체가 null 이다. */
+  principal: { krw: number; pv01: number | null } | null;
   /** 미청산이 없으면 null. */
   open: MrStrategyOpen | null;
   neighbors: MrNeighborRow[];
@@ -533,10 +633,23 @@ export interface MrStrategyRun {
    *  (`dirs.blocked`)과 **따로** 센다: 방향은 데스크의 제약이고 필터는 우리가
    *  고른 것이라, 한 숫자로 합치면 선택의 대가가 제약 뒤에 숨는다. */
   gated: { spells: number; days: number };
+  /** 구간 넷의 성과 — **한 번에** 온다 [OWNER 2026-09-04].
+   *
+   *  엔진은 전체 표본에서 한 번만 돌고 채점만 잘리므로(그 근거는 `MR_SPANS`
+   *  주석), 네 벌을 내는 값이 봉 배열을 네 번 훑는 값이다. 그래서 구간
+   *  고르개가 **재실행도 stale 도 안 만든다** — 값이 이미 와 있다.
+   *
+   *  순서는 `MR_SPANS` 와 같다. 구 백엔드는 이 필드를 모르므로(§6 ⑥ 배포 순서)
+   *  없으면 화면이 `summary`(전체 기간) 하나로 떨어진다. */
+  spans?: MrSpanPerf[];
   summary: {
     totalPnl: number;
     maxDrawdown: number;
     winRate: number | null;
+    /** ⚠ **화면에서 은퇴했다** [OWNER 2026-09-04 — "샤프가 아니라 절대수익형
+     *  펀드에서 사용하는 성과지표"]. 계약과 엔진(`mrbacktest.summarize`)에는
+     *  남는다 — 적합성 벡터가 그 수를 잠그고 있고, 지우면 그 잠금이 풀린다.
+     *  화면이 읽는 것은 `spans` 의 Sortino·Calmar·GPR·Omega·PF·Ulcer·Martin 이다. */
     sharpe: number | null;
     numTrades: number;
     /** 미청산 다리의 MTM(₩) — 총손익에는 있고 승률에는 없다. */
@@ -706,6 +819,93 @@ export function fetchMrBook(p: MrStrategyParams): Promise<MrBookRun> {
   return get<MrBookRun>(mrBookUrl(strategyQuery(p).toString()), 'mr book');
 }
 
+/* ── 근사 최적화 [OWNER 2026-09-04 — "지금 주어진 진입, 청산, 손절, 룩백,
+ * 진입 규칙을 바탕으로 … 근사 최적화 세트를 바탕으로 결과를 보여주고, 그 밑에
+ * TOP 5 조건을 매트릭스로"] ────────────────────────────────────────────────
+ *
+ * 다섯 노브의 **프리셋을 전부** 돌린 격자다(3×3×3×3×2 = 162칸). 연속
+ * 최적화가 아닌 이유는 이웃 칸 표가 서던 자리의 규율과 같다: 화면이 못 고르는
+ * 조합을 최적이라고 적으면 그 수를 재현할 손잡이가 없다.
+ *
+ * **회계는 엔진 근사다** — 162칸을 실가격(자산스왑 재가격)으로 매기면 못 돈다.
+ * 그래서 최적 칸은 «채택» 으로 노브에 꽂고 정식 실행을 다시 누른다. 그때
+ * 실가격이 붙고, 머리 카드의 수와 이 표의 수가 다른 이유가 그것이다.
+ *
+ * **정렬은 화면**이 한다. 순위 기준을 바꿀 때마다 서버에 다시 물으면 같은
+ * 격자를 기준만 바꿔 다시 도는 셈이고, 「기준을 바꾸면 1등이 바뀐다」는 사실
+ * 자체가 이 표가 말해야 하는 것이라 그 전환은 즉각이어야 한다. */
+export type MrOptimizeCell = MrPerf & {
+  lookback: number;
+  entryZ: number;
+  exitZ: number;
+  stopZ: number;
+  entryMode: MrEntryMode;
+  /** 지금 노브가 이 칸인가 — 순위를 매기는 쪽이 「내 칸」을 못 찾으면 이 표의
+   *  목적이 없다. 격자 안에 **정확히 하나**다. */
+  current: boolean;
+};
+
+export interface MrOptimizeRun {
+  id: string;
+  label: string;
+  /** 격자의 회계 — 늘 `false`(엔진 근사)다. */
+  real: boolean;
+  /** 머리 카드의 회계 — 이 둘이 다르면 화면이 그 사실을 적어야 한다. */
+  headReal: boolean;
+  span: MrSpan;
+  from: string | null;
+  to: string | null;
+  days: number;
+  cells: MrOptimizeCell[];
+}
+
+/** 순위 기준 — **화면이 고른다**. 서버는 칸마다 전부 실어 보낸다.
+ *
+ *  `higher` 는 「클수록 좋은가」다. 지금은 전부 참인데(낙폭·Ulcer 는 순위
+ *  기준에 안 넣었다 — 「가장 안 아팠던 구성」은 «아무 것도 안 한 구성» 이라
+ *  1등이 늘 거래 0 건이 된다), 필드를 두는 이유는 그 사실이 목록에 적혀
+ *  있어야 다음 사람이 낙폭을 넣을 때 부호를 안 뒤집기 때문이다. */
+export const MR_RANK_KEYS = [
+  { v: 'calmar', label: 'Calmar', higher: true,
+    help: '연환산 손익을 최대 낙폭으로 나눈 값이에요. 절대수익형의 표준 기준이에요.' },
+  { v: 'sortino', label: 'Sortino', higher: true,
+    help: '손실 쪽 변동만 벌해요. 상승 변동성을 안 깎는 샤프예요.' },
+  { v: 'martin', label: 'Martin', higher: true,
+    help: '연환산 손익을 Ulcer(RMS 낙폭)로 나눠요. 낙폭의 깊이와 길이를 같이 봐요.' },
+  { v: 'gpr', label: 'GPR', higher: true,
+    help: '월 손익 합을 손실 월의 합으로 나눠요(Schwager).' },
+  { v: 'totalPnl', label: '총손익', higher: true,
+    help: '구간 안에서 번 돈이에요. 위험을 안 보는 기준이에요.' },
+] as const;
+export type MrRankKey = (typeof MR_RANK_KEYS)[number]['v'];
+
+export function fetchMrOptimize(
+  id: string, p: MrStrategyParams, span: MrSpan,
+): Promise<MrOptimizeRun> {
+  const q = strategyQuery(p);
+  q.set('id', id);
+  q.set('span', span);
+  return get<MrOptimizeRun>(mrOptimizeUrl(q.toString()), 'mr optimize');
+}
+
+/** 격자를 기준 하나로 줄 세운다 — **못 잰 칸은 뒤로**.
+ *
+ *  `null` 은 「그 구간에서 그 지표가 안 선다」이지 「0 이다」가 아니다(낙폭이
+ *  0 이라 Calmar 가 없는 칸, 손실 월이 없어 GPR 이 없는 칸). 0 으로 채워
+ *  정렬하면 그런 칸이 한복판에 끼어들어 순위가 거짓이 된다. */
+export function rankCells(cells: MrOptimizeCell[], key: MrRankKey): MrOptimizeCell[] {
+  const spec = MR_RANK_KEYS.find((k) => k.v === key)!;
+  const sign = spec.higher ? -1 : 1;
+  return [...cells].sort((a, b) => {
+    const x = a[key];
+    const y = b[key];
+    if (x === null && y === null) return 0;
+    if (x === null) return 1;
+    if (y === null) return -1;
+    return sign * (x - y);
+  });
+}
+
 /** 거래 하나의 **실가격 일별 대사** [OWNER 2026-09-03 — "이 방향이 정확한 대사"].
  *
  *  BSS 를 자산스왑(국고 매수 · IRS 페이)으로 세워 민평 노드를 1bp 씩 범프한
@@ -732,10 +932,33 @@ export function fetchMrRecon(
   return get<MrRecon>(mrReconUrl(q.toString()), 'mr recon');
 }
 
-/** 실가격 대사 — 서 있거나(`available`), 왜 못 서는지(`why`)거나 둘 중 하나다. */
-export type MrRecon =
-  | ({ available: true; principal: { krw: number; pv01: number } } & BacktestRecon)
-  | { available: false; why: string };
+/** 실가격 대사 — 서 있거나(`available`), 왜 못 서는지(`why`)거나 둘 중 하나다.
+ *
+ * 서면 **표가 하나**다 [OWNER 2026-09-07]. BSS 는 자산스왑 한 표(다리 둘이 그
+ * 안에 선다). 선물 계열은 **블록**으로 오는데 FUT 은 선물 달력 하나, FSW 도
+ * 하나다 — IRS 다리가 그 표 안에 `legs` 로 서서 하루가 일곱 줄이 된다
+ * (`legTenors` 가 두 다리의 열 목록이고, `reconTenors` 가 그 합집합을 세운다).
+ *
+ * 종전에는 FSW 가 **둘**이었다(선물 달력 + IRS 달력 — 엔진 단위 분리
+ * [OWNER 2026-08-25]). 백테스트가 2026-09-04 에 한 표로 가면서 화면 둘이 같은
+ * 상품을 다른 모양으로 그렸고, 그 어긋남을 여기서 닫았다. 「표는 자기 달력 위에
+ * 선다」는 그대로 산다 — IRS 다리는 IRS 달력에서 값매겨진 뒤 선물 행마다
+ * «지난 행 이후» 의 밤으로 담긴다(`futures.book_recon` 의 «버킷»). */
+export type MrReconBlock = { name: string } & BacktestRecon;
+
+export type MrReconOne =
+  { available: true; principal: { krw: number; pv01: number | null } } & BacktestRecon;
+
+export type MrReconBlocks = {
+  available: true;
+  principal: { krw: number; pv01: number | null };
+  blocks: MrReconBlock[];
+  /** 보유 중 갈아탄 횟수와 **회당** 비용(원). 그 돈은 이미 비용 칸에 들어가
+   * 있다 — 화면은 그 사실을 말하기만 한다 [OWNER 2026-09-04 «0.5틱»]. */
+  roll: { days: number; won: number; dates: string[] };
+};
+
+export type MrRecon = MrReconOne | MrReconBlocks | { available: false; why: string };
 
 async function get<T>(url: string, what: string): Promise<T> {
   const r = await fetch(url);

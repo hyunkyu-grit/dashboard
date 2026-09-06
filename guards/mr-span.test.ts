@@ -1,13 +1,21 @@
-/* 전략 실험 창의 **표시 구간과 대사 재료** [OWNER 2026-09-02 — "백테스트 기간을
+/* 전략 실험 창의 **구간과 대사 재료** [OWNER 2026-09-02 — "백테스트 기간을
  * 항상 전체로 설정하다보니 시인성과 목적의식이 불분명" · "진입 레벨과 기준
- * 노셔널과 같은 것들이 전부 나올 수 있게 해야 이게 직접 대사가 가능하므로"].
+ * 노셔널과 같은 것들이 전부 나올 수 있게 해야 이게 직접 대사가 가능하므로" ·
+ * OWNER 2026-09-04 — "지난 1년, 지난 1분기, 지난 1개월을 전역 설정값으로 두고
+ * 이를 조정하면 성과도 바뀌게 해주기"].
  *
  * ## 이 파일이 지는 명제 셋
  *
- * **표시 구간은 백테스트가 아니다.** 구간 탭(전체·1년·1분기·1개월)은 차트와
- * 거래 표의 «표시»만 자른다 — 엔진에 들어가면 z 밴드가 구간 앞머리 룩백만큼
- * 잘리고 「전체 재현」이라는 창의 계약이 깨진다. 그래서 노브 계약
- * (`MrStrategyParams`)에 없어야 하고, stale 을 세우면 안 된다.
+ * **구간은 채점을 자르지 엔진을 다시 돌리지 않는다.** 2026-09-04 에 구간이
+ * «표시»에서 «전역 설정값»이 됐다 — 성과 카드와 최적화 격자가 이 구간에서
+ * 채점된다. 그런데 **엔진에 들어가지는 않는다**: 들어가면 z 밴드가 구간
+ * 앞머리 룩백만큼 잘려 1개월 창에서 120일 룩백이 아예 못 선다. 그래서 노브
+ * 계약(`MrStrategyParams`)에 없어야 하고, stale 을 세우면 안 된다 — 서버가 네
+ * 구간을 한 번에 보내 오므로(`spans`) 고르개는 고르기만 한다.
+ *
+ * **달력 산술은 서버에 하나만 둔다.** 화면이 `monthsBefore` 로 따로 자르던
+ * 시절에는 카드(서버 채점)와 곡선(화면 산술)이 하루씩 갈릴 수 있었다 —
+ * 말일 넘침·휴장에서. 이제 화면은 `spans[].from` 을 읽는다.
  *
  * **재기준은 산술이지 다른 수가 아니다.** 누적 곡선은 구간 시작을 0 으로 다시
  * 긋는다(`p.cum - baseCum`) — 전체 표시에서 `baseCum = 0` 이라 같은 식이 전체
@@ -50,11 +58,30 @@ describe('표시 구간 — 표시만 자른다', () => {
     expect(staleFn).not.toMatch(/span/);
   });
 
-  it('구간은 날짜로 자른다 — 달력 개월이지 봉 수가 아니다', () => {
-    expect(code).toMatch(/monthsBefore\(/);
-    expect(code).toMatch(/months: 12/);
-    expect(code).toMatch(/months: 3/);
-    expect(code).toMatch(/months: 1/);
+  it('구간은 날짜로 자른다 — 달력 개월이지 봉 수가 아니고, 자는 하나다', () => {
+    /* 목록은 `api.ts` 가 지고(서버 `mrmetrics.SPANS` 의 거울), 달력 산술은
+       **서버에만** 있다. 화면이 자기 `monthsBefore` 로 또 자르면 카드와 곡선이
+       하루씩 갈릴 수 있고, 그때 「구간 순손익」과 「총손익」이 다른 수가 된다. */
+    const api = src('src/mr/api.ts');
+    expect(api).toMatch(/months: 12/);
+    expect(api).toMatch(/months: 3/);
+    expect(api).toMatch(/months: 1/);
+    expect(code).not.toMatch(/function monthsBefore/);
+    /* 화면이 자르는 자리는 서버가 채점한 첫 봉이다. */
+    expect(code).toMatch(/perf\?\.from/);
+    expect(code).toMatch(/run\.points\.findIndex\(\(p\) => p\.t >= from\)/);
+  });
+
+  it('성과가 구간을 따라간다 — 카드가 `spans` 를 읽는다', () => {
+    /* 2026-09-04 이전에는 카드가 `run.summary`(전체 기간)를 읽어서, 구간을
+       바꿔도 성과가 안 움직였다. 그 회귀를 여기서 잠근다. */
+    expect(code).toMatch(/run\?\.spans\?\.find\(\(b\) => b\.span === span\)/);
+    /* 구 백엔드에서 옛 summary 로 조용히 떨어지지 않는다 — 그러면 화면이 전체
+       기간의 수를 이 구간의 수인 것처럼 말한다. */
+    expect(code).toMatch(/구간별 성과는 새 백엔드가 필요해요/);
+    /* 샤프는 화면에서 내려갔다(계약·엔진에는 남는다 — 적합성 벡터가 잠근다). */
+    const body = code.slice(code.indexOf('<StatColumn title="성과">'));
+    expect(body).not.toMatch(/label="Sharpe"/);
   });
 
   it('누적 곡선은 구간 시작 0 재기준 — 전체 표시와 한 산술이다', () => {
@@ -63,11 +90,16 @@ describe('표시 구간 — 표시만 자른다', () => {
     expect(code).toMatch(/run\.points\[w0 - 1\]!\.cum/);
   });
 
-  it('고르개는 캐논 부품이다 — PeriodSelector + 무부호 판', () => {
+  it('고르개는 캐논 부품이고 **노브 줄**에 산다 — PeriodSelector + 무부호 판', () => {
     /* 손수 만든 알약 줄이 아니라 Main 미리보기의 그 컨트롤. 이 고르개의 선택은
-       데이터 부호가 없으므로 `.sr-tabs-neutral`(theme/type.css 의 그 주석). */
-    expect(code).toMatch(/PeriodSelector/);
-    expect(code).toMatch(/sr-tabs-neutral/);
+       데이터 부호가 없으므로 `.sr-tabs-neutral`(theme/type.css 의 그 주석).
+       2026-09-04 에 창 본문에서 **노브 바**로 올라갔다 — 결과를 바꾸는 것은
+       설정 줄에 있어야 한다(`Panel.aside` 주석의 그 규율). */
+    const knob = src('src/mr/KnobBar.tsx');
+    expect(knob).toMatch(/PeriodSelector/);
+    expect(knob).toMatch(/sr-tabs-neutral/);
+    /* 두 벌이 되지 않게 — 창 본문에는 없다. */
+    expect(code).not.toMatch(/PeriodSelector/);
   });
 
   it('사건 마커는 구간만큼 옮겨 세운다 — 전체 인덱스를 그대로 찍으면 딴 날에 선다', () => {
@@ -166,7 +198,13 @@ describe('거래 한 줄이 스스로 검산이 된다', () => {
        그래서 거래마다 진입일 커브로 잰다. 지키는 명제는 **「명목 N원/bp」가 모든
        거래에서 같은 뜻이다** — 그 항등(`명목 = 액면 × pv01 × 1e-4`)이 페이로드
        안에서 닫히는 것은 `test_mr_legrecon` 이 라우트를 타고 잰다. */
-    expect(src('src/mr/api.ts')).toMatch(/principal: \{ krw: number; pv01: number \} \| null/);
+    /* `pv01` 이 **null 일 수 있다** [2026-09-04]: 선물 계열은 스왑 연금계수가
+       아니라 합성채 PVBP 로 환산하므로 그 항등(`명목 = 액면 x pv01 x 1e-4`)이
+       안 선다 — 그 칸을 비운다(공란 정책). 타입이 그 사실을 지지 않으면
+       화면이 없는 수를 곱한다. */
+    expect(src('src/mr/api.ts')).toMatch(
+      /principal: \{ krw: number; pv01: number \| null \} \| null/,
+    );
     /* 머리의 액면은 «지금 세우면» 이라고 화면이 말한다. */
     expect(code).toMatch(/지금 커브/);
     const py = fs.readFileSync(path.join(root, 'backend/app/main.py'), 'utf8');
@@ -174,7 +212,11 @@ describe('거래 한 줄이 스스로 검산이 된다', () => {
     expect(py).toMatch(/def _mr_principal_at\(/);
     /* 대사 라우트와 엔진이 **같은 자**를 쓴다 — 안 그러면 표와 헤드라인이 갈린다. */
     expect(py).toMatch(/principal = _mr_principal_at\(entry_d, tenor, notional\)/);
-    expect(py).toMatch(/principal = _mr_principal_at\(dt\.date\.fromisoformat\(e_iso\)/);
+    /* 회계 쪽 호출. 2026-09-04 에 선물 갈래가 붙으면서 날짜를 위에서 한 번만
+       파싱하게 바뀌었다 — 지키는 명제는 그대로 「**그 거래의 진입일**로 잰다」
+       이므로 표기만 옮긴다(가드가 옛 표기를 붙들면 리팩터가 못 지나간다). */
+    expect(py).toMatch(/e_d, x_d = dt\.date\.fromisoformat\(e_iso\), dt\.date\.fromisoformat\(x_iso\)/);
+    expect(py).toMatch(/principal = _mr_principal_at\(e_d, tenor, notional\)/);
     /* **미청산 다리도 같이 가격한다** — 총손익·낙폭이 그것을 실시간으로 지고
        있어서(`mrbacktest` 의 그 주석), 빼먹으면 그 구간 봉이 통째로 0 이 되고
        `Σ거래 + 미청산 ≠ 총손익` 이 된다(실측 2026-09-03: BSS-9M 51봉). */

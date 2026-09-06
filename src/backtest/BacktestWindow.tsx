@@ -81,6 +81,7 @@ import {
   futuresReconNote,
   reconNote,
   reconPair,
+  reconTenors,
 } from './recon';
 import {
   bookKindOf,
@@ -534,7 +535,11 @@ export function BacktestWindow({
                     ) : null}
                     <ReconStack
                       days={backtestDays(pair.swap)}
-                      tenors={pair.swap.tenors}
+                      /* 열은 `reconTenors` 가 정한다 — 다리별 대사면 두 다리의
+                         **합집합**, 아니면 자기 목록 그대로다. 스왑 표는 다리가
+                         없으니 지금은 후자지만, 세 표가 같은 함수를 쓰게 두면
+                         한 표만 옛 방식으로 남는 일이 생기지 않는다. */
+                      tenors={reconTenors(pair.swap)}
                       defaultOrder="desc"
                       note={reconNote(pair.swap)}
                       maxHeight={cap}
@@ -550,7 +555,11 @@ export function BacktestWindow({
                     ) : null}
                     <ReconStack
                       days={backtestDays(pair.bond)}
-                      tenors={pair.bond.tenors}
+                      /* 자산스왑은 **하루 일곱 줄**이다 [OWNER 2026-09-04] —
+                         국고 다리(민평 노드)와 IRS 다리(스왑 노드)의 열 집합이
+                         어긋나므로(민평엔 2.5Y·20Y·30Y, IRS 엔 1D·4Y·6Y·8Y)
+                         민평 목록만 넘기면 IRS 다리의 감도가 통째로 사라진다. */
+                      tenors={reconTenors(pair.bond)}
                       defaultOrder="desc"
                       note={bondReconNote(pair.bond)}
                       maxHeight={cap}
@@ -559,9 +568,19 @@ export function BacktestWindow({
                 ) : null}
                 {pair.futures ? (
                   /* 세 번째 표 [OWNER, 2026-08-25 — 선물·퓨처스왑 합류].
-                     선물 달력 위에 서고, 열은 평가·잔차뿐이다(캐리·롤다운 =
-                     존재하지 않는 성분 — ReconStack 이 숫자 없는 열을 안
-                     세운다). 퓨처스왑의 IRS 다리는 위 스왑 표에 있다. */
+                     선물 달력 위에 선다.
+
+                     **퓨처스왑은 하루 일곱 줄이다** [OWNER 2026-09-04] — 선물
+                     다리와 IRS 다리가 이 표 안에서 갈라지고 합계가 닫는다.
+                     2026-08-25 판은 IRS 다리를 위 스왑 표로 보냈는데(엔진 단위
+                     분리), 그러면 한 거래의 두 다리가 다른 표에 서서 「이 거래가
+                     그날 얼마를 벌었나」를 화면이 한 줄로 못 말한다. 이제 그
+                     다리는 **스왑 표에서 빠진다**(중복 금지 — 서버
+                     `mixedbook.book_recon` 이 그 계약의 다른 쪽).
+
+                     아웃라이트(FUT)만 있는 북은 종전 그대로 하루 세 줄이고, 열은
+                     평가·잔차뿐이다(캐리·롤다운 = 존재하지 않는 성분 —
+                     ReconStack 이 숫자 없는 열을 안 세운다). */
                   <VStack gap={0.5} width="100%">
                     {many ? (
                       <TextCaption as="span" color="fgMuted">
@@ -570,7 +589,7 @@ export function BacktestWindow({
                     ) : null}
                     <ReconStack
                       days={backtestDays(pair.futures)}
-                      tenors={pair.futures.tenors}
+                      tenors={reconTenors(pair.futures)}
                       defaultOrder="desc"
                       note={futuresReconNote(pair.futures)}
                       maxHeight={cap}

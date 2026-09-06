@@ -370,6 +370,39 @@ class TestRecon:
         assert r["bond"] is None
         assert r["swap"] and all(":" not in k for k in r["swap"]["tenors"])
 
+    def test_an_asset_swap_row_stands_as_two_legs_in_the_bond_table(self):
+        """자산스왑은 채권 표 안에서 **하루 일곱 줄**이다 [OWNER 2026-09-04].
+
+        다리마다 KRD·Δbp·손익 셋에 합계 한 줄. 여기서 재는 것은 그 다리가
+        실려 오는가와 **합계가 다리 합인가**뿐이다 — 다리 산술 자체는
+        `test_cashbond` 와 `test_mr_legrecon` 이 이미 박고 있다.
+        """
+        ds = _dataset(120)
+        m = _matrix(ds.dates)
+        r = mb.book_recon(m, ds, [_pos("ASW:KTB:3Y", 1, ds.dates[5])], SPEC)
+        block = r["bond"]
+        assert [lg["name"] for lg in block["legTenors"]] == ["국고", "IRS"]
+        body = [x for x in block["rows"] if not x.get("carryover")]
+        assert body
+        for row in body:
+            assert [lg["name"] for lg in row["legs"]] == ["국고", "IRS"]
+            legs = row["legs"]
+            for key in ("valuation", "carry", "rolldown", "actual"):
+                assert row[key] == pytest.approx(
+                    legs[0][key] + legs[1][key], abs=2.0), key
+            # 조달은 국고 다리만 진다 — IRS 다리는 «그 질문이 없다»(공란).
+            assert legs[1]["funding"] is None
+            assert row["funding"] == legs[0]["funding"]
+
+    def test_a_plain_cash_bond_book_stays_three_rows_a_day(self):
+        """다리는 **자산스왑에만** 있다 — 현물채권은 다리가 하나뿐이라
+        가를 것이 없고, 가르면 IRS KRD 범프 값(250일 5.55배)만 문다."""
+        ds = _dataset(120)
+        m = _matrix(ds.dates)
+        r = mb.book_recon(m, ds, [_pos("CB:KTB:3Y", 1, ds.dates[5])], SPEC)
+        assert "legTenors" not in r["bond"]
+        assert all("legs" not in x for x in r["bond"]["rows"])
+
 
 # ── 6. 라우트 ───────────────────────────────────────────────────────────────
 

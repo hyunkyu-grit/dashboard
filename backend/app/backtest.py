@@ -717,6 +717,7 @@ def _book_recon(
     positions: list[Position],
     spans: list[tuple[int, int, bool]],
     cache: dict[int, np.ndarray],
+    with_krd: bool = True,
 ) -> dict:
     """The daily reconciliation block for the whole book.
 
@@ -880,7 +881,8 @@ def _book_recon(
             # 어긋나고 1.5Y 로 스필도 샌다]. 시뮬 엔진의 결제일 관행과도
             # 같아져 세 표면(백테스트·시뮬·인포맥스)이 한 기준이 됐다.
             # 청산 마크의 포지션은 내일 리스크가 없다 — KRD 0.
-            if alive_fwd:
+            if alive_fwd and with_krd:
+                # 범프가 이 함수에서 제일 비싼 자리다 — 안 물었으면 안 돈다.
                 base_dirty = f_clean + f_accrued
                 for lb in info["bump"]:
                     zc_b = bumped_par_curve(par, lb, bumped)
@@ -900,13 +902,8 @@ def _book_recon(
                 dbp[lb] = None if d is None else round(d, 2)
                 est[lb] = 0.0 if d is None else -prev_krd[lb] * d
             total_est = round(sum(est.values()))
-            rows.append({
+            row = {
                 "t": on.isoformat(),
-                # 전일(start-of-day) KRD — est 가 곱한 바로 그 값 (모듈 주석)
-                "krd": {lb: round(prev_krd[lb]) for lb in labels},
-                "dbp": dbp,
-                "est": {lb: round(est[lb]) for lb in labels},
-                "estTotal": total_est,
                 # 그날 손익 = 평가(백워드) + 캐리·롤다운(포워드) — 평가일
                 # 기준 데일리. 차트의 `d`(종가 대 종가)와는 세타 귀속이 하루
                 # 어긋난다: 금요일 행이 주말치를 실으므로 여기가 튀고, 차트의
@@ -917,30 +914,44 @@ def _book_recon(
                 "carry": round(day_carry),
                 # 개시 — 진입일 행에만 선다 (그 밖의 날은 0)
                 "startup": round(day_start),
-                # 선형화 잔차: 추정(전일 KRD × Δbp)이 설명하는 대상은
-                # 평가(커브무브)뿐이다 — 세타를 섞어 빼던 종전 정의를 정리.
-                "residual": round(day_val) - total_est,
-            })
+            }
+            if with_krd:
+                # 리스크 칸은 **잰 때만** 싣는다(위 `with_krd` 머리 — 안 잰 값을
+                # 0 으로 채우면 다음 사람이 그것을 실측으로 읽는다).
+                row.update({
+                    # 전일(start-of-day) KRD — est 가 곱한 바로 그 값 (모듈 주석)
+                    "krd": {lb: round(prev_krd[lb]) for lb in labels},
+                    "dbp": dbp,
+                    "est": {lb: round(est[lb]) for lb in labels},
+                    "estTotal": total_est,
+                    # 선형화 잔차: 추정(전일 KRD × Δbp)이 설명하는 대상은
+                    # 평가(커브무브)뿐이다 — 세타를 섞어 빼던 종전 정의를 정리.
+                    "residual": round(day_val) - total_est,
+                })
+            rows.append(row)
         prev_krd = krd
 
     # 이월 앵커 행 [OWNER, 2026-08-11]: 마지막 날의 종가 KRD(다음 영업일
     # 기준 재평가 — 곧 내일 아침 들고 갈 리스크). 날짜는 마지막 행이 세타를
     # booking 한 구간의 끝(`nxt`)이고, 손익 필드는 전부 None — 공란 정책.
     if rows:
-        rows.append({
+        anchor = {
             "t": nxt.isoformat(),
-            "krd": {lb: round(krd[lb]) for lb in labels},
-            "dbp": {},
-            "est": {},
-            "estTotal": None,
             "actual": None,
             "valuation": None,
             "rolldown": None,
             "carry": None,
             "startup": None,
-            "residual": None,
             "carryover": True,
-        })
+        }
+        if with_krd:
+            # 이월 앵커가 싣는 것은 **종가 KRD 하나**다 — 그것을 안 쟀으면
+            # 이 행은 날짜뿐이고, 0 을 적어 «리스크가 없다» 고 말하지 않는다.
+            anchor.update({
+                "krd": {lb: round(krd[lb]) for lb in labels},
+                "dbp": {}, "est": {}, "estTotal": None, "residual": None,
+            })
+        rows.append(anchor)
 
     return {
         "tenors": labels,
@@ -1025,13 +1036,25 @@ def run_backtest(dataset: Dataset, positions: list[Position]) -> dict:
     }
 
 
-def book_recon(dataset: Dataset, positions: list[Position]) -> dict:
+def book_recon(
+    dataset: Dataset, positions: list[Position], with_krd: bool = True
+) -> dict:
     """The 일별 대사 block, as its own call [OWNER, 2026-08-11].
 
     Separate from `run_backtest` ON PURPOSE: the KRD bump pass costs several
     times the backtest itself, and every property test that replays books
     would pay it for rows it never reads. The ENDPOINT merges this under
     `recon` in the same response; the engine tests call whichever they test.
+
+    ## `with_krd=False` — **돈만 필요할 때** [2026-09-04]
+
+    MR 회계는 이 블록에서 **하루의 돈**(평가·캐리·롤다운)만 읽어 봉에 얹는다.
+    그런데 범프 한 번이 그 일의 대부분이라, 퓨처스왑 52거래의 IRS 다리를 거래마다
+    세우면 전략 라우트가 24초가 된다(실측 2026-09-04: 42봉 한 거래에 465ms).
+
+    끄면 **`krd`·`dbp`·`est`·`estTotal`·`residual` 을 아예 안 싣는다.** 0 으로
+    채우지 않는 이유는 이 리포의 공란 정책 그대로다 — 「그날 KRD 가 0 이었다」는
+    다른 말이고, 안 잰 값을 0 이라 적으면 다음 사람이 그것을 실측으로 읽는다.
     """
     if not positions:
         raise BacktestError("at least one position is required")
@@ -1039,7 +1062,7 @@ def book_recon(dataset: Dataset, positions: list[Position]) -> dict:
         raise BacktestError(f"at most {MAX_POSITIONS} positions")
     spans = [_span_of(dataset, p) for p in positions]
     cache: dict[int, np.ndarray] = {}
-    return _book_recon(dataset, positions, spans, cache)
+    return _book_recon(dataset, positions, spans, cache, with_krd=with_krd)
 
 
 def _quoted_value(dataset: Dataset, series_id: str, i: int) -> float | None:

@@ -179,6 +179,11 @@ export const mrBookUrl = (query: string) => liveUrl("/api/mr/book", query);
  * 테너별 KRD. **거래를 누를 때만** 도는 별도 패스라 라우트도 따로다
  * (KRD 범프가 본체보다 비싸다 — `cashbond` 의 그 근거). */
 export const mrReconUrl = (query: string) => liveUrl("/api/mr/recon", query);
+/** 근사 최적화 격자 — 다섯 노브(룩백·진입·청산·손절·진입 규칙)의 프리셋을
+ * 전부 돌린 표 [OWNER 2026-09-04]. **누를 때만** 도는 별도 패스라 라우트도
+ * 따로다(162칸이 본체보다 비싸다 — `/api/mr/recon` 과 같은 근거).
+ * query 는 `/api/mr/strategy` 와 같고 `span` 이 하나 더 있다. */
+export const mrOptimizeUrl = (query: string) => liveUrl("/api/mr/optimize", query);
 
 export const simInstrumentsUrl = () => liveUrl("/api/instruments");
 export const simExpandUrl = () => liveUrl("/api/instruments/expand");

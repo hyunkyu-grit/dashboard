@@ -73,6 +73,7 @@ from . import mrbacktest as mrbt
 from . import mrbook
 from . import mrcarry as mrc
 from . import mrdiag as mrd
+from . import mrmetrics as mrm
 from . import mrregime as mrg
 from . import mrseries as mrs
 from . import payloads
@@ -81,6 +82,7 @@ from . import schedule_cache
 # 백테스트 엔진은 이제 `mixedbook` 을 통해서만 부른다 — 스왑만 있는 북은 저쪽이
 # 그대로 위임한다. 여기서 `run_backtest` 를 직접 들고 있으면 «스왑 전용 길» 이
 # 하나 더 열려 있는 셈이고, 그 길로 들어간 북에는 `kind` 가 안 붙는다.
+from . import backtest as bt_engine
 from .backtest import BacktestError
 from . import futures
 from . import mixedbook
@@ -983,6 +985,122 @@ def _mr_neighbors(dates: list[str], vals: list[float], base: dict,
     return rows
 
 
+#: 최적화 격자가 흔드는 다섯 [OWNER 2026-09-04 — "지금 주어진 진입, 청산,
+#: 손절, 룩백, 진입 규칙을 바탕으로 … 근사 최적화 세트"]. 진입 규칙만 프리셋이
+#: 아니라 **전 경우**(둘)다 — 값이 아니라 규칙이라 「이웃」이라는 말이 안 선다.
+MR_ENTRY_MODES_ALL: tuple[str, ...] = ("level", "touch")
+
+#: 격자가 낼 수 있는 최대 칸 수 — 3×3×3×3×2 = 162 가 프리셋 그대로의 값이다.
+#: 현재 노브가 프리셋 밖이면(자유 룩백) 칸이 하나씩 늘어 최대 4×4×4×4×2 = 512.
+#: 그 위는 라우트가 막는다 — 화면에 안 쓰는 계산에 몇 초를 쓰지 않는다.
+MR_OPT_MAX_CELLS = 512
+
+
+def _mr_optimize(dates: list[str], vals: list[float], base: dict,
+                 allow: tuple[int, ...], *,
+                 span: str,
+                 carry: list[float] | None = None,
+                 gate: list[bool] | None = None,
+                 time_stop: int | None = None,
+                 cost_bp_series: list[float] | None = None,
+                 reverse_exit: bool = False,
+                 close_open_at_end: bool = False,
+                 tradable_dv: list[float] | None = None) -> dict:
+    """**근사 최적화 격자** — 다섯 노브의 프리셋을 전부 돌린 결과
+    [OWNER 2026-09-04].
+
+    ## 왜 «근사» 인가
+
+    연속 최적화를 안 한다. 격자는 **화면이 고를 수 있는 값** 위에서만 돌고
+    (`mr.STRATEGY_PRESETS` + 진입 규칙 둘), 그건 이웃 칸 표가 서던 자리와 같은
+    규율이다: 화면이 못 고르는 조합을 최적이라고 적으면 그 수를 재현할 손잡이가
+    없다. 프리셋 밖의 최적을 찾는 도구가 아니라 **「내가 지금 고른 칸이 이
+    격자에서 몇 등인가」** 를 답하는 도구다.
+
+    ## 회계는 **엔진 근사**다 — 그 사실을 화면이 적는다
+
+    162칸을 실가격(자산스왑 재가격)으로 매기면 한 칸이 초 단위라 못 돈다.
+    그래서 여기서는 `mrbacktest.simulate` 의 수를 그대로 쓴다 — 머리 카드가
+    실가격일 때 이 표의 숫자는 그것과 **다르다**(BSS 실측: 실가격이 거래당
+    +0.7~+3.5백만원 크다). 화면은 최적 칸을 «채택» 버튼으로 노브에 꽂고,
+    정식 실행은 늘 그대로 돈다 — 그때 실가격이 붙는다.
+
+    ## 순위는 서버가 안 매긴다
+
+    칸을 전부 돌려주고 **정렬은 화면**이 한다. 순위 기준(Calmar·Sortino·…)을
+    바꿀 때마다 서버에 다시 물으면, 같은 격자를 기준만 바꿔 다시 도는 셈이다.
+    그리고 「기준을 바꾸면 1등이 바뀐다」는 사실 자체가 이 표가 말해야 하는
+    것이라, 그 전환은 즉각이어야 한다.
+    """
+    opts: dict[str, list] = {}
+    for knob in ("lookback", "entryZ", "exitZ", "stopZ"):
+        o = list(mr_mod.STRATEGY_PRESETS[knob])
+        if base[knob] not in o:
+            o = sorted(o + [base[knob]])
+        opts[knob] = o
+    modes = list(MR_ENTRY_MODES_ALL)
+    if base["entryMode"] not in modes:
+        modes.append(base["entryMode"])
+
+    n_cells = 1
+    for o in opts.values():
+        n_cells *= len(o)
+    n_cells *= len(modes)
+    if n_cells > MR_OPT_MAX_CELLS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"격자가 너무 커요: {n_cells}칸 (최대 {MR_OPT_MAX_CELLS})")
+
+    months = dict(mrm.SPANS).get(span)
+    start = mrm.span_start(dates, months)
+
+    cells: list[dict] = []
+    for lb in opts["lookback"]:
+        lb = int(lb)
+        if lb < 2 or len(vals) < lb + 1:
+            continue
+        # 룩백이 같은 칸 54개가 **같은 밴드**를 쓴다 — 한 번 재서 나눠 준다
+        # (`mrbacktest.simulate` 의 `roll` 손잡이. 산술은 안 바뀐다).
+        rs = mrbt.rolling_series(vals, lb)
+        for ez in opts["entryZ"]:
+            for xz in opts["exitZ"]:
+                for sz in opts["stopZ"]:
+                    for md in modes:
+                        r = mrbt.simulate(
+                            dates, vals, lookback=lb, entry_z=ez, exit_z=xz,
+                            stop_z=sz, cost_bp=base["costBp"],
+                            notional=base["notional"], allow_dirs=allow,
+                            carry=carry, entry_mode=md, gate=gate,
+                            time_stop=time_stop, cost_bp_series=cost_bp_series,
+                            reverse_exit=reverse_exit,
+                            close_open_at_end=close_open_at_end,
+                            tradable_dv=tradable_dv, roll=rs)
+                        m = mrm.score(dates, r["points"], r["trades"], start,
+                                      base["costBp"])
+                        cells.append({
+                            "lookback": lb, "entryZ": ez, "exitZ": xz,
+                            "stopZ": sz, "entryMode": md,
+                            # 지금 노브가 어느 칸인가 — 순위를 매기는 쪽이
+                            # 「내 칸」을 표에서 못 찾으면 이 표의 목적이 없다.
+                            "current": (lb == base["lookback"] and ez == base["entryZ"]
+                                        and xz == base["exitZ"] and sz == base["stopZ"]
+                                        and md == base["entryMode"]),
+                            **{k: m[k] for k in (
+                                "totalPnl", "maxDrawdown", "sortino", "calmar",
+                                "gpr", "omega", "profitFactor", "ulcer",
+                                "martin", "recoveryDays", "recovered",
+                                "winRate", "numTrades", "breakevenCostBp",
+                                "breakevenCostMult")},
+                        })
+    return {
+        "span": span,
+        "from": dates[start] if dates else None,
+        "to": dates[-1] if dates else None,
+        "days": len(dates) - start,
+        "cells": cells,
+    }
+
+
 def _mr_check_knobs(lookback: int, entryZ: float, exitZ: float,
                     stopZ: float, costBp: float, notional: float,
                     entryMode: str, timeStop: int, costModel: str,
@@ -1076,6 +1194,106 @@ def _mr_principal_at(on: dt.date, tenor: str, notional: float) -> float | None:
     """그 거래의 **액면** — 진입일 커브에서 명목(₩/bp)을 액면으로."""
     pv = _mr_pv01_at(on, TENOR_T[tenor])
     return None if not pv else notional / (pv * 1e-4)
+
+
+#: MR 선물 계열 → 선물 엔진의 계열 id·테너와 **방향 사상**
+#: [실측 2026-09-04, 계열마다 여섯 거래 부호 전건 일치].
+#:
+#: FUT 는 MR 의 값이 **금리**라 +1(금리 롱) = 선물 매도이므로 뒤집는다(BSS 와
+#: 같은 사상). FSW 는 값이 **스프레드**이고 `futures.py` 의 «+1 = 호가값(스프레드)
+#: 롱 = 선물 매도 + IRS 리시브» 와 같은 말이라 그대로 넘긴다.
+MR_FUT_MAP: dict[str, tuple[str, str, int]] = {
+    "FUT-KTB3": ("FUT:3Y", "3Y", -1),
+    "FUT-KTB10": ("FUT:10Y", "10Y", -1),
+    "FSW-3Y": ("FSW:3Y", "3Y", 1),
+    "FSW-10Y": ("FSW:10Y", "10Y", 1),
+}
+
+#: 선물 대사 캐시 — `_mr_recon_cache` 와 같은 규율(거래 목록은 z 에만 달려 있어
+#: 노브를 돌리는 동안 거의 다 맞는다).
+_mr_fut_cache: dict = {}
+
+
+def _mr_fut_recon(sid: str, direction: int, notional: float,
+                  entry: dt.date, exit_: dt.date, *, with_krd: bool,
+                  with_legs: bool = False) -> dict | None:
+    """MR **선물 거래 하나**의 실가격 대사 — 못 세우면 `None`.
+
+    반환 `{"blocks": [{"name", "recon"}], "face": 액면, "rolls": [롤일]}`.
+
+    ## `with_legs` — 화면은 한 표, 회계는 두 블록 [OWNER 2026-09-07]
+
+    **켜면**(화면) FSW 도 블록 **하나**다. IRS 다리가 선물 표 안으로 들어와
+    하루가 일곱 줄이 된다 — 백테스트 창이 2026-09-04 에 간 그 길이고
+    (`futures.book_recon(with_legs=True)` 의 «버킷»), 이제 두 화면이 같은 상품을
+    같은 모양으로 그린다. 종전에는 여기가 **둘**이었다(선물 달력 + IRS 달력)
+    [OWNER 2026-08-25, 엔진 단위 분리] — 그 분리는 «표는 자기 달력 위에 선다»
+    까지 살고, 「한 거래의 두 다리는 한 표에」가 그 위에 얹힌다.
+
+    **끄면**(회계) 종전 그대로 둘이다. 모양이 아니라 **값**이 필요한 자리라서
+    그렇다: 다리 표는 IRS 파 커브를 범프해야 서는데(`with_krd=True` 가 박혀 있다
+    — `futures.book_recon` 의 그 호출), 회계는 거래마다 도므로 그 값을 안 쓰고도
+    낼 수 있는 총계만 받는다(BSS 가 `_mr_recon_rows` 에서 같은 이유로 다리를
+    안 묻는다). **돈은 어느 쪽이든 같다** — 다리의 합이 곧 합계 줄이고, 회계는
+    블록의 행을 한 줄기로 펴서 날짜로 얹는다.
+
+    실측 2026-09-04: 블록의 돈 합이 거래 손익과 ±2원으로 닫힌다.
+
+    ## 액면
+
+    MR 노브는 ₩/bp(DV01)인데 선물 포지션은 **액면**을 받는다. 환산은 그 거래의
+    **진입일 벤더 내재금리**로 한다(`futures.face_for_dv01` — BSS 의
+    `_mr_principal_at` 과 같은 자리, 같은 이유).
+
+    ## 캐리·롤다운·조달이 없는 다리
+
+    선물 다리는 현금결제·연결 계열이라 **존재하지 않는 성분**이다(공란 정책 —
+    `futures.book_recon` 머리). 0 으로 채우지 않는다.
+    """
+    hit = MR_FUT_MAP.get(sid)
+    if hit is None:
+        return None
+    fid, tenor, sign = hit
+    try:
+        fut = futures.load()
+    except Exception:                                  # noqa: BLE001
+        return None
+    #: `with_legs` 가 **열쇠에 든다** — 다리 유무는 응답의 모양을 바꾼다
+    #: (`_mr_recon_rows` 의 같은 조항). 안 넣으면 회계가 먼저 캐시를 채우고
+    #: 화면이 두 블록짜리 옛 판을 받는다.
+    key = (fut.watermark, _dataset.data_key if hasattr(_dataset, "data_key") else None,
+           sid, direction, notional, entry, exit_, with_krd, with_legs)
+    if key in _mr_fut_cache:
+        return _mr_fut_cache[key]
+
+    got: dict | None = None
+    try:
+        fs = fut.series[tenor]
+        i = futures._index_on_or_before(fs.dates, entry)   # noqa: SLF001 — 같은 레인
+        y0 = futures.implied_at_index(fs, i, tenor)
+        face = futures.face_for_dv01(notional, y0, tenor)
+        pos = futures.as_position(fid, sign * int(direction), face, entry, exit_)
+        # 다리를 켜는 것은 **FSW 일 때만** 뜻이 있다 — FUT 아웃라이트는 물건이
+        # 하나라 다리가 없고, `book_recon` 도 그때는 `with_legs` 를 무시한다.
+        want_legs = bool(with_legs and pos.kind == futures.KIND_FSW)
+        blocks = [{"name": "선물",
+                   "recon": futures.book_recon(fut, _dataset, [pos],
+                                               with_legs=want_legs)}]
+        if pos.kind == futures.KIND_FSW and not want_legs:
+            swap_pos, _y, _dv = futures.fsw_swap_leg(fut, _dataset, pos)
+            blocks.append({"name": "IRS",
+                           "recon": bt_engine.book_recon(_dataset, [swap_pos],
+                                                         with_krd=with_krd)})
+        # 보유 중 **롤일** — 그날 갈아타므로 왕복 1틱을 문다(`futures.roll_cost`).
+        rolls = sorted(d for d in futures.roll_days(list(fs.dates))
+                       if entry < d <= exit_)
+        got = {"blocks": blocks, "face": face, "rolls": [d.isoformat() for d in rolls]}
+    except (futures.FuturesError, BacktestError, KeyError, ValueError, IndexError):
+        got = None
+    if len(_mr_fut_cache) >= MR_RECON_CACHE_MAX:
+        _mr_fut_cache.clear()
+    _mr_fut_cache[key] = got
+    return got
 
 
 def _mr_recon_rows(m, tenor: str, entry: dt.date, exit_: dt.date,
@@ -1209,8 +1427,8 @@ def _mr_scale_rows(rows: list[dict], scale: float) -> list[dict]:
     return out
 
 
-def _mr_real_accounting(r: dict, *, kind: str, tenor: str, notional: float,
-                        cost_bp: float, spec) -> bool:
+def _mr_real_accounting(r: dict, *, sid: str, kind: str, tenor: str,
+                        notional: float, cost_bp: float, spec) -> bool:
     """`simulate()` 의 **언제** 위에 백테스트·시뮬의 **얼마** 를 얹는다
     [OWNER 2026-09-03 — "캐리 롤다운 다 넣고 우리가 원래 사용하던 백테스트/
     시뮬레이션에서의 대사와 동일하게 작성하기"].
@@ -1234,10 +1452,21 @@ def _mr_real_accounting(r: dict, *, kind: str, tenor: str, notional: float,
 
         그날 손익 = 평가 + 캐리 + 롤다운 + 조달 + 비용
 
-    ## 선물 계열은 안 바꾼다
+    ## 선물 계열도 실가격이다 [2026-09-04]
 
-    자산스왑이 아니라 이 경로가 없다(증거금·일일정산). 그때 `False` 를 돌려주고
-    라우트가 그 사실을 페이로드에 싣는다 — 두 회계가 섞여 있으면 화면이 말해야 한다.
+    자산스왑은 아니지만 **자기 엔진의 실가격**이 있다: 선물 다리는 조정가 차분,
+    FSW 의 IRS 다리는 스왑 엔진(`_mr_fut_recon`). 두 블록의 돈 합이 거래 손익과
+    ±2원으로 닫힌다(실측 2026-09-04).
+
+    거기에 **롤 비용**이 붙는다 [OWNER 2026-09-04 — "0.5틱으로 해두자"]. 종전에는
+    분기마다 실제로 갈아타는데 그 왕복이 모형에 없었고(비용은 진입·청산 봉에만
+    걸린다), 롤일 Δ 를 0 으로 마스크하는 근사가 그 사실을 가리고 있었다 — 마스크는
+    벤더 내재금리 차분에만 참인 규약이라 조정가 위에서는 죽는다.
+
+    **롤 마스크는 여기서 안 쓴다.** 엔진이 만든 `tradable` 은 근사의 부속이고,
+    실가격 회계에서는 돈이 조정가에서 나므로 그 배열이 손익에 안 쓰인다. 시점은
+    z 가 정하므로 거래 목록은 한 건도 안 움직인다(실측: `dv_bar` 는 `trade_mtm`·
+    `dailyPnl` 에만 들어간다).
 
     ## 미청산 다리도 센다
 
@@ -1253,7 +1482,7 @@ def _mr_real_accounting(r: dict, *, kind: str, tenor: str, notional: float,
     **버리지 않는다** — 다음 봉으로 이월해서 얹는다. 그래야 거래의 세로합이
     대사표의 합과 한 자도 안 갈린다.
     """
-    if kind != "bss":
+    if kind not in ("bss", "fut", "fsw"):
         return False
     trades = r["trades"]
     if not trades:
@@ -1264,31 +1493,49 @@ def _mr_real_accounting(r: dict, *, kind: str, tenor: str, notional: float,
     op = r.get("open")
     if op and last_t:
         legs_to_price.append((op, op["entryDate"], last_t, op["direction"]))
-    try:
-        m = creditmatrix.load()
-    except Exception:                                  # noqa: BLE001
-        return False
+    m = None
+    if kind == "bss":
+        try:
+            m = creditmatrix.load()
+        except Exception:                              # noqa: BLE001
+            return False
 
     #: 날짜 → 네 성분. 여러 거래가 한 날을 나눠 갖지 않는다(한 번에 한 포지션).
     day: dict[str, tuple[float, float, float, float]] = {}
+    #: 날짜 → 그날 갈아타는 비용(양수). 선물 계열에만 선다.
+    roll_day: dict[str, float] = {}
     per_trade: list[dict[str, float]] = []
     for obj, e_iso, x_iso, direction in legs_to_price:
-        # 액면은 **거래마다 진입일 커브**로 잰다 — 그래야 「명목 N원/bp」가 모든
-        # 거래에서 같은 뜻이 된다(`_mr_pv01_at` 머리의 검산).
-        principal = _mr_principal_at(dt.date.fromisoformat(e_iso), tenor, notional)
-        if principal is None:
-            return False
-        scale = principal / MR_REF_PRINCIPAL
-        # 회계는 **총계만** 쓴다 — 다리를 물으면 IRS 파 커브 범프가 거래마다
-        # 붙어서(실측 5.55배) 전략 라우트가 통째로 느려진다. 다리는 거래를
-        # 누를 때 `/api/mr/recon` 이 받는다.
-        got = _mr_recon_rows(m, tenor, dt.date.fromisoformat(e_iso),
-                             dt.date.fromisoformat(x_iso), -int(direction), spec)
-        if got is None:
-            return False                               # 한 건이라도 못 재면 전부 안 바꾼다
-        rows = got["rows"]
+        e_d, x_d = dt.date.fromisoformat(e_iso), dt.date.fromisoformat(x_iso)
+        if kind == "bss":
+            # 액면은 **거래마다 진입일 커브**로 잰다 — 그래야 「명목 N원/bp」가 모든
+            # 거래에서 같은 뜻이 된다(`_mr_pv01_at` 머리의 검산).
+            principal = _mr_principal_at(e_d, tenor, notional)
+            if principal is None:
+                return False
+            # 회계는 **총계만** 쓴다 — 다리를 물으면 IRS 파 커브 범프가 거래마다
+            # 붙어서(실측 5.55배) 전략 라우트가 통째로 느려진다. 다리는 거래를
+            # 누를 때 `/api/mr/recon` 이 받는다.
+            got = _mr_recon_rows(m, tenor, e_d, x_d, -int(direction), spec)
+            if got is None:
+                return False                           # 한 건이라도 못 재면 전부 안 바꾼다
+            rows = _mr_scale_rows(got["rows"], principal / MR_REF_PRINCIPAL)
+        else:
+            got = _mr_fut_recon(sid, int(direction), notional, e_d, x_d,
+                                with_krd=False)
+            if got is None:
+                return False
+            # 블록의 행을 한 줄기로 편다. 두 달력(선물·IRS)이 어긋나도 아래에서
+            # **날짜로** 봉에 얹으므로 합이 안 샌다.
+            rows = [row for b in got["blocks"] for row in b["recon"]["rows"]]
+            # 보유 중 롤일마다 **왕복 1틱** — 연결 계열은 상품이 아니라서
+            # 갈아타기의 마찰을 따로 문다(`futures.roll_cost` 머리).
+            rc = futures.roll_cost(got["face"])
+            for d_iso in got["rolls"]:
+                roll_day[d_iso] = roll_day.get(d_iso, 0.0) + rc
+            obj["cost"] = (obj.get("cost") or 0.0) - rc * len(got["rolls"])
         agg = {"mtm": 0.0, "carry": 0.0, "rolldown": 0.0, "funding": 0.0}
-        for row in _mr_scale_rows(rows, scale):
+        for row in rows:
             if row.get("actual") is None:
                 continue                               # 이월 앵커 — 오늘의 돈이 아니다
             # **「그날 손익」이 정본이고 평가가 잔차를 진다** — `splitKrw` 의 그
@@ -1321,7 +1568,11 @@ def _mr_real_accounting(r: dict, *, kind: str, tenor: str, notional: float,
              got[2] + carry_over[2], got[3] + carry_over[3]) if got
             else (carry_over[0], carry_over[1], carry_over[2], carry_over[3]))
         carry_over = [0.0, 0.0, 0.0, 0.0]
-        cost = pt["barCost"]
+        # 롤 비용은 **비용 칸**에 든다 — 새 열을 만들지 않아야 대사표의
+        # 「평가+캐리+롤다운+조달+비용 = 그날 손익」이 그대로 닫힌다.
+        rc_today = roll_day.pop(d, 0.0)
+        cost = pt["barCost"] - rc_today
+        pt["barCost"] = cost
         pt["mtm"] = v
         pt["barCarry"] = c
         pt["barRolldown"] = rd
@@ -1331,6 +1582,15 @@ def _mr_real_accounting(r: dict, *, kind: str, tenor: str, notional: float,
         pt["cumulativePnl"] = cum
         trade_cum = 0.0 if pt["position"] == 0 and pt["dailyPnl"] == 0 else trade_cum + pt["dailyPnl"]
         pt["tradePnl"] = trade_cum
+    # 봉에 못 얹은 롤 비용 — 롤일은 선물 달력이고 봉도 그 달력이라 보통 0 이지만,
+    # 남으면 마지막 봉이 진다(아래 돈과 같은 규율).
+    left_roll = sum(roll_day.values())
+    if abs(left_roll) > 1e-9 and r["points"]:
+        last = r["points"][-1]
+        last["barCost"] -= left_roll
+        last["dailyPnl"] -= left_roll
+        last["cumulativePnl"] -= left_roll
+        last["tradePnl"] -= left_roll
     # 봉에 못 얹은 날 — 마지막 봉에 몰아 얹어 **한 자도 안 잃는다**.
     left = [sum(day[d][i] for d in day if d not in seen) for i in range(4)]
     if any(abs(x) > 1e-9 for x in left) and r["points"]:
@@ -1359,7 +1619,9 @@ def _mr_real_accounting(r: dict, *, kind: str, tenor: str, notional: float,
     # 견디는가 = 1 + 총손익/문 돈 (`mrbacktest.breakeven_cost_bp` 의 그 산술).
     paid = -sum(p["barCost"] for p in r["points"])
     mult = None if paid <= 0 else 1.0 + r["summary"]["totalPnl"] / paid
-    if r["summary"].get("breakevenCostMult") is not None or mult is None:
+    # 선물 계열은 문 돈에 **롤 비용**이 섞여 있고 그것은 편도 bp 에 비례하지
+    # 않는다 — 그래서 「편도 N bp 까지 견딘다」로 옮길 수 없다. 배수만 말한다.
+    if kind != "bss" or r["summary"].get("breakevenCostMult") is not None or mult is None:
         r["summary"]["breakevenCostMult"] = mult
         r["summary"]["breakevenCostBp"] = None
     else:
@@ -1519,11 +1781,9 @@ def _mr_leg(id: str, *, lookback: int, entryZ: float, exitZ: float, stopZ: float
     # `simulate` 가 정한 **언제** 위에 실제 자산스왑의 **얼마** 를 얹는다.
     # 엔진 함수는 안 건드린다(잠긴 적합성 벡터가 그대로 통과한다) — 근거와
     # 한계는 `_mr_real_accounting` 머리에.
-    real = False
-    if kinds[id] == "bss":
-        real = _mr_real_accounting(
-            r, kind=kinds[id], tenor=mrc._tenor_of(id),
-            notional=notional, cost_bp=costBp, spec=spec)
+    real = _mr_real_accounting(
+        r, sid=id, kind=kinds[id], tenor=mrc._tenor_of(id),
+        notional=notional, cost_bp=costBp, spec=spec)
 
     return {"id": id, "label": labels[id], "kind": kinds[id], "unit": unit,
             # 이 다리의 수가 «실가격 회계» 인가 «엔진 근사» 인가. 두 회계가
@@ -1710,7 +1970,29 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     # (위 «pv01 근사» 주석·`docs/MR_LANE_STATE.md` §6 ⑤) 화면이 「근사」를 같이
     # 적는다. 선물은 원금이 없다(증거금·일일정산) — 지어내지 않고 null 로 보낸다.
     principal = None
-    if leg["kind"] != "fut":
+    if leg["kind"] in ("fut", "fsw"):
+        # 선물 계열의 액면은 **선물 DV01** 로 환산한다 [2026-09-04] — 스왑 pv01 이
+        # 아니다. FSW 는 두 다리가 진입일 DV01 중립이라 스프레드 1bp 의 값이 곧
+        # 선물 다리의 DV01 이고, 회계도 그 액면 위에서 돈다(`_mr_fut_recon`).
+        # 머리의 수는 «지금 세우면» 이고 거래마다의 액면은 그 거래의 진입일
+        # 커브가 정한다(BSS 와 같은 규약).
+        _fid, _ft, _sg = MR_FUT_MAP[id]
+        try:
+            _fs = futures.load().series[_ft]
+            _j = len(_fs.implied) - 1
+            while _j >= 0 and _fs.implied[_j] is None:
+                _j -= 1
+            if _j >= 0:
+                principal = {
+                    "krw": round(futures.face_for_dv01(notional, _fs.implied[_j], _ft)),
+                    # 선물은 연금계수(pv01)가 아니라 합성채 PVBP 로 환산한다 —
+                    # 스왑의 항등(`명목 = 액면 x pv01 x 1e-4`)이 안 서는 자리라
+                    # 그 칸을 비운다(공란 정책).
+                    "pv01": None,
+                }
+        except (futures.FuturesError, KeyError, ValueError):
+            principal = None
+    else:
         pv = pv01(_curves["now"], TENOR_T[mrc._tenor_of(id)])
         # pv01 은 **무반올림** — 4자리로 내보냈더니 되곱한 명목이 14.66원/bp,
         # 8자리로도 원금 큰 단기 테너(6M 202억)에서 84원 어긋났다(2026-09-02
@@ -1903,6 +2185,13 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
             tuple(dirs["allowed"]), carry=carry_krw, entry_mode=entryMode,
             gate=gate, time_stop=timeStop or None, cost_bp_series=cost_series,
             reverse_exit=reverseExit, close_open_at_end=countOpen),
+        # ── 구간별 성과 [OWNER 2026-09-04 — "지난 1년, 지난 1분기, 지난
+        #    1개월을 전역 설정값으로 두고 이를 조정하면 성과도 바뀌게"] ──────
+        # 네 벌을 **한 번에** 낸다. 엔진은 전체 표본에서 한 번만 돌고(룩백
+        # 워밍업이 구간 앞에 있어야 z 가 선다 — `mrmetrics` 머리 §구간),
+        # 바뀌는 것은 채점뿐이라 네 벌의 값이 봉 배열을 네 번 훑는 값이다.
+        # 그래서 화면의 구간 고르개는 재실행도 stale 도 안 만든다.
+        "spans": mrm.spans_for(dates, r["points"], r["trades"], costBp),
         "summary": {
             "totalPnl": round(s["totalPnl"], 2),
             "maxDrawdown": round(s["maxDrawdown"], 2),
@@ -1922,6 +2211,57 @@ def mr_strategy(id: str, lookback: int = 60, entryZ: float = 2.0,
     }
 
 
+@router.get("/api/mr/optimize")
+def mr_optimize(id: str, span: str = "all",
+                lookback: int = 60, entryZ: float = 2.0,
+                exitZ: float = 0.5, stopZ: float = 3.5,
+                costBp: float = 0.5, notional: float = 1_000_000.0,
+                carry: bool = True, entryMode: str = "level",
+                timeStop: int = 0, costModel: str = "flat",
+                regime: str = "none", reverseExit: bool = False,
+                countOpen: bool = False,
+                fundingBasis: str = funding.DEFAULT_BASIS,
+                fundingSpreadBp: float = funding.DEFAULT_SPREAD_BP) -> dict:
+    """근사 최적화 격자 — 다섯 노브의 프리셋을 전부 돌린 표 [OWNER 2026-09-04].
+
+    **비용·명목·실전 규칙은 안 흔든다.** 비용은 그날 그 종목의 호가폭이고
+    명목은 이 데스크의 포지션 크기라 최적화할 대상이 아니다(`mr.STRATEGY_PRESETS`
+    머리의 그 규율). 실전 규칙 다섯은 긴 표본에서 이미 기각됐다 — 격자에 넣으면
+    화면이 «이걸 켜 보면 좋아질까» 를 다시 묻게 된다.
+
+    `/api/mr/strategy` 와 **같은 준비 자리**(`_mr_leg`)를 지난다. 별도 라우트인
+    이유는 `/api/mr/recon` 이 갈라져 있는 이유와 같다: 162칸이 본체보다 비싸서
+    누를 때만 돈다.
+    """
+    labels = {s: l for s, l, _ in mr_mod.SERIES}
+    if id not in labels:
+        raise HTTPException(status_code=404, detail=f"unknown mr series {id}")
+    if span not in dict(mrm.SPANS):
+        raise HTTPException(status_code=422, detail=f"모르는 구간이에요: {span}")
+    _mr_check_knobs(lookback, entryZ, exitZ, stopZ, costBp, notional,
+                    entryMode, timeStop, costModel, regime)
+
+    spec = _funding_spec(fundingBasis, fundingSpreadBp)
+    leg = _mr_leg(id, lookback=lookback, entryZ=entryZ, exitZ=exitZ, stopZ=stopZ,
+                  costBp=costBp, notional=notional, carry=carry,
+                  entryMode=entryMode, timeStop=timeStop, costModel=costModel,
+                  regime=regime, reverseExit=reverseExit, countOpen=countOpen,
+                  spec=spec)
+    got = _mr_optimize(
+        leg["dates"], leg["vals"],
+        {"lookback": lookback, "entryZ": entryZ, "exitZ": exitZ, "stopZ": stopZ,
+         "costBp": costBp, "notional": notional, "entryMode": entryMode},
+        tuple(leg["dirs"]["allowed"]), span=span,
+        carry=leg["carryKrw"], gate=leg["gate"],
+        time_stop=timeStop or None, cost_bp_series=leg["costSeries"],
+        reverse_exit=reverseExit, close_open_at_end=countOpen,
+        tradable_dv=leg["tradable"])
+    # 이 표의 수는 **엔진 근사**다 — 머리 카드가 실가격이면 둘이 다르다.
+    # 화면이 그 사실을 적을 수 있게 같이 보낸다(`MrStrategyRun.real` 과 같은 값).
+    return {"id": id, "label": labels[id], "real": False,
+            "headReal": leg["real"], **got}
+
+
 def _mr_cost_span(legs: list[dict]) -> dict | None:
     """아홉 다리가 **실제로 문** 비용의 범위와 중앙값 — 동적 비용일 때만.
 
@@ -1939,8 +2279,6 @@ def _mr_cost_span(legs: list[dict]) -> dict | None:
 #: 대사가 설 수 없는 이유들 — 화면이 그대로 읽는 문장이다. 「없다」가 아니라
 #: **왜 없는지**를 말한다(이 리포의 그 규율 — 빈칸으로 렌더하느니 이유를 쓴다).
 MR_RECON_WHY = {
-    "kind": "선물 계열은 자산스왑이 아니에요 — 국채선물은 증거금·일일정산이라 "
-            "현물을 조달해 들고 있는 자산스왑으로 가격할 수 없어요. 다리별 표로 서요.",
     "before": "민평 이력은 {first} 부터예요 — 이 거래는 그 앞이라 실가격 대사를 "
               "세울 수 없어요.",
     "after": "민평 이력은 {last} 까지예요 — 이 거래는 그 뒤예요.",
@@ -2001,8 +2339,6 @@ def mr_recon(id: str, entry: str, exit: str, notional: float = 1_000_000.0,
     kinds = {s: kd for s, _, kd in mr_mod.SERIES}
     if id not in kinds:
         raise HTTPException(status_code=404, detail=f"unknown mr series {id}")
-    if kinds[id] != "bss":
-        return {"available": False, "why": MR_RECON_WHY["kind"]}
 
     tenor = mrc._tenor_of(id)                      # noqa: SLF001 — 같은 레인
     try:
@@ -2010,6 +2346,39 @@ def mr_recon(id: str, entry: str, exit: str, notional: float = 1_000_000.0,
         exit_d = dt.date.fromisoformat(exit)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"날짜가 이상해요: {exc}")
+
+    if kinds[id] != "bss":
+        # ── 선물 계열 [OWNER 2026-09-04] ───────────────────────────────────
+        # 자산스왑은 아니지만 자기 엔진의 실가격이 있다. 표는 **블록**으로 오고
+        # 화면에서는 **어느 계열이든 하나**다 [OWNER 2026-09-07]: FUT 은 선물
+        # 달력, FSW 는 그 안에 IRS 다리가 들어와 하루 일곱 줄(`with_legs` —
+        # `_mr_fut_recon` 머리). 민평 제약이 안 걸리는 자리라 표본도 안 자른다.
+        got = _mr_fut_recon(id, int(dir), notional, entry_d, exit_d,
+                            with_krd=True, with_legs=True)
+        if got is None:
+            return {"available": False,
+                    "why": "선물 대사를 못 세웠어요 — 그 구간의 종가나 IRS 마킹이 "
+                           "빠져 있어요."}
+        rc = futures.roll_cost(got["face"])
+        # `legTenors` 는 **있을 때만** 싣는다 — 화면의 열은 두 다리의 합집합인데
+        # (`reconTenors`), 빈 목록을 보내면 그 함수가 다리 판으로 들어가 놓고
+        # 열을 하나도 못 세운다. 없으면 그 질문이 없는 것이다(FUT 아웃라이트).
+        return {
+            "available": True,
+            "blocks": [{"name": b["name"],
+                        "tenors": b["recon"]["tenors"],
+                        "rows": b["recon"]["rows"],
+                        "truncated": bool(b["recon"].get("truncated")),
+                        **({"legTenors": b["recon"]["legTenors"]}
+                           if b["recon"].get("legTenors") else {})}
+                       for b in got["blocks"]],
+            # 액면과 그 액면을 만든 DV01 — 페이로드 안에서 환산이 닫혀야 손
+            # 대사가 선다(BSS 의 `principal` 과 같은 규율).
+            "principal": {"krw": round(got["face"]), "pv01": None},
+            # 롤 비용은 **비용 칸**에 이미 들어가 있다 — 화면이 그 사실을 말한다.
+            "roll": {"days": len(got["rolls"]), "won": round(rc),
+                     "dates": got["rolls"]},
+        }
 
     try:
         m = creditmatrix.load()

@@ -22,6 +22,8 @@
 하나만 단위시험하면 셋을 잇는 배선이 안 잡힌다. 실제로 이 검사가 서는 자리는
 「페이로드가 스스로 닫히나」이므로 라우트를 탄다.
 """
+import datetime as dt
+
 import pytest
 
 from app import mr as mr_mod
@@ -43,16 +45,23 @@ pytestmark_live = pytest.mark.skipif(
 TOL = 1.0
 
 #: 계열 종류마다 다리 이름과 개수가 정해져 있다(`mrcarry.LEG_NAMES`).
-#: 다리 **분해**(감도·Δ·손익)는 이제 **근사 회계에서만** 온다. BSS 는
-#: 2026-09-03 부터 실가격 자산스왑으로 회계하므로 그 구간의 돈을 대사표가
-#: 세고, 점에는 「일별 레벨」이 쓰는 **레벨만** 실린다 — 폐기된 근사의 감도를
-#: 같이 세우면 한 화면에 두 회계가 선다.
-CASES = [
+#:
+#: 다리 **분해**(감도·Δ·손익)는 이제 **아무 계열에도 없다.** 2026-09-03 에 BSS 가,
+#: 2026-09-04 에 선물 넷이 실가격 회계로 옮겨가면서 그 구간의 돈은 대사표가 세고,
+#: 점에는 「일별 레벨」이 쓰는 **레벨만** 실린다 — 폐기된 근사의 감도를 같이
+#: 세우면 한 화면에 두 회계가 선다(`main._attach_leg_recon` 의 `levels_only`).
+#:
+#: 종전의 `CASES`(선물 = 근사 분해가 오던 계열)는 그래서 비었고, 그것을 지키던
+#: 시험 셋(다리 세로합·줄의 곱셈·다리 KRD 부호)은 **명제가 죽어서** 폐기했다.
+#: 같은 명제의 실가격 판은 `TestFuturesRealRecon` 이 진다.
+LEVEL_ONLY = [
+    ("BSS-3Y", ["국고", "IRS"]),
+    ("BSS-7Y", ["국고", "IRS"]),
     ("FSW-3Y", ["선물", "IRS"]),
     ("FUT-KTB3", ["선물"]),
 ]
-#: 실가격 회계라 레벨만 오는 계열.
-LEVEL_ONLY = [("BSS-3Y", ["국고", "IRS"]), ("BSS-7Y", ["국고", "IRS"])]
+#: 다리가 둘인 계열 — 「다리 − 다리 = 값」이 성립하는 자리.
+TWO_LEG = [(sid, names) for sid, names in LEVEL_ONLY if len(names) == 2]
 
 
 @pytestmark_live
@@ -66,7 +75,7 @@ class TestLegRecon:
         with TestClient(app) as c:
             yield c
 
-    @pytest.mark.parametrize("sid,names", CASES)
+    @pytest.mark.parametrize("sid,names", LEVEL_ONLY)
     def test_every_bar_carries_its_legs(self, client, sid, names):
         """**한 봉도 빠지지 않는다.** 일부만 있으면 화면이 어떤 날은 이중으로,
         어떤 날은 한 줄로 서서 읽는 사람이 그 차이를 데이터로 읽는다."""
@@ -77,39 +86,6 @@ class TestLegRecon:
         assert not missing, f"{sid}: 다리가 없는 봉 {len(missing)}개 (첫 {missing[:3]})"
         for p in pts:
             assert [g["k"] for g in p["legs"]] == names, f"{sid} {p['t']}"
-
-    @pytest.mark.parametrize("sid,names", CASES)
-    def test_the_legs_add_up_to_what_the_engine_booked(self, client, sid, names):
-        """세로합 셋 — 이 시험이 이 레인의 자기검사다."""
-        pts = client.get(f"/api/mr/strategy?id={sid}").json()["points"]
-        for p in pts:
-            legs = p["legs"]
-            assert abs(sum(g["mtm"] for g in legs) - p["mtm"]) <= TOL, \
-                f"{sid} {p['t']}: 다리 손익 합 ≠ 평가"
-            assert abs(sum(g["carry"] for g in legs) - p["carry"]) <= TOL, \
-                f"{sid} {p['t']}: 다리 캐리 합 ≠ 캐리"
-            if len(legs) == 2:
-                assert abs(sum(g["krd"] for g in legs)) <= TOL, \
-                    f"{sid} {p['t']}: 다리 KRD 합 ≠ 0 (DV01 중립이 깨졌다)"
-
-    @pytest.mark.parametrize("sid,names", CASES)
-    def test_each_row_closes_its_own_multiplication(self, client, sid, names):
-        """줄마다 `손익 = −KRD × Δbp` — 백테스트 대사표의 그 부호 규약이다.
-
-        이게 깨지면 표의 **가로**가 안 닫힌다. 세로합만 맞고 가로가 틀리면
-        「분해는 그럴듯한데 줄이 거짓」인 표가 되고, 그건 더 나쁘다.
-        """
-        pts = client.get(f"/api/mr/strategy?id={sid}").json()["points"]
-        checked = 0
-        for p in pts:
-            for g in p["legs"]:
-                if g["dv"] is None or p["hold"] == 0:
-                    assert g["mtm"] == 0, f"{sid} {p['t']} {g['k']}: 못 곱하는데 손익이 있다"
-                    continue
-                assert abs(-g["krd"] * g["dv"] - g["mtm"]) <= TOL, \
-                    f"{sid} {p['t']} {g['k']}: −KRD × Δ ≠ 손익"
-                checked += 1
-        assert checked > 100, f"{sid}: 실제로 곱한 줄이 {checked}개뿐이다"
 
     @pytest.mark.parametrize("sid,names", LEVEL_ONLY)
     def test_real_accounting_series_carry_levels_only(self, client, sid, names):
@@ -126,12 +102,17 @@ class TestLegRecon:
             for g in p["legs"]:
                 assert set(g) == {"k", "lvl"}, f"{sid} {p['t']}: 근사의 값이 남아 있다"
 
-    def test_a_roll_day_masks_both_legs(self, client):
-        """롤일은 봉 전체가 마스크다 — **한쪽만 살리면 그 줄이 안 닫힌다.**
+    def test_a_roll_day_still_masks_the_value_delta(self, client):
+        """롤일의 **Δ 는 여전히 0** 이다 — 그런데 이제 그 마스크는 돈에 안 닿는다.
 
-        선물 다리에서 온 점프라 IRS 다리만 살려 두고 싶어지는데, 그러면
-        「감도 × Δ = 손익」이 IRS 줄에서만 참이고 종합에서 거짓이 된다. 엔진이
-        그 봉을 0 으로 적었으므로 표도 0 이어야 하고, 왜 0 인지는 표식이 말한다.
+        마스크의 근거는 값 계열이 **벤더 내재금리 직독**이라 계약이 갈리는 날
+        통째로 튄다는 것이다(`mrbacktest` 의 그 주석). 그 명제는 살아 있다 —
+        Δ 는 그 계열 위의 변화이므로 여기서 0 이 맞다.
+
+        죽은 것은 **돈 쪽**이다. 2026-09-04 부터 그 구간의 돈은 조정가 차분에서
+        나오고 조정가는 롤갭이 이미 빠진 계열이라, 마스크가 고치던 병이 그 자리에
+        없다. 대신 갈아타기의 **마찰**을 비용으로 문다(`futures.roll_cost`).
+        그래서 여기서 재는 것은 Δ 하나이고, 다리 손익은 **아예 안 온다.**
         """
         pts = client.get("/api/mr/strategy?id=FSW-3Y").json()["points"]
         rolls = [p for p in pts if p.get("roll")]
@@ -139,49 +120,12 @@ class TestLegRecon:
         for p in rolls:
             assert p["dv"] == 0, f"{p['t']}: 스프레드 Δ 가 안 마스크됐다"
             for g in p["legs"]:
-                assert g["dv"] == 0, f"{p['t']} {g['k']}: 다리 Δ 가 안 마스크됐다"
-                assert g["mtm"] == 0, f"{p['t']} {g['k']}: 마스크된 봉에 손익이 있다"
+                assert set(g) == {"k", "lvl"}, f"{p['t']}: 근사의 값이 남아 있다"
 
-    def test_the_sign_of_krd_means_what_the_desk_means(self, client):
-        """**부호가 경제와 맞나** — 이건 조용히 뒤집히는 종류다.
-
-        백테스트·시뮬 대사표의 규약은 `손익 = −KRD × Δbp` 이고, 그 규약에서
-        **양수 KRD = 금리 오르면 잃는 쪽**(현물 매수·리시브), **음수 KRD =
-        금리 오르면 버는 쪽**(페이·숏)이다. 오너의 실물 표로 대조했다
-        (2026-09-03): `KRD −509,059 · Δbp 0.75 · 손익 +381,795`.
-
-        BSS 는 `dirs` 가 한 방향만 허용한다 — 국고 **매수** · IRS **페이**
-        (엔진 부호로 `position = -1`). 그러면 국고 다리는 양수 KRD, IRS 다리는
-        음수 KRD 여야 한다. 값이 아니라 **뜻**을 재는 시험이라, 부호 규약을
-        바꾸면 여기가 먼저 빨개진다.
-
-        ⚠ 종전 화면의 「감도」 칸은 `hold × 명목` 이라 **반대 부호**였다.
-        2026-09-03 에 앱 전체와 맞췄고, 그 사실은 `_attach_leg_recon` 머리에.
-        """
-        pts = client.get("/api/mr/strategy?id=FSW-3Y").json()["points"]
-        held = [p for p in pts if p["hold"] == -1]
-        assert len(held) > 100, f"보유 봉이 {len(held)}개뿐이다 — 표본이 바뀌었다"
-        for p in held:
-            g, s = p["legs"]
-            assert g["k"] == "선물" and s["k"] == "IRS"
-            assert g["krd"] > 0, f"{p['t']}: 매수 다리인데 KRD 가 양수가 아니다"
-            assert s["krd"] < 0, f"{p['t']}: IRS 페이인데 KRD 가 음수가 아니다"
-
-        # 그리고 그 부호가 실제로 돈의 방향을 만든다 — 금리가 오른 날 국고
-        # 다리는 잃고, 같은 날 IRS 다리는 번다.
-        up = [p for p in held if p["legs"][0]["dv"] and p["legs"][0]["dv"] > 0]
-        assert up, "국고 금리가 오른 보유 봉이 없다"
-        for p in up[:200]:
-            assert p["legs"][0]["mtm"] < 0, f"{p['t']}: 매수 다리 금리가 올랐는데 벌었다"
-        up_i = [p for p in held if p["legs"][1]["dv"] and p["legs"][1]["dv"] > 0]
-        assert up_i, "IRS 금리가 오른 보유 봉이 없다"
-        for p in up_i[:200]:
-            assert p["legs"][1]["mtm"] > 0, f"{p['t']}: IRS 페이인데 금리 올라 잃었다"
-
-    @pytest.mark.parametrize("sid,_names", LEVEL_ONLY)
-    def test_bss_legs_are_the_spread_itself(self, client, sid, _names):
-        """BSS 는 `(국고 − IRS) × 100 = 값` 이 정확히 성립한다 — 다리 레벨이
-        스프레드의 **재료**이지 옆에 붙은 참고값이 아니라는 사실이다."""
+    @pytest.mark.parametrize("sid,_names", TWO_LEG)
+    def test_two_leg_series_are_the_spread_itself(self, client, sid, _names):
+        """다리 둘인 계열은 `(다리0 − 다리1) × 100 = 값` 이 정확히 성립한다 —
+        다리 레벨이 스프레드의 **재료**이지 옆에 붙은 참고값이 아니라는 사실이다."""
         pts = client.get(f"/api/mr/strategy?id={sid}").json()["points"]
         for p in pts[:500]:
             g, s = p["legs"][0]["lvl"], p["legs"][1]["lvl"]
@@ -263,15 +207,33 @@ class TestRealRecon:
         assert "민평" in r["why"] and "2020-01-02" in r["why"]
         assert "rows" not in r, "못 세운다면서 행을 보냈다"
 
-    def test_futures_series_say_why_they_have_no_asset_swap(self, client):
-        """선물 계열은 이 경로가 **없다** — 증거금·일일정산이라 현물을 조달해
-        들고 있는 자산스왑으로 가격할 수 없다. 화면은 다리 표로 서고, 그 사실을
-        여기서 말한다."""
-        for sid in ("FUT-KTB3", "FSW-3Y"):
+    def test_futures_series_come_as_one_block(self, client):
+        """선물 계열은 **블록 하나**로 온다 [OWNER 2026-09-07].
+
+        자산스왑은 아니지만 자기 엔진의 실가격이 있다. FUT 은 선물 달력 한 표고,
+        FSW 도 **한 표**다 — IRS 다리가 그 안에 `legTenors` 로 서서 하루가 일곱
+        줄이 된다(백테스트 창이 2026-09-04 에 간 그 길).
+
+        종전에는 FSW 가 둘이었다(선물 달력 + IRS 달력 — 엔진 단위 분리
+        [OWNER 2026-08-25]). 그 분리는 «표는 자기 달력 위에 선다» 까지 살고,
+        「한 거래의 두 다리는 한 표에」가 그 위에 얹혔다. 그 앞의 명제
+        («자산스왑이 아니라 못 세운다»)는 2026-09-04 에 죽었다.
+        """
+        want = {"FUT-KTB3": [], "FSW-3Y": ["선물", "IRS"]}
+        for sid, legs in want.items():
             r = client.get(f"/api/mr/recon?id={sid}"
                            "&entry=2021-01-04&exit=2021-02-01&dir=-1").json()
-            assert r["available"] is False, sid
-            assert "자산스왑" in r["why"], sid
+            assert r["available"] is True, (sid, r.get("why"))
+            assert [b["name"] for b in r["blocks"]] == ["선물"], sid
+            blk = r["blocks"][0]
+            # 다리는 **FSW 에만** 있다. FUT 아웃라이트는 물건이 하나라 그 질문이
+            # 없고, 빈 목록을 실으면 화면이 다리 판으로 들어가 열을 못 세운다.
+            assert [lg["name"] for lg in blk.get("legTenors", [])] == legs, sid
+            if legs:
+                assert blk["rows"][0]["legs"], f"{sid}: 다리 목록만 있고 행에 다리가 없다"
+            assert r["principal"]["krw"] > 0, sid
+            # 스왑의 항등(`명목 = 액면 x pv01 x 1e-4`)이 안 서는 자리라 비운다.
+            assert r["principal"]["pv01"] is None, sid
 
     def test_an_unknown_series_is_a_404_not_an_empty_table(self, client):
         assert client.get("/api/mr/recon?id=NOPE&entry=2021-01-04"
@@ -352,15 +314,16 @@ class TestRealRecon:
             five = p["mtm"] + p["carry"] + p["rolldown"] + p["funding"] + p["cost"]
             assert abs(five - p["pnl"]) < 0.02, f"{p['t']}: 봉의 다섯이 안 닫힌다"
 
-    def test_futures_keep_the_engine_approximation_and_say_so(self, client):
-        """선물 계열은 자산스왑이 아니라 이 회계가 **없다**. 0 으로 채우지 않고
-        열 자체를 안 보낸다 — 0 은 「그날 롤다운이 없었다」는 다른 말이다."""
-        for sid in ("FUT-KTB3", "FSW-3Y"):
+    def test_futures_are_real_too(self, client):
+        """선물 계열도 **실가격 회계**다 [2026-09-04]. 종전에는 여기서
+        `real is False` 를 지켰는데, 그 명제는 오너 결정으로 죽었다."""
+        for sid in ("FUT-KTB3", "FUT-KTB10", "FSW-3Y", "FSW-10Y"):
             b = client.get(f"/api/mr/strategy?id={sid}").json()
-            assert b["real"] is False, sid
+            assert b["real"] is True, sid
             p = b["points"][len(b["points"]) // 2]
-            assert "rolldown" not in p and "funding" not in p, sid
-            assert abs((p["mtm"] + p["carry"] + p["cost"]) - p["pnl"]) < 0.02, sid
+            # 다섯 성분이 봉에서 닫힌다 — BSS 와 같은 계약.
+            assert abs((p["mtm"] + p["carry"] + p["rolldown"] + p["funding"]
+                        + p["cost"]) - p["pnl"]) < 0.02, sid
 
     def test_the_locked_pms_vector_still_passes(self):
         """**엔진 함수는 안 건드렸다.** 회계는 라우트에서 얹으므로 `simulate`
@@ -609,3 +572,192 @@ class TestTwoLegRecon:
             new += abs(b["residual"] + s["residual"])
         assert old > 0, "옛 잔차가 전부 0 이라 비교가 안 된다"
         assert new < old * 0.5, f"잔차가 안 줄었다 — 옛 {old:,.0f} 새 {new:,.0f}"
+
+
+@pytestmark_live
+class TestFuturesRealRecon:
+    """선물 넷이 **실가격 대사**로 돈다 [OWNER 2026-09-04 — "0.5틱으로 해두자"].
+
+    인계문의 임무였다. 배선은 셋이었고 셋 다 실측으로 정했다: 액면은 진입일
+    벤더 내재금리로 환산하고(`futures.face_for_dv01`), 방향은 FUT −dir · FSW +dir
+    이며, FSW 의 IRS 다리는 **스왑 표에** 선다(엔진 단위 분리).
+
+    그리고 결정이 하나 붙었다 — **롤 비용**. 연결 계열은 데이터 구조물이지
+    상품이 아니라서, 분기마다 실제로 갈아타는 왕복(0.5틱 편도 x 2 = 1틱)을
+    문다. 종전에는 그 자리가 0 이었고 롤일 Δ 마스크가 그 사실을 가리고 있었다.
+
+    ⚠ **IRS 다리의 자리가 2026-09-07 에 바뀌었다** [OWNER]. 화면에서는 선물 표
+    **안**에 들어와 하루가 일곱 줄이 되고(`with_legs`), 회계는 종전대로 두 블록을
+    받는다(다리 표는 IRS 파 커브를 범프해야 서는데 회계는 거래마다 돈다). 두
+    길의 **돈이 같다**는 것을 `test_the_two_paths_are_the_same_money` 가 잰다.
+    """
+
+    KN = "notional=1000000&costBp=0.5"
+
+    @pytest.fixture(scope="class")
+    def client(self):
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        with TestClient(app) as c:
+            yield c
+
+    def _recon(self, client, sid, t):
+        return client.get(
+            f"/api/mr/recon?id={sid}&entry={t['entryT']}&exit={t['exitT']}"
+            f"&dir={t['dir']}&notional=1000000"
+        ).json()
+
+    @pytest.mark.parametrize("sid", ["FUT-KTB3", "FUT-KTB10", "FSW-3Y", "FSW-10Y"])
+    def test_every_trade_on_screen_can_be_reconciled(self, sid, client):
+        """**화면이 보여 주는 것은 전부 대사할 수 있다.** 한 건이라도 못 재면
+        회계가 통째로 옛 근사로 떨어진다(「한 건이라도 못 재면 전부 안 바꾼다」)
+        — 그 자리를 실제로 밟았다: 벤더 두 표에 2019-02-15 가 없어서 FSW-10Y
+        67거래가 통째로 떨어져 있었다."""
+        b = client.get(f"/api/mr/strategy?id={sid}&{self.KN}").json()
+        assert b["real"] is True, sid
+        bad = [t["entryT"] for t in b["trades"]
+               if not self._recon(client, sid, t).get("available")]
+        assert not bad, f"{sid}: 대사 못 세운 거래 {len(bad)}건 (첫 {bad[:3]})"
+
+    @pytest.mark.parametrize("sid", ["FUT-KTB3", "FSW-3Y", "FSW-10Y"])
+    def test_the_blocks_are_the_book(self, sid, client):
+        """**표의 세로합 + 비용 = 거래 손익.** BSS 와 같은 계약이다.
+
+        FSW 는 두 달력이 어긋나는데도 합이 닫힌다 — IRS 다리가 선물 행마다
+        «지난 행 이후» 의 밤으로 담기고(버킷), 마지막 행이 남은 밤을 지기
+        때문이다. 화면이 한 표든(`with_legs`) 회계가 두 블록이든 **같은 수**라야
+        한다는 것이 이 시험의 다른 쪽이다.
+        """
+        b = client.get(f"/api/mr/strategy?id={sid}&{self.KN}").json()
+        checked = 0
+        for t in b["trades"][:8]:
+            r = self._recon(client, sid, t)
+            assert r["available"], (sid, t["entryT"], r.get("why"))
+            tot = sum(row["actual"] for blk in r["blocks"] for row in blk["rows"]
+                      if row.get("actual") is not None)
+            assert abs(tot + t["cost"] - t["pnl"]) <= 2.0, \
+                f"{sid} {t['entryT']}: 세로합 {tot:,.0f} + 비용 {t['cost']:,.0f} ≠ 손익 {t['pnl']:,.0f}"
+            checked += 1
+        assert checked >= 5, f"{sid}: 잰 거래가 {checked}건뿐이다"
+
+    @pytest.mark.parametrize("sid", ["FSW-3Y", "FSW-10Y"])
+    def test_the_two_paths_are_the_same_money(self, sid, client):
+        """**한 표(화면)와 두 블록(회계)이 같은 돈이다** [OWNER 2026-09-07].
+
+        모양이 갈리는 것은 값이 갈려도 된다는 뜻이 아니다. 화면은 IRS 다리를
+        선물 표 안에 버킷으로 담고, 회계는 두 블록의 행을 한 줄기로 펴서 날짜로
+        얹는다 — **더하는 순서만 다르고 더하는 것은 같은 밤들**이다.
+
+        이 시험이 없으면 어느 한쪽만 고쳤을 때 화면과 헤드라인이 조용히 갈린다.
+        성분마다 잰다(합만 재면 두 오차가 상쇄되는 자리를 놓친다).
+        """
+        from app import main as m
+
+        b = client.get(f"/api/mr/strategy?id={sid}&{self.KN}").json()
+        checked = 0
+        for t in b["trades"][:5]:
+            e_d = dt.date.fromisoformat(t["entryT"])
+            x_d = dt.date.fromisoformat(t["exitT"])
+            one = m._mr_fut_recon(sid, int(t["dir"]), 1_000_000.0, e_d, x_d,
+                                  with_krd=True, with_legs=True)
+            two = m._mr_fut_recon(sid, int(t["dir"]), 1_000_000.0, e_d, x_d,
+                                  with_krd=False)
+            assert one is not None and two is not None, t["entryT"]
+            assert len(one["blocks"]) == 1 and len(two["blocks"]) == 2, t["entryT"]
+            for key in ("actual", "valuation", "carry", "rolldown"):
+                a = sum(r.get(key) or 0.0
+                        for r in one["blocks"][0]["recon"]["rows"])
+                c = sum(r.get(key) or 0.0 for blk in two["blocks"]
+                        for r in blk["recon"]["rows"])
+                assert abs(a - c) <= 2.0, \
+                    f"{sid} {t['entryT']} {key}: 한 표 {a:,.0f} ≠ 두 블록 {c:,.0f}"
+            assert one["face"] == two["face"], t["entryT"]
+            assert one["rolls"] == two["rolls"], t["entryT"]
+            checked += 1
+        assert checked >= 3, f"{sid}: 잰 거래가 {checked}건뿐이다"
+
+    def test_the_futures_leg_has_no_carry_or_funding(self, client):
+        """선물 다리는 캐리·롤다운·조달이 **존재하지 않는 성분**이다 — 현금결제·
+        연결 계열이라 조달할 원금도 늙을 잔존도 없다. `None` 이지 0 이 아니다.
+
+        ⚠ 재는 자리가 **행이 아니라 다리**다 [2026-09-07]. FSW 가 한 표가 되면서
+        행의 `carry` 는 두 다리의 **합**(= IRS 것)이 됐다. 종전처럼 행을 재면
+        「선물 다리에 캐리가 있다」는 거짓을 잡게 된다 — 표가 합계 줄을 지는 것과
+        다리가 그 성분을 지는 것은 다른 명제다.
+        """
+        b = client.get(f"/api/mr/strategy?id=FSW-3Y&{self.KN}").json()
+        r = self._recon(client, "FSW-3Y", b["trades"][0])
+        blk = r["blocks"][0]
+        live = [row for row in blk["rows"] if row.get("actual") is not None]
+        assert live
+        for row in live:
+            fut_leg, irs_leg = row["legs"]
+            assert fut_leg["name"] == "선물" and irs_leg["name"] == "IRS", row["t"]
+            assert fut_leg["carry"] is None and fut_leg["rolldown"] is None, row["t"]
+            assert fut_leg["funding"] is None, row["t"]
+            assert fut_leg["actual"] == fut_leg["valuation"], row["t"]
+        # IRS 다리는 반대로 캐리를 진다(CD 91일 − 스왑 고정), 그리고 **행의
+        # 캐리는 그 다리에서 온다** — 합계 줄이 다리의 합이라는 계약.
+        assert any(row["legs"][1].get("carry") for row in live), "IRS 다리에 캐리가 없다"
+        for row in live:
+            assert row["carry"] == row["legs"][1]["carry"], row["t"]
+
+    def test_the_roll_is_paid_for(self, client):
+        """**갈아타기를 문다** [OWNER 2026-09-04]. 비용 = 진입·청산 편도 둘 +
+        보유 중 롤일마다 왕복 1틱.
+
+        종전에는 두 번째 항이 0 이었다 — 분기마다 실제로 구계약을 팔고 신계약을
+        사는데 그 왕복이 모형에 없었다. 연결선물이라서 안 무는 게 아니라
+        **연결선물이라서 무는** 자리다: 조정가가 빼는 것은 계약 사이의 가격
+        단차이지 갈아타기의 마찰이 아니다.
+        """
+        b = client.get(f"/api/mr/strategy?id=FUT-KTB3&{self.KN}").json()
+        one_way = 1_000_000.0 * 0.5                    # 명목 x 편도 bp
+        rolled = 0
+        for t in b["trades"]:
+            r = self._recon(client, "FUT-KTB3", t)
+            assert r["available"], t["entryT"]
+            want = -(2 * one_way) - r["roll"]["days"] * r["roll"]["won"]
+            assert abs(t["cost"] - want) <= 2.0, \
+                f"{t['entryT']}: 비용 {t['cost']:,.0f} ≠ {want:,.0f} (롤 {r['roll']['days']}회)"
+            rolled += r["roll"]["days"]
+        assert rolled > 0, "보유 중 롤일이 한 번도 없다 — 표본이 바뀌었다"
+
+    def test_paying_the_spread_is_short_the_futures(self, client):
+        """**부호가 경제와 맞나** — 조용히 뒤집히는 종류다.
+
+        규약은 `손익 = −KRD × Δbp` 이고, 양수 KRD = 금리 오르면 잃는 쪽이다.
+        FSW 는 `+1 = 호가값(스프레드) 롱 = 선물 매도 + IRS 리시브` 이므로, 그
+        방향에서 선물 다리의 KRD 는 **음수**(내재금리가 오르면 번다)여야 한다.
+        MR 엔진의 `direction` 을 그대로 넘긴다는 사상이 여기서 확인된다.
+        """
+        b = client.get(f"/api/mr/strategy?id=FSW-3Y&{self.KN}").json()
+        longs = [t for t in b["trades"] if t["dir"] > 0]
+        assert longs, "스프레드 롱 거래가 없다"
+        r = self._recon(client, "FSW-3Y", longs[0])
+        fut_blk = next(x for x in r["blocks"] if x["name"] == "선물")
+        mid = [row for row in fut_blk["rows"] if row.get("actual") is not None][1]
+        krd = [v for v in mid["krd"].values() if abs(v) > 1.0]
+        assert krd and all(v < 0 for v in krd), \
+            f"{mid['t']}: 스프레드 롱인데 선물 KRD 가 음수가 아니다 — {mid['krd']}"
+
+    def test_a_missing_vendor_day_blanks_one_cell_not_the_table(self, client):
+        """벤더 값이 없는 날은 **칸 하나가 비고 표는 산다.**
+
+        실측: 2019-02-15 는 벤더 두 표에 없다(레인 문서의 「백필 대상」). 종전에는
+        `implied_at_index` 가 그 자리에서 죽어 **FSW-10Y 67거래가 통째로** 옛
+        근사로 떨어졌다. PVBP 의 수준은 직전 값으로 잇고(수준의 완만한 함수),
+        **Δbp 는 안 잇는다** — 변화를 지어내면 없는 사실을 말하는 것이다.
+        """
+        r = client.get("/api/mr/recon?id=FSW-10Y&entry=2019-01-04"
+                       "&exit=2019-03-12&dir=-1&notional=1000000").json()
+        assert r["available"] is True, r.get("why")
+        fut_blk = next(x for x in r["blocks"] if x["name"] == "선물")
+        gap = [row for row in fut_blk["rows"] if row["t"] == "2019-02-15"]
+        assert gap, "그날 행이 아예 없다 — 표본이 바뀌었다"
+        row = gap[0]
+        assert all(v is None for v in row["dbp"].values()), "Δbp 를 지어냈다"
+        assert row["actual"] is not None and row["actual"] != 0, \
+            "돈까지 지웠다 — 조정가는 그날에도 있다"

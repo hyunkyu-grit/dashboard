@@ -57,6 +57,7 @@ from .backtest import (
     _span_of,
     _thin,
 )
+from .backtest import book_recon as swap_book_recon
 from .engine_port import next_kr_business_day
 from .mysqldb import engine
 
@@ -254,6 +255,62 @@ def as_position(series_id: str, direction: int, notional: float,
 
 
 # ── 계열 (화면이 읽는 히스토리) ─────────────────────────────────────────────
+
+#: 호가 단위(가격 포인트). KTB 선물은 3년·10년 모두 0.01 이다.
+TICK = 0.01
+
+
+def dv01_of(notional: float, y: float, tenor: str) -> float:
+    """선물 **DV01**(원/bp) — 액면 `notional` 을 수준 `y`(%)에서 들었을 때.
+
+        DV01 = 액면 / 100 x synth_pvbp(y, 만기)
+
+    PVBP 가 **수준의 함수**라 어느 날의 금리로 재는지가 값을 정한다. 이 리포의
+    규약은 **진입일 벤더 내재금리**다(`fsw_swap_leg` 의 그 주석 — 조정가 역산으로
+    재던 종전 값은 최대 182bp 틀려 헤지 비율까지 어긋났다).
+    """
+    return (notional / 100.0) * synth_pvbp(y, FUT_YEARS[tenor])
+
+
+def face_for_dv01(dv01_won: float, y: float, tenor: str) -> float:
+    """`dv01_of` 의 **역** — 「원/bp」 노브를 액면으로.
+
+    MR 의 명목은 액면이 아니라 DV01(원/bp)이라(`main._mr_principal_at` 가 BSS 에
+    대해 하는 일과 같은 자리) 선물에 태우려면 이 환산이 필요하다. 실측
+    2026-09-04: 100만원/bp 는 3Y 에서 진입일에 따라 31.96~34.98억, 10Y 는
+    9.67~12.07억이다.
+    """
+    pvbp = synth_pvbp(y, FUT_YEARS[tenor])
+    if pvbp <= 0:
+        raise FuturesError(f"{tenor} PVBP 를 셀 수 없습니다 (y={y}).")
+    return dv01_won * 100.0 / pvbp
+
+
+def roll_cost(notional: float) -> float:
+    """분기 갈아타기 **한 번**의 비용(원) — 왕복 1틱(0.5틱 편도 x 2)
+    [OWNER 2026-09-04 — "0.5틱으로 해두자"].
+
+    ## 연결선물인데 왜 무나
+
+    연결 계열은 **데이터 구조물이지 상품이 아니다.** 셋째 화요일을 넘겨 시장에
+    남아 있으려면 실제로 구계약을 팔고 신계약을 사야 한다. 조정가가 빼는 것은
+    계약 사이의 **가격 단차**(캘린더 스프레드 수준)이지 그 갈아타기의 **마찰**이
+    아니다 — 즉 조정가 차분의 손익은 «공짜로 롤했다고 가정한 포지션» 의 손익이고,
+    그 가정의 값이 이 함수다. (모듈 머리의 「롤오버 갭 병은 실측으로 없다」는
+    가격 계열이 깨끗하다는 말이지 롤이 공짜라는 말이 아니다.)
+
+    롤을 피하는 길이 더 비싼 것도 근거다: 롤 전 청산·롤 후 재진입은 편도 0.5bp
+    왕복이라 0.5틱 왕복보다 3배 비싸다. **0.5틱은 보수적인 값이 아니라 가장 싼
+    경로의 값이다.**
+
+    ## bp 가 아니라 틱인 이유
+
+    1틱이 몇 bp 인지가 **수준을 따라 움직인다**(실측: 100만원/bp 포지션에서 3Y 는
+    표본 첫날 0.324bp -> 끝날 0.350bp, 10Y 는 0.097 -> 0.121bp). 고정 bp 로 박으면
+    6년에 걸쳐 8~25% 조용히 어긋난다. 액면 위에서 재면 저절로 따라간다.
+    """
+    return notional / 100.0 * TICK
+
 
 def instrument_label(kind: str, tenor: str) -> str:
     return (FUT_LABELS if kind == KIND_FUT else FSW_LABELS)[tenor]
@@ -461,11 +518,10 @@ def fsw_swap_leg(
     entry_i, _exit_i = _span_on(cal, pos)
     entry_date = cal[entry_i]
     fs = fut.series[pos.tenor]
-    years = FUT_YEARS[pos.tenor]
     # 진입 내재금리는 **벤더 값을 읽는다** — 조정가 역산이 아니다. DV01 산정이
     # 이 금리에 달려 있어서, 종전 값(최대 182bp 오차)은 헤지 비율까지 틀렸다.
     y0 = implied_at_index(fs, fs.dates.index(entry_date), pos.tenor)
-    fut_dv01_won = (pos.notional / 100.0) * synth_pvbp(y0, years)
+    fut_dv01_won = dv01_of(pos.notional, y0, pos.tenor)
 
     j = _index_on_or_after(dataset.dates, entry_date)
     if dataset.dates[j] != entry_date:
@@ -668,11 +724,37 @@ def run_backtest(fut: FuturesData, dataset, positions: list[FuturesPosition]) ->
 
 # ── 대사 ────────────────────────────────────────────────────────────────────
 
-def book_recon(fut: FuturesData, dataset, positions: list[FuturesPosition]) -> dict:
+def book_recon(fut: FuturesData, dataset, positions: list[FuturesPosition],
+               with_legs: bool = False) -> dict:
     """선물 일별 대사 — {tenors, rows, truncated}. 스왑 표와 같은 관행(행의
     krd 는 est 가 곱한 전일 것), 열은 평가·잔차뿐이다(캐리·롤·개시 = 존재하지
-    않는 성분 — None). FSW 는 **선물 다리만** 여기 선다(IRS 다리는 스왑 표 —
-    모듈 doc)."""
+    않는 성분 — None).
+
+    ## `with_legs` — 퓨처스왑을 **하루 일곱 줄**로 [OWNER 2026-09-04]
+
+    끄면 종전 그대로다: FSW 는 **선물 다리만** 여기 서고 IRS 다리는 스왑 표에
+    선다(2026-08-25 「엔진 단위 분리」). 켜면 행마다 `legs: [선물, IRS]` 와
+    `legTenors` 가 붙어 자산스왑 대사와 같은 모양이 되고 — 다리마다 KRD·Δbp·
+    손익 세 줄에 합계 한 줄 — 부르는 쪽은 **스왑 표에서 그 다리를 빼야 한다**
+    (`mixedbook.book_recon`). 안 빼면 같은 돈이 두 표에 선다.
+
+    ### 두 달력을 어떻게 한 표에 세우나 — **버킷**이다
+
+    IRS 다리는 IRS 달력 위에서 스왑 엔진이 값매긴다(여기서 다시 가격하지
+    않는다 — 두 번째 정의 금지). 그 행들을 선물 달력의 **행마다 하나씩 담는다**:
+    선물 행 `d` 의 IRS 다리는 «직전 선물 행 다음부터 `d` 까지» 의 IRS 행 전부다.
+
+    이 규칙이 사는 이유는 **돈이 보존되기 때문**이다. IRS 가 쉰 날의 선물 행은
+    IRS 쪽이 0 이고(마킹이 없으니 실현될 것도 없다), 다음 IRS 마킹은 두 밤을
+    한 번에 재므로 그 돈이 다음 버킷에 통째로 들어간다. 세로합은 스왑 표에서
+    떼어 온 그 다리의 합과 정확히 같다 — 자산스왑 대사가 IRS 다리를 민평
+    달력에 얹을 때 쓴 것과 같은 사상이다(`cashbond._leg_delta` 의 `imap`).
+
+    **Δbp 는 그 버킷의 차**다(하루가 아니라 «지난 선물 행 이후»). 버킷 안에서
+    KRD 가 움직이면 `KRD × Δbp` 가 `est` 와 미세하게 갈리는데, 그 몫은 잔차
+    열에 선다. 버킷에 IRS 행이 둘 이상 드는 날은 드물다(두 달력이 갈리는 날 —
+    민평 대 IRS 실측이 12일이었다).
+    """
     if not positions:
         raise FuturesError("at least one position is required")
 
@@ -713,8 +795,67 @@ def book_recon(fut: FuturesData, dataset, positions: list[FuturesPosition]) -> d
     rows: list[dict] = []
     years = {t: FUT_YEARS[t] for t in tenors}
 
-    def implied_at(fs: FuturesSeries, d: dt.date, t: str) -> float:
-        return implied_on_or_before(fs, d, t)
+    def level_at(fs: FuturesSeries, i: int, t: str) -> float:
+        """PVBP 를 세울 **수준**(%). 그날 벤더 값이 없으면 **직전 값으로 잇는다.**
+
+        `implied_at_index` 는 값이 없으면 명문으로 죽는다 — 「금리」를 물었는데
+        없으면 지어내지 말라는 규약이고 그건 옳다. 그런데 여기서 쓰는 것은 금리
+        자체가 아니라 **PVBP 의 인자**이고, PVBP 는 수준의 완만한 함수다(3Y 는
+        6년에 걸쳐 0.0311 -> 0.0286). 하루를 잇는 오차보다 **표 전체가 죽는 쪽이
+        훨씬 나쁘다** — 실측 2026-09-04: 벤더 두 표에 2019-02-15 가 없어서
+        FSW-10Y 의 거래 하나가 못 서고, 「한 건이라도 못 재면 전부 안 바꾼다」는
+        회계 규칙에 걸려 **그 계열 67거래가 통째로 옛 근사로 떨어졌다.**
+
+        Δbp 는 잇지 않는다 — 그건 **변화**라 지어내면 없는 사실을 말하는 것이다
+        (아래 `vendor_at`, 공란 정책).
+        """
+        j = i
+        while j >= 0 and fs.implied[j] is None:
+            j -= 1
+        if j < 0:
+            raise FuturesError(f"{t}: {fs.dates[i]} 앞에 벤더 내재금리가 없습니다.")
+        return fs.implied[j]
+
+    def vendor_at(fs: FuturesSeries, i: int) -> float | None:
+        """그날 **벤더가 실제로 낸** 값. 없으면 None — 이으면 안 되는 자리용."""
+        return fs.implied[i] if 0 <= i < len(fs.implied) else None
+
+    # ── IRS 다리 — **스왑 엔진의 표를 받아** 선물 행에 버킷으로 담는다 ──────
+    fsw = [p for p in positions if p.kind == KIND_FSW]
+    want_legs = bool(with_legs and fsw)
+    swap_labels: list[str] = []
+    #: 선물 행 날짜 → 그 버킷에 든 IRS 행들
+    bucket: dict[dt.date, list[dict]] = {d: [] for d in window}
+    swap_anchor: dict[str, float] = {}
+    if want_legs:
+        swap_pos = [fsw_swap_leg(fut, dataset, p)[0] for p in fsw]
+        swap_rec = swap_book_recon(dataset, swap_pos, with_krd=True)
+        # 열은 **그 다리가 실제로 흔든 노드**만 — 전 노드를 세우면 스왑 표의
+        # 열 목록(TENOR_T 전부)이 통째로 따라와 빈 칸이 스무 개 선다.
+        seen: set[str] = set()
+        for r in swap_rec["rows"]:
+            for lb, v in (r.get("krd") or {}).items():
+                if v:
+                    seen.add(lb)
+        swap_labels = [lb for lb in swap_rec["tenors"] if lb in seen]
+        lo = window[start - 1] if start > 0 else None
+        for r in swap_rec["rows"]:
+            rd = dt.date.fromisoformat(r["t"])
+            if r.get("carryover"):
+                # 이월 앵커는 «내일 아침 리스크» 라 돈이 없다 — 선물 표의
+                # 이월 앵커에 KRD 만 얹는다.
+                swap_anchor = {lb: v for lb, v in (r.get("krd") or {}).items()
+                               if lb in swap_labels}
+                continue
+            if lo is not None and rd <= lo:
+                continue                      # 잘린 창 앞 — 표가 truncated 라 말한다
+            j = _index_on_or_after(window, rd)
+            # 마지막 선물 행보다 뒤인 IRS 행은 **마지막 행에** 담는다. 버리면
+            # 세로합이 그만큼 스왑 표와 갈린다.
+            key = window[j] if j < len(window) and window[j] >= rd else window[-1]
+            if key < window[start]:
+                key = window[start]
+            bucket[key].append(r)
 
     prev_krd = {t: 0.0 for t in tenors}
     for k in range(max(start - 1, 0), len(window)):
@@ -735,7 +876,7 @@ def book_recon(fut: FuturesData, dataset, positions: list[FuturesPosition]) -> d
             # PVBP 는 **수준**에 달렸으므로 벤더 내재금리를 읽는다.
             alive_fwd = d < info["exit_d"] or (d == window[-1] and info["open_end"])
             if alive_fwd:
-                y = implied_at_index(fs, i, t)
+                y = level_at(fs, i, t)
                 krd[t] += info["dir"] * (info["pos"].notional / 100.0) * synth_pvbp(y, years[t])
 
         if k >= start:
@@ -744,19 +885,22 @@ def book_recon(fut: FuturesData, dataset, positions: list[FuturesPosition]) -> d
             for t in tenors:
                 fs = fut.series[t]
                 i = _index_on_or_before(fs.dates, d)
-                if i >= 1:
+                cur, prv = vendor_at(fs, i), vendor_at(fs, i - 1) if i >= 1 else None
+                if cur is not None and prv is not None:
                     # 두 **수준**의 차다. 조정가 역산의 차로 내면 상수 오프셋이
                     # 비선형을 지나 안 상쇄된다 — 벤더 값의 차로 낸다.
                     # 롤일에는 계약이 바뀌므로 여기 Δbp 가 진짜로 튄다(실측
                     # KTB3 중앙 5.70bp·최대 27.2bp). 그건 사실이라 안 지운다.
-                    dy = (implied_at_index(fs, i, t) - implied_at_index(fs, i - 1, t)) * 100.0
+                    dy = (cur - prv) * 100.0
                     dbp[t] = round(dy, 2)
                     est[t] = -prev_krd[t] * dy
                 else:
+                    # 한쪽이라도 벤더 값이 없으면 **그날 Δ 를 말할 수 없다** —
+                    # 0 은 「안 움직였다」는 다른 말이라 안 쓴다(공란 정책).
                     dbp[t] = None
                     est[t] = 0.0
             total_est = round(sum(est.values()))
-            rows.append({
+            row = {
                 "t": d.isoformat(),
                 "krd": {t: round(prev_krd[t]) for t in tenors},
                 "dbp": dbp,
@@ -769,13 +913,37 @@ def book_recon(fut: FuturesData, dataset, positions: list[FuturesPosition]) -> d
                 "rolldown": None,
                 "startup": None,
                 "residual": round(day_val) - total_est,
-            })
+            }
+            if want_legs:
+                irs = _bucket_leg(bucket[d], swap_labels)
+                row["legs"] = [
+                    {
+                        "name": "선물",
+                        "krd": row["krd"], "dbp": dbp,
+                        "est": row["est"], "estTotal": total_est,
+                        "actual": round(day_val), "valuation": round(day_val),
+                        # 합성채는 만기가 고정이라 캐리·롤다운이 없다(모듈 doc).
+                        "carry": None, "rolldown": None, "funding": None,
+                        "residual": round(day_val) - total_est,
+                    },
+                    irs,
+                ]
+                # 합계 줄은 **두 다리의 합**이다 — 이 표가 이제 FSW 전체를
+                # 진다(IRS 다리가 스왑 표에서 빠진다는 계약의 다른 쪽).
+                row["estTotal"] = total_est + (irs["estTotal"] or 0)
+                row["valuation"] = round(day_val) + (irs["valuation"] or 0)
+                row["carry"] = irs["carry"]
+                row["rolldown"] = irs["rolldown"]
+                row["startup"] = irs["startup"]
+                row["actual"] = round(day_val) + (irs["actual"] or 0)
+                row["residual"] = row["valuation"] - row["estTotal"]
+            rows.append(row)
         prev_krd = krd
 
     if rows:
         # 이월 앵커 — 종가 KRD. 날짜는 다음 선물 거래일이 데이터 밖이라
         # 달력상 다음 영업일로 적는다(스왑 표와 같은 처리).
-        rows.append({
+        anchor = {
             "t": next_kr_business_day(window[-1]).isoformat(),
             "krd": {t: round(krd[t]) for t in tenors},
             "dbp": {},
@@ -788,6 +956,71 @@ def book_recon(fut: FuturesData, dataset, positions: list[FuturesPosition]) -> d
             "startup": None,
             "residual": None,
             "carryover": True,
-        })
+        }
+        if want_legs:
+            blank = {"dbp": {}, "est": {}, "estTotal": None, "actual": None,
+                     "valuation": None, "carry": None, "rolldown": None,
+                     "startup": None, "funding": None, "residual": None}
+            anchor["legs"] = [
+                {"name": "선물", "krd": anchor["krd"], **blank},
+                {"name": "IRS",
+                 "krd": {lb: round(v) for lb, v in swap_anchor.items()}, **blank},
+            ]
+        rows.append(anchor)
 
-    return {"tenors": tenors, "rows": rows, "truncated": start > 0}
+    out = {"tenors": tenors, "rows": rows, "truncated": start > 0}
+    if want_legs:
+        # 표의 열은 두 다리의 **합집합**이다 — 화면이 이것으로 칸을 세운다
+        # (자산스왑 대사의 `legTenors` 와 같은 계약).
+        out["legTenors"] = [
+            {"name": "선물", "tenors": tenors},
+            {"name": "IRS", "tenors": swap_labels},
+        ]
+    return out
+
+
+def _bucket_leg(rows: list[dict], labels: list[str]) -> dict:
+    """선물 행 하나가 지는 **IRS 다리 한 줄** — 그 버킷의 IRS 행들을 접는다.
+
+    돈은 **더한다**(그 버킷에서 실제로 마킹된 밤 전부). KRD 는 버킷의 **첫**
+    행 것이다 — 그 행의 «전일 종가 KRD» 가 곧 이 버킷이 시작될 때의 감도이고,
+    추정이 곱한 값도 그것이다(표 규약: 한 블록 안에서 KRD × Δbp = 추정).
+
+    Δbp 도 **더한다**. 수준의 차라서 이어 붙이면 그대로 «지난 선물 행 이후의
+    변화» 가 된다(a−b + b−c = a−c). 버킷의 어느 행에서도 그 노드를 못 재면
+    None 이다 — 0 은 「안 움직였다」는 다른 말이다(공란 정책).
+
+    빈 버킷(IRS 가 쉰 날)은 돈이 0 이고 Δ 는 전부 공란이다. 「그날은 IRS 마킹이
+    없었다」가 사실이고, 그 밤의 돈은 다음 버킷이 진다.
+    """
+    krd = ({lb: (rows[0].get("krd") or {}).get(lb, 0.0) for lb in labels}
+           if rows else {lb: 0.0 for lb in labels})
+    dbp: dict[str, float | None] = {}
+    est: dict[str, float] = {}
+    for lb in labels:
+        seen = [v for r in rows for v in [(r.get("dbp") or {}).get(lb)]
+                if v is not None]
+        dbp[lb] = round(sum(seen), 2) if seen else None
+        est[lb] = sum((r.get("est") or {}).get(lb, 0.0) for r in rows)
+
+    def _sum(key: str) -> float:
+        return sum(r.get(key) or 0.0 for r in rows)
+
+    est_total = round(sum(est.values()))
+    val = round(_sum("valuation"))
+    return {
+        "name": "IRS",
+        "krd": {lb: round(v) for lb, v in krd.items()},
+        "dbp": dbp,
+        "est": {lb: round(v) for lb, v in est.items()},
+        "estTotal": est_total,
+        "valuation": val,
+        "carry": round(_sum("carry")),
+        "rolldown": round(_sum("rolldown")),
+        # 개시(거래일→발효일 한 밤)는 진입일 행에만 선다 — 스왑 표의 그 칸.
+        "startup": round(_sum("startup")),
+        # 조달은 현물 다리만 진다 — IRS 에는 조달할 원금이 없다(공란 정책).
+        "funding": None,
+        "actual": round(_sum("actual")),
+        "residual": val - est_total,
+    }

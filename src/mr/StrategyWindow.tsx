@@ -46,22 +46,31 @@ import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@coinbase/cds-web/tables';
 import { Tooltip } from '@coinbase/cds-web/overlays';
 import { Text } from '@coinbase/cds-web/typography';
-import { PeriodSelector } from '@coinbase/cds-web/visualizations/chart';
 
 import { TimeChart, useStackedScales, type TimeLine, type TimeMarker } from '@/chart/TimeChart';
 import type { ScalePriceLine } from '@/chart/ScaleChart';
-import type { Unit } from '@/lib/api';
+import type { BacktestRecon, Unit } from '@/lib/api';
 import { BacktestUnavailable } from '@/lib/api';
 import { fmtBp, fmtLevel, unitSuffix } from '@/lib/format';
 import { fmtKrw, fmtKrwFromMan, manUnits } from '@/lib/krw';
+import { Segmented } from '@/ui/ControlCard';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { ReadoutCard, ReadoutFact, ReadoutLevel, ReadoutMoney, placeReadout } from '@/ui/ReadoutCard';
 import { Stat, StatColumn } from '@/ui/Stat';
 
 import {
   MR_ENTRY_MODES,
+  MR_RANK_KEYS,
+  MR_SPAN_LABEL,
   MR_STRATEGY_DEFAULTS,
+  fetchMrOptimize,
   fetchMrStrategy,
+  rankCells,
+  type MrOptimizeCell,
+  type MrOptimizeRun,
+  type MrPerf,
+  type MrRankKey,
+  type MrSpan,
   type MrStrategyParams,
   type MrStrategyRun,
   type MrStrategyTrade,
@@ -70,8 +79,8 @@ import {
   fetchMrRecon,
   type MrRecon,
 } from './api';
-import { backtestDays, reconNote, reconTenors } from '@/backtest/recon';
-import { ReconStack } from '@/ui/window/ReconStack';
+import { backtestDays, futuresReconNote, reconNote, reconTenors } from '@/backtest/recon';
+import { ReconStack, type ReconStackDay } from '@/ui/window/ReconStack';
 import { MrKnobBar, mrKnobsStale } from './KnobBar';
 import { Panel, WHY_WORD, headFont } from './parts';
 
@@ -129,37 +138,38 @@ const CHART_H_SUB = 140;
    줄 보이나»이고, 풀폭이 된 뒤에도 200 이면 38거래에서 세 줄만 보인다. */
 const TABLE_H = CHART_H + CHART_H_SUB;
 
-/* ── 표시 구간 [OWNER 2026-09-02 — "백테스트 기간을 항상 전체로 설정하다보니
- * 시인성과 목적의식이 불분명"] ─────────────────────────────────────────────
- * 백테스트는 **늘 전체 기간**이고 이 손잡이는 차트와 거래 표의 «표시»만
- * 자른다 — stale 을 안 세우고 성과 카드도 안 바꾼다
- * [OWNER 2026-09-02 — 재실행이 아니라 표시 창]. 누적 손익은 구간 시작을 0 으로
- * 다시 그어 「이 구간에서 얼마를 벌었나」가 바로 보이게 하고, 구간 순손익과
- * 걸친 거래 수를 패널 머리에 병기한다 — 전체와 딴 수가 아니라 같은 곡선의 한
- * 조각이다(구간 순 = 구간 끝 누적 − 구간 직전 누적). */
-const MR_SPANS = [
-  { v: 'all', label: '전체', months: null },
-  { v: '1y', label: '지난 1년', months: 12 },
-  { v: '1q', label: '지난 1분기', months: 3 },
-  { v: '1m', label: '지난 1개월', months: 1 },
-] as const;
-type MrSpan = (typeof MR_SPANS)[number]['v'];
-
-/** `PeriodSelector` 는 `{id,label}` 탭을 받는다 — 두 번 적지 않고 MR_SPANS 에서
- *  유도한다(PreviewPane 의 그 규율: 한 목록에만 있는 구간이 생길 수 없게). */
-const MR_SPAN_TABS = MR_SPANS.map((s) => ({ id: s.v as string, label: s.label }));
-
-/** ISO 날짜에서 n개월 전 — 달력으로 센다(봉 수가 아니다). UTC 산술이라 시간대에
- *  안 밀리고, 말일 넘침(5-31 − 3개월)은 Date.UTC 가 다음 달로 굴린다 — 경계
- *  하루의 차이는 표시 창에서 값이 아니다. */
-function monthsBefore(iso: string, months: number): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(Date.UTC(y!, m! - 1 - months, d!)).toISOString().slice(0, 10);
-}
+/* ── 구간은 **전역 설정값**이 됐다 [OWNER 2026-09-04 — "지난 1년, 지난 1분기,
+ * 지난 1개월을 전역 설정값으로 두고 이를 조정하면 성과도 바뀌게 해주기"] ─────
+ *
+ * 2026-09-02 판에서 이 손잡이는 «표시» 였다: 차트와 거래 표만 자르고 성과
+ * 카드는 전체 기간이었다. 이제는 성과도 바뀐다 — 그래서 셋이 옮겨 갔다.
+ *
+ *   목록(`MR_SPANS`·`MR_SPAN_TABS`)  → `api.ts` (서버 `mrmetrics.SPANS` 의 거울)
+ *   고르개                            → `KnobBar` (노브 줄 **위**의 제 줄)
+ *   달력 산술(`monthsBefore`)         → **서버**. 화면은 `spans[].from` 을 읽는다
+ *
+ * 마지막 하나가 이 파일에서 없어진 함수다. 카드가 서버 채점이고 차트가 화면
+ * 산술이면 둘이 하루씩 갈릴 수 있고(말일 넘침·휴장), 그때 「구간 순손익」과
+ * 「구간 총손익」이 다른 수가 된다 — 같은 것을 두 번 계산하지 않는다.
+ *
+ * 누적 손익 곡선은 그대로 구간 시작을 0 으로 다시 긋는다(구간 순 = 구간 끝
+ * 누적 − 구간 직전 누적). */
 
 /** 액면을 데스크 말로 — «35.7억». `fmtKrw` 는 부호를 앞세우는 **손익** 표기라
- *  명목에 쓰면 「+35억 7,000만원」이 된다 — 명목은 방향이 없는 양이다. */
+ *  Delta 나 액면에 쓰면 「+35억 7,000만원」이 된다 — 둘 다 방향이 없는 양이다. */
 const fmtEok = (krw: number): string => `${(krw / 1e8).toFixed(1)}억`;
+
+/** 위험조정 비율 — **두 자리 고정**이고 못 잰 값은 «—» 다 [OWNER 2026-09-04].
+ *
+ *  `null` 은 「그 구간에서 그 지표가 안 선다」이지 「0 이다」가 아니다(낙폭이
+ *  0 이라 Calmar 가 없는 칸, 손실 월이 없어 GPR 이 없는 칸). 0 으로 적으면
+ *  화면이 「최악」이라고 말하는데 사실은 「최선이라 분모가 없다」인 경우가
+ *  섞인다 — 그래서 카드의 note 가 왜 없는지를 같이 적는다.
+ *
+ *  두 자리인 이유는 이 수들이 **원/원**이라서다. 셋째 자리는 명목 하나만 바꿔도
+ *  움직이는 자리가 아니지만(비율은 명목에 불변) 칸 폭만 늘린다. */
+const fmtRatio = (v: number | null | undefined): string =>
+  v == null ? '—' : v.toFixed(2);
 
 /** 대사 열의 레벨 — bp 계열은 **2자리**다(캐논 `fmtLevel` 의 1자리에서 일부러
  *  이탈). 이 표들은 「청산 레벨 − 진입 레벨 = Δ」를 주장하는데 Δ 가 2자리
@@ -248,6 +258,57 @@ function exitTally(run: MrStrategyRun): string {
 }
 
 /** 진입 규칙의 이름 — 목록이 어휘의 주인이라 여기서 다시 짓지 않는다. */
+/* ── 근사 최적화 표의 부품 [OWNER 2026-09-04] ───────────────────────────────
+ *
+ * 한 칸이 다섯 노브라 조건 열을 다섯으로 쪼개면 표가 열둘이 된다. 대신 «조건»
+ * 한 칸에 다섯을 접는데, 그때 **읽는 순서가 곧 규칙의 순서**여야 한다:
+ * 룩백(무엇을 기준으로) → 진입 → 청산 → 손절(어디서 들고 나는가) → 규칙
+ * (언제 그 판단을 실행에 옮기는가). 설정 줄의 왼→오른 순서와 같다.
+ *
+ * σ 는 라벨이 진다(`fmtSigma` 가 아니라 맨 숫자) — 칸 안에 σ 를 다섯 번
+ * 적으면 그 글자가 조건보다 넓어진다. 열 머리가 「룩백/진입/청산/손절」을
+ * 말하고 있으므로 자릿수만 남긴다. */
+const cellWord = (c: MrOptimizeCell): string =>
+  `${c.lookback}일 · ${Number(c.entryZ.toFixed(1))}/${Number(c.exitZ.toFixed(1))}/${Number(c.stopZ.toFixed(1))}σ · ${entryWord(c.entryMode)}`;
+
+/** 표의 열 — 머리 활자는 `headFont` 가 고른다(소문자가 있으면 legal). */
+const OPT_COLS: { k: string; label: string; num?: boolean }[] = [
+  { k: 'rank', label: '순위', num: true },
+  { k: 'cond', label: '조건' },
+  { k: 'calmar', label: 'Calmar', num: true },
+  { k: 'sortino', label: 'Sortino', num: true },
+  { k: 'martin', label: 'Martin', num: true },
+  { k: 'gpr', label: 'GPR', num: true },
+  { k: 'omega', label: 'Omega', num: true },
+  { k: 'pf', label: 'Profit F.', num: true },
+  { k: 'pnl', label: '총손익', num: true },
+  { k: 'mdd', label: '최대 낙폭', num: true },
+  { k: 'n', label: '거래', num: true },
+];
+
+/** TOP 5 **+ 지금 칸**. 지금 칸이 다섯 안이면 다섯 줄, 밖이면 여섯 줄이다.
+ *
+ *  다섯만 적으면 「내 칸이 몇 등인가」를 표에서 못 찾는다 — 카드에 등수는
+ *  적히지만 그 등수의 수가 안 보이면 «얼마나 뒤인가» 를 말할 수 없다. 붙이는
+ *  줄은 자기 실제 등수를 달고 선다(6등이라고 적지 않는다). */
+function optRows(ranked: MrOptimizeCell[]): { c: MrOptimizeCell; n: number }[] {
+  const rows = ranked.slice(0, 5).map((c, i) => ({ c, n: i + 1 }));
+  const at = ranked.findIndex((c) => c.current);
+  if (at >= 5) rows.push({ c: ranked[at]!, n: at + 1 });
+  return rows;
+}
+
+/** 비율 한 칸 — 못 잰 값은 «—» 다(0 이 아니다 — `fmtRatio` 머리의 그 근거). */
+function NumCell({ v }: { v: number | null }) {
+  return (
+    <TableCell className="sr-num" justifyContent="flex-end">
+      <Text font="label1" as="span" tabularNumbers noWrap>
+        {fmtRatio(v)}
+      </Text>
+    </TableCell>
+  );
+}
+
 const entryWord = (mode: string): string =>
   MR_ENTRY_MODES.find((m) => m.v === mode)?.label ?? mode;
 
@@ -360,7 +421,26 @@ function ReconNum({
  * 들고 갈 리스크»이지 오늘의 돈이 아니다 — `ReconStack` 머리의 그 규약).
  * 이 값이 백테스트 성과표의 거래 손익과 다른 이유는 `realPane` 머리에. */
 function reconTotal(r: Extract<MrRecon, { available: true }>): number {
-  return r.rows.reduce((a, x) => a + (x.actual ?? 0), 0);
+  return reconBlocks(r).reduce(
+    (a, b) => a + b.rows.reduce((n: number, x) => n + (x.actual ?? 0), 0),
+    0,
+  );
+}
+
+/** 이 대사가 **몇 표인가.**
+ *
+ * **어느 계열이든 하나다** [OWNER 2026-09-07]. BSS 는 자산스왑 한 표(다리 둘이
+ * 그 안에 선다). 선물 계열은 블록으로 오는데 FUT 은 선물 달력 하나, FSW 도
+ * 하나다 — IRS 다리가 그 표 **안에** 서서 하루가 일곱 줄이 된다(백테스트 창이
+ * 간 그 길, `futures.book_recon` 의 «버킷»). 종전에는 FSW 가 둘이었고, 그래서
+ * 화면 둘이 같은 상품을 다른 모양으로 그렸다.
+ *
+ * 그래도 목록으로 두는 이유는 **세로합·검산이 한 곳에서 돌아야** 하기 때문이고
+ * (블록이 다시 늘어도 여기만 산다), 응답이 여전히 `blocks` 로 오기 때문이다. */
+function reconBlocks(
+  r: Extract<MrRecon, { available: true }>,
+): ({ name?: string } & BacktestRecon)[] {
+  return 'blocks' in r ? r.blocks : [r];
 }
 
 /** 대사 줄의 문장 — **표가 곧 엔진의 장부다** [OWNER 2026-09-03 — "캐리
@@ -381,12 +461,84 @@ function reconTotal(r: Extract<MrRecon, { available: true }>): number {
 function bridgeText(t: MrStrategyTrade, r: Extract<MrRecon, { available: true }>): string {
   const uTot = manUnits(reconTotal(r));
   const uCost = manUnits(t.cost);
-  return (
+  /* «표들이» 대 «표가» — **세는 것이지 계열로 가르는 것이 아니다**. 종전에는
+     `'blocks' in r` 로 갈랐는데, 선물이 한 표가 된 지금(2026-09-07) 그 식은 표
+     하나를 두고 「표들이」라고 말한다. 블록이 다시 늘면 문장도 같이 는다. */
+  const head =
     `표 세로합 ${fmtKrwFromMan(uTot)} · 비용 ${fmtKrwFromMan(uCost)}`
     + ` → 거래 손익 ${fmtKrwFromMan(uTot + uCost)}`
-    + ` — 이 표가 곧 이 거래의 장부예요(평가·캐리·롤다운·조달).`
-    + ` 액면 ${fmtEok(r.principal.krw)} 자산스왑으로 실제로 가격했고,`
-    + ` 비용은 상품이 아니라 전략의 노브라 표 밖에 있어요.`
+    + ` — ${reconBlocks(r).length > 1 ? '이 표들이' : '이 표가'} 곧 이 거래의 장부예요`;
+  if (!('blocks' in r)) {
+    return (
+      `${head}(평가·캐리·롤다운·조달).`
+      + ` 액면 ${fmtEok(r.principal.krw)} 자산스왑으로 실제로 가격했고,`
+      + ` 비용은 상품이 아니라 전략의 노브라 표 밖에 있어요.`
+    );
+  }
+  /* 선물은 성분이 다르다. 선물 다리는 **평가뿐**이고(현금결제·연결 계열이라
+     캐리·롤다운·조달이 존재하지 않는 성분이에요), FSW 의 IRS 다리만 캐리·
+     롤다운을 진다. 그리고 비용에 **롤**이 들어 있다 — 분기마다 실제로
+     갈아타므로 그 왕복을 물어야 해요 [OWNER 2026-09-04 «0.5틱»]. */
+  /* `won` 은 **크기**로 오므로 부호를 여기서 준다 — `fmtKrw` 가 «+» 를 붙여
+     「회당 +32만원」이 되면 문 돈이 번 돈처럼 읽힌다(실측 2026-09-04 스크린샷). */
+  const roll = r.roll.days > 0
+    ? ` 비용에는 갈아타기 ${r.roll.days}회(회당 ${fmtKrw(-r.roll.won)})가 들어 있어요.`
+    : ' 이 구간에는 갈아타는 날이 없었어요.';
+  /* IRS 다리가 있는지는 **다리 목록**이 말한다 — 블록 수가 아니다. 2026-09-07
+     에 FSW 가 한 표로 합쳐지면서 `blocks.length > 1` 은 늘 거짓이 됐고, 그대로
+     뒀으면 화면이 자기 표에 서 있는 캐리·롤다운 열을 「없다」고 말했다
+     (`futuresReconNote` 가 2026-09-04 에 밟은 바로 그 함정). */
+  const hasIrsLeg = r.blocks.some((b) => (b.legTenors?.length ?? 0) > 1);
+  return (
+    `${head}.`
+    + ` 액면 ${fmtEok(r.principal.krw)} 로 실제로 가격했어요 —`
+    + ` 선물 다리는 평가뿐이고(현금결제·연결 계열이라 캐리·롤다운·조달이`
+    + ` 존재하지 않는 성분이에요)${hasIrsLeg ? ', IRS 다리가 캐리·롤다운을 져요' : ''}.`
+    + roll
+  );
+}
+
+/** 갈아타는 날의 행에 **왜 그렇게 생겼는지**를 붙인다 [2026-09-04].
+ *
+ * 롤일에는 계약이 바뀌므로 벤더 내재금리의 Δ 가 통째로 튄다(실측 KTB3 중앙
+ * 5.70bp·최대 27.2bp). 그러면 `추정 = −KRD × Δbp` 가 유령이 되고 **잔차가 그것을
+ * 다 진다** — 실측 2026-09-04, FSW-3Y 03-16 행: 추정 +14,938,197 · 평가 −2,545,502
+ * · 잔차 −17,483,699.
+ *
+ * 그 수는 사실이라 안 지운다(`futures.book_recon` 의 그 결정). 대신 **표가 이유를
+ * 말한다** — 안 적으면 읽는 사람은 대사가 깨졌다고 읽는다. 돈 쪽은 멀쩡하다:
+ * 평가는 조정가 차분에서 나오고 조정가는 롤갭이 이미 빠진 계열이다.
+ *
+ * IRS 다리는 상수만기라 롤이 없다 — 그 표에는 안 붙인다. */
+function rollMarked(
+  days: ReconStackDay[],
+  name: string | undefined,
+  r: Extract<MrRecon, { available: true }>,
+): ReconStackDay[] {
+  if (name !== '선물' || !('roll' in r) || !r.roll.dates.length) return days;
+  const on = new Set(r.roll.dates);
+  return days.map((d) =>
+    on.has(d.date)
+      ? {
+          ...d,
+          title: `${d.title ?? d.date} · 계약이 갈리는 날 — Δbp 가 계약 교체라 튀고,`
+            + ' 추정이 그 위에 서요. 그날의 돈(평가)은 조정가에서 나와요.',
+        }
+      : d,
+  );
+}
+
+/** 그 표 밑에 서는 한 줄 — 위 `rollMarked` 와 같은 사실을 글로. */
+function rollNote(
+  name: string | undefined,
+  r: Extract<MrRecon, { available: true }>,
+): string {
+  if (name !== '선물' || !('roll' in r) || !r.roll.dates.length) return '';
+  const ds = r.roll.dates.map((d) => d.slice(5)).join('·');
+  return (
+    ` 계약이 갈리는 날(${ds})은 Δbp 가 교체라 튀어요 — 그 줄의 추정과 잔차는`
+    + ' 그 위에 선 값이고, 그날의 돈은 조정가에서 나오니 평가는 멀쩡해요.'
+    + ' 갈아타기 비용은 표 밖 비용 칸에 들어 있어요.'
   );
 }
 
@@ -547,10 +699,15 @@ function reconSub(t: MrStrategyTrade, run: MrStrategyRun): string {
       ? ''
       : ` · ${t.outFrom}부터 밖 ${t.outDays}일` +
         (t.peakZ == null ? '' : `(최대 ${t.peakZ.toFixed(2)}σ)`);
-  /* 명목·액면이 대사표 머리에 선다 [OWNER 2026-09-02] — 대사표의 KRD 줄이
+  /* Delta·액면이 대사표 머리에 선다 [OWNER 2026-09-02] — 대사표의 KRD 줄이
      ±이 수라(다리 둘이면 합이 0), 이 표만 떼어 봐도 검산이 서게. 액면은 pv01
-     근사(거래 표의 그 각주). */
-  const size = ` · 명목 ${run.params.notional.toLocaleString()}원/bp` +
+     근사(거래 표의 그 각주).
+
+     **「명목」이 아니라 「Delta」** [OWNER 2026-09-04, 2026-09-07 에 이 자리까지].
+     노브와 카드는 09-04 에 바꿨는데 이 줄과 거래 표 부제·창 각주가 남아, 하필
+     바로 옆의 «액면 약 35.0억» 과 한 줄에 서 있었다 — 그 충돌이 애초에 이름을
+     바꾼 이유다(`KnobBar` 의 그 주석). */
+  const size = ` · Delta ${run.params.notional.toLocaleString()}원/bp` +
     (run.principal ? `(액면 약 ${fmtEok(run.principal.krw)} — 지금 커브)` : '');
   return `${t.entryT} → ${t.exitT} · ${t.bars}봉 · ${legs}${out} · ${WHY_WORD[t.why]}${size}`;
 }
@@ -581,9 +738,19 @@ export function StrategyWindow({
      그날 손익이 되고, 세로합이 거래 손익이 된다. 실행할 때마다 닫는다 —
      다른 실행의 거래를 펴 놓고 있으면 그 표가 거짓이 된다. */
   const [openTrade, setOpenTrade] = useState<string | null>(null);
-  /* 표시 구간 — 실행·종목이 바뀌어도 남는다(보기 취향이지 실행의 일부가
-     아니다). 판정 규율은 MR_SPANS 머리 주석에. */
+  /* 구간 — **전역 설정값** [OWNER 2026-09-04]. 실행·종목이 바뀌어도 남는다.
+     성과를 바꾸지만 stale 은 안 세운다: 서버가 네 구간을 한 번에 보내 오므로
+     (`MrStrategyRun.spans`) 고르개는 이미 와 있는 값을 고를 뿐이고, 엔진은
+     늘 전체 표본에서 한 번만 돈다(그 근거는 `api.ts::MR_SPANS`). */
   const [span, setSpan] = useState<MrSpan>('all');
+  /* ── 근사 최적화 [OWNER 2026-09-04] ──────────────────────────────────────
+     162칸이라 **누를 때만** 부른다(`/api/mr/recon` 이 갈라져 있는 그 근거).
+     결과는 실행·종목·구간이 바뀌면 버린다 — 딴 조건의 순위를 들고 있으면
+     화면이 거짓말을 한다. 순위 기준만은 남긴다(서버에 다시 안 묻는다). */
+  const [opt, setOpt] = useState<MrOptimizeRun>();
+  const [optRunning, setOptRunning] = useState(false);
+  const [optError, setOptError] = useState<string>();
+  const [rankKey, setRankKey] = useState<MrRankKey>('calmar');
   /* 서랍 펼침을 창이 쥔다 — 거래 줄을 누르면 그 자리에서 대사가 펴져야 한다
      (안 쥐면 「눌렀는데 아무 일도 안 일어난」 화면이 된다). 접는 손잡이는
      여전히 서랍 탭이다. */
@@ -593,13 +760,27 @@ export function StrategyWindow({
   useEffect(() => {
     setRun(undefined);
     setError(undefined);
+    setOpt(undefined);
+    setOptError(undefined);
   }, [id]);
+
+  /* 구간이 바뀌면 격자도 딴 구간의 채점이다 — 성과 카드는 서버가 네 벌을 다
+     보내 와서 즉각 갈아 끼지만, 격자는 구간마다 다시 돌아야 한다(162칸 × 넷을
+     늘 보내면 페이로드가 네 배가 되고 대부분은 안 읽힌다). */
+  useEffect(() => {
+    setOpt(undefined);
+    setOptError(undefined);
+  }, [span]);
 
   const exec = useCallback(() => {
     /* 다른 실행의 거래를 펴 놓고 있으면 그 대사가 거짓이 된다. */
     setOpenTrade(null);
     setDrawerOpen(false);
     setError(undefined);
+    /* 최적화 표도 같이 버린다 — 「지금 칸」이 어디인지가 노브에 달려 있어서,
+       옛 격자를 들고 있으면 표가 딴 실행의 순위를 이 실행의 것처럼 적는다. */
+    setOpt(undefined);
+    setOptError(undefined);
     setRunning(true);
     fetchMrStrategy(id, knobs)
       .then(setRun)
@@ -610,6 +791,33 @@ export function StrategyWindow({
       .finally(() => setRunning(false));
   }, [id, knobs]);
 
+  /* 격자를 부른다 — **누를 때만**. 실행 시점의 노브(`run.params`)로 부르는
+     이유는 「지금 칸」이 표에서 한 칸으로 서야 순위를 읽을 수 있기 때문이다:
+     아직 안 실행한 노브로 부르면 그 칸이 머리 카드와 다른 규칙의 수가 된다. */
+  const runOptimize = useCallback(() => {
+    if (!run) return;
+    setOptError(undefined);
+    setOptRunning(true);
+    fetchMrOptimize(id, run.params, span)
+      .then(setOpt)
+      .catch((e: unknown) => {
+        if (e instanceof BacktestUnavailable) setOptError('실행 중인 백엔드(:8200)가 필요해요.');
+        else setOptError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => setOptRunning(false));
+  }, [id, run, span]);
+
+  /* 「이 조건으로 실행」 — 격자의 한 칸을 노브에 꽂는다. **실행까지 하지는
+     않는다**: 격자는 엔진 근사고 머리 카드는 실가격일 수 있어서, 사람이
+     「실행」을 눌러야 그 차이가 화면에 서는 순서가 지켜진다(그리고 stale
+     배너가 «지금 노브가 실행과 다르다» 를 말해 준다). */
+  const adopt = useCallback((c: MrOptimizeCell) => {
+    setKnobs((k) => ({
+      ...k, lookback: c.lookback, entryZ: c.entryZ,
+      exitZ: c.exitZ, stopZ: c.stopZ, entryMode: c.entryMode,
+    }));
+  }, []);
+
   /* pinned 규율 — 실행 시점 파라미터와 지금 노브가 갈리면 stale. 판정은
      **공용**이다(`KnobBar.mrKnobsStale`) — 통합 장부 창과 같은 조건을 써야
      같은 노브를 돌렸을 때 한 창만 낡은 숫자를 들고 있는 일이 없다. */
@@ -617,16 +825,29 @@ export function StrategyWindow({
 
   const dates = useMemo(() => run?.points.map((p) => p.t) ?? [], [run]);
 
-  /* 구간의 첫 인덱스 — **날짜로** 자른다(인덱스가 아니다 — 통합 장부의 그
-     규율). 마지막 두 점은 남긴다: 한 점짜리 차트는 선이 못 된다. */
+  /* ── 이 구간의 성과 [OWNER 2026-09-04] ──────────────────────────────────
+     서버가 네 벌을 다 보내 온다(`spans`). 화면은 고르기만 하므로 재실행도
+     stale 도 없다. 구 백엔드는 이 필드를 모르므로(§6 ⑥ 배포 순서) 없으면
+     `undefined` 이고, 그때 카드가 「구간별 성과는 새 백엔드가 필요해요」를
+     적는다 — 옛 `summary` 로 조용히 떨어지면 화면이 전체 기간의 수를 이
+     구간의 수인 것처럼 말하게 된다. */
+  const perf: MrPerf | undefined = useMemo(
+    () => run?.spans?.find((b) => b.span === span),
+    [run, span],
+  );
+
+  /* 구간의 첫 인덱스 — **서버가 채점한 첫 봉**을 그대로 찾는다.
+     종전에는 화면이 달력 산술(`monthsBefore`)로 직접 잘랐는데, 이제 카드가
+     서버 채점이라 두 자가 하루라도 갈리면 「구간 순손익」(곡선)과 「총손익」
+     (카드)이 다른 수가 된다. 마지막 두 점은 남긴다: 한 점짜리 차트는 선이
+     못 된다. */
   const w0 = useMemo(() => {
     if (!run || run.points.length < 2) return 0;
-    const months = MR_SPANS.find((s) => s.v === span)?.months ?? null;
-    if (months == null) return 0;
-    const cut = monthsBefore(run.points[run.points.length - 1]!.t, months);
-    const i = run.points.findIndex((p) => p.t >= cut);
+    const from = perf?.from;
+    if (!from) return 0;
+    const i = run.points.findIndex((p) => p.t >= from);
     return Math.min(i < 0 ? 0 : i, run.points.length - 2);
-  }, [run, span]);
+  }, [run, perf]);
   const winPoints = useMemo(() => (run ? run.points.slice(w0) : []), [run, w0]);
   const winDates = useMemo(() => winPoints.map((p) => p.t), [winPoints]);
   /* 누적의 재기준점 = 구간 **직전** 봉의 누적. 구간 순손익 = 구간 끝 누적 − 이
@@ -751,7 +972,7 @@ export function StrategyWindow({
         span === 'all'
           ? `${run.trades.length}건`
           : `구간에 걸친 ${shownTrades.length}건 / 전체 ${run.trades.length}건`,
-        `명목 ${run.params.notional.toLocaleString()}원/bp`,
+        `Delta ${run.params.notional.toLocaleString()}원/bp`,
         run.principal ? `액면 약 ${fmtEok(run.principal.krw)}(지금 커브)` : null,
       ].filter((x): x is string => x != null).join(' · ');
 
@@ -1003,19 +1224,41 @@ export function StrategyWindow({
           어긋난다(실측 16건 중 3건). 읽는 사람이 암산으로 줄을 검산할 수
           있어야 하고, 그게 이 줄의 존재 이유다. */}
       <Text font="legal" as="p" color="fgMuted">
-        {recon.truncated
+        {reconBlocks(recon).some((b) => b.truncated)
           ? `엔진 근사 ${fmtKrw(sel.pnl)} · 실가격은 창이 잘려 합을 못 내요 — 아래 각주를 보세요.`
           : bridgeText(sel, recon)}
       </Text>
-      <ReconStack
-        days={backtestDays(recon)}
-        /* 열은 **두 다리의 합집합**이다 [OWNER 2026-09-04] — 민평과 IRS 의
-           라벨이 어긋나서 한쪽 목록만 쓰면 다른 다리의 칸이 통째로 사라진다.
-           다리별 대사가 아니면 이 함수가 `recon.tenors` 를 그대로 돌려준다. */
-        tenors={reconTenors(recon)}
-        defaultOrder="desc"
-        note={reconNote(recon)}
-      />
+      {/* 표는 **자기 달력 위에** 선다 — 백테스트 창과 같은 문법이다
+          (`BacktestWindow`). 이름표는 선물 계열에만 세운다: 자산스왑 한 표에
+          «자산스왑 대사» 라고 적으면 안 읽히는 줄이 하나 는다.
+
+          높이를 **안 박는다** [2026-09-07]. 종전에는 블록이 여럿일 때 `15vh` 로
+          눌렀는데, FSW 가 한 표가 되면서 그 조건이 늘 거짓이 됐다 — 조건만 죽은
+          채로 두면 다음 사람이 «표가 눌리는 판» 이 있다고 읽는다. 남는 높이는
+          서랍이 준다(`realPane` 의 `flexGrow`). */}
+      {reconBlocks(recon).map((b, i) => (
+        <VStack key={b.name ?? i} gap={0.5} width="100%">
+          {b.name ? (
+            <Text font="caption" as="span" color="fgMuted">
+              {`${b.name} 대사 — ${b.name} 달력`}
+            </Text>
+          ) : null}
+          <ReconStack
+            days={rollMarked(backtestDays(b), b.name, recon)}
+            /* 열은 **두 다리의 합집합**이다 [OWNER 2026-09-04] — 민평과 IRS 의
+               라벨이 어긋나서 한쪽 목록만 쓰면 다른 다리의 칸이 통째로 사라진다.
+               다리별 대사가 아니면 이 함수가 `tenors` 를 그대로 돌려준다. */
+            tenors={reconTenors(b)}
+            defaultOrder="desc"
+            /* 선물 표의 각주는 **백테스트의 그것**이다 [OWNER 2026-09-07] —
+               같은 함수라야 「하루 일곱 줄」·「IRS 다리가 캐리·롤다운을 진다」·
+               「쉰 날은 0 이고 다음 행이 두 밤을 진다」가 두 화면에서 같은 말로
+               선다. 자산스왑 표는 종전대로 잘림만 말한다. */
+            note={`${b.name ? futuresReconNote(b) : (reconNote(b) ?? '')}`
+              .concat(rollNote(b.name, recon)).trim() || undefined}
+          />
+        </VStack>
+      ))}
     </VStack>
   ) : null;
 
@@ -1108,18 +1351,229 @@ export function StrategyWindow({
        선물  → 자산스왑이 아니므로 다리 표(`ReconDay`)가 그대로 선다.
      빈 칸에 이유를 쓰는 것이 서랍의 규율이고(`WindowDrawer` 의 `unavailable`),
      여기서는 그 이유가 **서버 문장 그대로**다 — 화면이 다시 쓰면 갈린다. */
+  /* 어느 표를 세우나 — **회계가 정한다**(`run.real`), 계열 종류가 아니라.
+   *
+   * 종전에는 `hasLegLevels`(= BSS 만 싣는 `govt` 필드가 있나)로 갈랐다. 그건
+   * 「BSS 인가」의 대역이었고, 2026-09-04 에 선물 넷도 실가격 회계로 들어오면서
+   * 거짓이 됐다 — 선물이 실가격으로 돌면서도 화면은 **폐기된 근사 표**를 그리고
+   * 있게 된다. 판정은 그 봉의 돈이 어느 회계에서 나왔는가여야 한다. */
   const reconContent = !sel || !run
     ? null
-    : hasLegLevels
+    : run.real
       ? (recon?.available ? realPane : null)
       : reconPaneLegs;
+  /* 고르개 옆 한 줄 — **서버가 실제로 채점한 구간**을 적는다. 화면이 달력을
+     다시 세지 않는 이유는 `w0` 주석과 같다(두 자가 갈리면 카드와 곡선이
+     다른 구간을 말한다). 전체 구간은 안 적는다 — 「전체」가 이미 그 뜻이다. */
+  const spanNote = !perf || span === 'all'
+    ? undefined
+    : `${perf.from ?? '—'} 부터 ${perf.days.toLocaleString()}봉 — 성과·최적화가 이 구간에서 채점돼요.`;
+
+  /* ── 근사 최적화 절 [OWNER 2026-09-04 — "전략 실험시에 근사 최적화 세트를
+     바탕으로 결과를 보여주고, 그 밑에 TOP 5 조건을 매트릭스로"] ─────────────
+
+     격자는 다섯 노브의 **프리셋 전부**(3×3×3×3×2 = 162칸)이고 순위 기준은
+     화면이 고른다(서버는 칸마다 지표를 다 실어 보낸다 — 기준을 바꿀 때마다
+     같은 격자를 다시 돌 이유가 없고, 「기준을 바꾸면 1등이 바뀐다」는 사실
+     자체가 이 표가 말해야 하는 것이라 그 전환은 즉각이어야 한다).
+
+     **1등 카드와 TOP 5 표를 같이 세운다.** 1등만 적으면 「그 칸이 얼마나
+     외로운가」를 못 말한다 — 2등과 3% 차이인 1등과 두 배 차이인 1등은 같은
+     숫자가 아니고, 그 차이가 곧 그 칸의 신뢰도다(내렸던 이웃 칸 표가 재던
+     것이 그것이었다). 그래서 표에는 **지금 칸의 순위**도 같이 선다.
+
+     회계가 머리 카드와 다를 수 있다는 사실은 각주가 말한다 — 162칸을 실가격
+     으로 매기면 못 돌아서 격자는 늘 엔진 근사다. */
+  const ranked = useMemo(
+    () => (opt ? rankCells(opt.cells, rankKey) : []),
+    [opt, rankKey],
+  );
+  const best = ranked[0];
+  const curRank = ranked.findIndex((c) => c.current);
+
+  const optPane = !run ? null : (
+    <Panel
+      title="근사 최적화"
+      sub={opt
+        ? `${opt.cells.length}칸 · ${MR_SPAN_LABEL[span]} 채점 · 엔진 근사`
+        : '룩백·진입·청산·손절·진입 규칙의 프리셋을 전부 돌려요'}
+      aside={
+        <HStack gap={1} alignItems="center">
+          {opt ? (
+            <Box className="sr-tabs-neutral">
+              <Segmented
+                label="순위 기준"
+                value={rankKey}
+                options={MR_RANK_KEYS.map((k) => ({
+                  value: k.v, label: k.label, title: k.help,
+                }))}
+                onChange={(v) => setRankKey(v)}
+              />
+            </Box>
+          ) : null}
+          <button
+            type="button"
+            className="sr-pillbtn"
+            data-fill
+            disabled={optRunning}
+            onClick={runOptimize}
+          >
+            {optRunning ? '격자 도는 중…' : opt ? '다시 돌리기' : '최적화 실행'}
+          </button>
+        </HStack>
+      }
+    >
+      {optError ? (
+        <Text font="body" as="p" className="sr-up">
+          격자를 못 돌렸어요 — {optError}
+        </Text>
+      ) : !opt ? (
+        <Text font="body" as="p" color="fgMuted">
+          누르면 룩백 3 × 진입 3 × 청산 3 × 손절 3 × 진입 규칙 2 = 162칸을 이
+          구간에서 채점해요. 비용·Delta 와 실전 규칙은 안 흔들어요 — 그 둘은
+          통상값이 아니라 그날의 호가폭이고 이 데스크의 포지션 크기예요.
+        </Text>
+      ) : !best ? (
+        <Text font="body" as="p" color="fgMuted">
+          이 구간에서 설 수 있는 칸이 없어요 — 이력이 룩백보다 짧아요.
+        </Text>
+      ) : (
+        <VStack gap={1} width="100%">
+          {/* 1등 한 벌 — 「근사 최적화 세트의 결과」. 지금 칸과 나란히 적어야
+              «바꿀 값이 있나» 가 한 줄로 읽힌다. */}
+          <HStack className="sr-stats" width="100%" flexWrap="wrap">
+            <StatColumn title={`최적 세트 · ${MR_RANK_KEYS.find((k) => k.v === rankKey)!.label} 1등`}>
+              <Stat label="조건" value={cellWord(best)} note={best.current ? '지금 노브예요' : undefined} />
+              <Stat
+                label={MR_RANK_KEYS.find((k) => k.v === rankKey)!.label}
+                value={rankKey === 'totalPnl' ? fmtKrw(best.totalPnl) : fmtRatio(best[rankKey])}
+              />
+              <Stat
+                label="총손익"
+                value={fmtKrw(best.totalPnl)}
+                tone={best.totalPnl > 0 ? 'up' : best.totalPnl < 0 ? 'down' : undefined}
+              />
+              <Stat label="최대 낙폭" value={fmtKrw(-best.maxDrawdown)} />
+              <Stat label="거래" value={String(best.numTrades)} />
+              {/* 지금 칸이 몇 등인가 — 이 표의 존재 이유다. 1등이면 그 사실이
+                  「바꿀 것이 없다」는 답이고, 뒤쪽이면 얼마나 뒤인지가 답이다. */}
+              <Stat
+                label="지금 칸"
+                value={curRank < 0 ? '—' : `${curRank + 1}등`}
+                note={curRank < 0 ? '격자 밖이에요' : `${ranked.length}칸 중`}
+              />
+            </StatColumn>
+          </HStack>
+
+          {/* TOP 5 매트릭스 — 조건 다섯 열 + 지표 열. 표는 캐논(CDS Table),
+              머리 활자는 `headFont`(소문자가 있으면 legal — CDS caption 이
+              대문자화를 걸어 「bp」가 「BP」가 된다). */}
+          <Box className="sr-mr-drawertable" width="100%">
+            <Table bordered={false}>
+              <TableHeader sticky>
+                <TableRow>
+                  {OPT_COLS.map((c) => (
+                    <TableCell
+                      key={c.k}
+                      as="th"
+                      scope="col"
+                      className={c.num ? 'sr-num' : undefined}
+                      justifyContent={c.num ? 'flex-end' : undefined}
+                    >
+                      <Text font={headFont(c.label)} as="span" color="fgMuted" noWrap>
+                        {c.label}
+                      </Text>
+                    </TableCell>
+                  ))}
+                  <TableCell as="th" scope="col">
+                    <Text font="caption" as="span" color="fgMuted" noWrap>
+                      채택
+                    </Text>
+                  </TableCell>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {/* 다섯 + **지금 칸**. 지금 칸이 TOP 5 안이면 그 줄 하나로
+                    끝나고, 밖이면 여섯째 줄로 붙는다 — 표에서 자기 자리를 못
+                    찾으면 순위가 아무 말도 안 한다. */}
+                {optRows(ranked).map(({ c, n }) => (
+                  <TableRow key={`${c.lookback}-${c.entryZ}-${c.exitZ}-${c.stopZ}-${c.entryMode}`}>
+                    <TableCell className="sr-num" justifyContent="flex-end">
+                      <Text font="label1" as="span" tabularNumbers noWrap>{n}</Text>
+                    </TableCell>
+                    <TableCell>
+                      <Text font="label1" as="span" noWrap>
+                        {c.current ? `${cellWord(c)} · 지금` : cellWord(c)}
+                      </Text>
+                    </TableCell>
+                    <NumCell v={c.calmar} />
+                    <NumCell v={c.sortino} />
+                    <NumCell v={c.martin} />
+                    <NumCell v={c.gpr} />
+                    <NumCell v={c.omega} />
+                    <NumCell v={c.profitFactor} />
+                    <TableCell className="sr-num" justifyContent="flex-end">
+                      <Text
+                        font="label1"
+                        as="span"
+                        tabularNumbers
+                        noWrap
+                        className={c.totalPnl > 0 ? 'sr-up' : c.totalPnl < 0 ? 'sr-down' : undefined}
+                      >
+                        {fmtKrw(c.totalPnl)}
+                      </Text>
+                    </TableCell>
+                    <TableCell className="sr-num" justifyContent="flex-end">
+                      <Text font="label1" as="span" tabularNumbers noWrap>
+                        {fmtKrw(-c.maxDrawdown)}
+                      </Text>
+                    </TableCell>
+                    <TableCell className="sr-num" justifyContent="flex-end">
+                      <Text font="label1" as="span" tabularNumbers noWrap>
+                        {c.numTrades}
+                      </Text>
+                    </TableCell>
+                    <TableCell>
+                      <button
+                        type="button"
+                        className="sr-pillbtn"
+                        disabled={c.current}
+                        onClick={() => adopt(c)}
+                      >
+                        {/* 「채택」 두 글자다 [실측 2026-09-04]. 「노브에 넣기」로
+                            두면 이 열이 열 중 가장 넓어져 표가 상자를 38px 넘고
+                            (실측: 표 1109 대 상자 1071), 넘친 쪽이 하필 **누르는
+                            칸**이라 가로로 밀어야 눌린다. 열 머리가 이미 「채택」
+                            이라 동사는 중복이기도 하다. */}
+                        {c.current ? '적용됨' : '채택'}
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
+
+          {/* 이 표가 무엇이 아닌지 — 각주가 진다. 셋 다 안 적으면 화면이
+              「이 칸이 최적이다」라고만 말하게 된다. */}
+          <Text font="legal" as="p" color="fgMuted">
+            {`격자는 엔진 근사예요${run.real ? ' — 머리 카드는 실가격이라 같은 조건이라도 수가 달라요' : ''}.`}
+            {' '}비율은 원/원이라 수익률 기반 문헌값과 크기를 직접 비교하면 안 돼요.
+            {' '}같은 구간·같은 표본을 162번 잰 값이라 1등은 뽑기의 결과이기도
+            해요 — 2등과의 거리가 그 칸의 신뢰도예요.
+          </Text>
+        </VStack>
+      )}
+    </Panel>
+  );
+
   const reconWhy = !run
     ? '실행하면 거래가 서고, 거래 줄을 누르면 하루씩 대사가 열려요.'
     : !sel
-      ? '거래 줄을 누르면 하루씩 대사가 서요 — 자산스왑으로 세워 테너별 KRD 로 재요.'
-      : hasLegLevels && recon === null
-        ? '대사를 재는 중이에요 — 민평 노드를 하나씩 범프해서 채권을 다시 가격해요.'
-        : hasLegLevels && recon && !recon.available
+      ? '거래 줄을 누르면 하루씩 대사가 서요 — 실제 가격기로 다시 세워서 재요.'
+      : run.real && recon === null
+        ? '대사를 재는 중이에요 — 실제 가격기로 다시 세우고 있어요.'
+        : run.real && recon && !recon.available
           ? recon.why
           : undefined;
 
@@ -1169,7 +1623,19 @@ export function StrategyWindow({
       <VStack gap={2} padding={2} width="100%">
         {/* 노브 두 줄은 **공용**이다(`KnobBar.tsx`) — 통합 장부 창과 같은 것을
             쓴다. 갈라 낸 근거는 그 파일 머리에 있다. */}
-        <MrKnobBar lead={label} knobs={knobs} onChange={set} onRun={exec} running={running} />
+        <MrKnobBar
+          lead={label}
+          knobs={knobs}
+          onChange={set}
+          onRun={exec}
+          running={running}
+          /* 구간은 **전역 설정값**이라 노브 줄 위에 선다 [OWNER 2026-09-04].
+             결과가 있어야 「언제부터」를 말할 수 있으므로 안내 문장은 실행
+             뒤에만 붙는다 — 없으면 고르개만 서고 그것도 맞는 화면이다. */
+          span={span}
+          onSpanChange={setSpan}
+          spanNote={spanNote}
+        />
         {/* 상태 문구의 활자는 **Backtest 와 한 벌**이다 — 안내·빈 상태는
             `body` 뮤트, 오류는 `body` + `.sr-up`(앱 공통 오류 문법: 백테스트·
             Main 미리보기가 같은 것을 쓴다). 종전에는 셋 다 `legal` 맨 잉크라
@@ -1196,40 +1662,70 @@ export function StrategyWindow({
           </Text>
         ) : (
           <>
-            {/* ── 성과 — 원본 KPI 다섯, 부품은 이 앱의 스트립(`ui/Stat.tsx`).
-                   첫 판은 같은 모양을 손으로 다시 만들었다(중복). 표기는 이 리포
-                   문법(억/만), 방향색은 손익에만 — 낙폭은 늘 음수라 색이 정보를
-                   더하지 않는다. */}
+            {/* ── 성과 — **절대수익형 지표 열둘** [OWNER 2026-09-04 — "샤프가
+                   아니라 절대수익형펀드(헤지펀드)에서 사용하는 성과지표 가져와서
+                   사용해주기"]. 부품은 이 앱의 스트립(`ui/Stat.tsx`) 그대로다.
+
+                   **Sharpe 가 내려갔다.** 그 값은 계약과 엔진에 남아 있고(적합성
+                   벡터가 잠그고 있다) 화면만 안 읽는다 — 실전 규칙 다섯·이웃 칸을
+                   내릴 때와 같은 규율이다. 왜 σ 가 아니라 낙폭·하방편차인지는
+                   서버 `mrmetrics.py` 머리가 진다.
+
+                   **수는 전부 고른 구간 것이다.** 열둘이 `perf` 하나에서 나오므로
+                   구간을 바꾸면 열둘이 같이 움직인다 — 한 칸만 전체 기간이면
+                   그 카드가 조용히 딴 구간을 말하게 된다.
+
+                   표기는 이 리포 문법(억/만), 방향색은 손익에만 — 낙폭은 늘
+                   음수라 색이 정보를 더하지 않는다. 비율은 **두 자리**다(원/원
+                   이라 문헌의 수익률 기반 값과 크기를 직접 비교하면 안 되고,
+                   그 사실은 열 머리 옆 각주가 말한다). */}
+            {!perf ? (
+              /* 구 백엔드 — 조용히 `summary`(전체 기간)로 떨어지지 않는다.
+                 그러면 화면이 전체 기간의 수를 이 구간의 수인 것처럼 말한다. */
+              <Text font="body" as="p" color="fgMuted">
+                구간별 성과는 새 백엔드가 필요해요 — 지금 백엔드는 전체 기간
+                하나만 보내고 있어요.
+              </Text>
+            ) : (
             <HStack className="sr-stats" width="100%" flexWrap="wrap">
               <StatColumn title="성과">
                 <Stat
                   label="총손익"
-                  value={fmtKrw(run.summary.totalPnl)}
-                  tone={
-                    run.summary.totalPnl > 0 ? 'up' : run.summary.totalPnl < 0 ? 'down' : undefined
-                  }
+                  value={fmtKrw(perf.totalPnl)}
+                  tone={perf.totalPnl > 0 ? 'up' : perf.totalPnl < 0 ? 'down' : undefined}
+                  note={span === 'all' ? undefined : MR_SPAN_LABEL[span]}
                 />
-                <Stat label="최대 낙폭" value={fmtKrw(-run.summary.maxDrawdown)} />
+                <Stat label="최대 낙폭" value={fmtKrw(-perf.maxDrawdown)} />
+                {/* 낙폭의 **길이** — 깊이만 적으면 「얼마나 오래 물속이었나」를
+                    화면이 안 말한다. 골에서부터 센다(고점은 지나고 나서야
+                    고점인 줄 안다 — `mrmetrics._drawdowns` 의 그 근거). */}
+                <Stat
+                  label="회복일"
+                  value={perf.recoveryDays == null ? '—' : `${perf.recoveryDays}일`}
+                  note={perf.recoveryDays == null
+                    ? '낙폭이 없었어요'
+                    : perf.recovered ? '골에서 전고점까지' : '아직 회복 못 했어요'}
+                />
                 <Stat
                   label="승률"
-                  value={run.summary.winRate == null ? '—' : `${Math.round(run.summary.winRate * 100)}%`}
+                  value={perf.winRate == null ? '—' : `${Math.round(perf.winRate * 100)}%`}
                   /* 분모를 여기서 말한다 [OWNER 2026-08-26]. 미청산 다리는 원본
                      규약대로 거래·승률에 안 들어가는데(총손익에는 들어간다),
                      카드가 그 사실을 안 적으면 열려 있는 손실 포지션이 승률에서
                      조용히 사라진다 — 실측 80% 는 15건 중 12건이었고 빠진 한
                      건은 표본 두 번째로 나쁜 −600만이었다. */
-                  /* 분모가 무엇인지 한 줄로. 「포함」이면 그 다리가 승패를
-                     이미 갈랐다는 뜻이고, 「제외」면 열린 손실이 승률에서 빠져
-                     있다는 뜻이다 — 둘 다 말해야 숫자가 읽힌다. */
                   note={!run.open ? undefined
                     : run.params.countOpen ? '미청산 1건 포함' : '미청산 1건 제외'}
                 />
+                {/* 거래 수는 **구간 안에서 청산된 것**이다 — 곡선의 구간
+                    순손익에 든 거래가 표에도 있어야 한다(`shownTrades` 와 같은
+                    규약). 전체와 다르면 그 사실을 note 가 적는다. */}
                 <Stat
-                  label="Sharpe"
-                  value={run.summary.sharpe == null ? '—' : run.summary.sharpe.toFixed(2)}
-                  note="전 봉 기준"
+                  label="거래"
+                  value={String(perf.numTrades)}
+                  note={perf.numTrades === run.summary.numTrades
+                    ? undefined : `전체 ${run.summary.numTrades}건`}
                 />
-                <Stat label="거래" value={String(run.summary.numTrades)} />
                 {run.open ? (
                   <Stat
                     label="미청산"
@@ -1238,6 +1734,48 @@ export function StrategyWindow({
                     note={`${run.open.entryT} 진입`}
                   />
                 ) : null}
+              </StatColumn>
+              {/* 분모가 저마다 다른 일곱 — 그 사실이 이 열의 요점이다. 하나가
+                  나쁘고 하나가 좋으면 «어느 축에서» 를 묻게 되고, 그게 절대수익형
+                  평가가 샤프 한 칸으로는 못 하던 일이다. */}
+              <StatColumn title="위험조정">
+                <Stat
+                  label="Sortino"
+                  value={fmtRatio(perf.sortino)}
+                  note={perf.sortino == null ? '손실 난 날이 없어요' : '하방편차 · 연'}
+                />
+                <Stat
+                  label="Calmar"
+                  value={fmtRatio(perf.calmar)}
+                  note={perf.calmar == null ? '낙폭이 없었어요' : '연환산 ÷ 최대낙폭'}
+                />
+                <Stat
+                  label="Martin"
+                  value={fmtRatio(perf.martin)}
+                  note={perf.martin == null ? '낙폭이 없었어요' : '연환산 ÷ Ulcer'}
+                />
+                <Stat label="Ulcer" value={fmtKrw(-perf.ulcer)} note="RMS 낙폭" />
+                {/* GPR 이 없는 이유가 둘이라 화면이 가른다 — 월 버킷이 모자란
+                    것과 손실 월이 하나도 없는 것은 다른 사실이다. */}
+                <Stat
+                  label="GPR"
+                  value={fmtRatio(perf.gpr)}
+                  note={perf.gpr != null ? '월 버킷 · Schwager'
+                    : perf.gprMonths < 2 ? `월 버킷 ${perf.gprMonths}개라 못 세요`
+                    : '손실 난 달이 없어요'}
+                />
+                <Stat
+                  label="Omega"
+                  value={fmtRatio(perf.omega)}
+                  note={perf.omega == null ? '손실 난 날이 없어요' : 'θ=0 · 일별'}
+                />
+                <Stat
+                  label="Profit Factor"
+                  value={fmtRatio(perf.profitFactor)}
+                  note={perf.profitFactor == null
+                    ? (perf.numTrades ? '진 거래가 없어요' : '거래가 없어요')
+                    : '거래 기준'}
+                />
               </StatColumn>
               <StatColumn title="조건">
                 {/* 비용이 봉마다 다르면 「편도 몇 bp」가 한 숫자로 안 나온다 —
@@ -1254,46 +1792,60 @@ export function StrategyWindow({
                     (`mrbacktest.breakeven_cost_bp`). 「이 구성이 얼마짜리
                     호가폭까지 견디는가」 는 비용 노브의 값보다 먼저 알아야 하는
                     사실이고, 그걸 모르면 비용 기본값이 곧 결론이 된다. */}
-                {run.summary.breakevenCostBp != null ? (
+                {/* 손익분기도 **이 구간의 수**다 [OWNER 2026-09-04]. 구간
+                    안에서 문 비용 위의 닫힌형이라(`mrmetrics.score` 의 그 산술)
+                    전체 기간의 값과 다르고, 달라야 맞다 — 성과가 구간을 따라가는데
+                    「이 성과가 견디는 호가폭」만 전체 기간이면 두 칸이 딴 구간을
+                    말한다. 고정 비용 판은 bp 로, 동적 비용 판은 «그 경로의 몇 배»
+                    로 적는다(동적에서는 「몇 bp」가 한 숫자로 안 나온다). */}
+                {run.cost.model === 'flat' && perf.breakevenCostBp != null ? (
                   <Stat
                     label="손익분기 비용"
-                    value={`편도 ${run.summary.breakevenCostBp.toFixed(2)}bp`}
-                    tone={run.summary.breakevenCostBp <= run.params.costBp ? 'down' : undefined}
+                    value={`편도 ${perf.breakevenCostBp.toFixed(2)}bp`}
+                    tone={perf.breakevenCostBp <= run.params.costBp ? 'down' : undefined}
                     note={
-                      run.summary.breakevenCostBp <= run.params.costBp
+                      perf.breakevenCostBp <= run.params.costBp
                         ? '지금 비용에서 이미 손실'
-                        : `여유 ${(run.summary.breakevenCostBp - run.params.costBp).toFixed(2)}bp`
+                        : `여유 ${(perf.breakevenCostBp - run.params.costBp).toFixed(2)}bp`
                     }
                   />
-                ) : run.summary.breakevenCostMult != null ? (
+                ) : perf.breakevenCostMult != null ? (
                   /* 동적 비용 판 — 「몇 bp」가 아니라 «이 경로의 몇 배» 다.
                      여기가 비어 있으면 비용 모델을 바꾸는 순간 손익분기가
                      화면에서 사라진다(실측 2026-08-28). */
                   <Stat
                     label="손익분기 비용"
-                    value={`지금 경로의 ${run.summary.breakevenCostMult.toFixed(1)}배`}
-                    tone={run.summary.breakevenCostMult <= 1 ? 'down' : undefined}
-                    note={run.summary.breakevenCostMult <= 1
+                    value={`지금 경로의 ${perf.breakevenCostMult.toFixed(1)}배`}
+                    tone={perf.breakevenCostMult <= 1 ? 'down' : undefined}
+                    note={perf.breakevenCostMult <= 1
                       ? '지금 비용에서 이미 손실'
                       : `편도 ${(run.cost.model === 'dynamic'
-                          ? run.cost.mid * run.summary.breakevenCostMult
-                          : run.params.costBp * run.summary.breakevenCostMult).toFixed(2)}bp 중앙 기준`}
+                          ? run.cost.mid * perf.breakevenCostMult
+                          : run.params.costBp * perf.breakevenCostMult).toFixed(2)}bp 중앙 기준`}
                   />
                 ) : null}
-                {/* 액면 병기 [OWNER 2026-09-02] — 명목 노브는 DV01 이고 주문
+                {/* 액면 병기 [OWNER 2026-09-02] — Delta 노브는 DV01 이고 주문
                     단위는 억이다. 환산은 서버(`principal` — 지금 커브 pv01 하나의
                     근사)가 하고, 화면은 근사임을 같이 적는다. 선물은 원금이
-                    없어(증거금·일일정산) note 가 그 사실을 말한다. */}
+                    없어(증거금·일일정산) note 가 그 사실을 말한다.
+
+                    **라벨이 「명목」에서 「Delta」로 바뀌었다** [OWNER 2026-09-04].
+                    이 칸의 단위는 처음부터 ₩/bp 였는데 「명목」은 액면을 가리키는
+                    말이라, 바로 옆 note 의 「액면 약 35.7억」과 한 카드 안에서
+                    충돌하고 있었다 — 근거는 `KnobBar` 의 그 자리에. */}
                 <Stat
-                  label="명목"
+                  label="Delta"
                   value={`${run.params.notional.toLocaleString()}원/bp`}
-                  /* `null` 은 「선물이라 원금이 없다」는 서버의 답이고,
+                  /* `null` 은 「그 환산을 못 세웠다」는 서버의 답이고,
                      `undefined` 는 이 필드를 모르는 **구 백엔드**다(§6 ⑥ 의 그
-                     배포 순서 함정) — 후자에 「선물은…」을 적으면 BSS 창이
-                     거짓말을 한다. 모르면 조용히 비운다. */
+                     배포 순서 함정) — 모르면 조용히 비운다.
+
+                     ⚠ 종전에는 null 에 「선물은 액면 환산이 없어요」를 적었다.
+                     2026-09-04 부터 **선물도 액면으로 환산한다**(선물 DV01 —
+                     `futures.face_for_dv01`), 그래서 그 문장은 거짓이 됐다. */
                   note={run.principal
                     ? `액면 약 ${fmtEok(run.principal.krw)} (지금 커브)`
-                    : run.principal === null ? '선물은 액면 환산이 없어요' : undefined}
+                    : run.principal === null ? '액면 환산을 못 세웠어요' : undefined}
                 />
                 <Stat label="종가" value={run.asof ?? '—'} />
                 {/* 방향은 노브가 아니라 사실이라 「조건」에 선다 — 이 데스크가
@@ -1315,28 +1867,12 @@ export function StrategyWindow({
                 ) : null}
               </StatColumn>
             </HStack>
+            )}
 
-            {/* ── 표시 구간 [OWNER 2026-09-02 — "지난 한달, 지난 한분기, 지난
-                1년칸을 신설"] — 네 패널(값·z·누적·거래 표)을 같이 자른다. 한
-                패널의 aside 에 두면 「그 패널만 자른다」고 거짓말하므로 그리드
-                위에 제 줄로 선다. 부품은 Main 미리보기의 그 캐논(`PeriodSelector`)
-                이고, 이 고르개의 선택은 데이터 부호가 아니므로 `.sr-tabs-neutral`
-                이다(`theme/type.css` 그 주석). 백테스트는 전체 기간 그대로라
-                stale 을 안 세운다 — 그 사실을 고르개 옆이 말한다. */}
-            <HStack gap={1} alignItems="center" width="100%">
-              <Box className="sr-tabs-neutral">
-                <PeriodSelector
-                  tabs={MR_SPAN_TABS}
-                  activeTab={MR_SPAN_TABS.find((t) => t.id === span) ?? null}
-                  onChange={(t) => t && setSpan(t.id as MrSpan)}
-                />
-              </Box>
-              {span !== 'all' && winPoints[0] ? (
-                <Text font="legal" as="span" color="fgMuted" noWrap>
-                  {winPoints[0]!.t} 부터 표시만 잘라요 — 성과는 전체 기간 그대로예요.
-                </Text>
-              ) : null}
-            </HStack>
+            {/* ── 근사 최적화 [OWNER 2026-09-04] — 고르개는 노브 줄로 올라갔다
+                (`KnobBar` 의 구간 줄). 여기 있던 「표시만 자른다」 문장은
+                은퇴했다: 이제 자르는 것이 표시가 아니라 채점이다. */}
+            {optPane}
 
             {/* ── 차트 셋 = **LINKED PAIR 의 세로 결**(Backtest `LinkedCharts`).
                    같은 `dates` 배열과 `useStackedScales`(값축 폭이 형제 최광폭
@@ -1693,7 +2229,7 @@ export function StrategyWindow({
                 ? ` 캐리는 ${run.carry.defn}이고 조달은 ${run.carry.funding} 이에요 — 원본 PMS 산술에는 없던 항이에요.`
                 : ''}
               {run.principal
-                ? ` 액면은 **거래마다 진입일 커브**로 환산해요 — 그래야 「명목 ${run.params.notional.toLocaleString()}원/bp」가 모든 거래에서 같은 뜻이에요. 머리의 ${fmtEok(run.principal.krw)}은 «지금 세우면» 이고, 거래마다의 액면은 그 거래의 대사표가 적어요(표본 안에서 ${run.real ? '5~16%' : ''} 움직여요).`
+                ? ` 액면은 **거래마다 진입일 커브**로 환산해요 — 그래야 「Delta ${run.params.notional.toLocaleString()}원/bp」가 모든 거래에서 같은 뜻이에요. 머리의 ${fmtEok(run.principal.krw)}은 «지금 세우면» 이고, 거래마다의 액면은 그 거래의 대사표가 적어요(표본 안에서 ${run.real ? '5~16%' : ''} 움직여요).`
                 : ''}
               {/* 다리 레벨의 출처와 항등 — 안 적으면 이 세 열이 어디서 온
                   값인지, 스프레드와 무슨 관계인지 화면만 보고는 알 수 없다. */}

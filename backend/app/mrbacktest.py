@@ -135,7 +135,8 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
              cost_bp_series: list[float] | None = None,
              reverse_exit: bool = False,
              close_open_at_end: bool = False,
-             tradable_dv: list[float] | None = None) -> dict[str, Any]:
+             tradable_dv: list[float] | None = None,
+             roll: dict[str, list] | None = None) -> dict[str, Any]:
     """원본 simulateMeanReversion 의 바-루프 그대로. 반환 키도 그 어휘를 쓴다.
 
     `allow_dirs` 만 원본에 없던 자리다 — 실행할 수 있는 방향(+1 = 값이 오르면
@@ -221,7 +222,14 @@ def simulate(dates: list[str], values: list[float], *, lookback: int,
         raise ValueError(f"entry_mode 는 level|touch 다: {entry_mode!r}")
 
     n = len(values)
-    roll = rolling_series(values, lookback)
+    # `roll` 은 **캐시 손잡이**다 — 산술이 아니라 «이미 잰 것을 다시 안 잰다».
+    # 안 주면 여기서 잰다(원본과 완전히 같은 수, 적합성 벡터가 그것을 잰다).
+    #
+    # 근거는 최적화 격자다: 162칸이 룩백 셋을 나눠 쓰는데 `rolling_series` 가
+    # 칸마다 다시 도니 그 함수 하나가 격자 시간의 63%였다(실측 2026-09-04,
+    # 3,000봉: 20일 5.9ms · 60일 14.7ms · 120일 27.5ms × 54칸씩 = 2.6s/4.1s).
+    # 룩백이 같으면 결과가 같은 순수 함수라, 부르는 쪽이 한 번 재서 나눠 준다.
+    roll = rolling_series(values, lookback) if roll is None else roll
     z = roll["z"]
 
     # ── 봉마다 **거래 가능한** Δ [OWNER 2026-09-02 — "롤일 Δ 를 0 으로 마스크"] ──

@@ -13,8 +13,8 @@
  *
  * ① **승률은 한 통에 모은 거래의 승률이다.** 아홉 승률의 평균이 아니다 —
  *    거래 수가 6건과 58건인 두 만기를 평균 내면 그 수는 아무것도 아니다.
- * ② **걸린 돈을 말한다.** 동일가중 합이라 아홉이 동시에 서면 명목이 아홉 배다.
- *    「최대 동시 다리」와 그 날짜가 없으면 명목 100만원/bp 라고 적힌 화면이
+ * ② **걸린 돈을 말한다.** 동일가중 합이라 아홉이 동시에 서면 Delta 가 아홉 배다.
+ *    「최대 동시 다리」와 그 날짜가 없으면 Delta 100만원/bp 라고 적힌 화면이
  *    실제로는 900만원/bp 를 움직인다.
  * ③ **묶어서 나아졌는지를 답한다.** 통합 SR 옆에 개별 SR 중앙값·쌍상관·유효
  *    독립 계열 수가 선다. 그게 없으면 통합은 그냥 큰 숫자일 뿐이다.
@@ -317,7 +317,7 @@ export function BookWindow({
     },
   ];
   const zeroLine: ScalePriceLine[] = [{ value: 0, color: (pa) => pa.line }];
-  /* 아홉이 다 선 자리 — 「여기가 명목의 천장」을 그림이 스스로 말한다. */
+  /* 아홉이 다 선 자리 — 「여기가 Delta 의 천장」을 그림이 스스로 말한다. */
   const capLine: ScalePriceLine[] = !run ? [] : [
     { value: 0, color: (pa) => pa.line },
     { value: run.legs.length, color: (pa) => pa.lineHeavy, dash: true },
@@ -413,8 +413,12 @@ export function BookWindow({
                 ) : null}
               </StatColumn>
 
-              {/* 걸린 돈 — 동일가중 합의 **대가**다. 이 칸이 없으면 「명목
-                  100만원/bp」가 실제로 움직인 돈을 최대 아홉 배 작게 말한다. */}
+              {/* 걸린 돈 — 동일가중 합의 **대가**다. 이 칸이 없으면 「Delta
+                  100만원/bp」가 실제로 움직인 돈을 최대 아홉 배 작게 말한다.
+
+                  낱말은 **노브를 따라간다** [OWNER 2026-09-04 «Strategy에서 명목이
+                  아니라 Delta라고 하기», 2026-09-07 에 이 창까지]. 같은 노브가
+                  두 창에서 다른 이름으로 서면 읽는 사람은 다른 수라고 읽는다. */}
               <StatColumn title="장부">
                 <Stat
                   label="최대 동시"
@@ -422,9 +426,9 @@ export function BookWindow({
                   note={run.book.peakT ?? undefined}
                 />
                 <Stat
-                  label="그때 명목"
+                  label="그때 Delta"
                   value={`${run.book.peakNotional.toLocaleString()}원/bp`}
-                  note={`명목 ${run.params.notional.toLocaleString()} × ${run.book.maxLegs}`}
+                  note={`Delta ${run.params.notional.toLocaleString()} × ${run.book.maxLegs}`}
                 />
                 <Stat
                   label="평균 동시"
@@ -641,7 +645,7 @@ export function BookWindow({
                     <ReadoutCard title={run.points[idx.i]!.t}>
                       <ReadoutFact k="다리" v={`${run.points[idx.i]!.legs}개`} />
                       <ReadoutFact
-                        k="걸린 명목"
+                        k="걸린 Delta"
                         v={`${(run.points[idx.i]!.legs * run.params.notional).toLocaleString()}원/bp`}
                       />
                       <ReadoutMoney k="그날" v={run.points[idx.i]!.pnl} />
@@ -686,7 +690,7 @@ export function BookWindow({
             </VStack>
 
             <Text font="legal" as="span" color="fgMuted">
-              만기 {run.legs.length}개에 각각 명목 {run.params.notional.toLocaleString()}원/bp 를
+              만기 {run.legs.length}개에 각각 Delta {run.params.notional.toLocaleString()}원/bp 를
               걸고 일별 손익을 더한 장부예요 — 승률·손익비는 아홉 목록을 한 통에 모아서
               셌어요(아홉 승률의 평균이 아니에요). 동시에 선 다리가 최대 {run.book.maxLegs}개라
               그날 걸린 돈은 {run.book.peakNotional.toLocaleString()}원/bp 예요.{' '}

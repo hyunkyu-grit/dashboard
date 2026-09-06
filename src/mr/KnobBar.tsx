@@ -17,6 +17,7 @@
 
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import { Text } from '@coinbase/cds-web/typography';
+import { PeriodSelector } from '@coinbase/cds-web/visualizations/chart';
 
 import { Field, NumField, Segmented } from '@/ui/ControlCard';
 import { CONTROL_H } from '@/ui/controlHeight';
@@ -24,9 +25,11 @@ import { CONTROL_H } from '@/ui/controlHeight';
 import {
   MR_COST_PRESETS,
   MR_ENTRY_MODES,
+  MR_SPAN_TABS,
   MR_STRATEGY_LOOKBACKS,
   MR_STRATEGY_PRESETS,
   fmtSigma,
+  type MrSpan,
   type MrStrategyParams,
 } from './api';
 
@@ -148,6 +151,9 @@ export function MrKnobBar({
   onChange,
   onRun,
   running,
+  span,
+  onSpanChange,
+  spanNote,
 }: {
   /** 「종목」 칸에 설 값. 낱개는 계열명, 통합은 「BSS 통합」이다. */
   lead: string;
@@ -156,6 +162,18 @@ export function MrKnobBar({
   onChange: (patch: Partial<MrStrategyParams>) => void;
   onRun: () => void;
   running: boolean;
+  /** 구간 — **전역 설정값** [OWNER 2026-09-04]. 주면 노브 줄 **위에** 자기 줄로
+   *  선다. 위에 두는 이유는 그것이 «전역» 이라는 사실을 자리가 말해야 하기
+   *  때문이다: 아래 줄은 이 종목의 규칙이고, 이 줄은 그 규칙을 **어느 구간에서
+   *  채점하는가** 다.
+   *
+   *  안 주면 줄 자체가 안 선다 — 아직 이 손잡이를 안 받은 창(통합 장부)이
+   *  빈 줄을 그리지 않게. */
+  span?: MrSpan;
+  onSpanChange?: (v: MrSpan) => void;
+  /** 그 구간이 실제로 언제부터인가 — 서버가 채점한 첫 봉이다. 화면이 지어내지
+   *  않고 결과에서 읽어 넘긴다(달력 산술이 서버·화면 두 곳에 있으면 갈린다). */
+  spanNote?: string;
 }) {
   const set = onChange;
   return (
@@ -164,6 +182,42 @@ export function MrKnobBar({
        지금은 자식이 하나뿐이라 gap 이 아무 일도 안 하지만, 상자는 남긴다 —
        줄을 되살리면 seam 도 같이 살아야 하고, 그때 이 주석이 그 값을 지킨다. */
     <VStack gap={1} width="100%">
+      {/* ── 구간 줄 — **전역 설정값** [OWNER 2026-09-04 — "지난 1년, 지난
+          1분기, 지난 1개월을 전역 설정값으로 두고 이를 조정하면 성과도 바뀌게
+          해주기"] ───────────────────────────────────────────────────────────
+          2026-09-02 판에서 이 고르개는 창 **본문**에 있었고 차트·거래 표만
+          잘랐다(성과 카드는 전체 기간). 성과까지 바꾸는 값이 되었으니 자리도
+          노브 쪽으로 올라온다 — 결과를 바꾸는 것은 설정 줄에 있어야 한다는
+          `Panel.aside` 주석의 그 규율이다.
+
+          **그런데 stale 은 안 세운다.** 서버가 네 구간을 한 번에 보내 오므로
+          (`MrStrategyRun.spans`) 고르개는 이미 와 있는 값을 고르기만 한다 —
+          엔진을 다시 안 도는 이유는 `api.ts::MR_SPANS` 주석에 있다(룩백
+          워밍업이 구간 앞에 있어야 z 가 선다).
+
+          부품은 Main 미리보기의 그 캐논(`PeriodSelector`)이고, 이 고르개의
+          선택은 데이터 부호가 아니므로 `.sr-tabs-neutral` 이다. */}
+      {span && onSpanChange ? (
+        <HStack gap={1.5} alignItems="flex-end" flexWrap="wrap">
+          <Field label="구간" help="이 구간 안의 봉만 더하고, 이 구간에서 청산된 거래만 세요. 규칙은 늘 전체 표본에서 돌아요.">
+            <HStack gap={1.5} alignItems="center" height={CONTROL_H}>
+              <Box className="sr-tabs-neutral">
+                <PeriodSelector
+                  tabs={MR_SPAN_TABS}
+                  activeTab={MR_SPAN_TABS.find((t) => t.id === span) ?? null}
+                  onChange={(t) => t && onSpanChange(t.id as MrSpan)}
+                />
+              </Box>
+              {spanNote ? (
+                <Text font="legal" as="span" color="fgMuted" noWrap>
+                  {spanNote}
+                </Text>
+              ) : null}
+            </HStack>
+          </Field>
+        </HStack>
+      ) : null}
+
       {/* ── 설정 줄 — 원본 노브 일곱 + 실행. 실행은 사람이 누른다.
           바닥 정렬 행: 블록 높이가 곧 라벨 높이(2026-08-19 얼라인 레인),
           한 행의 컨트롤은 전부 32px 등고(control-parity 의 그 등고)라
@@ -278,29 +332,36 @@ export function MrKnobBar({
           options={MR_STRATEGY_PRESETS.stopZ}
           onPick={(v) => set({ stopZ: v })}
         />
-        {/* ── 비용·명목·실행은 **한 상자에 담는다** [2026-08-28 실측] ──────
+        {/* ── 비용·Delta·실행은 **한 상자에 담는다** [2026-08-28 실측] ─────
             묶음을 만들려는 게 아니라 **감쌈(wrap)을 제어**하는 장치다: 형제로
             늘어놓으면 줄이 넘칠 때 감쌈이 아무 데서나 잘라 비용만 첫 줄에 남고
-            명목·실행이 둘째 줄로 갔다(실측 x 1409~1473). 셋을 한 상자에 담으면
+            Delta·실행이 둘째 줄로 갔다(실측 x 1409~1473). 셋을 한 상자에 담으면
             **셋째** 넘어간다. 안쪽 간격도 바깥과 같은 12px 다. */}
         <HStack gap={1.5} alignItems="flex-end">
         {/* 비용에 프리셋이 생겼다 [OWNER 2026-08-28]. 종전에는 「근거 없는
             값을 늘어놓지 않는다」는 이유로 자유 입력만 뒀는데, 그 사이에 근거가
             생겼다 — 국고3Y·IRS3Y 패키지 실제 편도가 ≤0.5bp 라는 오너 답이다.
-            **기본이 0.5 다.** 0.05 는 첫 PMS 의 값이지 이 데스크의 호가폭이
-            아니고, 싸게 잡은 비용은 결론을 통째로 뒤집는다. 자유 입력은 남긴다 —
-            그날 그 종목의 호가폭이 셋 중 어느 것도 아닐 수 있다.
-            **폭 220 = 실측**(2026-09-02): 알약 셋 0.05/0.2/0.5 + 간격 + 자유
-            입력 64 의 실제 잉크가 219.3px 이고 여유 0.7 이다. (중간에 212 로
-            적었던 적이 있는데 그건 자유 입력이 56 이던 때의 수다 — 선언과 코드가
-            갈리면 다음 사람이 그 수를 믿고 되돌려 침범이 재발한다.) 종전 주석은 「196 = 알약 셋 +
-            자유 입력 56 + 간격」이라고 적었는데 그 산술이 15.3px 모자라, 상자
-            선언이 거짓이 되고 내용이 이웃 칸(명목)을 침범했다 — 상자 사이
-            간격은 6px 인데 잉크 사이는 −9.3px 이었다(얼라인 7 감사). */}
-        <Box width={220}>
+            **기본이 0.5 다.** 싸게 잡은 비용은 결론을 통째로 뒤집는다. 자유
+            입력은 남긴다 — 그날 그 종목의 호가폭이 셋 중 어느 것도 아닐 수 있다.
+
+            **셋이 0.05/0.2/0.5 → 0.25/0.5/1 로 갈렸다** [OWNER 2026-09-04].
+            뜻과 근거는 `api.ts::MR_COST_PRESETS` 가 진다.
+
+            **폭 205 = 실측** [2026-09-07, 브라우저에서]. 알약 셋 53.45 + 44.89
+            + 30.44 에 자유 입력 64 를 더해 잉크 192.78 이고, 간격 3 × 4px 를
+            얹어 **차지하는 폭 204.78** 이다 — 205 면 죽은 폭 0.22px 다.
+
+            정정 이력을 남긴다. 2026-09-02 실측은 옛 프리셋(0.05/0.2/0.5)의
+            「잉크 219.3px」이었고, 09-04 에 셋이 갈리면서(「0.5」 3글자 → 「1」
+            1글자) 그 수를 **유도**로 줄여 212 를 썼다(숫자 ≈7.7 · 마침표 ≈3.5
+            로 잡아 ≈208 + 여유 4). 유도는 방향은 맞았지만 **7.22px 을 남겼다**
+            — 같은 줄의 룩백 칸 0.98 · 진입 σ 0.56 과 견주면 이 칸만 어긋나
+            있었다. 재고 나서야 그것이 보였다(CLAUDE.md 얼라인 6 — 눈이 마지막
+            가드다). */}
+        <Box width={205}>
           <Field
             label="비용 (bp)"
-            help="왕복이 아니라 편도예요. 0.5는 오너 실측(국고3Y·IRS3Y 패키지)이고 0.05는 첫 PMS 값이에요."
+            help="왕복이 아니라 편도예요. 0.5는 오너 실측(국고3Y·IRS3Y 패키지)이고, 0.25는 좋은 날, 1은 나쁜 날의 호가폭이에요."
           >
             <HStack gap={0.5} alignItems="center">
               {MR_COST_PRESETS.map((v) => (
@@ -333,7 +394,18 @@ export function MrKnobBar({
             2026-09-02). 그 위(1억)는 70.02 라 안 들어간다 — 그때는 폭을 108 로
             올리거나 `NumField` 의 `format` 으로 천 단위를 넣고 다시 잰다. */}
         <Box width={96}>
-          {/* 「원」은 한글이다 [OWNER 2026-08-28 — "이게 표기가 왜 이런식으로
+          {/* 「명목」이 아니라 **「Delta」** 다 [OWNER 2026-09-04 — "Strategy에서
+              명목이 아니라 Delta라고 하기"].
+
+              라벨이 값의 뜻을 틀리게 말하고 있었다. 이 칸의 단위는 처음부터
+              `₩/bp`(= DV01)이지 액면이 아닌데, 「명목」은 채권·스왑에서 **액면**
+              을 가리키는 말이다 — 그래서 「명목 100만원」이 「액면 1억」과 같은
+              줄에 서면 둘 중 어느 것이 주문 단위인지 화면이 못 말했다(액면은
+              옆 카드가 따로 적고 있고, 그 환산이 거래마다 5~16% 움직인다).
+              Delta 는 그 값이 실제로 하는 일 — 「1bp 움직일 때의 손익」 — 을
+              가리키는 이 데스크의 낱말이다.
+
+              **「원」은 한글이다** [OWNER 2026-08-28 — "이게 표기가 왜 이런식으로
               되는거지?"]. 종전에는 `₩`(U+20A9)를 썼는데, 이 앱의 본문 폰트
               **Pretendard SR 의 그 글리프가 「W + 가는 가로줄 둘」**이다 —
               40px 래스터 대조에서 `₩` 와 `W` 의 차이가 202픽셀(같은 폰트의
@@ -342,9 +414,13 @@ export function MrKnobBar({
               에서는 652픽셀로 제대로 갈린다 — 폰트가 없어서가 아니라 이 폰트의
               U+20A9 가 반각 표기라서다.
               기호를 바꾸는 대신 한글로 적는다: 이 화면의 돈은 전부 `fmtKrw`
-              가 「+100만원」으로 쓰고 있어서, 「원」이 오히려 같은 어휘다. */}
-          <Field label="명목 (원/bp)" help="1bp 움직일 때의 손익이에요. 포지션 크기라 프리셋이 없어요.">
-            <NumField label="명목(원/bp)" value={knobs.notional} min={0}
+              가 「+100만원」으로 쓰고 있어서, 「원」이 오히려 같은 어휘다.
+
+              폭 96 은 그대로다 — 라벨이 「명목 (원/bp)」(글자 자리 62px 산술의
+              근거는 값 쪽이지 라벨 쪽이 아니다)에서 「Delta (원/bp)」로 바뀌어도
+              **들어가는 값**이 안 바뀌기 때문이다(최대 「10000000」 59.92px). */}
+          <Field label="Delta (원/bp)" help="1bp 움직일 때의 손익이에요. 포지션 크기라 프리셋이 없어요.">
+            <NumField label="Delta(원/bp)" value={knobs.notional} min={0}
               onCommit={(v) => set({ notional: v })} />
           </Field>
         </Box>

@@ -36,6 +36,12 @@
 `book_recon` 은 **표 자체를 둘**로 낸다 [OWNER, 2026-08-25 — 엔진 단위 분리].
 스왑 표는 IRS 달력, 채권 표는 민평 달력 위에 각자 서고, 이 함수는 두 엔진의
 블록을 `{"swap": …, "bond": …}` 로 나란히 돌려줄 뿐 병합하지 않는다.
+
+**한 거래의 다리 둘은 예외다** [OWNER 2026-09-04]. 자산스왑(국고 + IRS)과
+퓨처스왑(선물 + IRS)은 «상품 하나» 라, 두 다리가 다른 표에 서면 그 거래의 그날
+손익을 화면이 한 줄로 못 말한다. 그 둘은 자기 표 **안에서** 다리로 갈라지고
+(하루 일곱 줄: 다리마다 KRD·Δbp·손익 셋 + 합계 하나), 표 자체는 여전히 자기
+엔진의 달력 위에 선다. 그래서 퓨처스왑의 IRS 다리는 **스왑 표에서 빠진다**.
 2026-08-21 판(민평 ∩ IRS 병합 한 표)은 한쪽만 쉰 날과 그 다음 날을 떨궈야
 했고 — 두 계열이 다른 밤을 재므로 — 그 드롭이 세로합을 기간 3분해와
 어긋나게 했다. 위의 달력 문단은 **차트·헤드라인**(run_backtest)에만 남는다.
@@ -563,25 +569,25 @@ def book_recon(
     _check(positions)
     swap_recon = bond_recon = futures_recon = None
 
-    # 퓨처스왑의 IRS 다리는 **스왑 표에** 선다 [OWNER, 2026-08-25 — 엔진 단위
-    # 분리]: 실제 스왑이 IRS 달력 위에서 스왑 엔진으로 값매겨지므로, 대사도
-    # 그 표가 진다. run 경로와 같은 함수(fsw_swap_leg)로 같은 다리를 얻는다.
-    fsw_swap_legs: list[Position] = []
+    # 퓨처스왑의 IRS 다리는 **선물 표 안에 다리로** 선다 [OWNER 2026-09-04 —
+    # "Backtest의 퓨처스왑과 자산스왑도 … 하루당 행 7개로"]. 2026-08-25 의
+    # 「엔진 단위 분리」는 그 다리를 스왑 표로 보냈는데, 그러면 한 거래의 두
+    # 다리가 서로 다른 표에 서서 «이 거래가 그날 얼마를 벌었나» 를 화면이
+    # 한 줄로 못 말한다. 자산스왑이 이미 다리 둘을 한 표에 세우고 있었고
+    # (`cashbond.book_recon` 의 `with_legs`), 퓨처스왑이 그것을 따라간다.
+    #
+    # **그래서 스왑 표에서는 뺀다** — 안 빼면 같은 돈이 두 표에 선다
+    # (`futures.book_recon` 의 `with_legs` 머리가 그 계약의 다른 쪽).
     if has_futures(positions):
         if fut is None:
             raise MixedBookError(
                 "선물 줄에는 선물 종가가 필요합니다 — 백엔드가 SQL 에 닿는지 확인해 주세요."
             )
         try:
-            for p in positions:
-                if is_futures(p.series_id):
-                    fp = _as_futures(p)
-                    if fp.kind == ft.KIND_FSW:
-                        leg, _y0, _dv = ft.fsw_swap_leg(fut, dataset, fp)
-                        fsw_swap_legs.append(leg)
             futures_recon = ft.book_recon(
                 fut, dataset,
                 [_as_futures(p) for p in positions if is_futures(p.series_id)],
+                with_legs=True,
             )
         except ft.FuturesError as exc:
             raise MixedBookError(str(exc))
@@ -589,13 +595,18 @@ def book_recon(
     swap_positions = [
         _as_swap(p) for p in positions
         if not is_bond(p.series_id) and not is_futures(p.series_id)
-    ] + fsw_swap_legs
+    ]
     if swap_positions:
         swap_recon = swap_book_recon(dataset, swap_positions)
     if has_bond(positions):
         if m is None:
             raise MixedBookError("채권 줄에는 민평이 필요합니다.")
+        # 자산스왑도 다리 둘이다 [OWNER 2026-09-04] — 국고 매수와 IRS 페이가
+        # 하루 안에서 각자 KRD·Δbp·손익을 지고 합계가 닫는다. 비용은 IRS 다리의
+        # KRD 범프이고(250일 창에서 5.55배 — `cashbond.book_recon` 의 그 실측),
+        # **자산스왑 줄이 있을 때만** 문다(그 함수가 `asw and with_legs` 로 잰다).
         bond_recon = cb.book_recon(
-            m, dataset, [_as_bond(p) for p in positions if is_bond(p.series_id)], spec
+            m, dataset, [_as_bond(p) for p in positions if is_bond(p.series_id)],
+            spec, with_legs=True,
         )
     return {"swap": swap_recon, "bond": bond_recon, "futures": futures_recon}

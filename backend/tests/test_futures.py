@@ -23,6 +23,7 @@ import datetime as dt
 import pytest
 from fastapi.testclient import TestClient
 
+from app import backtest as bt_engine
 from app import futures as ft
 from app import instruments
 from app.backtest import BacktestError
@@ -400,7 +401,14 @@ class TestFsw:
         assert own[DATES[-1]] == pytest.approx(expected, rel=0.05)
         assert own[DATES[-1]] > 0
 
-    def test_recon_triple_has_all_blocks(self):
+    def test_recon_puts_both_legs_in_the_futures_table(self):
+        """FSW 의 IRS 다리는 **선물 표 안에 다리로** 선다 [OWNER 2026-09-04].
+
+        2026-08-25 판은 그 다리를 스왑 표로 보냈다(엔진 단위 분리). 한 거래의
+        두 다리가 다른 표에 서면 「이 거래가 그날 얼마를 벌었나」를 화면이 한
+        줄로 못 말한다 — 자산스왑이 이미 다리 둘을 한 표에 세우고 있었고
+        퓨처스왑이 그것을 따라갔다. **스왑 표에서는 빠진다**(중복 금지).
+        """
         p0 = 104.0
         path = [p0] * len(DATES)
         ft.set_data(_futdata(path))
@@ -412,13 +420,58 @@ class TestFsw:
         )
         assert set(out) == {"swap", "bond", "futures"}
         assert out["bond"] is None
-        # FSW 의 IRS 다리가 스왑 표에 선다 — 엔진 단위 분리.
-        assert out["swap"] is not None and out["swap"]["rows"]
+        # 스왑 줄이 하나도 없는 북이라 스왑 표 자체가 안 선다 — IRS 다리는
+        # 선물 표 안에 있다(같은 돈이 두 표에 서지 않는다).
+        assert out["swap"] is None
         assert out["futures"] is not None
         rows = out["futures"]["rows"]
         assert rows[-1].get("carryover") is True
+        # 하루 일곱 줄의 재료: 다리 둘(선물·IRS) + 합계는 행 자신이다.
+        assert out["futures"]["legTenors"][0]["name"] == "선물"
+        assert out["futures"]["legTenors"][1]["name"] == "IRS"
         for r in rows:
-            assert r["carry"] is None and r["rolldown"] is None  # 공란 정책
+            assert [lg["name"] for lg in r["legs"]] == ["선물", "IRS"]
+            # 선물 다리는 캐리·롤다운이 **없는 성분**이다 — 다리 줄에서 공란.
+            assert r["legs"][0]["carry"] is None
+            assert r["legs"][0]["rolldown"] is None
+            # 조달은 어느 다리도 안 진다(현물이 아니다).
+            assert r["legs"][1]["funding"] is None
+        body = [r for r in rows if not r.get("carryover")]
+        for r in body:
+            # 합계 = 두 다리의 합. 이 항등이 깨지면 표가 대사표가 아니다.
+            assert r["actual"] == r["legs"][0]["actual"] + r["legs"][1]["actual"]
+            assert r["valuation"] == (r["legs"][0]["valuation"]
+                                      + r["legs"][1]["valuation"])
+            assert r["estTotal"] == (r["legs"][0]["estTotal"]
+                                     + r["legs"][1]["estTotal"])
+            # 캐리·롤다운·개시는 IRS 다리에서만 온다(선물엔 그 성분이 없다).
+            assert r["carry"] == r["legs"][1]["carry"]
+            assert r["rolldown"] == r["legs"][1]["rolldown"]
+
+    def test_fsw_legs_conserve_the_swap_leg_money_across_the_two_calendars(self):
+        """버킷이 **돈을 흘리지 않는다** — 세로합이 스왑 표의 그 다리와 같다.
+
+        IRS 다리는 IRS 달력 위에서 값매겨지고 선물 표는 선물 달력 위에 선다.
+        두 달력이 갈리는 날 IRS 쪽은 0 이고, 다음 마킹이 두 밤을 한 번에
+        재므로 합은 보존돼야 한다(`futures.book_recon` 의 `with_legs` 머리).
+        """
+        path = [104.0, 104.0, 103.5, 103.5, 103.8, 103.8,
+                103.8, 104.1, 104.1, 104.1, 104.0, 104.0]
+        fut = _futdata(path)
+        ds = _dataset()
+        pos = ft.as_position("FSW:3Y", 1, 1e10, DATES[0], None)
+        with_legs = ft.book_recon(fut, ds, [pos], with_legs=True)
+        # 같은 다리를 스왑 엔진에게 직접 물었을 때의 표.
+        swap_pos, _y0, _dv = ft.fsw_swap_leg(fut, ds, pos)
+        alone = bt_engine.book_recon(ds, [swap_pos])
+
+        def _money(rec, pick):
+            return sum(pick(r) or 0.0 for r in rec["rows"] if not r.get("carryover"))
+
+        for key in ("actual", "valuation", "carry", "rolldown", "startup"):
+            got = _money(with_legs, lambda r, k=key: r["legs"][1][k])
+            want = _money(alone, lambda r, k=key: r[k])
+            assert got == pytest.approx(want, abs=1.0), key
 
 
 # ── ④ 선물 대사표 ──────────────────────────────────────────────────────────

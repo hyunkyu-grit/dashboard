@@ -71,7 +71,13 @@ describe('떠 있는 창의 리듬은 Backtest 와 한 값이다', () => {
   it('창 머리 부제는 caption 뮤트 — legal 이 아니다', () => {
     for (const f of WINDOWS) {
       const code = src(f);
-      const aside = code.slice(code.indexOf('aside={'), code.indexOf('onClose={onClose}'));
+      /* **창의** aside 다 — 파일의 첫 `aside={` 가 아니다. 2026-09-04 에 창
+         본문의 `Panel` 이 자기 aside 를 갖게 되면서(근사 최적화 절의 순위
+         기준 세그먼트) 첫 `aside={` 가 그쪽이 됐고, 이 시험이 패널의 활자를
+         창 머리의 것이라고 읽었다. 닻은 `FloatingWindow` 의 첫 prop 이다. */
+      const at = code.indexOf('windowKey=');
+      expect(at, f).toBeGreaterThan(0);
+      const aside = code.slice(code.indexOf('aside={', at), code.indexOf('onClose={onClose}', at));
       expect(aside, f).toMatch(/font="caption"/);
       expect(aside, f).not.toMatch(/font="legal"/);
     }
@@ -223,14 +229,34 @@ describe('칸 폭은 실측이고 죽은 폭이 없다', () => {
     }
   });
 
-  it('비용 칸은 알약 셋 + 자유 입력을 담는다 — 종전 196 은 15.3px 모자랐다', () => {
-    /* 220 = 211.3 + 자유 입력이 56→64 로 커진 8. 자유 입력 폭의 근거는 그 칸
-       주석에 있다(글자 자리 22px 로는 자기 화면의 프리셋 0.05 가 안 들어갔다). */
-    expect(knob).toContain('<Box width={220}>');
-    /* 주석이 그 산술을 «정정으로» 적고 있어야 한다 — 종전 값을 지우면 왜
-       212 인지가 다시 근거 없는 수가 된다(이 리포는 정정 이력을 주석에 남긴다). */
-    expect(knobRaw).toMatch(/종전 주석은 「196 = 알약 셋/);
+  it('비용 칸은 알약 셋 + 자유 입력을 담고, 프리셋이 갈리면 폭도 따라간다', () => {
+    /* 2026-09-04 에 프리셋이 0.05/0.2/0.5 → 0.25/0.5/1 로 갈렸고(오너 지시),
+       그때는 옛 실측(219.3)에서 **유도한** 212 를 썼다. 2026-09-07 에 브라우저
+       에서 실제로 쟀더니 차지하는 폭이 204.78 이라 212 는 7.22px 을 남기고
+       있었다 — 이 줄의 다른 칸(룩백 0.98 · 진입 σ 0.56)과 유일하게 어긋난
+       칸이었다. 그래서 205 다.
+
+       유도가 틀렸다는 게 아니라 **유도로 멈추면 안 된다**는 것이 이 시험의
+       뜻이다(CLAUDE.md 얼라인 6). */
+    expect(knob).toContain('<Box width={205}>');
+    expect(knob).toContain('MR_COST_PRESETS');
+    /* 정정 이력을 지우지 않는다 — 옛 실측과 그 사이의 유도가 주석에 남아야
+       되돌릴 때 같은 자리를 다시 밟지 않는다. */
     expect(knobRaw).toMatch(/219\.3px/);
+    expect(knobRaw).toMatch(/폭 205 = 실측/);
+    /* 실측이면 **잰 수가 적혀 있어야 한다.** 「실측」이라는 낱말만 있고 수가
+       없으면 그것은 선언이지 실측이 아니다. */
+    expect(knobRaw).toMatch(/204\.78/);
+  });
+
+  it('프리셋 목록은 화면이 아니라 계약이 진다 — 0.25 / 0.5 / 1', () => {
+    /* 값이 KnobBar 에 손으로 적혀 있으면 서버 검증·다른 창과 갈린다. */
+    const api = src('src/mr/api.ts');
+    expect(api).toMatch(/MR_COST_PRESETS = \[0\.25, 0\.5, 1\]/);
+    /* 0.05 는 «화면이 안 권할» 뿐 사라진 값이 아니다 — 자유 입력이 남고,
+       그 사실이 주석에 있다. */
+    const apiRaw = fs.readFileSync(path.join(root, 'src/mr/api.ts'), 'utf8');
+    expect(apiRaw).toMatch(/자유 입력에 적으면 된다/);
   });
 
   it('σ 칸은 **각자 제 내용 폭**이다 — 공통 폭 상수는 은퇴했다', () => {
@@ -262,7 +288,10 @@ describe('칸 폭은 실측이고 죽은 폭이 없다', () => {
     /* 실제로 한 번 갈렸다: 주석 「폭 212 = 실측」 대 코드 `<Box width={220}>`
        (2026-09-02 검사). 212 는 실측 잉크 219.3 을 못 담아, 그 수를 믿고
        되돌리면 이웃 칸 침범이 그대로 재발한다. */
-    const rx = /폭 (\d+) = 실측/g;
+    /* 「= 실측」과 「= 유도」 둘 다 잰다. 2026-09-04 에 비용 칸이 유도값이
+       됐는데(프리셋이 갈려 옛 실측을 못 쓴다), 실측만 재면 그 칸의 선언과
+       코드가 갈려도 이 시험이 아무 말도 안 하게 된다. */
+    const rx = /폭 (\d+) = (?:실측|유도)/g;
     let m: RegExpExecArray | null;
     const bad: string[] = [];
     while ((m = rx.exec(knobRaw))) {
@@ -574,5 +603,77 @@ describe('롤일 Δ 는 손익이 아니다 — 마스크와 그 표식', () => 
     /* 마스크를 거는 쪽은 선물 가족뿐이다 — BSS 는 상수만기라 롤이 없다. */
     const main = fs.readFileSync(path.join(root, 'backend/app/main.py'), 'utf8');
     expect(main).toMatch(/if kinds\[id\] in \("fut", "fsw"\):/);
+  });
+});
+
+describe('퓨처스왑 대사는 두 화면에서 한 모양이다 — 하루 일곱 줄', () => {
+  /* [OWNER 2026-09-07 — "통일한다"]. 2026-09-04 에 Backtest 만 7행으로 갔고 MR
+     창은 두 블록(선물 달력 + IRS 달력)으로 남아 있었다. 화면 둘이 같은 상품을
+     다른 모양으로 그리는 상태였고, 이 절이 그것이 다시 갈라지는 것을 막는다.
+
+     ⚠ 이 가드가 재는 것은 **모양의 출처**다. 돈이 두 길에서 같은지는 파이썬이
+     잰다(`test_the_two_paths_are_the_same_money`) — 여기서 잴 수 없는 사실이다. */
+
+  it('MR 창이 백테스트의 선물 각주를 **임포트**한다 — 옮겨 적지 않았다', () => {
+    /* 캐논 규칙 1: 「참고한다」= 그 함수를 임포트한다. 문장을 복사하면 한쪽만
+       낡고, 그게 바로 2026-09-04 에 각주가 자기 표의 열을 「없다」고 말한 자리다. */
+    const code = src('src/mr/StrategyWindow.tsx');
+    expect(code).toMatch(/import \{[^}]*futuresReconNote[^}]*\} from '@\/backtest\/recon'/);
+    expect(code).toMatch(/b\.name \? futuresReconNote\(b\)/);
+    /* 각주 문장 자체는 한 곳에만 산다. */
+    const mine = code.match(/하루가 일곱 줄|하루 일곱 줄/g)?.length ?? 0;
+    expect(mine, 'MR 창이 각주 문장을 자기 안에 다시 적었다').toBe(0);
+  });
+
+  it('IRS 다리가 있는지는 다리 목록이 정한다 — 블록 수가 아니다', () => {
+    /* `blocks.length > 1` 은 FSW 가 한 표가 된 뒤로 늘 거짓이다. 그 식을 남겨
+       두면 화면이 자기 표에 서 있는 캐리·롤다운 열을 「없다」고 말한다. */
+    const code = src('src/mr/StrategyWindow.tsx');
+    expect(code).toMatch(/legTenors\?\.length \?\? 0\) > 1/);
+    expect(code, '블록 수로 다리를 판정하는 식이 남아 있다')
+      .not.toMatch(/r\.blocks\.length > 1 \?/);
+    /* 이름표도 마찬가지 — 「IRS 달력」 표는 이제 없다. */
+    expect(code).not.toMatch(/b\.name === 'IRS'/);
+  });
+
+  it('서버가 다리를 화면에만 켠다 — 회계는 두 블록 그대로', () => {
+    /* 다리 표는 IRS 파 커브를 범프해야 서는데(`with_krd=True` 가 박혀 있다)
+       회계는 거래마다 돈다. 모양이 갈리는 자리라 **열쇠에 든다.** */
+    const main = fs.readFileSync(path.join(root, 'backend/app/main.py'), 'utf8');
+    expect(main).toMatch(/with_krd=True, with_legs=True/);
+    expect(main).toMatch(/entry, exit_, with_krd, with_legs\)/);
+    /* 빈 `legTenors` 를 실으면 화면이 다리 판으로 들어가 열을 못 세운다. */
+    expect(main).toMatch(/if b\["recon"\]\.get\("legTenors"\) else \{\}/);
+  });
+});
+
+describe('이 칸의 이름은 Delta 다 — 화면 어디에서도', () => {
+  /* [OWNER 2026-09-04 — "Strategy에서 명목이 아니라 Delta라고 하기"].
+     낱말 바꾸기가 아니다: 이 칸의 단위는 `₩/bp`(DV01)인데 「명목」은 채권·스왑에서
+     **액면**을 가리키는 말이라, 바로 옆에 선 「액면 약 35.0억」과 충돌한다.
+
+     ⚠ 이 가드가 있는 이유는 **한 번 놓쳤기 때문**이다. 09-04 에 노브와 카드만
+     바꿨고 거래 표 부제·창 각주·서랍 머리·통합 장부 창 넷이 남아, 화면이 같은
+     노브를 두 이름으로 불렀다(브라우저 실측 2026-09-07). 사람 눈이 마지막
+     가드였고 그건 너무 늦은 가드다. */
+
+  const WINDOWS = ['src/mr/StrategyWindow.tsx', 'src/mr/KnobBar.tsx', 'src/mr/BookWindow.tsx'];
+
+  it.each(WINDOWS)('%s 의 화면 문자열에 「명목」이 없다', (f) => {
+    /* 주석은 판단 대상이 아니다 — 이름이 바뀐 **경위**를 적은 자리가 있고,
+       그것까지 지우면 다음 사람이 왜 Delta 인지를 못 찾는다. */
+    const code = src(f);
+    const bad = code.split('\n')
+      .map((line, i) => ({ line, n: i + 1 }))
+      .filter(({ line }) => /명목/.test(line));
+    expect(bad.map((b) => `${b.n}: ${b.line.trim()}`), `${f} 에 화면 「명목」이 남았다`)
+      .toEqual([]);
+  });
+
+  it('Delta 는 ₩/bp 라는 사실이 노브에 적혀 있다', () => {
+    const knob = fs.readFileSync(path.join(root, 'src/mr/KnobBar.tsx'), 'utf8');
+    expect(knob).toMatch(/Delta \(원\/bp\)/);
+    /* 왜 「명목」이 아닌지 — 근거가 코드 옆에 있어야 되돌리지 않는다. */
+    expect(knob).toMatch(/액면/);
   });
 });
