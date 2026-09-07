@@ -283,3 +283,56 @@ describe('백테스트 대사도 다리로 갈라진다 — 하루 일곱 줄', 
     expect(ft).toMatch(/dbp\[lb\] = round\(sum\(seen\), 2\) if seen else None/);
   });
 });
+
+describe('TOP 5 의 「채택」은 오른쪽에 **고정**된다', () => {
+  /* [OWNER 2026-09-07 — "고정 열로 ㄱㄱ"]. 이 표는 상자를 넘고 넘침이 데이터에
+     달렸다(열 폭이 내용에서 온다 — 실측 BSS-3Y 10px · FSW-3Y 47.7px). 넘친 쪽이
+     하필 누르는 칸이라, 안 붙이면 표의 유일한 액션이 기본 화면에 없다.
+     실측 2026-09-07: 붙인 뒤 스크롤 양 끝에서 「채택」이 상자 안에 선다. */
+
+  const pane = src('src/mr/OptimizePane.tsx');
+  const css = raw('src/theme/type.css');
+  const block = css.slice(css.indexOf('.sr-mr-optgrid th:last-child'));
+
+  it('격자에 제 클래스가 있다 — 대사표와 같은 상자를 쓰면서도 규칙은 다르다', () => {
+    /* `.sr-mr-drawertable` 은 대사표와 **공유**다. 고정을 그 클래스에 걸면
+       하루 일곱 줄짜리 대사표의 마지막 열까지 같이 붙는다. */
+    expect(pane).toMatch(/className="sr-mr-drawertable sr-mr-optgrid"/);
+    expect(css).toContain('.sr-mr-optgrid');
+  });
+
+  it('경계는 box-shadow 다 — border 는 sticky 셀에서 1px 이 곧 샘이다', () => {
+    /* 대사표 고정 열(`.sr-recon-edge-l`)이 적어 둔 그 근거와 같다: 테두리는
+       레이아웃을 1px 밀고, 밀린 1px 로 밑이 샌다. */
+    expect(block).toMatch(/box-shadow:/);
+    expect(block, '고정 셀에 border 를 썼다').not.toMatch(/border(-left|-right)?:/);
+  });
+
+  it('고정 셀의 배경은 불투명이다 — 밑을 지나는 행이 비치면 두 줄이 겹쳐 읽힌다', () => {
+    expect(block).toMatch(/background: var\(--sr-card\)/);
+    /* 색은 토큰만 — hex 는 `direction.css` 에만(CLAUDE.md 규칙 3). */
+    expect(block, 'hex 색을 썼다').not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+
+  it('**안 넘치면 그림자를 안 그린다** — 없는 사실을 말하지 않는다', () => {
+    /* 덮는 것이 없는데 「여기서부터 덮고 있다」를 그리면 화면이 거짓말한다 —
+       `.sr-recon-div-l` 이 2026-09-03 에 같은 이유로 그림자를 버린 판단이다.
+       CSS 는 넘침을 모르므로 화면이 재서 `data-covering` 을 단다. */
+    expect(block).toMatch(/\[data-covering='1'\][\s\S]{0,200}box-shadow:/);
+    expect(pane).toMatch(/data-covering=\{covering \? '1' : '0'\}/);
+    expect(pane).toMatch(/scrollWidth - box\.clientWidth > 1/);
+  });
+
+  it('재는 자리는 **CDS 가 두른 스크롤 상자**다 — sticky 의 기준과 같아야 한다', () => {
+    /* sticky 는 가장 가까운 스크롤 컨테이너에 붙는다. 바깥 Box 를 재면 그
+       상자는 안 스크롤하므로 넘침이 늘 0 이고 그림자가 영영 안 선다. */
+    expect(pane).toMatch(/querySelector<HTMLElement>\('div\[class\*="tableContainer"\]'\)/);
+  });
+
+  it('ResizeObserver 하나에 안 기댄다 — 페인트가 없으면 콜백도 없다', () => {
+    /* RO 콜백은 렌더 수명주기에 실려 온다. 탭이 페인트를 안 하면 아예 안 오고
+       (자동화 탭 실측 0회), 그러면 창 크기만 바뀐 판에서 그림자가 안 따라간다. */
+    expect(pane).toMatch(/window\.addEventListener\('resize', measure\)/);
+    expect(pane).toMatch(/window\.removeEventListener\('resize', measure\)/);
+  });
+});

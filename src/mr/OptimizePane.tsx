@@ -21,7 +21,7 @@
  * 셋째 창이 생길 때 다시 갈라야 한다.
  */
 
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
 import {
@@ -112,6 +112,55 @@ export type OptimizePaneProps = {
   extraNote?: string;
 };
 
+/** 표가 실제로 **넘치는가** — 고정 열의 그림자가 그 사실에만 서게 한다.
+ *
+ *  CSS 는 넘침을 모른다. 그런데 이 표의 넘침은 **데이터에 달렸다**(열 폭이
+ *  내용에서 온다 — 실측 BSS-3Y 10px · FSW-3Y 47.7px). 안 넘치는 판에서도
+ *  그림자를 그리면 화면이 「여기서부터 덮고 있다」는 **없는 사실**을 말한다 —
+ *  `.sr-recon-div-l` 이 2026-09-03 에 같은 이유로 그림자를 버린 그 판단이다.
+ *
+ *  재는 자리는 CDS 가 표에 두르는 `overflow-x: auto` 상자다(sticky 의 기준
+ *  컨테이너와 같은 상자여야 한다). 폭은 창 크기·글꼴·데이터로 바뀌므로
+ *  `ResizeObserver` 로 계속 본다.
+ *
+ *  ⚠ **읽기만 한다.** 여기서 레이아웃을 고치지 않는다 — 관측이 레이아웃을
+ *  바꾸면 관측이 자기를 다시 부른다. */
+function useCovering(): [React.RefObject<HTMLDivElement | null>, boolean] {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [covering, setCovering] = useState(false);
+  const measure = useCallback(() => {
+    const box = ref.current?.querySelector<HTMLElement>('div[class*="tableContainer"]')
+      ?? ref.current;
+    if (!box) return;
+    setCovering(box.scrollWidth - box.clientWidth > 1);
+  }, []);
+  /* 의존 배열이 **없다** — 렌더마다 다시 잰다. 이 표의 폭은 데이터에서 오므로
+     (칸이 바뀌면 돈 문자열이 바뀐다) 렌더가 곧 「폭이 바뀔 수 있는 순간」이다.
+
+     ⚠ **`ResizeObserver` 하나에 기대지 않는다.** RO 콜백은 렌더 수명주기에
+     실려 오므로 탭이 페인트를 안 하면 아예 안 온다(이 리포가 rAF 에서 이미
+     겪은 그 인공산물 — 자동화 탭에서 실측 0회). 창 크기만 바뀌고 리렌더가 없는
+     경우가 실사용에 있으므로 `resize` 도 같이 듣는다. 둘 다 같은 `measure` 를
+     부르고, 그 함수는 읽기만 하므로 두 번 불려도 값이 같다. */
+  useEffect(() => {
+    const host = ref.current;
+    if (!host) return;
+    measure();
+    window.addEventListener('resize', measure);
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    if (ro) {
+      ro.observe(host);
+      const inner = host.querySelector('table');
+      if (inner) ro.observe(inner);
+    }
+    return () => {
+      window.removeEventListener('resize', measure);
+      ro?.disconnect();
+    };
+  });
+  return [ref, covering];
+}
+
 export function OptimizePane({
   opt, error, running, rankKey, onRankKey, span, headReal,
   onRun, onAdopt, intro, extraNote,
@@ -122,6 +171,7 @@ export function OptimizePane({
   );
   const best = ranked[0];
   const curRank = ranked.findIndex((c) => c.current);
+  const [gridRef, covering] = useCovering();
   const rank = MR_RANK_KEYS.find((k) => k.v === rankKey)!;
 
   return (
@@ -197,7 +247,17 @@ export function OptimizePane({
           {/* TOP 5 매트릭스 — 조건 다섯 열 + 지표 열. 표는 캐논(CDS Table),
               머리 활자는 `headFont`(소문자가 있으면 legal — CDS caption 이
               대문자화를 걸어 「bp」가 「BP」가 된다). */}
-          <Box className="sr-mr-drawertable" width="100%">
+          {/* 「채택」 열을 오른쪽에 **고정**한다 [OWNER 2026-09-07 — "고정 열로"].
+              표가 상자를 넘고 넘친 쪽이 하필 누르는 칸이라, 안 붙이면 이 표의
+              유일한 액션이 기본 화면에 없다. 문법과 근거는 `theme/type.css` 의
+              `.sr-mr-optgrid` — 대사표 고정 열과 같은 규율이다.
+              `data-covering` 은 **실제로 넘칠 때만** 그림자를 켠다. */}
+          <Box
+            ref={gridRef}
+            className="sr-mr-drawertable sr-mr-optgrid"
+            width="100%"
+            data-covering={covering ? '1' : '0'}
+          >
             <Table bordered={false}>
               <TableHeader sticky>
                 <TableRow>

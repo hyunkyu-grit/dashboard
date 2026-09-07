@@ -2971,3 +2971,52 @@ tr.sr-mr-book > td {
     0 -2px 0 var(--color-bgLine),
     0 -8px 8px -6px var(--sr-edge-shadow);
 }
+
+/* ── TOP 5 격자의 **채택 열 고정** [OWNER 2026-09-07 — "고정 열로 ㄱㄱ"] ───────
+ *
+ * 이 표는 상자를 넘는다. 넘침이 **데이터에 달렸다**(열 폭이 내용에서 오므로 돈
+ * 문자열이 넓어지면 표도 넓어진다 — 실측 BSS-3Y 10px · FSW-3Y 47.7px), 그래서
+ * 열 폭을 못 박아 닫을 수가 없다. 넘친 쪽이 하필 **누르는 칸**이라 「채택」이
+ * 오른쪽 밖에 있고, 밀어야 눌린다 — 표에서 유일한 액션이 기본 화면에 없는 셈이다.
+ *
+ * 그래서 마지막 열을 오른쪽에 붙인다. 대사표의 고정 열과 **같은 문법**이다
+ * (`.sr-recon-stick`·`.sr-recon-edge-l`):
+ *
+ *   1. 고정 셀의 배경은 **불투명**이어야 한다 — 밑을 지나는 행이 비치면 두 줄이
+ *      겹쳐 읽힌다.
+ *   2. 경계는 **`box-shadow` 만**. `border` 는 레이아웃을 1px 밀고, sticky 셀에서
+ *      그 1px 이 곧 샘이다(모듈 주석의 그 실측).
+ *   3. 헤어라인이 「여기서부터 덮고 있다」를, 그 안쪽 옅은 그림자가 「밑을
+ *      지나간다」를 말한다. 왼쪽으로 드리운다 — 덮는 쪽이 왼쪽이다.
+ *
+ * ⚠ **안 넘칠 때는 그림자를 안 그린다.** 덮는 것이 없는데 «덮고 있다» 를 그리면
+ * 화면이 없는 사실을 말한다 — `.sr-recon-div-l` 이 2026-09-03 에 같은 이유로
+ * 그림자를 버리고 헤어라인만 남긴 그 판단이다. 넘치는지는 CSS 가 모르므로
+ * `OptimizePane` 이 재서 `data-covering` 을 단다.
+ *
+ * 기준 컨테이너는 CDS 가 표에 두르는 `overflow-x: auto` 상자다 — sticky 는 가장
+ * 가까운 스크롤 컨테이너에 붙으므로 여기서는 그게 맞는 기준이다(`.sr-rv-rank-scroll`
+ * 이 겪은 그 함정의 반대 경우). */
+.sr-mr-optgrid th:last-child,
+.sr-mr-optgrid td:last-child {
+  position: sticky;
+  right: 0;
+  background: var(--sr-card);
+}
+
+/* 머리의 마지막 칸은 **모서리**다 — 위(머리 고정)와 오른쪽(열 고정)이 겹치므로
+   둘 중 어느 것보다도 위에 서야 한다. */
+.sr-mr-optgrid th:last-child {
+  z-index: 11;
+}
+
+.sr-mr-optgrid td:last-child {
+  z-index: 5;
+}
+
+.sr-mr-optgrid[data-covering='1'] th:last-child,
+.sr-mr-optgrid[data-covering='1'] td:last-child {
+  box-shadow:
+    -1px 0 0 var(--color-bgLine),
+    -6px 0 8px -6px var(--sr-edge-shadow);
+}
