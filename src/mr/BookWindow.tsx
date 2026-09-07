@@ -60,12 +60,19 @@ import { Stat, StatColumn } from '@/ui/Stat';
 import {
   MR_STRATEGY_DEFAULTS,
   fetchMrBook,
-  type MrBookLeg,
-  type MrBookRun,
+  fetchMrBookOptimize,
+  type MrBookOptimizeRun,
+  type MrBookSpan,
+  type MrBookSpanLeg,
+  type MrOptimizeCell,
+  type MrRankKey,
+  type MrSpan,
   type MrStrategyParams,
+  type MrBookRun,
 } from './api';
 import { MrKnobBar, mrKnobsStale } from './KnobBar';
-import { Panel, WHY_WORD, ym } from './parts';
+import { OptimizePane } from './OptimizePane';
+import { Panel, RiskAdjusted, WHY_WORD, fmtRatio, ym } from './parts';
 
 /* 차트 높이 두 급·표 높이 — **낱개 창과 같은 값**(`StrategyWindow` 그 상수:
    Backtest LINKED PAIR 의 200/140). 주인공(누적 곡선)이 크고 파생(동시 다리
@@ -100,7 +107,7 @@ function Num({ v, tone }: { v: string; tone?: 'up' | 'down' }) {
  * 아니라 「커브의 어디가 버는가」라, 6M→10Y 로 세워야 그 모양이 보인다(실측에서
  * 짧은 쪽이 세다 — `docs/MR_LANE_STATE.md` 의 신호일 앞수익 표).
  */
-function LegTable({ run, onPick }: { run: MrBookRun; onPick?: (id: string) => void }) {
+function LegTable({ legs, onPick }: { legs: MrBookSpanLeg[]; onPick?: (id: string) => void }) {
   return (
     <Box style={{ position: 'relative', height: TABLE_H, overflow: 'auto' }} width="100%">
       <Table bordered={false}>
@@ -118,10 +125,11 @@ function LegTable({ run, onPick }: { run: MrBookRun; onPick?: (id: string) => vo
             <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
               <Text font="caption" as="span" color="fgMuted">손익</Text>
             </TableCell>
-            {/* `caption` 은 대문자로 세운다 — 「SR」은 원래 대문자라 무해하지만
-                「bp」·「z」가 든 머리는 `legal` 이다(낱개 창 대사표의 판례). */}
+            {/* 축이 **Calmar** 다 [OWNER 2026-09-07] — 위의 「통합 대 개별」과
+                같은 자여야 표와 판정이 갈리지 않는다. 소문자가 있으므로 `legal`
+                이다(`caption` 은 대문자화를 걸어 「Calmar」를 「CALMAR」로 만든다). */}
             <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
-              <Text font="caption" as="span" color="fgMuted">SR</Text>
+              <Text font="legal" as="span" color="fgMuted">Calmar</Text>
             </TableCell>
             <TableCell as="th" scope="col" className="sr-num" justifyContent="flex-end">
               <Text font="caption" as="span" color="fgMuted">최대 낙폭</Text>
@@ -135,7 +143,7 @@ function LegTable({ run, onPick }: { run: MrBookRun; onPick?: (id: string) => vo
           </TableRow>
         </TableHeader>
         <TableBody>
-          {run.legs.map((g: MrBookLeg) => (
+          {legs.map((g: MrBookSpanLeg) => (
             <TableRow
               key={g.id}
               tabIndex={onPick ? 0 : undefined}
@@ -163,7 +171,7 @@ function LegTable({ run, onPick }: { run: MrBookRun; onPick?: (id: string) => vo
                 v={fmtKrw(g.totalPnl)}
                 tone={g.totalPnl > 0 ? 'up' : g.totalPnl < 0 ? 'down' : undefined}
               />
-              <Num v={g.sharpe == null ? '—' : g.sharpe.toFixed(2)} />
+              <Num v={fmtRatio(g.calmar)} />
               <Num v={fmtKrw(-g.maxDrawdown)} />
               <Num v={g.avgBars == null ? '—' : `${g.avgBars.toFixed(1)}봉`} />
               {/* 몫은 **양수 다리에만** 있다 — 총합이 0 이하이거나 이 다리가
@@ -257,10 +265,21 @@ export function BookWindow({
   /* 아래쪽 패널이 만기별 성적과 거래 목록 중 무엇을 드는가. 표 둘을 세로로
      쌓으면 창이 두 배가 되고, 나란히 두면 열이 열넷이라 어느 쪽도 안 읽힌다. */
   const [tab, setTab] = useState<'legs' | 'trades'>('legs');
+  /* 구간은 **전역 설정값**이다 [OWNER 2026-09-07 — "통합 장부에도 마찬가지로"].
+     낱개 창과 같은 계약이고 같은 이유다: 서버가 네 벌을 한 번에 보내므로
+     (`run.spans`) 고르개는 이미 와 있는 값을 고르기만 한다 — 재실행도 stale 도
+     안 만든다. 엔진은 늘 전체 표본 위에서 돈다(룩백 워밍업이 구간 앞에 있어야
+     z 가 선다). */
+  const [span, setSpan] = useState<MrSpan>('all');
+  const [opt, setOpt] = useState<MrBookOptimizeRun>();
+  const [optRunning, setOptRunning] = useState(false);
+  const [optError, setOptError] = useState<string>();
+  const [rankKey, setRankKey] = useState<MrRankKey>('calmar');
 
   const exec = useCallback(() => {
     setError(undefined);
     setRunning(true);
+    setOpt(undefined);
     fetchMrBook(knobs)
       .then(setRun)
       .catch((e: unknown) => {
@@ -279,9 +298,45 @@ export function BookWindow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* 격자는 **실행·구간이 바뀌면 버린다** — 딴 조건의 순위를 들고 있으면 표가
+     거짓말을 한다(낱개 창의 그 규율). 순위 기준만은 남긴다(서버에 안 묻는다). */
+  const runOptimize = useCallback(() => {
+    if (!run) return;
+    setOptError(undefined);
+    setOptRunning(true);
+    fetchMrBookOptimize(run.params, span)
+      .then(setOpt)
+      .catch((e: unknown) => {
+        if (e instanceof BacktestUnavailable) setOptError('실행 중인 백엔드(:8200)가 필요해요.');
+        else setOptError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => setOptRunning(false));
+  }, [run, span]);
+
+  /* 「채택」 — 격자의 한 칸을 노브에 꽂는다. **실행까지 하지는 않는다**:
+     격자는 엔진 근사고 머리 카드는 실가격일 수 있어서, 사람이 「실행」을
+     눌러야 그 차이가 화면에 서는 순서가 지켜진다. */
+  const adopt = useCallback((c: MrOptimizeCell) => {
+    setKnobs((k) => ({
+      ...k, lookback: c.lookback, entryZ: c.entryZ,
+      exitZ: c.exitZ, stopZ: c.stopZ, entryMode: c.entryMode,
+    }));
+  }, []);
+
+  useEffect(() => { setOpt(undefined); }, [span]);
+
   const stale = useMemo(() => (run ? mrKnobsStale(run.params, knobs) : false), [run, knobs]);
   const dates = useMemo(() => run?.points.map((p) => p.t) ?? [], [run]);
   const stack = useStackedScales();
+
+  /* ── 이 구간의 성적 ────────────────────────────────────────────────────
+     서버가 네 벌을 다 보내 온다. 구 백엔드는 이 필드를 모르므로 `undefined`
+     이고, 그때 화면은 옛 `summary`(전체 기간)로 **조용히 떨어지지 않는다** —
+     그러면 전체 기간의 수를 이 구간의 수인 것처럼 말하게 된다. */
+  const perf: MrBookSpan | undefined = useMemo(
+    () => run?.spans?.find((b) => b.span === span),
+    [run, span],
+  );
 
   const only = run && run.dirs.allowed.length === 1
     ? (run.dirs.allowed[0]! > 0 ? run.dirs.plus : run.dirs.minus)
@@ -346,6 +401,12 @@ export function BookWindow({
           onChange={(patch) => setKnobs((k) => ({ ...k, ...patch }))}
           onRun={exec}
           running={running}
+          span={span}
+          onSpanChange={setSpan}
+          /* 서버가 실제로 채점한 구간을 적는다 — 화면이 달력을 다시 세지
+             않는다(두 자가 갈리면 카드와 곡선이 다른 구간을 말한다). */
+          spanNote={!perf || span === 'all' ? undefined
+            : `${perf.from ?? '—'} 부터 ${perf.days.toLocaleString()}봉 — 성과·만기별·최적화가 이 구간에서 채점돼요.`}
         />
         {/* 상태 문구의 활자는 Backtest 와 한 벌 — 안내는 `body` 뮤트, 오류는
             `body` + `.sr-up`(앱 공통 오류 문법). 낱개 창도 같다. */}
@@ -373,36 +434,54 @@ export function BookWindow({
           </Text>
         ) : (
           <>
+            {!perf ? (
+              /* 구 백엔드 — 조용히 전체 기간(`summary`)으로 떨어지지 않는다.
+                 그러면 화면이 전체 기간의 수를 이 구간의 수인 것처럼 말한다. */
+              <Text font="body" as="p" color="fgMuted">
+                구간별 성과는 새 백엔드가 필요해요 — 지금 백엔드는 전체 기간
+                하나만 보내고 있어요.
+              </Text>
+            ) : (
             <HStack className="sr-stats" width="100%" flexWrap="wrap">
               <StatColumn title="성과">
                 <Stat
                   label="총손익"
-                  value={fmtKrw(run.summary.totalPnl)}
+                  value={fmtKrw(perf.totalPnl)}
                   tone={
-                    run.summary.totalPnl > 0 ? 'up' : run.summary.totalPnl < 0 ? 'down' : undefined
+                    perf.totalPnl > 0 ? 'up' : perf.totalPnl < 0 ? 'down' : undefined
                   }
-                  note={`${run.bars.toLocaleString()}봉 · ${run.from}~${run.to}`}
+                  note={`${perf.days.toLocaleString()}봉 · ${perf.from}~${perf.to}`}
                 />
-                <Stat label="최대 낙폭" value={fmtKrw(-run.summary.maxDrawdown)} />
+                <Stat label="최대 낙폭" value={fmtKrw(-perf.maxDrawdown)} />
+                {/* 낙폭의 **길이** — 깊이만 적으면 「얼마나 오래 물속이었나」를
+                    화면이 안 말한다. 샤프가 있던 자리이고, 절대수익형 평가가
+                    실제로 답해야 하는 물음이 이쪽이다. */}
+                <Stat
+                  label="회복일"
+                  value={perf.recoveryDays == null ? '—' : `${perf.recoveryDays}일`}
+                  note={perf.recoveryDays == null
+                    ? '낙폭이 없었어요'
+                    : perf.recovered ? '골에서 전고점까지' : '아직 회복 못 했어요'}
+                />
                 <Stat
                   label="승률"
-                  value={run.summary.winRate == null ? '—' : pct(run.summary.winRate)}
+                  value={perf.winRate == null ? '—' : pct(perf.winRate)}
                   /* **분모를 말한다.** 아홉 승률의 평균이 아니라 모은 거래의
                      승률이고, 미청산 다리는 원본 규약대로 여기 안 든다. */
                   note={
                     run.summary.openLegs === 0
-                      ? `${run.summary.numTrades}거래를 한 통에`
+                      ? `${perf.numTrades}거래를 한 통에`
                       : run.params.countOpen
                         ? `미청산 ${run.summary.openLegs}다리 포함`
                         : `미청산 ${run.summary.openLegs}다리 제외`
                   }
                 />
                 <Stat
-                  label="Sharpe"
-                  value={run.summary.sharpe == null ? '—' : run.summary.sharpe.toFixed(2)}
-                  note="전 봉 기준"
+                  label="거래"
+                  value={String(perf.numTrades)}
+                  note={perf.numTrades === run.summary.numTrades
+                    ? undefined : `전체 ${run.summary.numTrades}건`}
                 />
-                <Stat label="거래" value={String(run.summary.numTrades)} />
                 {run.summary.openPnl != null ? (
                   <Stat
                     label="미청산"
@@ -412,6 +491,10 @@ export function BookWindow({
                   />
                 ) : null}
               </StatColumn>
+
+              {/* 절대수익형 일곱 — 낱개 창과 **같은 부품**이다(`parts.RiskAdjusted`).
+                  샤프가 여기서 내려갔다 [OWNER 2026-09-04 · 2026-09-07]. */}
+              <RiskAdjusted perf={perf} />
 
               {/* 걸린 돈 — 동일가중 합의 **대가**다. 이 칸이 없으면 「Delta
                   100만원/bp」가 실제로 움직인 돈을 최대 아홉 배 작게 말한다.
@@ -486,54 +569,71 @@ export function BookWindow({
                 ) : null}
               </StatColumn>
             </HStack>
+            )}
 
-            {/* ── 묶어서 나아졌나 — 이 창의 존재 이유를 한 줄이 답한다 ─────── */}
+            {/* ── 묶어서 나아졌나 — 이 창의 존재 이유를 한 줄이 답한다 ───────
+                구간을 따라간다 [OWNER 2026-09-07] — 위 카드가 「지난 1분기」인데
+                이 절만 전체 기간이면 한 화면이 두 구간을 말한다. */}
+            {!perf ? null : (
             <VStack gap={0.5} width="100%">
               <HStack gap={1} alignItems="baseline" justifyContent="space-between">
                 <Text font="label2" as="h3" noWrap>
                   묶어서 나아졌나
                 </Text>
                 <Text font="legal" as="span" color="fgMuted">
-                  분산 효과는 쌍상관이 정해요 — 아홉이 같이 움직이면 아홉이 아니에요
+                  낙폭 대비로 재요 — 유효 독립은 「왜 그만큼인지」의 사정이에요
                 </Text>
               </HStack>
               <HStack className="sr-stats" width="100%" flexWrap="wrap">
+                {/* 축이 **Calmar** 다 [OWNER 2026-09-07] — 샤프에서 갈렸다.
+                    그러면서 이 절이 답하는 질문도 갈렸다는 것을 적어 둔다:
+                    샤프판에서는 바로 옆 「유효 독립」과 산술이 맞물렸다(SR 은
+                    1/σ 로 움직이므로 통합/개별 ≈ √N_eff 가 검산이었다). Calmar
+                    의 분모는 최대낙폭이라 **그 검산이 안 선다** — 최대낙폭은
+                    경로의 한 점이라 √N 으로 줄지 않는다. 지금 묻는 것은
+                    «묶어서 낙폭 대비가 나아졌나» 이고, 유효 독립은 그 옆에서
+                    사정을 말한다. */}
                 <StatColumn title="통합 대 개별">
+                  <Stat label="통합 Calmar" value={fmtRatio(perf.calmar)} />
                   <Stat
-                    label="통합 SR"
-                    value={run.summary.sharpe == null ? '—' : run.summary.sharpe.toFixed(2)}
-                  />
-                  <Stat
-                    label="개별 SR 중앙"
-                    value={run.diag.legSharpe.median == null ? '—' : run.diag.legSharpe.median.toFixed(2)}
+                    label="개별 Calmar 중앙"
+                    value={fmtRatio(perf.legCalmar.median)}
                     note={
-                      run.diag.legSharpe.min == null || run.diag.legSharpe.max == null
+                      perf.legCalmar.min == null || perf.legCalmar.max == null
                         ? undefined
-                        : `${run.diag.legSharpe.min.toFixed(2)} ~ ${run.diag.legSharpe.max.toFixed(2)}`
+                        : `${fmtRatio(perf.legCalmar.min)} ~ ${fmtRatio(perf.legCalmar.max)}`
                     }
                   />
                   <Stat
                     label="양수 만기"
-                    value={`${run.diag.legSharpe.positive}/${run.diag.legSharpe.n}`}
-                    note="SR 기준"
+                    value={`${perf.legCalmar.positive}/${perf.legCalmar.n}`}
+                    /* **잰 다리 수를 말한다.** 낙폭이 0 인 다리는 Calmar 가
+                       없어서 안 센다 — 0 으로 채우면 그 다리가 «최악» 으로 줄을
+                       서서 중앙값을 끌어내린다. */
+                    note={perf.legCalmar.n === perf.legCalmar.of
+                      ? 'Calmar 기준'
+                      : `Calmar 기준 · ${perf.legCalmar.of}개 중 ${perf.legCalmar.n}개만 잴 수 있어요`}
                   />
                 </StatColumn>
                 <StatColumn title="분산">
                   <Stat
                     label="평균 쌍상관"
                     value={
-                      run.diag.diversification.meanPairCorr == null
+                      perf.diversification.meanPairCorr == null
                         ? '—'
-                        : run.diag.diversification.meanPairCorr.toFixed(3)
+                        : perf.diversification.meanPairCorr.toFixed(3)
                     }
-                    note="일별 손익끼리"
+                    /* **몇 봉에서 쟀는지**를 같이 적는다. 「지난 1개월」이면 봉이
+                       스물 남짓이라 ρ̄ 의 표준오차가 0.2 를 넘는다 — 그 수를
+                       「분산이 좋아졌다」로 읽으면 안 된다. */
+                    note={`일별 손익끼리 · ${perf.diversification.days.toLocaleString()}봉`}
                   />
                   <Stat
                     label="유효 독립"
                     value={
-                      run.diag.diversification.effectiveN == null
+                      perf.diversification.effectiveN == null
                         ? '—'
-                        : `${run.diag.diversification.effectiveN.toFixed(1)}/${run.diag.diversification.n}`
+                        : `${perf.diversification.effectiveN.toFixed(1)}/${perf.diversification.n}`
                     }
                     note="N / (1 + (N−1)·상관)"
                   />
@@ -565,8 +665,19 @@ export function BookWindow({
                     />
                   ) : null}
                 </StatColumn>
+                {/* **표본 삼분할은 항상 전체 위에 선다** [OWNER 2026-09-07].
+                    이건 «시대가 바뀌어도 사나» 를 재는 안정성 검사라 채점
+                    구간과 무관하다 — 「지난 1개월」을 다시 셋으로 쪼개면 한
+                    조각이 열흘이라 수가 뜻을 잃는다. 그래서 제목이 「구간별」이
+                    아니라 **「표본 삼분할」**이다: 옆 카드가 「지난 1분기」인데
+                    이 열만 2020년부터면, 이름이 그 사실을 말해야 한다.
+
+                    ⚠ SR 이 여기 남는다. 삼분할은 «분산이 시대마다 사나» 를 재는
+                    자리라 σ 기반이 맞고, 위의 「통합 대 개별」이 Calmar 로 간 것과
+                    **다른 질문**이다. 한 화면에 두 자가 서므로 이름과 각주가
+                    그 사실을 적는다. */}
                 {run.diag.periods.length ? (
-                  <StatColumn title="구간별">
+                  <StatColumn title="표본 삼분할">
                     {run.diag.periods.map((p) => (
                       <Stat
                         key={p.from}
@@ -578,7 +689,16 @@ export function BookWindow({
                   </StatColumn>
                 ) : null}
               </HStack>
+              {run.diag.periods.length ? (
+                <Text font="legal" as="p" color="fgMuted">
+                  표본 삼분할은 고른 구간과 무관하게 전체 표본을 셋으로 나눈
+                  것이에요 — 시대가 바뀌어도 사는지를 재는 자리라, 짧은 구간을
+                  다시 쪼개면 한 조각이 열흘이 돼요. 축이 SR 인 것도 그 때문이에요
+                  (위 「통합 대 개별」은 낙폭 대비라 다른 질문이에요).
+                </Text>
+              ) : null}
             </VStack>
+            )}
 
             {/* ── 곡선 둘, 표 하나 = **LINKED PAIR 의 세로 결**(Backtest
                 `LinkedCharts`). `Panel` 은 이제 풀폭이 정본이고(2026-09-02,
@@ -685,9 +805,39 @@ export function BookWindow({
                   </Box>
                 }
               >
-                {tab === 'legs' ? <LegTable run={run} onPick={onPickLeg} /> : <TradeTable run={run} />}
+                {tab === 'legs'
+                  ? (perf
+                      ? <LegTable legs={perf.legs} onPick={onPickLeg} />
+                      : (
+                        <Text font="body" as="p" color="fgMuted">
+                          만기별 성적은 새 백엔드가 필요해요 — 지금 백엔드는 전체
+                          기간 하나만 보내고 있어요.
+                        </Text>
+                      ))
+                  : <TradeTable run={run} />}
               </Panel>
             </VStack>
+
+            {/* 근사 최적화 — **낱개 창과 같은 부품**이다(`OptimizePane`).
+                여기서 정하는 것은 안내·경고 문장 둘뿐이다. */}
+            <OptimizePane
+              opt={opt}
+              error={optError}
+              running={optRunning}
+              rankKey={rankKey}
+              onRankKey={setRankKey}
+              span={span}
+              headReal={opt?.headReal ?? false}
+              onRun={runOptimize}
+              onAdopt={adopt}
+              intro={'누르면 룩백 3 × 진입 3 × 청산 3 × 손절 3 × 진입 규칙 2 = 162칸을 '
+                + `만기 ${run.legs.length}개에 동시에 걸어 이 구간에서 채점해요 — 칸마다 `
+                + '아홉을 더한 장부를 재요 — 다리별 값의 평균이 아니에요(Calmar·'
+                + '낙폭은 비선형이라 더한 뒤에 재야 「묶어서 나아졌나」가 답이 돼요). '
+                + '한 칸이 아홉 배라 몇 초 걸려요. 비용·Delta 와 실전 규칙은 안 흔들어요.'}
+              extraNote={`한 칸이 만기 ${run.legs.length}개를 같이 흔들어요 — 표본내 격자라 `
+                + '1등 칸을 그대로 믿으면 과적합이 그만큼 배로 붙어요.'}
+            />
 
             <Text font="legal" as="span" color="fgMuted">
               만기 {run.legs.length}개에 각각 Delta {run.params.notional.toLocaleString()}원/bp 를
@@ -700,10 +850,12 @@ export function BookWindow({
               {run.carry.on && run.carry.defn
                 ? `캐리는 ${run.carry.defn}이고 조달은 ${run.carry.funding} 이에요. `
                 : ''}
-              노브 민감도(이웃 칸)는 두 창 다 없어요 — 여기서는 한 칸마다 만기{' '}
-              {run.legs.length}개를 다시 돌아야 하고, 전진분석이 파라미터 선택에 값을 못 더한다는
-              실측이 있어요. 한 칸 옆이 궁금하면 노브를 옮기고 실행하세요. 국고 다리는 민평(평가사 고시) 기준이고 당일
-              종가 체결 규약이에요.
+              노브 민감도는 위 「근사 최적화」가 답해요 — 162칸을 만기{' '}
+              {run.legs.length}개에 동시에 걸어 지금 칸의 등수를 매겨요. 종전에는 이 자리에
+              「두 창 다 없어요」라고 적혀 있었고 그건 이제 사실이 아니에요. 다만 그때 적어 둔
+              경고는 그대로예요: 표본내 격자라 1등 칸이 표본외에서도 1등이라는 보장이 없고,
+              전진분석이 파라미터 선택에 값을 못 더한다는 실측도 그대로예요. 국고 다리는
+              민평(평가사 고시) 기준이고 당일 종가 체결 규약이에요.
             </Text>
           </>
         )}

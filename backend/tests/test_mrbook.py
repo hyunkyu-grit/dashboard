@@ -11,6 +11,7 @@
 
 SQL 을 안 만진다 — 합성 계열에 실제 엔진을 걸어 재료를 만든다.
 """
+import datetime as dt
 import math
 
 import pytest
@@ -44,8 +45,18 @@ def _ou(n: int, *, seed: int, phi: float, sd: float = 1.4, mu: float = 30.0) -> 
     return out
 
 
+#: 픽스처의 첫 날. 실제 달력이라야 하는 이유는 **구간**이다 [2026-09-07] —
+#: `mrmetrics.span_cut` 이 「마지막 봉에서 달력으로 n개월」을 세므로 `D0000`
+#: 같은 가짜 날짜로는 못 선다. 종전 픽스처가 그 꼴이었고, 구간이 장부에 들어온
+#: 날 아홉 시험이 한꺼번에 죽었다 — 시험이 **생산의 계약(ISO)** 을 표현하지
+#: 못하고 있었다는 뜻이라, 날짜 쪽을 계약에 맞췄다.
+#: 달력일을 그대로 쓴다(주말을 안 뺀다). 이 파일이 재는 것은 «합치기» 이지
+#: 영업일 규칙이 아니고, 날짜가 서로 다르고 순서가 있으면 그 시험은 선다.
+_D0 = dt.date(2020, 1, 1)
+
+
 def _dates(n: int, start: int = 0) -> list[str]:
-    return [f"D{start + i:04d}" for i in range(n)]
+    return [(_D0 + dt.timedelta(days=start + i)).isoformat() for i in range(n)]
 
 
 def _leg(sid: str, label: str, dates: list[str], vals: list[float], **over) -> dict:
@@ -60,6 +71,13 @@ SPEC = [("BSS-2Y", "BSS 2Y", 7, 0.85, 1.4),
         ("BSS-3Y", "BSS 3Y", 99, 0.75, 1.4),
         ("BSS-10Y", "BSS 10Y", 5, 0.90, 0.9)]
 N = 400
+
+
+def _span(out: dict, key: str) -> dict:
+    """집계 결과에서 구간 하나 — 없으면 그 자리에서 죽는다(조용히 None 금지)."""
+    hit = [s for s in out["spans"] if s["span"] == key]
+    assert hit, f"구간 {key} 가 없다 — 있는 것: {[s['span'] for s in out['spans']]}"
+    return hit[0]
 
 
 def _three(**over) -> list[dict]:
@@ -187,7 +205,7 @@ def test_dates_are_matched_by_date_not_by_index():
     b = _leg("BSS-3Y", "BSS 3Y", _dates(n, start=10), _ou(n, seed=99, phi=0.75))
     out = mrbook.aggregate([a, b], notional=PIN["notional"],
                            cost_bp=PIN["cost_bp"], dynamic_cost=False)
-    assert out["from"] == "D0000" and out["to"] == f"D{n + 9:04d}"
+    assert out["from"] == _dates(1)[0] and out["to"] == _dates(1, start=n + 9)[0]
     assert out["bars"] == n + 10
     at = {p["t"]: p for p in out["points"]}
     ap = {p["date"]: p for p in a["r"]["points"]}
@@ -241,25 +259,44 @@ def test_diversification_reads_one_when_the_legs_are_the_same_trade():
     n = 260
     same = [_leg(f"BSS-{i}Y", f"BSS {i}Y", _dates(n), _ou(n, seed=7, phi=0.85))
             for i in (2, 3, 5)]
-    d = mrbook.aggregate(same, notional=PIN["notional"], cost_bp=PIN["cost_bp"],
-                         dynamic_cost=False)["diag"]["diversification"]
+    out = mrbook.aggregate(same, notional=PIN["notional"], cost_bp=PIN["cost_bp"],
+                           dynamic_cost=False)
+    # 구간을 따라간다 [2026-09-07] — 「전체」가 종전 `diag` 자리의 그 수다.
+    d = _span(out, "all")["diversification"]
     assert d["n"] == 3
     assert d["meanPairCorr"] == pytest.approx(1.0, abs=1e-6)
     assert d["effectiveN"] == pytest.approx(1.0, abs=0.05)
+    assert d["days"] == out["bars"], "전체 구간인데 상관을 일부 봉에서만 쟀다"
     # 서로 다른 계열이면 유효 독립이 늘어난다.
     mixed = mrbook.aggregate(_three(), notional=PIN["notional"],
                              cost_bp=PIN["cost_bp"], dynamic_cost=False)
-    assert mixed["diag"]["diversification"]["effectiveN"] > 1.0
+    assert _span(mixed, "all")["diversification"]["effectiveN"] > 1.0
+    # 짧은 구간은 **적은 봉에서** 잰다 — 화면이 그 사실을 가려야 하므로 값이
+    # 아니라 «몇 봉에서 쟀나» 가 실려 있어야 한다.
+    assert _span(mixed, "1m")["diversification"]["days"] < _span(mixed, "all")["diversification"]["days"]
 
 
-def test_leg_sharpe_sits_next_to_the_book_sharpe():
-    """통합이 개별보다 나은지는 중앙값 옆에 놓아야 판정이 선다."""
+def test_leg_calmar_sits_next_to_the_book_calmar():
+    """통합이 개별보다 나은지는 중앙값 옆에 놓아야 판정이 선다.
+
+    축이 샤프 → **Calmar** 로 갈렸다 [OWNER 2026-09-07]. 그래서 이 시험이 재는
+    것도 갈렸다: 종전에는 「통합 SR 이 개별 중앙보다 √유효독립 배쯤 크다」가
+    검산이었는데, Calmar 의 분모는 최대낙폭이라 그 검산이 안 선다. 남는 명제는
+    **줄 세우기가 성립하나**(min ≤ median ≤ max)와 **못 잰 다리를 안 센다**이다.
+    """
     legs = _three()
     out = mrbook.aggregate(legs, notional=PIN["notional"],
                            cost_bp=PIN["cost_bp"], dynamic_cost=False)
-    ls = out["diag"]["legSharpe"]
-    assert ls["n"] == 3 and ls["min"] <= ls["median"] <= ls["max"]
-    assert 0 <= ls["positive"] <= 3
+    lc = _span(out, "all")["legCalmar"]
+    assert lc["of"] == 3, "다리 수를 잘못 셌다"
+    assert lc["n"] <= lc["of"]
+    if lc["n"]:
+        assert lc["min"] <= lc["median"] <= lc["max"]
+        assert 0 <= lc["positive"] <= lc["n"]
+    # **0 으로 채우지 않는다** — 낙폭이 0 인 다리는 Calmar 가 None 이고, 0 으로
+    # 메우면 그 다리가 «최악» 으로 줄을 서서 중앙값을 끌어내린다.
+    cal = [g["calmar"] for g in _span(out, "all")["legs"]]
+    assert lc["n"] == sum(1 for c in cal if c is not None)
     # 사유별·손익비는 **모은 거래** 위에서 센다.
     assert sum(e["n"] for e in out["diag"]["exits"]) == out["summary"]["numTrades"]
     pay = out["diag"]["payoff"]

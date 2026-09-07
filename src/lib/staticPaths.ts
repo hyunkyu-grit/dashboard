@@ -184,6 +184,11 @@ export const mrReconUrl = (query: string) => liveUrl("/api/mr/recon", query);
  * 따로다(162칸이 본체보다 비싸다 — `/api/mr/recon` 과 같은 근거).
  * query 는 `/api/mr/strategy` 와 같고 `span` 이 하나 더 있다. */
 export const mrOptimizeUrl = (query: string) => liveUrl("/api/mr/optimize", query);
+/** 통합 장부의 근사 최적화 격자 [OWNER 2026-09-07]. 같은 격자를 아홉 만기에
+ * 걸어 칸마다 더한다 — **아홉 배 비싸서**(실측 4.4초 대 0.68초) 낱개와도 라우트를
+ * 가른다. query 는 `/api/mr/book` 과 같고 `span` 이 하나 더 있다. */
+export const mrBookOptimizeUrl = (query: string) =>
+  liveUrl("/api/mr/book/optimize", query);
 
 export const simInstrumentsUrl = () => liveUrl("/api/instruments");
 export const simExpandUrl = () => liveUrl("/api/instruments/expand");

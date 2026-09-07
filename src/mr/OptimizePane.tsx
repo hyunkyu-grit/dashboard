@@ -1,0 +1,298 @@
+'use client';
+
+/* 근사 최적화 절 — **두 창이 같은 표를 세운다** [OWNER 2026-09-04 · 2026-09-07].
+ *
+ * 낱개 창(`StrategyWindow`)이 먼저 가졌고, 2026-09-07 에 통합 장부(`BookWindow`)
+ * 가 같은 것을 요구하면서 여기로 갈라 냈다. 복제하면 한쪽만 낡는다 —
+ * CLAUDE.md 얼라인 8(«같은 것은 한 번만 만든다»)이고, 이 리포에서 `Field` 가
+ * 네 곳에 따로 정의돼 라벨 활자가 셋으로 갈렸던 그 자리와 같은 종류다.
+ *
+ * ## 두 창의 «다름» 은 무엇인가
+ *
+ * 격자의 **모양은 같다**(다섯 노브의 프리셋 · 같은 지표 · 같은 순위 기준).
+ * 다른 것은 한 칸의 값이 계열 하나냐 아홉을 더한 장부냐이고, 그건 서버가 이미
+ * 가른다(`/api/mr/optimize` 대 `/api/mr/book/optimize`). 화면이 아는 차이는
+ * 둘뿐이라 **문장으로만** 받는다:
+ *
+ *   `intro`      안 돌렸을 때의 안내 — 칸 수와 무엇을 안 흔드는지
+ *   `extraNote`  창별 경고 — 통합은 「만기 아홉이 같이 흔들린다」를 더 적는다
+ *
+ * 그 둘을 prop 이 아니라 창 안에서 분기로 쓰면, 이 파일이 두 창을 알게 되고
+ * 셋째 창이 생길 때 다시 갈라야 한다.
+ */
+
+import { useMemo } from 'react';
+
+import { Box, HStack, VStack } from '@coinbase/cds-web/layout';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHeader,
+  TableRow,
+} from '@coinbase/cds-web/tables';
+import { Text } from '@coinbase/cds-web/typography';
+
+import { fmtKrw } from '@/lib/krw';
+import { Segmented } from '@/ui/ControlCard';
+import { Stat, StatColumn } from '@/ui/Stat';
+
+import {
+  MR_ENTRY_MODES,
+  MR_RANK_KEYS,
+  MR_SPAN_LABEL,
+  type MrOptimizeRun,
+  type MrOptimizeCell,
+  type MrRankKey,
+  type MrSpan,
+  rankCells,
+} from './api';
+import { NumCell, Panel, fmtRatio, headFont } from './parts';
+
+/** 표의 열 — 조건 하나 + 지표들. 「채택」은 열 목록 밖이다(버튼이라 정렬도
+ *  단위도 없다). */
+const OPT_COLS: { k: string; label: string; num?: boolean }[] = [
+  { k: 'rank', label: '순위', num: true },
+  { k: 'cond', label: '조건' },
+  { k: 'calmar', label: 'Calmar', num: true },
+  { k: 'sortino', label: 'Sortino', num: true },
+  { k: 'martin', label: 'Martin', num: true },
+  { k: 'gpr', label: 'GPR', num: true },
+  { k: 'omega', label: 'Omega', num: true },
+  { k: 'pf', label: 'Profit F.', num: true },
+  { k: 'pnl', label: '총손익', num: true },
+  { k: 'mdd', label: '최대 낙폭', num: true },
+  { k: 'n', label: '거래', num: true },
+];
+
+const entryWord = (mode: string): string =>
+  MR_ENTRY_MODES.find((m) => m.v === mode)?.label ?? mode;
+
+/** 한 칸의 조건을 한 줄로 — 표의 「조건」 칸과 1등 카드가 같은 문장을 쓴다.
+ *
+ *  순서는 화면의 노브 순서다(룩백 → 진입 → 청산 → 손절 → 진입 규칙).
+ *
+ *  σ 는 **라벨이 진다**(맨 숫자 셋을 빗금으로 잇는다) — 칸 안에 「진입 2σ ·
+ *  청산 0.5σ · 손절 3.5σ」처럼 적으면 그 글자가 조건보다 넓어지고, 조건 칸은
+ *  이 표에서 이미 가장 넓은 열이라 표가 상자를 더 넘는다(미결 4-4). 열 머리가
+ *  「룩백/진입/청산/손절」을 말하고 있으므로 자릿수만 남긴다.
+ *  ⚠ 2026-09-07 에 공유 부품으로 옮기면서 한 번 풀어 썼다가 되돌렸다. */
+const cellWord = (c: MrOptimizeCell): string =>
+  `${c.lookback}일 · ${Number(c.entryZ.toFixed(1))}/${Number(c.exitZ.toFixed(1))}/${Number(c.stopZ.toFixed(1))}σ · ${entryWord(c.entryMode)}`;
+
+/** TOP 5 **+ 지금 칸**. 지금 칸이 다섯 안이면 다섯 줄, 밖이면 여섯 줄이다.
+ *
+ *  다섯만 적으면 「내 칸이 몇 등인가」를 표에서 못 찾는다 — 카드에 등수는
+ *  적히지만 그 등수의 수가 안 보이면 «얼마나 뒤인가» 를 말할 수 없다. 붙이는
+ *  줄은 자기 실제 등수를 달고 선다(6등이라고 적지 않는다). */
+function optRows(ranked: MrOptimizeCell[]): { c: MrOptimizeCell; n: number }[] {
+  const rows = ranked.slice(0, 5).map((c, i) => ({ c, n: i + 1 }));
+  const at = ranked.findIndex((c) => c.current);
+  if (at >= 5) rows.push({ c: ranked[at]!, n: at + 1 });
+  return rows;
+}
+
+export type OptimizePaneProps = {
+  /** 격자 — 아직 안 돌렸으면 `undefined`(창의 `useState<MrOptimizeRun>()` 그대로). */
+  opt: MrOptimizeRun | undefined;
+  /** 못 돌린 이유 — 없으면 `undefined`(창의 `useState<string>()` 그대로). */
+  error: string | undefined;
+  running: boolean;
+  rankKey: MrRankKey;
+  onRankKey: (k: MrRankKey) => void;
+  span: MrSpan;
+  /** 머리 카드가 **실가격**인가 — 격자는 늘 엔진 근사라, 참이면 각주가 「같은
+   *  조건이라도 수가 달라요」를 더 적는다. */
+  headReal: boolean;
+  onRun: () => void;
+  onAdopt: (c: MrOptimizeCell) => void;
+  /** 안 돌렸을 때의 안내 — 칸 수와 «안 흔드는 것» 을 창이 정한다. */
+  intro: string;
+  /** 창별 경고 한 문장 — 없으면 공통 각주만 선다. */
+  extraNote?: string;
+};
+
+export function OptimizePane({
+  opt, error, running, rankKey, onRankKey, span, headReal,
+  onRun, onAdopt, intro, extraNote,
+}: OptimizePaneProps) {
+  const ranked = useMemo(
+    () => (opt ? rankCells(opt.cells, rankKey) : []),
+    [opt, rankKey],
+  );
+  const best = ranked[0];
+  const curRank = ranked.findIndex((c) => c.current);
+  const rank = MR_RANK_KEYS.find((k) => k.v === rankKey)!;
+
+  return (
+    <Panel
+      title="근사 최적화"
+      sub={opt
+        ? `${opt.cells.length}칸 · ${MR_SPAN_LABEL[span]} 채점 · 엔진 근사`
+        : '룩백·진입·청산·손절·진입 규칙의 프리셋을 전부 돌려요'}
+      aside={
+        <HStack gap={1} alignItems="center">
+          {opt ? (
+            <Box className="sr-tabs-neutral">
+              <Segmented
+                label="순위 기준"
+                value={rankKey}
+                options={MR_RANK_KEYS.map((k) => ({
+                  value: k.v, label: k.label, title: k.help,
+                }))}
+                onChange={(v: MrRankKey) => onRankKey(v)}
+              />
+            </Box>
+          ) : null}
+          <button
+            type="button"
+            className="sr-pillbtn"
+            data-fill
+            disabled={running}
+            onClick={onRun}
+          >
+            {running ? '격자 도는 중…' : opt ? '다시 돌리기' : '최적화 실행'}
+          </button>
+        </HStack>
+      }
+    >
+      {error ? (
+        <Text font="body" as="p" className="sr-up">
+          격자를 못 돌렸어요 — {error}
+        </Text>
+      ) : !opt ? (
+        <Text font="body" as="p" color="fgMuted">{intro}</Text>
+      ) : !best ? (
+        <Text font="body" as="p" color="fgMuted">
+          이 구간에서 설 수 있는 칸이 없어요 — 이력이 룩백보다 짧아요.
+        </Text>
+      ) : (
+        <VStack gap={1} width="100%">
+          {/* 1등 한 벌 — 「근사 최적화 세트의 결과」. 지금 칸과 나란히 적어야
+              «바꿀 값이 있나» 가 한 줄로 읽힌다. */}
+          <HStack className="sr-stats" width="100%" flexWrap="wrap">
+            <StatColumn title={`최적 세트 · ${rank.label} 1등`}>
+              <Stat label="조건" value={cellWord(best)} note={best.current ? '지금 노브예요' : undefined} />
+              <Stat
+                label={rank.label}
+                value={rankKey === 'totalPnl' ? fmtKrw(best.totalPnl) : fmtRatio(best[rankKey])}
+              />
+              <Stat
+                label="총손익"
+                value={fmtKrw(best.totalPnl)}
+                tone={best.totalPnl > 0 ? 'up' : best.totalPnl < 0 ? 'down' : undefined}
+              />
+              <Stat label="최대 낙폭" value={fmtKrw(-best.maxDrawdown)} />
+              <Stat label="거래" value={String(best.numTrades)} />
+              {/* 지금 칸이 몇 등인가 — 이 표의 존재 이유다. 1등이면 그 사실이
+                  「바꿀 것이 없다」는 답이고, 뒤쪽이면 얼마나 뒤인지가 답이다. */}
+              <Stat
+                label="지금 칸"
+                value={curRank < 0 ? '—' : `${curRank + 1}등`}
+                note={curRank < 0 ? '격자 밖이에요' : `${ranked.length}칸 중`}
+              />
+            </StatColumn>
+          </HStack>
+
+          {/* TOP 5 매트릭스 — 조건 다섯 열 + 지표 열. 표는 캐논(CDS Table),
+              머리 활자는 `headFont`(소문자가 있으면 legal — CDS caption 이
+              대문자화를 걸어 「bp」가 「BP」가 된다). */}
+          <Box className="sr-mr-drawertable" width="100%">
+            <Table bordered={false}>
+              <TableHeader sticky>
+                <TableRow>
+                  {OPT_COLS.map((c) => (
+                    <TableCell
+                      key={c.k}
+                      as="th"
+                      scope="col"
+                      className={c.num ? 'sr-num' : undefined}
+                      justifyContent={c.num ? 'flex-end' : undefined}
+                    >
+                      <Text font={headFont(c.label)} as="span" color="fgMuted" noWrap>
+                        {c.label}
+                      </Text>
+                    </TableCell>
+                  ))}
+                  <TableCell as="th" scope="col">
+                    <Text font="caption" as="span" color="fgMuted" noWrap>
+                      채택
+                    </Text>
+                  </TableCell>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {optRows(ranked).map(({ c, n }) => (
+                  <TableRow key={`${c.lookback}-${c.entryZ}-${c.exitZ}-${c.stopZ}-${c.entryMode}`}>
+                    <TableCell className="sr-num" justifyContent="flex-end">
+                      <Text font="label1" as="span" tabularNumbers noWrap>{n}</Text>
+                    </TableCell>
+                    <TableCell>
+                      <Text font="label1" as="span" noWrap>
+                        {c.current ? `${cellWord(c)} · 지금` : cellWord(c)}
+                      </Text>
+                    </TableCell>
+                    <NumCell v={c.calmar} />
+                    <NumCell v={c.sortino} />
+                    <NumCell v={c.martin} />
+                    <NumCell v={c.gpr} />
+                    <NumCell v={c.omega} />
+                    <NumCell v={c.profitFactor} />
+                    <TableCell className="sr-num" justifyContent="flex-end">
+                      <Text
+                        font="label1"
+                        as="span"
+                        tabularNumbers
+                        noWrap
+                        className={c.totalPnl > 0 ? 'sr-up' : c.totalPnl < 0 ? 'sr-down' : undefined}
+                      >
+                        {fmtKrw(c.totalPnl)}
+                      </Text>
+                    </TableCell>
+                    <TableCell className="sr-num" justifyContent="flex-end">
+                      <Text font="label1" as="span" tabularNumbers noWrap>
+                        {fmtKrw(-c.maxDrawdown)}
+                      </Text>
+                    </TableCell>
+                    <TableCell className="sr-num" justifyContent="flex-end">
+                      <Text font="label1" as="span" tabularNumbers noWrap>
+                        {c.numTrades}
+                      </Text>
+                    </TableCell>
+                    <TableCell>
+                      <button
+                        type="button"
+                        className="sr-pillbtn"
+                        disabled={c.current}
+                        onClick={() => onAdopt(c)}
+                      >
+                        {/* 「채택」 두 글자다 [실측 2026-09-04]. 「노브에 넣기」로
+                            두면 이 열이 열 중 가장 넓어져 표가 상자를 넘고, 넘친
+                            쪽이 하필 **누르는 칸**이라 가로로 밀어야 눌린다.
+                            열 머리가 이미 「채택」이라 동사는 중복이기도 하다.
+                            ⚠ 그래도 넘친다 — 열 폭이 내용에서 오므로(돈 문자열이
+                            넓어지면 표도 넓어진다) 데이터에 달렸고, 실측 47.7px
+                            (FSW-3Y). 여는 결정은 오너 몫으로 남아 있다. */}
+                        {c.current ? '적용됨' : '채택'}
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
+
+          {/* 이 표가 무엇이 아닌지 — 각주가 진다. 안 적으면 화면이 「이 칸이
+              최적이다」라고만 말하게 된다. */}
+          <Text font="legal" as="p" color="fgMuted">
+            {`격자는 엔진 근사예요${headReal ? ' — 머리 카드는 실가격이라 같은 조건이라도 수가 달라요' : ''}.`}
+            {' '}비율은 원/원이라 수익률 기반 문헌값과 크기를 직접 비교하면 안 돼요.
+            {' '}같은 구간·같은 표본을 {opt.cells.length}번 잰 값이라 1등은 뽑기의
+            결과이기도 해요 — 2등과의 거리가 그 칸의 신뢰도예요.
+            {extraNote ? ` ${extraNote}` : ''}
+          </Text>
+        </VStack>
+      )}
+    </Panel>
+  );
+}

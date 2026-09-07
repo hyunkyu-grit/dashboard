@@ -10,9 +10,13 @@
  */
 
 import { HStack, VStack } from '@coinbase/cds-web/layout';
+import { TableCell } from '@coinbase/cds-web/tables';
 import { Text } from '@coinbase/cds-web/typography';
 
-import type { MrStrategyTrade } from './api';
+import { fmtKrw } from '@/lib/krw';
+import { Stat, StatColumn } from '@/ui/Stat';
+
+import type { MrPerf, MrStrategyTrade } from './api';
 
 /** 청산 사유의 우리말 — 서버의 어휘를 화면에서 **한 번만** 옮긴다.
  *  우선순위가 곧 이름이다: 손절 > 청산 > 역신호 > 타임스탑. `미청산` 은 판정이
@@ -79,5 +83,86 @@ export function Panel({
       </HStack>
       {children}
     </VStack>
+  );
+}
+
+/** 위험조정 비율 — **두 자리 고정**이고 못 잰 값은 «—» 다 [OWNER 2026-09-04].
+ *
+ *  `null` 은 「그 구간에서 그 지표가 안 선다」이지 「0 이다」가 아니다(낙폭이
+ *  0 이라 Calmar 가 없는 칸, 손실 월이 없어 GPR 이 없는 칸). 0 으로 적으면
+ *  화면이 「최악」이라고 말하는데 사실은 「최선이라 분모가 없다」인 경우가
+ *  섞인다 — 그래서 카드의 note 가 왜 없는지를 같이 적는다.
+ *
+ *  두 자리인 이유는 이 수들이 **원/원**이라서다. 셋째 자리는 Delta 하나만 바꿔도
+ *  움직이는 자리가 아니지만(비율은 Delta 에 불변) 칸 폭만 늘린다.
+ *
+ *  ⚠ 두 창이 같이 쓴다 [2026-09-07] — 낱개 창에 있던 것을 여기로 옮겼다.
+ *  통합 장부도 같은 일곱을 세우게 되면서 두 벌이 될 자리였다(얼라인 8). */
+export const fmtRatio = (v: number | null | undefined): string =>
+  v == null ? '—' : v.toFixed(2);
+
+/** 비율 한 칸 — 못 잰 값은 «—» 다(0 이 아니다 — `fmtRatio` 머리의 그 근거). */
+export function NumCell({ v }: { v: number | null }) {
+  return (
+    <TableCell className="sr-num" justifyContent="flex-end">
+      <Text font="label1" as="span" tabularNumbers noWrap>
+        {fmtRatio(v)}
+      </Text>
+    </TableCell>
+  );
+}
+
+/** **절대수익형 일곱** — 두 창이 같은 카드를 세운다 [OWNER 2026-09-04 · 2026-09-07].
+ *
+ *  분모가 저마다 다른 것이 이 열의 요점이다. 하나가 나쁘고 하나가 좋으면
+ *  «어느 축에서» 를 묻게 되고, 그게 절대수익형 평가가 샤프 한 칸으로는 못
+ *  하던 일이다.
+ *
+ *  못 잰 값은 «—» 이고 **왜 없는지**를 note 가 적는다 — 「손실 난 달이 없어요」
+ *  와 「월 버킷이 모자라요」는 다른 사실인데 둘 다 null 이다.
+ *
+ *  단위는 **원/원**이다(AUM 이 없다) — 문헌의 수익률 기반 값과 크기를 직접
+ *  비교하면 안 되고, 그 사실은 이 열을 감싸는 화면의 각주가 말한다. */
+export function RiskAdjusted({ perf }: { perf: MrPerf }) {
+  return (
+    <StatColumn title="위험조정">
+      <Stat
+        label="Sortino"
+        value={fmtRatio(perf.sortino)}
+        note={perf.sortino == null ? '손실 난 날이 없어요' : '하방편차 · 연'}
+      />
+      <Stat
+        label="Calmar"
+        value={fmtRatio(perf.calmar)}
+        note={perf.calmar == null ? '낙폭이 없었어요' : '연환산 ÷ 최대낙폭'}
+      />
+      <Stat
+        label="Martin"
+        value={fmtRatio(perf.martin)}
+        note={perf.martin == null ? '낙폭이 없었어요' : '연환산 ÷ Ulcer'}
+      />
+      <Stat label="Ulcer" value={fmtKrw(-perf.ulcer)} note="RMS 낙폭" />
+      {/* GPR 이 없는 이유가 둘이라 화면이 가른다 — 월 버킷이 모자란 것과
+          손실 월이 하나도 없는 것은 다른 사실이다. */}
+      <Stat
+        label="GPR"
+        value={fmtRatio(perf.gpr)}
+        note={perf.gpr != null ? '월 버킷 · Schwager'
+          : perf.gprMonths < 2 ? `월 버킷 ${perf.gprMonths}개라 못 세요`
+          : '손실 난 달이 없어요'}
+      />
+      <Stat
+        label="Omega"
+        value={fmtRatio(perf.omega)}
+        note={perf.omega == null ? '손실 난 날이 없어요' : 'θ=0 · 일별'}
+      />
+      <Stat
+        label="Profit Factor"
+        value={fmtRatio(perf.profitFactor)}
+        note={perf.profitFactor == null
+          ? (perf.numTrades ? '진 거래가 없어요' : '거래가 없어요')
+          : '거래 기준'}
+      />
+    </StatColumn>
   );
 }

@@ -677,3 +677,36 @@ describe('이 칸의 이름은 Delta 다 — 화면 어디에서도', () => {
     expect(knob).toMatch(/액면/);
   });
 });
+
+describe('소스 표기는 화면에 안 샌다 — 주석의 문법과 문장의 문법은 다르다', () => {
+  /* [실측 2026-09-07, 브라우저에서]. 이 리포의 주석은 `**강조**` · `«인용»` ·
+     `[OWNER 날짜]` 를 쓴다. 그 표기가 **렌더되는 문자열**에 들어가면 화면에
+     별표와 꺾쇠가 그대로 찍힌다 — 실제로 찍혀 있었다:
+
+       「액면은 **거래마다 진입일 커브**로 환산해요」   (전략 실험 창 각주)
+
+     주석이라 눈에 안 띄었고, 시험은 주석을 걷고 보므로 잡을 수도 없었다.
+     `src()` 가 주석을 걷은 **뒤에** 이 표기가 남아 있으면 그건 문장 안이다.
+
+     화면의 강조는 「」 다(이 리포의 렌더 텍스트가 이미 쓰는 것). 별표는 없다. */
+
+  const FILES = [
+    'src/mr/BookWindow.tsx', 'src/mr/StrategyWindow.tsx', 'src/mr/OptimizePane.tsx',
+    'src/mr/parts.tsx', 'src/mr/KnobBar.tsx', 'src/mr/api.ts',
+  ];
+
+  it.each(FILES)('%s — 주석을 걷고 나면 소스 표기가 없다', (f) => {
+    const code = src(f);
+    const bad: string[] = [];
+    code.split('\n').forEach((line, i) => {
+      for (const [what, rx] of [
+        ['별표 강조', /\*\*[^*\n]+\*\*/],
+        ['꺾쇠 인용', /«[^»\n]*»/],
+        ['오너 표기', /\[OWNER/],
+      ] as const) {
+        if (rx.test(line)) bad.push(`${i + 1} (${what}): ${line.trim().slice(0, 90)}`);
+      }
+    });
+    expect(bad, `${f} 의 문장에 소스 표기가 남았다`).toEqual([]);
+  });
+});

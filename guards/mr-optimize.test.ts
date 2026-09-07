@@ -41,7 +41,15 @@ const raw = (rel: string) => fs.readFileSync(path.join(root, rel), 'utf8');
 
 describe('절대수익형 성과지표 — 샤프의 자리에 분모가 다른 일곱', () => {
   const api = src('src/mr/api.ts');
-  const win = src('src/mr/StrategyWindow.tsx');
+  /* 카드 일곱은 **공유 부품**이다 [2026-09-07] — 통합 장부가 같은 열을 세우게
+     되면서 `parts.RiskAdjusted` 로 갈라 냈다. 닻이 창에 박혀 있으면 부품을
+     옮긴 날 이 가드가 「없어졌다」고 말한다(실제로 그렇게 죽었다). */
+  const win = src('src/mr/parts.tsx');
+  /* 같은 절의 사실이라도 **사는 집이 다르다** [2026-09-07]. 일곱 카드는 공유
+     부품(`parts`), 회복일은 창의 「성과」 열, 단위 각주는 최적화 절이다. 한
+     파일만 읽으면 옮긴 날 이 가드가 「없어졌다」고 거짓말한다. */
+  const strat = src('src/mr/StrategyWindow.tsx');
+  const pane = src('src/mr/OptimizePane.tsx');
   const py = raw('backend/app/mrmetrics.py');
 
   it('계약이 일곱을 다 싣는다 — 화면이 고를 수 있는 축이 그만큼이다', () => {
@@ -62,13 +70,14 @@ describe('절대수익형 성과지표 — 샤프의 자리에 분모가 다른 
     for (const label of ['Sortino', 'Calmar', 'Martin', 'Ulcer', 'GPR', 'Omega', 'Profit Factor']) {
       expect(win, label).toContain(`label="${label}"`);
     }
-    expect(win).toContain('label="회복일"');
+    /* 회복일은 「위험조정」이 아니라 **성과** 열이다 — 비율이 아니라 일수라서. */
+    expect(strat).toContain('label="회복일"');
     /* 못 잰 이유가 카드에 있다 — 「—」만 서면 0 인지 안 선 것인지 못 가른다. */
     expect(win).toMatch(/손실 난 날이 없어요/);
     expect(win).toMatch(/낙폭이 없었어요/);
     expect(win).toMatch(/손실 난 달이 없어요/);
     expect(win).toMatch(/진 거래가 없어요/);
-    expect(win).toMatch(/아직 회복 못 했어요/);
+    expect(strat).toMatch(/아직 회복 못 했어요/);
   });
 
   it('GPR 은 월 버킷, Omega 는 일별 — 같은 계열에서 재면 한 카드가 중복이다', () => {
@@ -89,12 +98,12 @@ describe('절대수익형 성과지표 — 샤프의 자리에 분모가 다른 
 
   it('비율은 원/원이라는 사실을 화면이 적는다 — 문헌값과 크기를 비교하면 안 된다', () => {
     expect(py).toMatch(/수익률이 아니라 \*\*원\*\*이다/);
-    expect(win).toMatch(/원\/원이라 수익률 기반 문헌값/);
+    /* 화면의 그 문장은 최적화 절 각주가 진다 — 지표 카드 옆에서 읽힌다. */
+    expect(pane).toMatch(/원\/원이라 수익률 기반 문헌값/);
   });
 });
 
 describe('구간은 전역 설정값이고, 성과가 그것을 따라간다', () => {
-  const win = src('src/mr/StrategyWindow.tsx');
   const api = src('src/mr/api.ts');
 
   it('서버가 네 벌을 한 번에 보낸다 — 고르개가 재실행을 안 만든다', () => {
@@ -121,7 +130,12 @@ describe('구간은 전역 설정값이고, 성과가 그것을 따라간다', (
 });
 
 describe('근사 최적화 — 프리셋 격자 · TOP 5 매트릭스 · 채택', () => {
-  const win = src('src/mr/StrategyWindow.tsx');
+  /* 절 전체가 **공유 부품**이다 [2026-09-07] — 두 창(낱개·통합)이 같은 표를
+     세운다. 창이 정하는 것은 안내·경고 문장 둘뿐이다. */
+  const win = src('src/mr/OptimizePane.tsx');
+  /* 부품이 아니라 **부르는 쪽**이 지는 사실이 있다 — 안내 문장·채택 처리·
+     격자 버리기는 창마다 다르므로 창에서 잰다. */
+  const strat = src('src/mr/StrategyWindow.tsx');
   const api = src('src/mr/api.ts');
   const main = raw('backend/app/main.py');
 
@@ -143,7 +157,8 @@ describe('근사 최적화 — 프리셋 격자 · TOP 5 매트릭스 · 채택'
     expect(grid).toMatch(/cost_bp=base\["costBp"\]/);
     expect(grid).toMatch(/notional=base\["notional"\]/);
     expect(grid).not.toMatch(/for cb in/);
-    expect(win).toMatch(/비용·Delta 와 실전 규칙은 안 흔들어요/);
+    /* 안내 문장은 창이 준다(`intro`) — 창마다 칸 수가 다를 수 있다. */
+    expect(strat).toMatch(/비용·Delta 와 실전 규칙은 안 흔들어요/);
   });
 
   it('정렬은 화면이 한다 — 서버는 칸마다 지표를 다 실어 보낸다', () => {
@@ -170,7 +185,7 @@ describe('근사 최적화 — 프리셋 격자 · TOP 5 매트릭스 · 채택'
   });
 
   it('채택은 노브에만 꽂고 실행하지 않는다 — 두 회계가 갈리는 순서를 지킨다', () => {
-    const fn = win.slice(win.indexOf('const adopt = useCallback'), win.indexOf('const stale = useMemo'));
+    const fn = strat.slice(strat.indexOf('const adopt = useCallback'), strat.indexOf('const stale = useMemo'));
     expect(fn).toMatch(/setKnobs/);
     expect(fn).not.toMatch(/exec\(\)/);
     expect(fn).not.toMatch(/fetchMrStrategy/);
@@ -185,8 +200,8 @@ describe('근사 최적화 — 프리셋 격자 · TOP 5 매트릭스 · 채택'
   it('실행·종목·구간이 바뀌면 격자를 버린다 — 딴 조건의 순위를 들고 있지 않는다', () => {
     /* 세 자리 전부에서 비운다. 하나라도 빠지면 표가 옛 조건의 순위를 이
        실행의 것처럼 적는다. */
-    expect((win.match(/setOpt\(undefined\)/g) ?? []).length).toBeGreaterThanOrEqual(3);
-    expect(win).toMatch(/\}, \[span\]\);/);
+    expect((strat.match(/setOpt\(undefined\)/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    expect(strat).toMatch(/\}, \[span\]\);/);
   });
 
   it('부품은 캐논이다 — Stat 스트립 · CDS Table · 공용 Segmented · 알약', () => {
@@ -194,8 +209,12 @@ describe('근사 최적화 — 프리셋 격자 · TOP 5 매트릭스 · 채택'
     expect(win).toMatch(/from '@coinbase\/cds-web\/tables'/);
     expect(win).toMatch(/from '@\/ui\/ControlCard'/);
     /* 액션은 채움 알약(`data-fill`) — 이 절의 유일한 액션이 「최적화 실행」이다. */
-    const pane = win.slice(win.indexOf('const optPane'), win.indexOf('const reconWhy'));
-    expect(pane).toMatch(/className="sr-pillbtn"[\s\S]{0,80}data-fill/);
+    expect(win).toMatch(/className="sr-pillbtn"[\s\S]{0,80}data-fill/);
+    /* 두 창이 **이 부품을 부른다** — 한쪽이 자기 판을 다시 만들면 갈린다. */
+    for (const f of ['src/mr/StrategyWindow.tsx', 'src/mr/BookWindow.tsx']) {
+      expect(src(f), f).toMatch(/<OptimizePane[\s/>]/);
+      expect(src(f), f).toMatch(/from '\.\/OptimizePane'/);
+    }
   });
 });
 

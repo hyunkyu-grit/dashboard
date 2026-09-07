@@ -1101,6 +1101,124 @@ def _mr_optimize(dates: list[str], vals: list[float], base: dict,
     }
 
 
+def _mr_book_optimize(legs: list[dict], base: dict, *, span: str,
+                      time_stop: int | None, reverse_exit: bool,
+                      close_open_at_end: bool) -> dict:
+    """**통합 장부의 근사 최적화 격자** [OWNER 2026-09-07 — "통합 장부에도
+    마찬가지로 적용해줘"].
+
+    낱개 격자(`_mr_optimize`)와 **같은 프리셋·같은 채점자**를 쓴다. 다른 것은
+    한 칸의 값이 계열 하나가 아니라 **아홉을 더한 장부**라는 것뿐이다: 칸마다
+    아홉을 돌려 날짜로 포개고(`mrbook._pooled` 와 같은 사상), 그 통합 곡선 위에서
+    `mrmetrics.score` 를 부른다.
+
+    ## 왜 아홉을 각자 채점해서 더하지 않나
+
+    Calmar·Sortino 는 **비선형**이라 다리별 값의 평균이 장부의 값이 아니다.
+    낙폭은 특히 그렇다 — 아홉이 서로 다른 날 물속에 있으면 장부의 최대낙폭은
+    아홉 낙폭의 합보다 훨씬 작다. 그 차이가 이 창이 존재하는 이유(«묶어서
+    나아졌나»)이므로, 채점은 반드시 **더한 뒤에** 한다.
+
+    ## 값 — 이 표는 화면이 이미 「안 한다」고 적어 둔 자리였다
+
+    2026-09-01 판의 각주는 「노브 민감도(이웃 칸)는 두 창 다 없어요 — 여기서는
+    한 칸마다 만기 아홉을 다시 돌아야 하고, 전진분석이 파라미터 선택에 값을 못
+    더한다는 실측이 있어요」였다. 오너가 그 결정을 뒤집었으므로(2026-09-07)
+    **각주도 같이 고친다** — 화면이 자기가 하는 일을 「안 한다」고 말하면 안 된다.
+    남는 경고는 그대로다: 이 격자는 **표본내**이고, 1등 칸을 그대로 믿으면
+    과적합이 만기 아홉 배로 붙는다. 화면이 그 문장을 진다.
+    """
+    dates = sorted({t for leg in legs for t in leg["dates"]})
+    at = {t: i for i, t in enumerate(dates)}
+    cut = mrm.span_cut(dates, dict(mrm.SPANS).get(span))
+    start = mrm.index_at(dates, cut)
+
+    opts: dict[str, list] = {}
+    for knob in ("lookback", "entryZ", "exitZ", "stopZ"):
+        o = list(mr_mod.STRATEGY_PRESETS[knob])
+        if base[knob] not in o:
+            o = sorted(o + [base[knob]])
+        opts[knob] = o
+    modes = list(MR_ENTRY_MODES_ALL)
+    if base["entryMode"] not in modes:
+        modes.append(base["entryMode"])
+
+    n_cells = len(modes)
+    for o in opts.values():
+        n_cells *= len(o)
+    if n_cells > MR_OPT_MAX_CELLS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"격자가 너무 커요: {n_cells}칸 (최대 {MR_OPT_MAX_CELLS})")
+
+    cells: list[dict] = []
+    for lb in opts["lookback"]:
+        lb = int(lb)
+        # 룩백이 같은 칸이 **같은 밴드**를 쓴다 — 다리마다 한 번 재서 나눠 준다
+        # (`mrbacktest.simulate` 의 `roll` 손잡이. 산술은 안 바뀐다). 이걸 안
+        # 하면 아홉 × 54칸이 밴드를 처음부터 다시 잰다.
+        rolls = {}
+        usable = []
+        for leg in legs:
+            if len(leg["vals"]) >= lb + 1 and lb >= 2:
+                rolls[leg["id"]] = mrbt.rolling_series(leg["vals"], lb)
+                usable.append(leg)
+        if not usable:
+            continue
+        for ez in opts["entryZ"]:
+            for xz in opts["exitZ"]:
+                for sz in opts["stopZ"]:
+                    for md in modes:
+                        daily = [0.0] * len(dates)
+                        bcost = [0.0] * len(dates)
+                        raw: list[dict] = []
+                        for leg in usable:
+                            r = mrbt.simulate(
+                                leg["dates"], leg["vals"], lookback=lb,
+                                entry_z=ez, exit_z=xz, stop_z=sz,
+                                cost_bp=base["costBp"], notional=base["notional"],
+                                allow_dirs=tuple(leg["dirs"]["allowed"]),
+                                carry=leg["carryKrw"], entry_mode=md,
+                                gate=leg["gate"], time_stop=time_stop,
+                                cost_bp_series=leg["costSeries"],
+                                reverse_exit=reverse_exit,
+                                close_open_at_end=close_open_at_end,
+                                tradable_dv=leg["tradable"],
+                                roll=rolls[leg["id"]])
+                            for j, pt in enumerate(r["points"]):
+                                i = at[leg["dates"][j]]
+                                daily[i] += pt["dailyPnl"]
+                                bcost[i] += pt["barCost"]
+                            raw.extend(r["trades"])
+                        pts = [{"dailyPnl": daily[i], "barCost": bcost[i]}
+                               for i in range(len(dates))]
+                        m = mrm.score(dates, pts, raw, start, base["costBp"])
+                        cells.append({
+                            "lookback": lb, "entryZ": ez, "exitZ": xz,
+                            "stopZ": sz, "entryMode": md,
+                            # 「내 칸」을 표에서 못 찾으면 순위가 아무 말도 못 한다.
+                            "current": (lb == base["lookback"] and ez == base["entryZ"]
+                                        and xz == base["exitZ"] and sz == base["stopZ"]
+                                        and md == base["entryMode"]),
+                            # 몇 만기가 실제로 섰나 — 룩백이 길면 짧은 계열이
+                            # 빠질 수 있고, 그때 그 칸은 **다른 장부**다.
+                            "legs": len(usable),
+                            **{k: m[k] for k in (
+                                "totalPnl", "maxDrawdown", "sortino", "calmar",
+                                "gpr", "omega", "profitFactor", "ulcer",
+                                "martin", "recoveryDays", "recovered",
+                                "winRate", "numTrades", "breakevenCostBp",
+                                "breakevenCostMult")},
+                        })
+    return {
+        "span": span,
+        "from": dates[start] if dates else None,
+        "to": dates[-1] if dates else None,
+        "days": len(dates) - start,
+        "cells": cells,
+    }
+
+
 def _mr_check_knobs(lookback: int, entryZ: float, exitZ: float,
                     stopZ: float, costBp: float, notional: float,
                     entryMode: str, timeStop: int, costModel: str,
@@ -2419,6 +2537,61 @@ def mr_recon(id: str, entry: str, exit: str, notional: float = 1_000_000.0,
     rec["principal"] = {"krw": round(principal),
                         "pv01": _mr_pv01_at(entry_d, TENOR_T[tenor])}
     return rec
+
+
+@router.get("/api/mr/book/optimize")
+def mr_book_optimize(span: str = "all",
+                     lookback: int = 60, entryZ: float = 2.0,
+                     exitZ: float = 0.5, stopZ: float = 3.5,
+                     costBp: float = 0.5, notional: float = 1_000_000.0,
+                     carry: bool = True, entryMode: str = "level",
+                     timeStop: int = 0, costModel: str = "flat",
+                     regime: str = "none", reverseExit: bool = False,
+                     countOpen: bool = False,
+                     fundingBasis: str = funding.DEFAULT_BASIS,
+                     fundingSpreadBp: float = funding.DEFAULT_SPREAD_BP) -> dict:
+    """통합 장부의 근사 최적화 격자 [OWNER 2026-09-07].
+
+    노브는 `/api/mr/book` 과 **완전히 같다**(구간만 더 받는다). 두 라우트가 다른
+    기본값에서 열리면 「지금 칸」이 격자 안에서 자기 자리를 못 찾는다.
+
+    낱개 격자보다 아홉 배 비싸다 — 별도 라우트인 이유가 그것이고(누를 때만
+    돈다), 산술과 한계는 `_mr_book_optimize` 머리에 있다.
+    """
+    if span not in dict(mrm.SPANS):
+        raise HTTPException(status_code=422, detail=f"모르는 구간이에요: {span}")
+    _mr_check_knobs(lookback, entryZ, exitZ, stopZ, costBp, notional,
+                    entryMode, timeStop, costModel, regime)
+    spec = _funding_spec(fundingBasis, fundingSpreadBp)
+
+    legs: list[dict] = []
+    excluded: list[dict] = []
+    for sid, label in mrbook.bss_series():
+        try:
+            legs.append(_mr_leg(
+                sid, lookback=lookback, entryZ=entryZ, exitZ=exitZ, stopZ=stopZ,
+                costBp=costBp, notional=notional, carry=carry,
+                entryMode=entryMode, timeStop=timeStop, costModel=costModel,
+                regime=regime, reverseExit=reverseExit, countOpen=countOpen,
+                spec=spec))
+        except (HTTPException, KeyError, ValueError) as exc:
+            detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+            excluded.append({"id": sid, "label": label, "reason": str(detail)})
+    if not legs:
+        raise HTTPException(status_code=422,
+                            detail="통합할 수 있는 만기가 하나도 없어요")
+
+    got = _mr_book_optimize(
+        legs,
+        {"lookback": lookback, "entryZ": entryZ, "exitZ": exitZ, "stopZ": stopZ,
+         "costBp": costBp, "notional": notional, "entryMode": entryMode},
+        span=span, time_stop=timeStop or None, reverse_exit=reverseExit,
+        close_open_at_end=countOpen)
+    # 격자는 **엔진 근사**다(낱개와 같은 계약) — 머리 카드가 실가격이면 둘이
+    # 다르고, 화면이 그 사실을 적어야 한다.
+    return {"id": mrbook.BOOK_ID, "label": mrbook.BOOK_LABEL, "real": False,
+            "headReal": all(leg["real"] for leg in legs),
+            "excluded": excluded, **got}
 
 
 @router.get("/api/mr/book")

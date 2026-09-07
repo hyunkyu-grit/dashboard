@@ -12,6 +12,7 @@
 import { BacktestUnavailable } from '@/lib/api';
 import {
   mrBoardUrl,
+  mrBookOptimizeUrl,
   mrBookUrl,
   mrHistoryUrl,
   mrOptimizeUrl,
@@ -675,7 +676,10 @@ export interface MrStrategyRun {
  * 창과 **같은 함수**(`main._mr_leg`)라, 통합의 수는 낱개 아홉의 합과 갈릴 수
  * 없다. */
 
-/** 다리 하나의 성적 — 만기 순으로 늘어선다. */
+/** 다리 하나의 성적 — 만기 순으로 늘어선다.
+ *
+ *  ⚠ 이건 **전체 기간**의 값이다(`MrBookRun.legs`). 구간을 따라가는 판은
+ *  `MrBookSpan.legs` 에 따로 있고, 화면이 세우는 것은 그쪽이다. */
 export interface MrBookLeg {
   id: string;
   label: string;
@@ -725,6 +729,60 @@ export interface MrBookOpen {
   bars: number;
 }
 
+/** 구간 하나의 통합 장부 성적 — 성과 카드 + 만기별 + 「묶어서 나아졌나」.
+ *
+ *  낱개 창의 `MrSpanPerf` 와 같은 자리이고 같은 `MrPerf` 를 편다. 통합에만
+ *  있는 셋이 더 붙는다. */
+export interface MrBookSpan extends MrPerf {
+  span: MrSpan;
+  /** 만기별 성적 — **이 구간에서** 잰다. 자르는 날은 장부 달력에서 한 번
+   *  정하고 만기마다 그 날로 색인을 찾는다(만기마다 마지막 봉이 다르다). */
+  legs: MrBookSpanLeg[];
+  /** 통합이 개별보다 나은가 — 축이 **Calmar** 다 [OWNER 2026-09-07].
+   *
+   *  샤프판이던 2026-09-01 판에서는 바로 아래 「유효 독립」과 산술이 맞물렸다
+   *  (SR 은 1/σ 로 움직이므로 통합/개별 ≈ √N_eff 가 검산이었다). Calmar 의
+   *  분모는 최대낙폭이라 그 검산은 **안 선다** — 최대낙폭은 경로의 한 점이라
+   *  √N 으로 줄지 않는다. 지금 이 절이 답하는 것은 «묶어서 낙폭 대비가
+   *  나아졌나» 이고, 유효 독립은 그 옆에서 사정을 말한다. */
+  legCalmar: {
+    median: number | null;
+    min: number | null;
+    max: number | null;
+    positive: number;
+    /** **잰** 다리 수. 낙폭이 0 이면 Calmar 가 없어서 안 센다(0 으로 채우면
+     *  그 다리가 «최악» 으로 줄을 서서 중앙값을 끌어내린다). */
+    n: number;
+    /** 전체 다리 수 — `n` 과 다르면 화면이 그 사실을 적는다. */
+    of: number;
+  };
+  /** 통합의 값어치 — 쌍상관이 낮을수록 아홉이 진짜 아홉으로 센다. */
+  diversification: {
+    meanPairCorr: number | null;
+    /** N / (1 + (N−1)·ρ̄). 상관이 0 이면 N, 1 이면 1 이다. */
+    effectiveN: number | null;
+    n: number;
+    /** 이 상관을 잰 봉 수 — 짧으면 값을 믿으면 안 된다(1개월이면 스물 남짓). */
+    days: number;
+  };
+}
+
+/** 구간 안에서 잰 만기 하나 — 표의 한 줄. */
+export interface MrBookSpanLeg {
+  id: string;
+  label: string;
+  tenor: string;
+  totalPnl: number;
+  maxDrawdown: number;
+  /** 「묶어서 나아졌나」와 **같은 축**이다 — 표와 판정이 다른 자를 쓰면 안 된다. */
+  calmar: number | null;
+  sortino: number | null;
+  winRate: number | null;
+  numTrades: number;
+  avgBars: number | null;
+  share: number | null;
+}
+
 export interface MrBookRun {
   id: string;
   label: string;
@@ -747,25 +805,20 @@ export interface MrBookRun {
   gated: { spells: number; days: number };
   /** 못 선 만기 — 조용히 빠지지 않는다(보드의 exclusions 문법). */
   excluded: { id: string; label: string; reason: string }[];
+  /** 구간 넷을 **한 번에** [OWNER 2026-09-07] — 낱개 창의 `spans` 와 같은 계약이고
+   *  같은 이유다(고르개가 서버에 다시 안 묻는다). 통합에서는 여기에 만기별 성적과
+   *  「묶어서 나아졌나」까지 들어 있다 — 그 셋이 다 채점 구간을 따라가야 한다.
+   *
+   *  ⚠ 구 백엔드에는 없다(`undefined`) — 그때 화면은 조용히 전체 기간으로
+   *  떨어지지 않고 **왜 없는지**를 적는다. */
+  spans?: MrBookSpan[];
   diag: {
     exits: MrStrategyRun['diag']['exits'];
     payoff: MrStrategyRun['diag']['payoff'];
+    /** **표본 삼분할은 항상 전체 위에 선다** [OWNER 2026-09-07] — «시대가
+     *  바뀌어도 사나» 를 재는 안정성 검사라 채점 구간과 무관하다. 「지난 1개월」을
+     *  다시 셋으로 쪼개면 한 조각이 열흘이라 수가 뜻을 잃는다. */
     periods: MrStrategyRun['diag']['periods'];
-    /** 통합의 값어치 — 쌍상관이 낮을수록 아홉이 진짜 아홉으로 센다. */
-    diversification: {
-      meanPairCorr: number | null;
-      /** N / (1 + (N−1)·ρ̄). 상관이 0 이면 N, 1 이면 1 이다. */
-      effectiveN: number | null;
-      n: number;
-    };
-    /** 개별 다리의 SR — 통합 SR 옆에 있어야 «묶어서 나아졌나» 가 판정된다. */
-    legSharpe: {
-      median: number | null;
-      min: number | null;
-      max: number | null;
-      positive: number;
-      n: number;
-    };
   };
   summary: {
     totalPnl: number;
@@ -789,6 +842,38 @@ export interface MrBookRun {
     peakT: string | null;
     peakNotional: number;
   };
+}
+
+/** 통합 장부의 근사 최적화 격자 [OWNER 2026-09-07].
+ *
+ *  낱개(`MrOptimizeRun`)와 **같은 칸**을 쓴다 — 순위·정렬·표가 같은 부품
+ *  (`OptimizePane`)이라 모양이 갈리면 안 된다. 다른 것은 한 칸의 값이 계열
+ *  하나가 아니라 아홉을 더한 장부라는 것뿐이고, 그건 라우트가 가른다. */
+export interface MrBookOptimizeRun {
+  id: string;
+  label: string;
+  /** 격자는 늘 **엔진 근사**다(162칸을 실가격으로 못 돈다). */
+  real: false;
+  /** 머리 카드가 실가격인가 — 아홉이 다 실가격일 때만 참이다. */
+  headReal: boolean;
+  span: MrSpan;
+  from: string | null;
+  to: string | null;
+  days: number;
+  excluded: { id: string; label: string; reason: string }[];
+  /** 칸마다 `legs`(그 칸에서 실제로 선 만기 수)가 더 붙는다 — 룩백이 길면
+   *  짧은 계열이 빠질 수 있고, 그때 그 칸은 **다른 장부**다. */
+  cells: (MrOptimizeCell & { legs: number })[];
+}
+
+/** 통합 장부 격자 — 누를 때만 돈다(아홉 배 비싸다, 실측 4.4초). */
+export async function fetchMrBookOptimize(
+  p: MrStrategyParams,
+  span: MrSpan,
+): Promise<MrBookOptimizeRun> {
+  const q = strategyQuery(p);
+  q.set('span', span);
+  return get<MrBookOptimizeRun>(mrBookOptimizeUrl(q.toString()), 'mr book optimize');
 }
 
 /** 노브 → 쿼리. 낱개 창과 **한 곳**에서 만든다 — 두 벌이면 한쪽만 늙는다. */

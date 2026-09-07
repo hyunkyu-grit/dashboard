@@ -128,18 +128,76 @@ describe('통합 장부 창이 말해야 하는 것', () => {
     expect(win).toMatch(/book\.idleShare/);
   });
 
-  it('묶어서 나아졌는지를 답한다 — 개별 SR·쌍상관·유효 독립', () => {
-    expect(win).toMatch(/legSharpe\.median/);
+  it('묶어서 나아졌는지를 답한다 — 개별 Calmar·쌍상관·유효 독립', () => {
+    /* 축이 샤프 → **Calmar** 로 갈렸다 [OWNER 2026-09-07]. 그러면서 이 절이
+       답하는 질문도 갈렸다: 샤프판에서는 「유효 독립」과 산술이 맞물렸지만
+       (SR 은 1/σ 라 통합/개별 ≈ √N_eff 가 검산), Calmar 의 분모는 최대낙폭이라
+       그 검산이 안 선다. 화면이 그 사실을 적는지도 같이 잰다. */
+    expect(win).toMatch(/legCalmar\.median/);
     expect(win).toMatch(/diversification\.meanPairCorr/);
     expect(win).toMatch(/diversification\.effectiveN/);
+    /* **잰 다리 수**가 화면에 있어야 한다 — 낙폭이 0 인 다리는 Calmar 가 없고,
+       0 으로 채우면 그 다리가 «최악» 으로 줄을 서서 중앙값을 끌어내린다. */
+    expect(win).toMatch(/legCalmar\.of/);
+    /* 상관을 **몇 봉에서 쟀나** — 짧은 구간에서는 값을 믿으면 안 된다. */
+    expect(win).toMatch(/diversification\.days/);
+  });
+
+  it('구간은 전역 설정값이다 — 성과·만기별·묶어서 나아졌나가 같이 따라간다', () => {
+    /* [OWNER 2026-09-07 — "통합 장부에도 마찬가지로 적용해줘"]. 낱개 창과 같은
+       계약이고 같은 이유다: 서버가 네 벌을 한 번에 보내므로 고르개가 재실행도
+       stale 도 안 만든다. */
+    expect(win).toMatch(/onSpanChange=\{setSpan\}/);
+    expect(win).toMatch(/run\?\.spans\?\.find/);
+    expect(raw('backend/app/mrbook.py')).toMatch(/"spans": _spans\(/);
+    /* 한 화면이 **두 구간을 말하지 않는다** — 카드가 구간이면 만기별 표도
+       구간이어야 한다. 표는 `perf.legs`(구간) 이지 `run.legs`(전체)가 아니다. */
+    expect(win).toMatch(/legs=\{perf\.legs\}/);
+  });
+
+  it('표본 삼분할만은 **항상 전체 위에** 선다 — 이름이 그 사실을 말한다', () => {
+    /* [OWNER 2026-09-07]. 안정성 검사라 채점 구간과 무관하다 — 「지난 1개월」을
+       다시 셋으로 쪼개면 한 조각이 열흘이라 수가 뜻을 잃는다. 옆 카드가 「지난
+       1분기」인데 이 열만 2020년부터이므로 **제목과 각주가 그것을 적어야** 한다. */
+    expect(win).toMatch(/title="표본 삼분할"/);
+    expect(win).toMatch(/고른 구간과 무관하게/);
+    /* 서버도 전체 위에서 낸다 — 화면만 이름을 바꾸면 거짓말이 된다. */
+    expect(raw('backend/app/mrbook.py')).toMatch(/표본 삼분할은 항상 전체 위에 선다/);
   });
 
   it('못 선 만기를 조용히 빼지 않는다', () => {
     expect(win).toMatch(/run\.excluded/);
   });
 
-  it('없는 것도 적는다 — 이웃 칸이 왜 없는지', () => {
-    expect(win).toMatch(/이웃 칸/);
+  it('노브 민감도가 **생겼고**, 각주가 그 사실을 따라갔다', () => {
+    /* 2026-09-01 판의 각주는 「노브 민감도(이웃 칸)는 두 창 다 없어요」였다.
+       오너가 2026-09-07 에 그 결정을 뒤집었으므로 각주도 같이 고쳤다 — 화면이
+       자기가 하는 일을 「안 한다」고 말하면 안 된다. */
+    expect(win).toMatch(/<OptimizePane[\s/>]/);
+    /* 옛 문장을 **인용해서 정정**하는 것은 허용이다(이 리포는 정정 이력을 남긴다).
+       금지되는 것은 그것이 아직 **주장으로 서 있는** 것이라, 「두 창 다 없어요」가
+       나오면 바로 뒤에 정정이 따라붙어야 한다. */
+    const stale = /두 창 다 없어요/.exec(win);
+    if (stale) {
+      expect(win.slice(stale.index, stale.index + 120),
+        '옛 각주가 정정 없이 주장으로 서 있다').toMatch(/이제 사실이 아니에요/);
+    }
+    /* 뒤집힌 것은 **결정**이지 경고가 아니다 — 표본내라는 사실은 그대로 적는다. */
+    expect(win).toMatch(/표본내/);
+    expect(win).toMatch(/전진분석이 파라미터 선택에 값을 못 더한다는/);
+  });
+
+  it('통합 격자는 **더한 뒤에** 채점한다 — 다리별 값의 평균이 아니다', () => {
+    /* Calmar·낙폭은 비선형이라 아홉의 평균이 장부의 값이 아니다. 아홉이 서로
+       다른 날 물속에 있으면 장부의 최대낙폭은 아홉 낙폭의 합보다 훨씬 작고,
+       그 차이가 이 창의 존재 이유(«묶어서 나아졌나»)다. */
+    const main = raw('backend/app/main.py');
+    const fn = main.slice(main.indexOf('def _mr_book_optimize'),
+                          main.indexOf('def _mr_check_knobs'));
+    expect(fn).toMatch(/채점은 반드시 \*\*더한 뒤에\*\* 한다/);
+    /* 더하는 것이 코드에도 있다 — 날짜로 포개고 그 위에서 한 번 잰다. */
+    expect(fn).toMatch(/daily\[i\] \+= pt\["dailyPnl"\]/);
+    expect(fn).toMatch(/m = mrm\.score\(dates, pts, raw, start/);
   });
 
   it('명구 의무 — 재현 도구이고 국고 다리는 민평이다', () => {

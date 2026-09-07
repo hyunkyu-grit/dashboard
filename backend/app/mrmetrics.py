@@ -87,21 +87,45 @@ def _days_in(y: int, m: int) -> int:
     return (dt.date(ny, nm, 1) - dt.date(y, m, 1)).days
 
 
-def span_start(dates: list[str], months: int | None) -> int:
-    """구간의 첫 봉 색인. 전체(`months=None`)면 0.
+def span_cut(dates: list[str], months: int | None) -> str | None:
+    """구간의 **첫 날**(ISO). 전체(`months=None`)면 None.
 
-    마지막 봉에서 달력으로 n개월을 물린 날 **이후 첫 봉**이다 — 봉 수로 세면
-    휴장이 많은 구간이 조용히 길어진다.
+    색인이 아니라 «날짜» 를 내는 자리가 따로 있는 이유는 **장부** 때문이다
+    [2026-09-07]. 통합 장부는 만기 아홉을 더하는데 만기마다 달력이 조금씩
+    다르다(마지막 봉이 3만기는 2026-08-24, 나머지는 09-04 인 실측). 각자
+    `span_start` 를 부르면 **저마다 자기 마지막 봉에서 1년을 물려** 아홉이 서로
+    다른 창을 보게 되고, 그러면 만기별 표의 합이 통합과 안 맞는다.
+
+    그래서 자르는 날은 **장부 달력에서 한 번** 정하고(`span_cut`), 다리마다는
+    그 날로 색인을 찾는다(`index_at`).
     """
     if months is None or not dates:
+        return None
+    return _months_before(dates[-1], months)
+
+
+def index_at(dates: list[str], cut: str | None) -> int:
+    """그 날 **이후 첫 봉**의 색인. `cut` 이 None 이면 0.
+
+    봉 수로 세면 휴장이 많은 구간이 조용히 길어지므로 날짜로 찾는다.
+    """
+    if cut is None or not dates:
         return 0
-    cut = _months_before(dates[-1], months)
     for i, t in enumerate(dates):
         if t >= cut:
             return i
     # 구간 안에 봉이 하나도 없다 — 마지막 봉 하나만 남긴다(빈 구간을 만들지
     # 않는다. 0 개로 두면 아래 산술이 전부 None 이 되어 화면이 통째로 빈다).
     return max(0, len(dates) - 1)
+
+
+def span_start(dates: list[str], months: int | None) -> int:
+    """구간의 첫 봉 색인 — 자기 달력에서 자른다(계열 하나짜리 화면용).
+
+    마지막 봉에서 달력으로 n개월을 물린 날 **이후 첫 봉**이다. 여러 계열을
+    한 창에 세우는 자리에서는 이걸 쓰면 안 된다 — `span_cut` 머리를 보라.
+    """
+    return index_at(dates, span_cut(dates, months))
 
 
 def _downside_dev(xs: list[float]) -> float:

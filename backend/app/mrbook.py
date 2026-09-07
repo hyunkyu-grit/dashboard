@@ -44,6 +44,7 @@ from typing import Any
 
 from . import mr as mr_mod
 from . import mrdiag as mrd
+from . import mrmetrics as mrm
 
 #: 통합 장부의 id·이름 — 보드의 랭킹 **아래**에 따로 서는 한 줄이고, 전략
 #: 실험 창이 이 id 로 열린다. 계열 목록(`mr.SERIES`)에는 **안 넣는다**:
@@ -128,8 +129,8 @@ def watch(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
 # ── 통합 백테스트 ───────────────────────────────────────────────────────────
 
 
-def _pooled(legs: list[dict[str, Any]]) -> tuple[list[str], list[float], list[int]]:
-    """(날짜, 그날 합산 손익, 그날 포지션이 선 다리 수).
+def _pooled(legs: list[dict[str, Any]]) -> tuple[list[str], list[float], list[int], list[float]]:
+    """(날짜, 그날 합산 손익, 그날 포지션이 선 다리 수, 그날 문 비용).
 
     날짜는 **합집합**이다. 어떤 만기가 하루 안 찍힌 날은 그 다리가 0 을 낸 것과
     같게 두는데, 그건 실제로 그날 그 다리를 못 움직였다는 뜻이라 맞는 처리다.
@@ -142,13 +143,18 @@ def _pooled(legs: list[dict[str, Any]]) -> tuple[list[str], list[float], list[in
     at = {t: i for i, t in enumerate(dates)}
     daily = [0.0] * len(dates)
     live = [0] * len(dates)
+    #: 그날 문 비용 — 손익분기(`mrmetrics.score`)가 «구간 안에서 문 돈» 을
+    #: 분모로 쓴다. 거래 목록에서 세면 미청산 다리의 진입 비용이 빠진다
+    #: (`aggregate` 의 `paid` 가 같은 이유로 봉에서 센다).
+    cost = [0.0] * len(dates)
     for leg in legs:
         for j, p in enumerate(leg["r"]["points"]):
             i = at[leg["dates"][j]]
             daily[i] += p["dailyPnl"]
+            cost[i] += p["barCost"]
             if p["position"] != 0:
                 live[i] += 1
-    return dates, daily, live
+    return dates, daily, live, cost
 
 
 def _curve(daily: list[float]) -> tuple[list[float], float, float]:
@@ -185,12 +191,17 @@ def _corr(a: list[float], b: list[float]) -> float | None:
     return cov / (sa * sb)
 
 
-def _diversification(legs: list[dict[str, Any]], dates: list[str]) -> dict[str, Any]:
-    """쌍상관의 평균과 «유효 독립 계열 수».
+def _diversification(legs: list[dict[str, Any]], dates: list[str],
+                     start: int = 0) -> dict[str, Any]:
+    """쌍상관의 평균과 «유효 독립 계열 수» — **구간 안에서**.
 
     N_eff = N / (1 + (N−1)·ρ̄) — 상관이 0 이면 N, 1 이면 1 이 되는 그 표준식이다.
-    이 수가 통합의 값어치를 말한다: 아홉을 더해도 유효하게는 셋뿐이면, 통합 SR
-    이 개별보다 크게 나아지지 않는 것이 정상이고 그건 결함이 아니라 사실이다.
+    이 수가 통합의 값어치를 말한다: 아홉을 더해도 유효하게는 셋뿐이면, 통합이
+    개별보다 크게 나아지지 않는 것이 정상이고 그건 결함이 아니라 사실이다.
+
+    ⚠ **짧은 구간에서는 상관이 상관을 못 잰다.** 「지난 1개월」이면 봉이 스물
+    남짓이라 ρ̄ 의 표준오차가 0.2 를 넘는다 — 그 수를 「분산이 좋아졌다」로 읽으면
+    안 된다. 화면이 봉 수를 같이 적어 읽는 사람이 가리게 한다(`days`).
     """
     at = {t: i for i, t in enumerate(dates)}
     series: list[list[float]] = []
@@ -198,7 +209,7 @@ def _diversification(legs: list[dict[str, Any]], dates: list[str]) -> dict[str, 
         v = [0.0] * len(dates)
         for j, p in enumerate(leg["r"]["points"]):
             v[at[leg["dates"][j]]] = p["dailyPnl"]
-        series.append(v)
+        series.append(v[start:])
     pairs = [c for i in range(len(series)) for j in range(i + 1, len(series))
              if (c := _corr(series[i], series[j])) is not None]
     n = len(series)
@@ -211,7 +222,80 @@ def _diversification(legs: list[dict[str, Any]], dates: list[str]) -> dict[str, 
         "meanPairCorr": round(rho, 3) if rho is not None else None,
         "effectiveN": round(eff, 1) if eff is not None else None,
         "n": n,
+        # 이 상관을 잰 봉 수 — 짧으면 수를 믿으면 안 된다(머리의 그 경고).
+        "days": len(series[0]) if series else 0,
     }
+
+
+def _spans(legs: list[dict[str, Any]], dates: list[str], points: list[dict],
+           raw: list[dict], cost_bp: float) -> list[dict[str, Any]]:
+    """네 구간을 **한 번에** 낸다 — 통합 성과 · 만기별 · 통합 대 개별 · 분산.
+
+    낱개 창이 `mrmetrics.spans_for` 로 하는 것을 장부에서 하는 자리이고, 규율도
+    같다: 엔진은 **늘 전체 표본 위에서** 돌고 바뀌는 것은 **채점**뿐이다. 고르개가
+    서버에 다시 안 물으므로 stale 도 재실행도 없다.
+
+    ## 자르는 날은 **장부 달력에서 한 번** 정한다
+
+    만기마다 마지막 봉이 다르다(실측: 3만기 2026-08-24 · 나머지 09-04). 다리마다
+    `span_start` 를 부르면 저마다 자기 끝에서 1년을 물려 **아홉이 서로 다른 창**을
+    보고, 그러면 만기별 표의 합이 통합과 안 맞는다. 그래서 `span_cut` 으로 날을
+    한 번 정하고 다리마다 `index_at` 으로 색인을 찾는다.
+
+    ## 왜 SR 이 아니라 Calmar 인가 [OWNER 2026-09-07]
+
+    「묶어서 나아졌나」의 축이 샤프에서 **Calmar** 로 갈렸다. 그러면서 이 절이
+    답하는 질문도 갈렸다는 것을 적어 둔다 — 샤프판은 «묶어서 **분산**이 줄었나»
+    였고 바로 아래 「유효 독립」과 산술이 맞물렸다(SR 은 1/σ 로 움직이므로 통합
+    /개별 ≈ √N_eff 가 검산이 됐다). Calmar 의 분모는 **최대낙폭**이라 그 검산이
+    안 선다 — 최대낙폭은 경로의 한 점이라 √N 으로 줄지 않는다.
+
+    지금 이 절이 답하는 것은 «묶어서 **낙폭 대비**가 나아졌나» 이고, 유효 독립은
+    그 옆에서 **왜 그만큼인지의 사정**을 말한다(상관만으로 서는 수라 그대로 산다).
+    화면이 그 사실을 적는다.
+    """
+    out: list[dict[str, Any]] = []
+    for key, months in mrm.SPANS:
+        cut = mrm.span_cut(dates, months)
+        i = mrm.index_at(dates, cut)
+        card = mrm.score(dates, points, raw, i, cost_bp)
+
+        per: list[dict[str, Any]] = []
+        for leg in legs:
+            j = mrm.index_at(leg["dates"], cut)
+            m = mrm.score(leg["dates"], leg["r"]["points"], leg["r"]["trades"],
+                          j, cost_bp)
+            tr = [t for t in leg["r"]["trades"]
+                  if cut is None or t["exitDate"] >= cut]
+            per.append({
+                "id": leg["id"], "label": leg["label"], "tenor": tenor_of(leg["id"]),
+                "totalPnl": m["totalPnl"], "maxDrawdown": m["maxDrawdown"],
+                "calmar": m["calmar"], "sortino": m["sortino"],
+                "winRate": m["winRate"], "numTrades": m["numTrades"],
+                "avgBars": round(st.fmean([t["bars"] for t in tr]), 1) if tr else None,
+                # 몫 — 총합이 0 이거나 부호가 섞이면 비율이 뜻을 잃는다(120% 금지).
+                "share": (round(m["totalPnl"] / card["totalPnl"], 4)
+                          if card["totalPnl"] > 0 and m["totalPnl"] >= 0 else None),
+            })
+
+        cal = [p["calmar"] for p in per if p["calmar"] is not None]
+        out.append({
+            "span": key, **card,
+            "legs": per,
+            # 통합이 개별보다 나은지 — 중앙값 옆에 놓아야 판정이 선다.
+            # **못 잰 다리는 안 센다**: 낙폭이 0 이면 Calmar 가 None 인데(구간
+            # 안에서 한 번도 안 물속이었다는 뜻) 0 으로 채우면 «최악» 으로 줄을
+            # 서서 중앙값을 끌어내린다. `n` 이 몇을 셌는지를 화면이 적는다.
+            "legCalmar": {
+                "median": round(st.median(cal), 3) if cal else None,
+                "min": round(min(cal), 3) if cal else None,
+                "max": round(max(cal), 3) if cal else None,
+                "positive": sum(1 for c in cal if c > 0),
+                "n": len(cal), "of": len(per),
+            },
+            "diversification": _diversification(legs, dates, i),
+        })
+    return out
 
 
 def aggregate(legs: list[dict[str, Any]], *, notional: float,
@@ -222,7 +306,7 @@ def aggregate(legs: list[dict[str, Any]], *, notional: float,
     `mrbacktest.simulate` 의 반환 그대로다. 이 함수는 **더하기만** 한다 —
     진입·청산 규칙을 여기서 다시 쓰면 통합의 수가 아홉 칸의 합과 갈린다.
     """
-    dates, daily, live = _pooled(legs)
+    dates, daily, live, barcost = _pooled(legs)
     cum, total, mdd = _curve(daily)
 
     # 진단이 먹는 **엔진 어휘 그대로의** 거래 목록(`exitReason` 등). 아래에서
@@ -302,9 +386,13 @@ def aggregate(legs: list[dict[str, Any]], *, notional: float,
             "asof": leg["dates"][-1] if leg["dates"] else None,
         })
 
-    leg_sharpes = [p["sharpe"] for p in per if p["sharpe"] is not None]
     port_sharpe = _sharpe(daily)
     idle = sum(1 for x in live if x == 0)
+    # 채점용 봉 — `mrmetrics.score` 는 엔진 봉의 어휘를 먹는다(`dailyPnl`·
+    # `barCost`). 화면 페이로드가 아니라 이 어휘로 넘겨야 낱개 창의 구간 카드와
+    # **같은 자**가 된다(두 번째 정의 없음).
+    spoints = [{"dailyPnl": daily[i], "barCost": barcost[i]}
+               for i in range(len(dates))]
     peak_i = max(range(len(live)), key=lambda i: live[i]) if live else None
 
     return {
@@ -342,22 +430,20 @@ def aggregate(legs: list[dict[str, Any]], *, notional: float,
             "peakT": dates[peak_i] if peak_i is not None else None,
             "peakNotional": (max(live) if live else 0) * notional,
         },
+        # 구간 넷을 한 번에 [OWNER 2026-09-07] — 통합 성과·만기별·통합 대 개별·
+        # 분산이 전부 여기 들어 있다. 고르개는 이 목록에서 고르기만 한다.
+        "spans": _spans(legs, dates, spoints, raw, cost_bp),
         "diag": {
             # 사유별·손익비는 **한 통에 모은 거래** 위에서 센다 — 아홉 승률의
             # 평균이 아니다(거래 수가 다르면 그 평균은 아무것도 아니다).
             "exits": mrd.exit_tally(raw, notional),
             "payoff": mrd.payoff(raw, notional),
+            # **표본 삼분할은 항상 전체 위에 선다** [OWNER 2026-09-07]. 이건
+            # «시대가 바뀌어도 사나» 를 재는 안정성 검사라 채점 구간과 무관하다 —
+            # 「지난 1개월」을 다시 셋으로 쪼개면 한 조각이 열흘이라 수가 뜻을
+            # 잃는다. 화면이 그 사실을 제목과 각주에 적는다.
             "periods": mrd.period_split(
                 dates, [{"dailyPnl": x} for x in daily]),
-            "diversification": _diversification(legs, dates),
-            # 통합이 개별보다 나은지 — 중앙값 옆에 놓아야 판정이 선다.
-            "legSharpe": {
-                "median": round(st.median(leg_sharpes), 3) if leg_sharpes else None,
-                "min": round(min(leg_sharpes), 3) if leg_sharpes else None,
-                "max": round(max(leg_sharpes), 3) if leg_sharpes else None,
-                "positive": sum(1 for s in leg_sharpes if s > 0),
-                "n": len(leg_sharpes),
-            },
         },
         # 방향·필터로 못 들어간 신호 — 다리마다 세서 더한다(둘을 한 숫자로
         # 합치지 않는 규율은 엔진과 같다).

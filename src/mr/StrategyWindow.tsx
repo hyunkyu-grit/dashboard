@@ -53,19 +53,16 @@ import type { BacktestRecon, Unit } from '@/lib/api';
 import { BacktestUnavailable } from '@/lib/api';
 import { fmtBp, fmtLevel, unitSuffix } from '@/lib/format';
 import { fmtKrw, fmtKrwFromMan, manUnits } from '@/lib/krw';
-import { Segmented } from '@/ui/ControlCard';
 import { FloatingWindow } from '@/ui/window/FloatingWindow';
 import { ReadoutCard, ReadoutFact, ReadoutLevel, ReadoutMoney, placeReadout } from '@/ui/ReadoutCard';
 import { Stat, StatColumn } from '@/ui/Stat';
 
 import {
   MR_ENTRY_MODES,
-  MR_RANK_KEYS,
   MR_SPAN_LABEL,
   MR_STRATEGY_DEFAULTS,
   fetchMrOptimize,
   fetchMrStrategy,
-  rankCells,
   type MrOptimizeCell,
   type MrOptimizeRun,
   type MrPerf,
@@ -82,7 +79,8 @@ import {
 import { backtestDays, futuresReconNote, reconNote, reconTenors } from '@/backtest/recon';
 import { ReconStack, type ReconStackDay } from '@/ui/window/ReconStack';
 import { MrKnobBar, mrKnobsStale } from './KnobBar';
-import { Panel, WHY_WORD, headFont } from './parts';
+import { OptimizePane } from './OptimizePane';
+import { Panel, RiskAdjusted, WHY_WORD, headFont } from './parts';
 
 /* 얼라인 규칙 [OWNER 2026-08-25 — CLAUDE.md «얼라인» 절]. 첫 판은 라벨을
  * 컨트롤 **옆**에 붙였고, 라벨 폭이 제각각이라 컨트롤 시작점이 계단이 졌다
@@ -158,18 +156,6 @@ const TABLE_H = CHART_H + CHART_H_SUB;
 /** 액면을 데스크 말로 — «35.7억». `fmtKrw` 는 부호를 앞세우는 **손익** 표기라
  *  Delta 나 액면에 쓰면 「+35억 7,000만원」이 된다 — 둘 다 방향이 없는 양이다. */
 const fmtEok = (krw: number): string => `${(krw / 1e8).toFixed(1)}억`;
-
-/** 위험조정 비율 — **두 자리 고정**이고 못 잰 값은 «—» 다 [OWNER 2026-09-04].
- *
- *  `null` 은 「그 구간에서 그 지표가 안 선다」이지 「0 이다」가 아니다(낙폭이
- *  0 이라 Calmar 가 없는 칸, 손실 월이 없어 GPR 이 없는 칸). 0 으로 적으면
- *  화면이 「최악」이라고 말하는데 사실은 「최선이라 분모가 없다」인 경우가
- *  섞인다 — 그래서 카드의 note 가 왜 없는지를 같이 적는다.
- *
- *  두 자리인 이유는 이 수들이 **원/원**이라서다. 셋째 자리는 명목 하나만 바꿔도
- *  움직이는 자리가 아니지만(비율은 명목에 불변) 칸 폭만 늘린다. */
-const fmtRatio = (v: number | null | undefined): string =>
-  v == null ? '—' : v.toFixed(2);
 
 /** 대사 열의 레벨 — bp 계열은 **2자리**다(캐논 `fmtLevel` 의 1자리에서 일부러
  *  이탈). 이 표들은 「청산 레벨 − 진입 레벨 = Δ」를 주장하는데 Δ 가 2자리
@@ -258,57 +244,6 @@ function exitTally(run: MrStrategyRun): string {
 }
 
 /** 진입 규칙의 이름 — 목록이 어휘의 주인이라 여기서 다시 짓지 않는다. */
-/* ── 근사 최적화 표의 부품 [OWNER 2026-09-04] ───────────────────────────────
- *
- * 한 칸이 다섯 노브라 조건 열을 다섯으로 쪼개면 표가 열둘이 된다. 대신 «조건»
- * 한 칸에 다섯을 접는데, 그때 **읽는 순서가 곧 규칙의 순서**여야 한다:
- * 룩백(무엇을 기준으로) → 진입 → 청산 → 손절(어디서 들고 나는가) → 규칙
- * (언제 그 판단을 실행에 옮기는가). 설정 줄의 왼→오른 순서와 같다.
- *
- * σ 는 라벨이 진다(`fmtSigma` 가 아니라 맨 숫자) — 칸 안에 σ 를 다섯 번
- * 적으면 그 글자가 조건보다 넓어진다. 열 머리가 「룩백/진입/청산/손절」을
- * 말하고 있으므로 자릿수만 남긴다. */
-const cellWord = (c: MrOptimizeCell): string =>
-  `${c.lookback}일 · ${Number(c.entryZ.toFixed(1))}/${Number(c.exitZ.toFixed(1))}/${Number(c.stopZ.toFixed(1))}σ · ${entryWord(c.entryMode)}`;
-
-/** 표의 열 — 머리 활자는 `headFont` 가 고른다(소문자가 있으면 legal). */
-const OPT_COLS: { k: string; label: string; num?: boolean }[] = [
-  { k: 'rank', label: '순위', num: true },
-  { k: 'cond', label: '조건' },
-  { k: 'calmar', label: 'Calmar', num: true },
-  { k: 'sortino', label: 'Sortino', num: true },
-  { k: 'martin', label: 'Martin', num: true },
-  { k: 'gpr', label: 'GPR', num: true },
-  { k: 'omega', label: 'Omega', num: true },
-  { k: 'pf', label: 'Profit F.', num: true },
-  { k: 'pnl', label: '총손익', num: true },
-  { k: 'mdd', label: '최대 낙폭', num: true },
-  { k: 'n', label: '거래', num: true },
-];
-
-/** TOP 5 **+ 지금 칸**. 지금 칸이 다섯 안이면 다섯 줄, 밖이면 여섯 줄이다.
- *
- *  다섯만 적으면 「내 칸이 몇 등인가」를 표에서 못 찾는다 — 카드에 등수는
- *  적히지만 그 등수의 수가 안 보이면 «얼마나 뒤인가» 를 말할 수 없다. 붙이는
- *  줄은 자기 실제 등수를 달고 선다(6등이라고 적지 않는다). */
-function optRows(ranked: MrOptimizeCell[]): { c: MrOptimizeCell; n: number }[] {
-  const rows = ranked.slice(0, 5).map((c, i) => ({ c, n: i + 1 }));
-  const at = ranked.findIndex((c) => c.current);
-  if (at >= 5) rows.push({ c: ranked[at]!, n: at + 1 });
-  return rows;
-}
-
-/** 비율 한 칸 — 못 잰 값은 «—» 다(0 이 아니다 — `fmtRatio` 머리의 그 근거). */
-function NumCell({ v }: { v: number | null }) {
-  return (
-    <TableCell className="sr-num" justifyContent="flex-end">
-      <Text font="label1" as="span" tabularNumbers noWrap>
-        {fmtRatio(v)}
-      </Text>
-    </TableCell>
-  );
-}
-
 const entryWord = (mode: string): string =>
   MR_ENTRY_MODES.find((m) => m.v === mode)?.label ?? mode;
 
@@ -1384,187 +1319,24 @@ export function StrategyWindow({
 
      회계가 머리 카드와 다를 수 있다는 사실은 각주가 말한다 — 162칸을 실가격
      으로 매기면 못 돌아서 격자는 늘 엔진 근사다. */
-  const ranked = useMemo(
-    () => (opt ? rankCells(opt.cells, rankKey) : []),
-    [opt, rankKey],
-  );
-  const best = ranked[0];
-  const curRank = ranked.findIndex((c) => c.current);
-
+  /* 근사 최적화 절은 **공유 부품**이다 [2026-09-07] — 통합 장부가 같은 표를
+     세우게 되면서 `OptimizePane` 으로 갈라 냈다. 이 창이 정하는 것은 문장 둘
+     (안내·경고)뿐이고 나머지는 서버가 가른다(라우트가 둘). */
   const optPane = !run ? null : (
-    <Panel
-      title="근사 최적화"
-      sub={opt
-        ? `${opt.cells.length}칸 · ${MR_SPAN_LABEL[span]} 채점 · 엔진 근사`
-        : '룩백·진입·청산·손절·진입 규칙의 프리셋을 전부 돌려요'}
-      aside={
-        <HStack gap={1} alignItems="center">
-          {opt ? (
-            <Box className="sr-tabs-neutral">
-              <Segmented
-                label="순위 기준"
-                value={rankKey}
-                options={MR_RANK_KEYS.map((k) => ({
-                  value: k.v, label: k.label, title: k.help,
-                }))}
-                onChange={(v) => setRankKey(v)}
-              />
-            </Box>
-          ) : null}
-          <button
-            type="button"
-            className="sr-pillbtn"
-            data-fill
-            disabled={optRunning}
-            onClick={runOptimize}
-          >
-            {optRunning ? '격자 도는 중…' : opt ? '다시 돌리기' : '최적화 실행'}
-          </button>
-        </HStack>
-      }
-    >
-      {optError ? (
-        <Text font="body" as="p" className="sr-up">
-          격자를 못 돌렸어요 — {optError}
-        </Text>
-      ) : !opt ? (
-        <Text font="body" as="p" color="fgMuted">
-          누르면 룩백 3 × 진입 3 × 청산 3 × 손절 3 × 진입 규칙 2 = 162칸을 이
-          구간에서 채점해요. 비용·Delta 와 실전 규칙은 안 흔들어요 — 그 둘은
-          통상값이 아니라 그날의 호가폭이고 이 데스크의 포지션 크기예요.
-        </Text>
-      ) : !best ? (
-        <Text font="body" as="p" color="fgMuted">
-          이 구간에서 설 수 있는 칸이 없어요 — 이력이 룩백보다 짧아요.
-        </Text>
-      ) : (
-        <VStack gap={1} width="100%">
-          {/* 1등 한 벌 — 「근사 최적화 세트의 결과」. 지금 칸과 나란히 적어야
-              «바꿀 값이 있나» 가 한 줄로 읽힌다. */}
-          <HStack className="sr-stats" width="100%" flexWrap="wrap">
-            <StatColumn title={`최적 세트 · ${MR_RANK_KEYS.find((k) => k.v === rankKey)!.label} 1등`}>
-              <Stat label="조건" value={cellWord(best)} note={best.current ? '지금 노브예요' : undefined} />
-              <Stat
-                label={MR_RANK_KEYS.find((k) => k.v === rankKey)!.label}
-                value={rankKey === 'totalPnl' ? fmtKrw(best.totalPnl) : fmtRatio(best[rankKey])}
-              />
-              <Stat
-                label="총손익"
-                value={fmtKrw(best.totalPnl)}
-                tone={best.totalPnl > 0 ? 'up' : best.totalPnl < 0 ? 'down' : undefined}
-              />
-              <Stat label="최대 낙폭" value={fmtKrw(-best.maxDrawdown)} />
-              <Stat label="거래" value={String(best.numTrades)} />
-              {/* 지금 칸이 몇 등인가 — 이 표의 존재 이유다. 1등이면 그 사실이
-                  「바꿀 것이 없다」는 답이고, 뒤쪽이면 얼마나 뒤인지가 답이다. */}
-              <Stat
-                label="지금 칸"
-                value={curRank < 0 ? '—' : `${curRank + 1}등`}
-                note={curRank < 0 ? '격자 밖이에요' : `${ranked.length}칸 중`}
-              />
-            </StatColumn>
-          </HStack>
-
-          {/* TOP 5 매트릭스 — 조건 다섯 열 + 지표 열. 표는 캐논(CDS Table),
-              머리 활자는 `headFont`(소문자가 있으면 legal — CDS caption 이
-              대문자화를 걸어 「bp」가 「BP」가 된다). */}
-          <Box className="sr-mr-drawertable" width="100%">
-            <Table bordered={false}>
-              <TableHeader sticky>
-                <TableRow>
-                  {OPT_COLS.map((c) => (
-                    <TableCell
-                      key={c.k}
-                      as="th"
-                      scope="col"
-                      className={c.num ? 'sr-num' : undefined}
-                      justifyContent={c.num ? 'flex-end' : undefined}
-                    >
-                      <Text font={headFont(c.label)} as="span" color="fgMuted" noWrap>
-                        {c.label}
-                      </Text>
-                    </TableCell>
-                  ))}
-                  <TableCell as="th" scope="col">
-                    <Text font="caption" as="span" color="fgMuted" noWrap>
-                      채택
-                    </Text>
-                  </TableCell>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {/* 다섯 + **지금 칸**. 지금 칸이 TOP 5 안이면 그 줄 하나로
-                    끝나고, 밖이면 여섯째 줄로 붙는다 — 표에서 자기 자리를 못
-                    찾으면 순위가 아무 말도 안 한다. */}
-                {optRows(ranked).map(({ c, n }) => (
-                  <TableRow key={`${c.lookback}-${c.entryZ}-${c.exitZ}-${c.stopZ}-${c.entryMode}`}>
-                    <TableCell className="sr-num" justifyContent="flex-end">
-                      <Text font="label1" as="span" tabularNumbers noWrap>{n}</Text>
-                    </TableCell>
-                    <TableCell>
-                      <Text font="label1" as="span" noWrap>
-                        {c.current ? `${cellWord(c)} · 지금` : cellWord(c)}
-                      </Text>
-                    </TableCell>
-                    <NumCell v={c.calmar} />
-                    <NumCell v={c.sortino} />
-                    <NumCell v={c.martin} />
-                    <NumCell v={c.gpr} />
-                    <NumCell v={c.omega} />
-                    <NumCell v={c.profitFactor} />
-                    <TableCell className="sr-num" justifyContent="flex-end">
-                      <Text
-                        font="label1"
-                        as="span"
-                        tabularNumbers
-                        noWrap
-                        className={c.totalPnl > 0 ? 'sr-up' : c.totalPnl < 0 ? 'sr-down' : undefined}
-                      >
-                        {fmtKrw(c.totalPnl)}
-                      </Text>
-                    </TableCell>
-                    <TableCell className="sr-num" justifyContent="flex-end">
-                      <Text font="label1" as="span" tabularNumbers noWrap>
-                        {fmtKrw(-c.maxDrawdown)}
-                      </Text>
-                    </TableCell>
-                    <TableCell className="sr-num" justifyContent="flex-end">
-                      <Text font="label1" as="span" tabularNumbers noWrap>
-                        {c.numTrades}
-                      </Text>
-                    </TableCell>
-                    <TableCell>
-                      <button
-                        type="button"
-                        className="sr-pillbtn"
-                        disabled={c.current}
-                        onClick={() => adopt(c)}
-                      >
-                        {/* 「채택」 두 글자다 [실측 2026-09-04]. 「노브에 넣기」로
-                            두면 이 열이 열 중 가장 넓어져 표가 상자를 38px 넘고
-                            (실측: 표 1109 대 상자 1071), 넘친 쪽이 하필 **누르는
-                            칸**이라 가로로 밀어야 눌린다. 열 머리가 이미 「채택」
-                            이라 동사는 중복이기도 하다. */}
-                        {c.current ? '적용됨' : '채택'}
-                      </button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Box>
-
-          {/* 이 표가 무엇이 아닌지 — 각주가 진다. 셋 다 안 적으면 화면이
-              「이 칸이 최적이다」라고만 말하게 된다. */}
-          <Text font="legal" as="p" color="fgMuted">
-            {`격자는 엔진 근사예요${run.real ? ' — 머리 카드는 실가격이라 같은 조건이라도 수가 달라요' : ''}.`}
-            {' '}비율은 원/원이라 수익률 기반 문헌값과 크기를 직접 비교하면 안 돼요.
-            {' '}같은 구간·같은 표본을 162번 잰 값이라 1등은 뽑기의 결과이기도
-            해요 — 2등과의 거리가 그 칸의 신뢰도예요.
-          </Text>
-        </VStack>
-      )}
-    </Panel>
+    <OptimizePane
+      opt={opt}
+      error={optError}
+      running={optRunning}
+      rankKey={rankKey}
+      onRankKey={setRankKey}
+      span={span}
+      headReal={run.real}
+      onRun={runOptimize}
+      onAdopt={adopt}
+      intro={'누르면 룩백 3 × 진입 3 × 청산 3 × 손절 3 × 진입 규칙 2 = 162칸을 이 '
+        + '구간에서 채점해요. 비용·Delta 와 실전 규칙은 안 흔들어요 — 그 둘은 '
+        + '통상값이 아니라 그날의 호가폭이고 이 데스크의 포지션 크기예요.'}
+    />
   );
 
   const reconWhy = !run
@@ -1735,48 +1507,10 @@ export function StrategyWindow({
                   />
                 ) : null}
               </StatColumn>
-              {/* 분모가 저마다 다른 일곱 — 그 사실이 이 열의 요점이다. 하나가
-                  나쁘고 하나가 좋으면 «어느 축에서» 를 묻게 되고, 그게 절대수익형
-                  평가가 샤프 한 칸으로는 못 하던 일이다. */}
-              <StatColumn title="위험조정">
-                <Stat
-                  label="Sortino"
-                  value={fmtRatio(perf.sortino)}
-                  note={perf.sortino == null ? '손실 난 날이 없어요' : '하방편차 · 연'}
-                />
-                <Stat
-                  label="Calmar"
-                  value={fmtRatio(perf.calmar)}
-                  note={perf.calmar == null ? '낙폭이 없었어요' : '연환산 ÷ 최대낙폭'}
-                />
-                <Stat
-                  label="Martin"
-                  value={fmtRatio(perf.martin)}
-                  note={perf.martin == null ? '낙폭이 없었어요' : '연환산 ÷ Ulcer'}
-                />
-                <Stat label="Ulcer" value={fmtKrw(-perf.ulcer)} note="RMS 낙폭" />
-                {/* GPR 이 없는 이유가 둘이라 화면이 가른다 — 월 버킷이 모자란
-                    것과 손실 월이 하나도 없는 것은 다른 사실이다. */}
-                <Stat
-                  label="GPR"
-                  value={fmtRatio(perf.gpr)}
-                  note={perf.gpr != null ? '월 버킷 · Schwager'
-                    : perf.gprMonths < 2 ? `월 버킷 ${perf.gprMonths}개라 못 세요`
-                    : '손실 난 달이 없어요'}
-                />
-                <Stat
-                  label="Omega"
-                  value={fmtRatio(perf.omega)}
-                  note={perf.omega == null ? '손실 난 날이 없어요' : 'θ=0 · 일별'}
-                />
-                <Stat
-                  label="Profit Factor"
-                  value={fmtRatio(perf.profitFactor)}
-                  note={perf.profitFactor == null
-                    ? (perf.numTrades ? '진 거래가 없어요' : '거래가 없어요')
-                    : '거래 기준'}
-                />
-              </StatColumn>
+              {/* 분모가 저마다 다른 일곱 — 두 창이 **같은 부품**을 세운다
+                  (`parts.RiskAdjusted`). 통합 장부도 같은 일곱을 쓰게 되면서
+                  여기서 갈라 냈다 [2026-09-07] — 두 벌이면 한쪽만 낡는다. */}
+              <RiskAdjusted perf={perf} />
               <StatColumn title="조건">
                 {/* 비용이 봉마다 다르면 「편도 몇 bp」가 한 숫자로 안 나온다 —
                     실제로 문 범위와 중앙값을 적는다. 상수 하나로 뭉개면 화면이
@@ -2229,7 +1963,7 @@ export function StrategyWindow({
                 ? ` 캐리는 ${run.carry.defn}이고 조달은 ${run.carry.funding} 이에요 — 원본 PMS 산술에는 없던 항이에요.`
                 : ''}
               {run.principal
-                ? ` 액면은 **거래마다 진입일 커브**로 환산해요 — 그래야 「Delta ${run.params.notional.toLocaleString()}원/bp」가 모든 거래에서 같은 뜻이에요. 머리의 ${fmtEok(run.principal.krw)}은 «지금 세우면» 이고, 거래마다의 액면은 그 거래의 대사표가 적어요(표본 안에서 ${run.real ? '5~16%' : ''} 움직여요).`
+                ? ` 액면은 거래마다 진입일 커브로 환산해요 — 그래야 「Delta ${run.params.notional.toLocaleString()}원/bp」가 모든 거래에서 같은 뜻이에요. 머리의 ${fmtEok(run.principal.krw)}은 「지금 세우면」이고, 거래마다의 액면은 그 거래의 대사표가 적어요(표본 안에서 ${run.real ? '5~16%' : ''} 움직여요).`
                 : ''}
               {/* 다리 레벨의 출처와 항등 — 안 적으면 이 세 열이 어디서 온
                   값인지, 스프레드와 무슨 관계인지 화면만 보고는 알 수 없다. */}
